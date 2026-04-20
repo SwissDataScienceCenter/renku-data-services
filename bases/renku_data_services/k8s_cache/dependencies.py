@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 
+from renku_data_services.authz.authz import Authz
 from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolRepository
 from renku_data_services.k8s.clients import DummyPriorityClassClient, DummyResourceQuotaClient
 from renku_data_services.k8s.db import K8sDbCache
@@ -20,6 +21,7 @@ class DependencyManager:
     _k8s_cache: K8sDbCache | None = field(default=None, repr=False, init=False)
     _metrics_repo: MetricsRepository | None = field(default=None, repr=False, init=False)
     _metrics: StagingMetricsService | None = field(default=None, repr=False, init=False)
+    _authz: Authz | None = field(default=None, repr=False, init=False)
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _cluster_repo: ClusterRepository | None = field(default=None, repr=False, init=False)
 
@@ -35,11 +37,17 @@ class DependencyManager:
             self._metrics = StagingMetricsService(enabled=self.config.metrics.enabled, metrics_repo=self.metrics_repo())
         return self._metrics
 
+    def authz(self) -> Authz:
+        """The authorization service."""
+        if not self._authz:
+            self._authz = Authz(authz_config=self.config.authz)
+        return self._authz
+
     def rp_repo(self) -> ResourcePoolRepository:
         """The resource pool repository."""
         if not self._rp_repo:
             self._rp_repo = ResourcePoolRepository(
-                session_maker=self.config.db.async_session_maker, quotas_repo=self.quota_repo()
+                session_maker=self.config.db.async_session_maker, quotas_repo=self.quota_repo(), authz=self.authz()
             )
         return self._rp_repo
 

@@ -1,6 +1,9 @@
+from types import SimpleNamespace
+
 import pytest
 import pytest_asyncio
 from authzed.api.v1 import (
+    ObjectReference,
     Relationship,
     RelationshipUpdate,
     SubjectReference,
@@ -8,10 +11,11 @@ from authzed.api.v1 import (
 )
 from ulid import ULID
 
-from renku_data_services.authz.authz import _AuthzConverter
+from renku_data_services.authz.authz import _AuthzConverter, _Relation
 from renku_data_services.authz.models import Member, Role, Scope, Visibility
 from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import NamespacePath, ResourceType
+from renku_data_services.crc.models import DeletedResourcePool
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.errors import errors
 from renku_data_services.migrations.core import run_migrations_for_app
@@ -23,6 +27,51 @@ admin_user = APIUser(is_admin=True, id="admin-id", access_token="some-token", fu
 anon_user = APIUser(is_admin=False)
 regular_user1 = APIUser(is_admin=False, id="user1-id", access_token="some-token1", full_name="some-user1")  # nosec B106
 regular_user2 = APIUser(is_admin=False, id="user2-id", access_token="some-token2", full_name="some-user2")  # nosec B106
+regular_user3 = APIUser(is_admin=False, id="user3-id", access_token="some-token3", full_name="some-user3")  # nosec B106
+
+
+POOL_ID = 9001
+
+
+def _pool_updates(pool_id: int, *, public: bool) -> list[RelationshipUpdate]:
+    """Build all relationship updates needed to create a resource pool in Authzed."""
+    pool_ref = _AuthzConverter.resource_pool(pool_id)
+    updates = [
+        RelationshipUpdate(
+            operation=RelationshipUpdate.OPERATION_TOUCH,
+            relationship=Relationship(
+                resource=pool_ref,
+                relation="resource_pool_platform",
+                subject=SubjectReference(object=_AuthzConverter.platform()),
+            ),
+        ),
+    ]
+    if public:
+        for obj_type in (ResourceType.user, ResourceType.anonymous_user):
+            updates.append(
+                RelationshipUpdate(
+                    operation=RelationshipUpdate.OPERATION_TOUCH,
+                    relationship=Relationship(
+                        resource=pool_ref,
+                        relation="public_viewer",
+                        subject=SubjectReference(object=ObjectReference(object_type=obj_type, object_id="*")),
+                    ),
+                )
+            )
+    return updates
+
+
+def _rel(
+    pool_id: int, relation: str, user_id: str, *, op: int = RelationshipUpdate.OPERATION_TOUCH
+) -> RelationshipUpdate:
+    return RelationshipUpdate(
+        operation=op,
+        relationship=Relationship(
+            resource=_AuthzConverter.resource_pool(pool_id),
+            relation=relation,
+            subject=SubjectReference(object=_AuthzConverter.user(user_id)),
+        ),
+    )
 
 
 @pytest_asyncio.fixture
@@ -370,3 +419,311 @@ async def test_listing_non_public_projects(app_manager_instance: DependencyManag
     assert private_project_id2_str in set(ids_user2)
     assert private_project_id1_str not in set(ids_user2)
     assert public_project_id_str not in set(ids_user2)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("public_pool", [True, False])
+async def test_resource_pool_base_access(
+    app_manager_instance: DependencyManager, bootstrap_admins, public_pool: bool
+) -> None:
+    """Base access: public pools are open to everyone; private pools block non-members."""
+    authz = app_manager_instance.authz
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=public_pool)))
+
+    # Admin can always use and write
+    assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.READ)
+    assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.WRITE)
+
+    # Regular user and anon: use depends on public, write is always denied
+    assert public_pool == await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
+    assert public_pool == await authz.has_permission(anon_user, ResourceType.resource_pool, POOL_ID, Scope.READ)
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.WRITE)
+    assert not await authz.has_permission(anon_user, ResourceType.resource_pool, POOL_ID, Scope.WRITE)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("public_pool", [True, False])
+async def test_resource_pool_member_access(
+    app_manager_instance: DependencyManager, bootstrap_admins, public_pool: bool
+) -> None:
+    """An explicit member can use a pool regardless of visibility; non-members still follow public rules."""
+    authz = app_manager_instance.authz
+    updates = _pool_updates(POOL_ID, public=public_pool) + [_rel(POOL_ID, _Relation.viewer.value, regular_user1.id)]
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
+
+    # Member can always use
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
+    # Member still cannot write
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.WRITE)
+    # Non-member follows public rules
+    assert public_pool == await authz.has_permission(regular_user2, ResourceType.resource_pool, POOL_ID, Scope.READ)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("public_pool", [True, False])
+@pytest.mark.parametrize("is_member", [True, False])
+async def test_resource_pool_prohibited_blocks_access(
+    app_manager_instance: DependencyManager, bootstrap_admins, public_pool: bool, is_member: bool
+) -> None:
+    """A prohibited user is blocked regardless of public visibility or membership."""
+    authz = app_manager_instance.authz
+    updates = _pool_updates(POOL_ID, public=public_pool) + [_rel(POOL_ID, _Relation.prohibited.value, regular_user1.id)]
+    if is_member:
+        updates.append(_rel(POOL_ID, _Relation.viewer.value, regular_user1.id))
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
+
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_admin_bypasses_prohibited(
+    app_manager_instance: DependencyManager, bootstrap_admins
+) -> None:
+    """Admin bypasses the prohibited flag via the platform->is_admin union."""
+    authz = app_manager_instance.authz
+    updates = _pool_updates(POOL_ID, public=True) + [_rel(POOL_ID, _Relation.prohibited.value, admin_user.id)]
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
+
+    assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.READ)
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_add_remove_member(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
+    """Adding and removing a member dynamically grants and revokes access."""
+    authz = app_manager_instance.authz
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=False)))
+
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
+
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(updates=[_rel(POOL_ID, _Relation.viewer.value, regular_user1.id)])
+    )
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
+
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(
+            updates=[_rel(POOL_ID, _Relation.viewer.value, regular_user1.id, op=RelationshipUpdate.OPERATION_DELETE)]
+        )
+    )
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_add_remove_prohibited(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
+    """Adding and removing a prohibited relation dynamically blocks and restores access."""
+    authz = app_manager_instance.authz
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=True)))
+
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
+
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(updates=[_rel(POOL_ID, _Relation.prohibited.value, regular_user1.id)])
+    )
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
+
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(
+            updates=[
+                _rel(POOL_ID, _Relation.prohibited.value, regular_user1.id, op=RelationshipUpdate.OPERATION_DELETE)
+            ]
+        )
+    )
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_isolation(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
+    """Membership and prohibition on one pool do not leak to another."""
+    pool_a, pool_b = 9001, 9002
+    authz = app_manager_instance.authz
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(
+            updates=_pool_updates(pool_a, public=False)
+            + _pool_updates(pool_b, public=True)
+            + [
+                _rel(pool_a, _Relation.viewer.value, regular_user1.id),
+                _rel(pool_b, _Relation.prohibited.value, regular_user1.id),
+            ]
+        )
+    )
+
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_a, Scope.READ)
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_b, Scope.READ)
+
+
+# Unique ID ranges per test — avoids cross-test interference in shared SpiceDB
+_ADD_DELETE_BASE = 9100
+_UNDO_BASE = 9110
+_VISIBILITY_BASE = 9120
+_LOOKUP_BASE = 9130
+_CLEANUP_BASE = 9140
+
+
+async def _assert_pool_access(
+    authz,
+    pool_id: int,
+    *,
+    admin_use: bool = True,
+    admin_write: bool = True,
+    user_use: bool,
+    anon_use: bool,
+) -> None:
+    """Assert USE / WRITE for admin, regular_user1 and anon_user on *pool_id*.
+
+    regular_user1 and anon_user are never expected to have WRITE — those two
+    assertions are always ``False`` and included automatically.
+    """
+    assert await authz.has_permission(admin_user, ResourceType.resource_pool, pool_id, Scope.READ) is admin_use
+    assert await authz.has_permission(admin_user, ResourceType.resource_pool, pool_id, Scope.WRITE) is admin_write
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_id, Scope.READ) is user_use
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_id, Scope.WRITE) is False
+    assert await authz.has_permission(anon_user, ResourceType.resource_pool, pool_id, Scope.READ) is anon_use
+    assert await authz.has_permission(anon_user, ResourceType.resource_pool, pool_id, Scope.WRITE) is False
+
+
+async def _create_pool_in_authz(authz, pool_id: int, *, public: bool) -> None:
+    """Shorthand: call ``_add_resource_pool`` and write the result to SpiceDB."""
+    change = authz._add_resource_pool(SimpleNamespace(id=pool_id, public=public))
+    await authz.client.WriteRelationships(change.apply)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("public_pool", [True, False], ids=["public", "private"])
+async def test_resource_pool_add_delete_authz(
+    app_manager_instance: DependencyManager, bootstrap_admins, public_pool: bool
+) -> None:
+    """_add_resource_pool creates correct rels; _remove_resource_pool cleans them all."""
+    authz = app_manager_instance.authz
+    pool_id = _ADD_DELETE_BASE + int(public_pool)
+
+    await _create_pool_in_authz(authz, pool_id, public=public_pool)
+    await _assert_pool_access(authz, pool_id, user_use=public_pool, anon_use=public_pool)
+
+    remove_change = await authz._remove_resource_pool(admin_user, DeletedResourcePool(id=pool_id))
+    await authz.client.WriteRelationships(remove_change.apply)
+
+    await _assert_pool_access(authz, pool_id, admin_use=False, admin_write=False, user_use=False, anon_use=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("public_pool", [True, False], ids=["public", "private"])
+async def test_resource_pool_add_undo(
+    app_manager_instance: DependencyManager, bootstrap_admins, public_pool: bool
+) -> None:
+    """Applying the undo payload from _add_resource_pool fully reverses creation."""
+    authz = app_manager_instance.authz
+    pool_id = _UNDO_BASE + int(public_pool)
+
+    change = authz._add_resource_pool(SimpleNamespace(id=pool_id, public=public_pool))
+    await authz.client.WriteRelationships(change.apply)
+    await _assert_pool_access(authz, pool_id, user_use=public_pool, anon_use=public_pool)
+
+    # Undo — simulates DB-rollback recovery path
+    await authz.client.WriteRelationships(change.undo)
+    await _assert_pool_access(authz, pool_id, admin_use=False, admin_write=False, user_use=False, anon_use=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "initial_public,new_public",
+    [
+        (True, False),
+        (False, True),
+        (True, True),
+        (False, False),
+    ],
+    ids=["public_to_private", "private_to_public", "public_to_public(noop)", "private_to_private(noop)"],
+)
+async def test_resource_pool_visibility_update(
+    app_manager_instance: DependencyManager,
+    bootstrap_admins,
+    initial_public: bool,
+    new_public: bool,
+) -> None:
+    """_update_resource_pool_visibility adds/removes public_viewer wildcards correctly."""
+    authz = app_manager_instance.authz
+    pool_id = _VISIBILITY_BASE + int(initial_public) * 2 + int(new_public)
+
+    await _create_pool_in_authz(authz, pool_id, public=initial_public)
+    await _assert_pool_access(authz, pool_id, user_use=initial_public, anon_use=initial_public)
+
+    vis_change = await authz._update_resource_pool_visibility(
+        admin_user, SimpleNamespace(id=pool_id, public=new_public)
+    )
+    await authz.client.WriteRelationships(vis_change.apply)
+
+    await _assert_pool_access(authz, pool_id, user_use=new_public, anon_use=new_public)
+
+    if initial_public == new_public:
+        assert len(vis_change.apply.updates) == 0, "No-op transition should produce no apply ops"
+        assert len(vis_change.undo.updates) == 0, (
+            f"No-op transition ({initial_public}->{new_public}) produced "
+            f"{len(vis_change.undo.updates)} undo op(s) that would corrupt state on rollback"
+        )
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_lookup_resources(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
+    """resources_with_permission returns correct pool IDs per user role."""
+    authz = app_manager_instance.authz
+    public_id, private_id = _LOOKUP_BASE, _LOOKUP_BASE + 1
+
+    for pid, public in [(public_id, True), (private_id, False)]:
+        await _create_pool_in_authz(authz, pid, public=public)
+
+    # Admin sees both
+    admin_pools = set(
+        await authz.resources_with_permission(admin_user, admin_user.id, ResourceType.resource_pool, Scope.READ)
+    )
+    assert {str(public_id), str(private_id)}.issubset(admin_pools)
+
+    # Regular user sees only public
+    user_pools = set(
+        await authz.resources_with_permission(regular_user1, regular_user1.id, ResourceType.resource_pool, Scope.READ)
+    )
+    assert str(public_id) in user_pools
+    assert str(private_id) not in user_pools
+
+    # Add regular_user1 as member → now sees both
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(updates=[_rel(private_id, _Relation.viewer, regular_user1.id)])
+    )
+    user_pools = set(
+        await authz.resources_with_permission(regular_user1, regular_user1.id, ResourceType.resource_pool, Scope.READ)
+    )
+    assert str(private_id) in user_pools
+
+    # Anon still only sees public
+    anon_pools = set(
+        await authz.resources_with_permission(anon_user, anon_user.id, ResourceType.resource_pool, Scope.READ)
+    )
+    assert str(public_id) in anon_pools
+    assert str(private_id) not in anon_pools
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_delete_cleans_all_relations(
+    app_manager_instance: DependencyManager, bootstrap_admins
+) -> None:
+    """_remove_resource_pool removes ALL rels including member and prohibited."""
+    authz = app_manager_instance.authz
+    pool_id = _CLEANUP_BASE
+
+    await _create_pool_in_authz(authz, pool_id, public=True)
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(
+            updates=[
+                _rel(pool_id, _Relation.viewer, regular_user1.id),
+                _rel(pool_id, _Relation.prohibited, regular_user2.id),
+            ]
+        )
+    )
+
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_id, Scope.READ)
+    assert not await authz.has_permission(regular_user2, ResourceType.resource_pool, pool_id, Scope.READ)
+
+    remove_change = await authz._remove_resource_pool(admin_user, DeletedResourcePool(id=pool_id))
+    await authz.client.WriteRelationships(remove_change.apply)
+
+    await _assert_pool_access(authz, pool_id, admin_use=False, admin_write=False, user_use=False, anon_use=False)
+    assert not await authz.has_permission(regular_user2, ResourceType.resource_pool, pool_id, Scope.READ)

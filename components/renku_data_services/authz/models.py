@@ -110,5 +110,5 @@ class CheckPermissionItem:
     """Represent a permission item to be checked by the authorization service."""
 
     resource_type: "ResourceType"
-    resource_id: str | ULID
+    resource_id: str | ULID | int
     scope: Scope

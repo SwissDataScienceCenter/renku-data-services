@@ -262,6 +262,8 @@ class TestDependencyManager(DependencyManager):
         gitlab_authenticator: base_models.Authenticator
         gitlab_client: base_models.GitlabAPIProtocol
         config.authz_config = AuthzConfigStack.from_env()
+        nb_authz = NonCachingAuthz(config.authz_config)
+        config.nb_config.k8s_v2_client._NotebookK8sClient__rp_repo.authz = nb_authz
         kc_api: IKeycloakAPI
 
         default_kubeconfig = KubeConfigEnv()
@@ -333,8 +335,11 @@ class TestDependencyManager(DependencyManager):
             session_maker=config.db.async_session_maker,
             quotas_repo=quota_repo,
             user_repo=kc_user_repo,
+            authz=authz,
         )
-        rp_repo = ResourcePoolRepository(session_maker=config.db.async_session_maker, quotas_repo=quota_repo)
+        rp_repo = ResourcePoolRepository(
+            session_maker=config.db.async_session_maker, quotas_repo=quota_repo, authz=authz
+        )
         storage_repo = StorageRepository(
             session_maker=config.db.async_session_maker,
             gitlab_client=gitlab_client,
