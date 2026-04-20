@@ -105,6 +105,7 @@ from renku_data_services.project.db import ProjectRepository, ProjectSessionSecr
 from renku_data_services.project.models import Project, SessionSecret
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata as RepoMetadata
+from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
@@ -648,12 +649,24 @@ async def get_image_pull_secret(
     user: APIUser,
     internal_gitlab_user: APIUser,
     image_check_repo: ImageCheckRepository,
+    builds_config: BuildsConfig,
 ) -> ExtraSecret | None:
     """Get an image pull secret."""
 
     v2_secret = await __get_connected_services_image_pull_secret(
         f"{server_name}-image-secret", image_check_repo, image, user
     )
+    if v2_secret:
+        return v2_secret
+
+    if builds_config.enabled and image.startswith(builds_config.build_output_private_image_prefix):
+        v2_secret = ExtraSecret(
+            V1Secret(
+                metadata=V1ObjectMeta(name=builds_config.pull_private_image_secret_name),
+            ),
+            adopt=False,
+        )
+
     if v2_secret:
         return v2_secret
 
@@ -740,6 +753,7 @@ async def start_session(
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
     git_repositories_repo: GitRepositoriesRepository,
+    builds_config: BuildsConfig,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -910,6 +924,7 @@ async def start_session(
         user=user,
         internal_gitlab_user=internal_gitlab_user,
         image_check_repo=image_check_repo,
+        builds_config=builds_config,
     )
     if image_secret:
         session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
@@ -969,7 +984,9 @@ async def start_session(
         metadata=Metadata(name=server_name, annotations=annotations),
         spec=AmaltheaSessionSpec(
             location=session_location,
-            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=True)] if image_secret else [],
+            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=image_secret.adopt)]
+            if image_secret
+            else [],
             codeRepositories=[],
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
