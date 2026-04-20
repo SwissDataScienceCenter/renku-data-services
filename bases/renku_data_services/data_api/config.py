@@ -51,6 +51,8 @@ class Config:
         if db is None:
             db = DBConfig.from_env()
 
+        authz_config = AuthzConfig.from_env()
+
         if dummy_stores:
             keycloak = None
             gitlab_url = None
@@ -63,7 +65,7 @@ class Config:
             else:
                 gitlab_url = None
 
-        nb_config = NotebooksConfig.from_env(db, enable_internal_gitlab=enable_internal_gitlab)
+        nb_config = NotebooksConfig.from_env(db, authz_config, enable_internal_gitlab=enable_internal_gitlab)
         return cls(
             enable_internal_gitlab=enable_internal_gitlab,
             version=os.environ.get("VERSION", "0.0.1"),
@@ -76,7 +78,7 @@ class Config:
             secrets=PublicSecretsConfig.from_env(),
             sentry=SentryConfig.from_env(),
             posthog=PosthogConfig.from_env(),
-            authz_config=AuthzConfig.from_env(),
+            authz_config=authz_config,
             solr=SolrClientConfig.from_env(),
             trusted_proxies=TrustedProxiesConfig.from_env(),
             keycloak=keycloak,

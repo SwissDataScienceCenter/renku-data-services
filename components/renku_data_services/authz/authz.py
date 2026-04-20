@@ -1,7 +1,7 @@
 """Projects authorization adapter."""
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable
+from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable, Collection
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
@@ -46,7 +46,7 @@ from renku_data_services.authz.models import (
     Visibility,
 )
 from renku_data_services.base_models.core import InternalServiceAdmin, ResourceType
-from renku_data_services.crc.models import ResourcePool
+from renku_data_services.crc.models import DeletedResourcePool, ResourcePool, ResourcePoolMembershipChange
 from renku_data_services.data_connectors.models import (
     DataConnector,
     DataConnectorToProjectLink,
@@ -98,6 +98,9 @@ _AuthzChangeFuncResult = TypeVar(
     | DataConnectorUpdate
     | DeletedDataConnector
     | DataConnectorToProjectLink
+    | ResourcePool
+    | DeletedResourcePool
+    | ResourcePoolMembershipChange
     | None,
 )
 _T = TypeVar("_T")
@@ -138,6 +141,7 @@ class _Relation(StrEnum):
     data_connector_namespace = "data_connector_namespace"
     linked_to = "linked_to"
     prohibited = "prohibited"
+    resource_pool_platform = "resource_pool_platform"
 
     @classmethod
     def from_role(cls, role: Role) -> "_Relation":
@@ -619,17 +623,22 @@ class Authz:
                 if len(args) == 0:
                     user_kwarg = kwargs.get("user")
                     requested_by_kwarg = kwargs.get("requested_by")
-                    if isinstance(user_kwarg, base_models.APIUser) and isinstance(
-                        requested_by_kwarg, base_models.APIUser
-                    ):
+                    api_user_kwarg = kwargs.get("api_user")
+                    found_users = [
+                        u
+                        for u in (user_kwarg, requested_by_kwarg, api_user_kwarg)
+                        if isinstance(u, base_models.APIUser)
+                    ]
+
+                    if len(found_users) > 1:
                         raise errors.ProgrammingError(
                             message="The decorator for authorization database changes found two APIUser parameters in"
-                            " the 'user' and 'requested_by' keyword arguments but expected only one of them to be "
-                            "present."
+                            " the 'user', 'requested_by' and 'api_user' keyword arguments but expected only one of "
+                            "them to be present."
                         )
-                    potential_user = user_kwarg if isinstance(user_kwarg, base_models.APIUser) else requested_by_kwarg
+                    potential_user = found_users[0] if found_users else None
                 else:
-                    potential_user = args[0]
+                    potential_user = args[0] if isinstance(args[0], base_models.APIUser) else None
                 if not isinstance(potential_user, base_models.APIUser):
                     raise errors.ProgrammingError(
                         message="The decorator for authorization database changes could not find APIUser in the "
@@ -719,9 +728,45 @@ class Authz:
                     ):
                         user = _extract_user_from_args(*func_args, **func_kwargs)
                         authz_change = await db_repo.authz._remove_data_connector_to_project_link(user, result)
+                    case AuthzOperation.create, ResourceType.resource_pool if isinstance(result, ResourcePool):
+                        authz_change = db_repo.authz._add_resource_pool(result)
+                    case AuthzOperation.update, ResourceType.resource_pool if isinstance(result, ResourcePool):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._update_resource_pool_visibility(user, result)
+                    case AuthzOperation.delete, ResourceType.resource_pool if result is None:
+                        # NOTE: This means that the resource pool does not exist
+                        # in the first place so nothing was deleted
+                        pass
+                    case AuthzOperation.delete, ResourceType.resource_pool if isinstance(result, DeletedResourcePool):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._remove_resource_pool(user, result)
+                    case (
+                        (AuthzOperation.create | AuthzOperation.delete),
+                        (ResourceType.resource_pool_member | ResourceType.resource_pool_prohibited),
+                    ) if isinstance(result, ResourcePoolMembershipChange):
+                        authz_operation = {
+                            AuthzOperation.create: RelationshipUpdate.OPERATION_TOUCH,
+                            AuthzOperation.delete: RelationshipUpdate.OPERATION_DELETE,
+                        }[operation]
+                        relation = {
+                            ResourceType.resource_pool_member: _Relation.viewer.value,
+                            ResourceType.resource_pool_prohibited: _Relation.prohibited.value,
+                        }[resource]
+                        authz_change = await db_repo.authz._update_resource_pool_user_relationships(
+                            resource_pool_id=result.resource_pool_id,
+                            user_ids=result.user_ids,
+                            relation=relation,
+                            operation=authz_operation,
+                        )
+                    case (
+                        (AuthzOperation.create | AuthzOperation.delete),
+                        (ResourceType.resource_pool_member | ResourceType.resource_pool_prohibited),
+                    ) if result is None:
+                        # Handle None returns (nothing to sync)
+                        pass
                     case _:
-                        resource_id: str | ULID | None = "unknown"
-                        if isinstance(result, (Project, Namespace, Group, DataConnector)):
+                        resource_id: str | ULID | int | None = "unknown"
+                        if isinstance(result, (Project, Namespace, Group, DataConnector, ResourcePool)):
                             resource_id = result.id
                         elif isinstance(result, (ProjectUpdate, GroupUpdate, DataConnectorUpdate)):
                             resource_id = result.new.id
@@ -762,7 +807,6 @@ class Authz:
                     result = await f(db_repo, *args, **kwargs)
                     authz_change = await _get_authz_change(db_repo, op, resource, result, *args, **kwargs)
                     await db_repo.authz.client.WriteRelationships(authz_change.apply)
-                    await session.commit()
                     return result
                 except Exception as err:
                     db_rollback_err = None
@@ -1248,6 +1292,199 @@ class Authz:
             updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel)]
         )
         return _AuthzChange(apply=apply, undo=undo)
+
+    def _add_resource_pool(self, resource_pool: ResourcePool) -> _AuthzChange:
+        """Create the new resource pool and associated resources and relations in the DB."""
+        resource_pool_res = _AuthzConverter.resource_pool(resource_pool.id)
+        all_users = SubjectReference(object=_AuthzConverter.all_users())
+        all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
+        resource_pool_in_platform = Relationship(
+            resource=resource_pool_res,
+            relation=_Relation.resource_pool_platform.value,
+            subject=SubjectReference(object=self._platform),
+        )
+        relationships = [resource_pool_in_platform]
+        if resource_pool.public:
+            all_users_are_public_viewers = Relationship(
+                resource=resource_pool_res,
+                relation=_Relation.public_viewer.value,
+                subject=all_users,
+            )
+            all_anon_users_are_public_viewers = Relationship(
+                resource=resource_pool_res,
+                relation=_Relation.public_viewer.value,
+                subject=all_anon_users,
+            )
+            relationships.extend([all_users_are_public_viewers, all_anon_users_are_public_viewers])
+        apply = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in relationships
+            ]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in relationships
+            ]
+        )
+        return _AuthzChange(apply=apply, undo=undo)
+
+    async def _remove_resource_pool(
+        self,
+        user: base_models.APIUser,
+        deleted_resource_pool: DeletedResourcePool,
+        *,
+        zed_token: ZedToken | None = None,
+    ) -> _AuthzChange:
+        """Remove the relationships associated with the resource pool."""
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        rel_filter = RelationshipFilter(
+            resource_type=ResourceType.resource_pool.value, optional_resource_id=str(deleted_resource_pool.id)
+        )
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+        )
+        rels: list[Relationship] = []
+        async for response in responses:
+            rels.append(response.relationship)
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in rels]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
+        )
+        return _AuthzChange(apply=apply, undo=undo)
+
+    async def _update_resource_pool_visibility(
+        self, user: base_models.APIUser, resource_pool: ResourcePool, *, zed_token: ZedToken | None = None
+    ) -> _AuthzChange:
+        """Update public_viewer wildcard relationships when public flag changes."""
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        pool_res = _AuthzConverter.resource_pool(resource_pool.id)
+
+        # Read existing public_viewer relationships
+        rel_filter = RelationshipFilter(
+            resource_type=ResourceType.resource_pool.value,
+            optional_resource_id=str(resource_pool.id),
+            optional_relation=_Relation.public_viewer.value,
+        )
+        responses = self.client.ReadRelationships(
+            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+        )
+        existing_rels: list[Relationship] = []
+        async for response in responses:
+            existing_rels.append(response.relationship)
+
+        all_users_sub = SubjectReference(object=_AuthzConverter.all_users())
+        anon_users_sub = SubjectReference(object=_AuthzConverter.anonymous_users())
+        all_users_are_public = Relationship(
+            resource=pool_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_users_sub,
+        )
+        anon_users_are_public = Relationship(
+            resource=pool_res,
+            relation=_Relation.public_viewer.value,
+            subject=anon_users_sub,
+        )
+
+        apply_updates: list[RelationshipUpdate] = []
+        undo_updates: list[RelationshipUpdate] = []
+
+        if resource_pool.public:
+            # For undo, only remove wildcards if they didn't exist before
+            existing_subjects = {
+                (rel.subject.object.object_type, rel.subject.object.object_id) for rel in existing_rels
+            }
+            if ("user", "*") not in existing_subjects:
+                apply_updates.append(
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_TOUCH,
+                        relationship=all_users_are_public,
+                    )
+                )
+                undo_updates.append(
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_DELETE,
+                        relationship=all_users_are_public,
+                    )
+                )
+            if ("anonymous_user", "*") not in existing_subjects:
+                apply_updates.append(
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_TOUCH,
+                        relationship=anon_users_are_public,
+                    )
+                )
+                undo_updates.append(
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_DELETE,
+                        relationship=anon_users_are_public,
+                    )
+                )
+        else:
+            # Remove public_viewer wildcards
+            for existing_rel in existing_rels:
+                apply_updates.append(
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_DELETE,
+                        relationship=existing_rel,
+                    )
+                )
+            if existing_rels:
+                undo_updates.append(
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_TOUCH,
+                        relationship=all_users_are_public,
+                    )
+                )
+                undo_updates.append(
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_TOUCH,
+                        relationship=anon_users_are_public,
+                    )
+                )
+        apply = WriteRelationshipsRequest(updates=apply_updates)
+        undo = WriteRelationshipsRequest(updates=undo_updates)
+        return _AuthzChange(apply=apply, undo=undo)
+
+    async def _update_resource_pool_user_relationships(
+        self,
+        resource_pool_id: int,
+        user_ids: Collection[str],
+        relation: str,
+        operation: RelationshipUpdate.Operation.ValueType,
+    ) -> _AuthzChange:
+        """Create an AuthzChange for resource pool user relationships.
+
+        Args:
+            resource_pool_id: The ID of the resource pool.
+            user_ids: Keycloak IDs of the users to update.
+            relation: The SpiceDB relation name (e.g. "member", "prohibited").
+            operation: OPERATION_TOUCH to add, OPERATION_DELETE to remove.
+
+        Returns:
+            An _AuthzChange with apply and undo WriteRelationshipsRequests.
+        """
+        inverse_operation = {
+            RelationshipUpdate.OPERATION_TOUCH: RelationshipUpdate.OPERATION_DELETE,
+            RelationshipUpdate.OPERATION_DELETE: RelationshipUpdate.OPERATION_TOUCH,
+        }[operation]
+        apply_updates: list[RelationshipUpdate] = []
+        undo_updates: list[RelationshipUpdate] = []
+
+        for uid in user_ids:
+            rel = Relationship(
+                resource=_AuthzConverter.resource_pool(resource_pool_id),
+                relation=relation,
+                subject=_AuthzConverter.user_subject(uid),
+            )
+            apply_updates.append(RelationshipUpdate(operation=operation, relationship=rel))
+            undo_updates.append(RelationshipUpdate(operation=inverse_operation, relationship=rel))
+
+        return _AuthzChange(
+            apply=WriteRelationshipsRequest(updates=apply_updates),
+            undo=WriteRelationshipsRequest(updates=undo_updates),
+        )
 
     async def _remove_admin(self, user_id: str) -> _AuthzChange:
         """Add a deployment-wide administrator in the authorization database."""
