@@ -951,7 +951,14 @@ definition resource_pool {
     relation project_viewer: project
     relation prohibited: user
     relation public_viewer: user:* | anonymous_user:*
-    permission read = (viewer + group_viewer->direct_member + project_viewer->direct_member + public_viewer - prohibited) + resource_pool_platform->is_admin
+    permission read = ( \
+            viewer \
+            + group_viewer->direct_member\
+            + project_viewer->direct_member \
+            + public_viewer \
+            - prohibited \
+            ) \
+            + resource_pool_platform->is_admin
     permission write = resource_pool_platform->is_admin
 }"""
 """Adds the resource_pool definition for Authzed authorization with groups and projects."""
