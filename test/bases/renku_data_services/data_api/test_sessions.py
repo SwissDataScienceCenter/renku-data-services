@@ -7,11 +7,13 @@ import kr8s
 import pytest
 from kr8s.objects import new_class
 from pytest import FixtureRequest
+from sanic_ext.exceptions import ValidationError
 from sanic_testing.testing import SanicASGITestClient, TestingResponse
 from syrupy.filters import props
 
 from renku_data_services import errors
 from renku_data_services.data_api.dependencies import DependencyManager
+from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.constants import BUILD_RUN_GVK
 from renku_data_services.session.models import EnvVar
 from renku_data_services.users.models import UserInfo
@@ -53,6 +55,26 @@ def launch_session(
         return res
 
     return launch_session_helper
+
+
+@pytest.mark.parametrize("prefix,private_prefix,must_raise",
+    [
+        ("dummy/image-prefix", "dummy/private-image-prefix", False),
+        (None, "dummy/private-image-prefix", False),
+        ("dummy/image-prefix", None, False),
+        ("dummy/private-image-prefix", "dummy/private-image-prefix", True),
+    ])
+def test_same_build_image_prefix(monkeypatch, prefix, private_prefix, must_raise) -> None:
+    if prefix is not None:
+        monkeypatch.setenv("BUILD_OUTPUT_IMAGE_PREFIX", prefix)
+    if private_prefix is not None:
+        monkeypatch.setenv("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX", private_prefix)
+
+    if must_raise:
+        with pytest.raises(ValidationError):
+            _ = BuildsConfig.from_env()
+    else:
+        _ = BuildsConfig.from_env()
 
 
 @pytest.mark.asyncio
