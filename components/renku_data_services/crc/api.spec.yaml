@@ -1231,8 +1231,8 @@ components:
           $ref: "#/components/schemas/NodeAffinityList"
         usage_available:
           $ref: "#/components/schemas/UsageAvailable"
-        usage_available_percentage:
-          $ref: "#/components/schemas/UsageAvailablePercentage"
+        usage_limit_total:
+          $ref: "#/components/schemas/UsageLimitTotal"
       required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default", "default_storage"]
       example:
         name: "resource class"
@@ -1707,13 +1707,12 @@ components:
       description: Amount of a resource available (in hours)
       example: 3.141
       minimum: 0
-    UsageAvailablePercentage:
+    UsageLimitTotal:
       type: number
-      format: float
-      description: Percentage of available resources based on quota
-      example: 75.5
+      format: double
+      description: Total number of a resources hours available to the user
+      example: 10
       minimum: 0
-      maximum: 100
       default: null
     ResourceUsage:
       type: number

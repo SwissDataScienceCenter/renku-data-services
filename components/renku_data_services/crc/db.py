@@ -315,13 +315,13 @@ class ResourcePoolRepository(_Base):
                 if self.resource_requests_repo:
                     updated_classes = []
                     for resource_class in rp_model.classes:
-                        usage_available, usage_available_percentage = await calculate_available_usage(
+                        usage_available, usage_limit_total = await calculate_available_usage(
                             self.resource_requests_repo, rp.id, resource_class.id, resource_usage
                         )
                         updated_class = replace(
                             resource_class,
                             usage_available=usage_available,
-                            usage_available_percentage=usage_available_percentage,
+                            usage_limit_total=usage_limit_total,
                         )
                         updated_classes.append(updated_class)
 

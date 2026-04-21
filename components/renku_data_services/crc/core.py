@@ -653,18 +653,17 @@ async def calculate_available_usage(
     if available_quota <= 0:
         return None, None
 
-    resource_usage = resource_usage or 0
-    remaining_quota = available_quota - resource_usage
-
-    if remaining_quota <= 0:
-        return 0.0, 0.0
-
     resource_class_cost = await resource_requests_repo.find_resource_class_costs(resource_pool_id, resource_class_id)
-
     if not resource_class_cost or resource_class_cost.cost.value == 0:
         # NOTE: No cost is defined, so we cannot calculate remaining hours
         return None, None
 
+    total_hours = available_quota / resource_class_cost.cost.value
+    resource_usage = resource_usage or 0
+    remaining_quota = available_quota - resource_usage
+
+    if remaining_quota <= 0:
+        return 0.0, total_hours
+
     remaining_hours = remaining_quota / resource_class_cost.cost.value
-    remaining_percentage = (remaining_quota / available_quota) * 100.0
-    return remaining_hours, remaining_percentage
+    return remaining_hours, total_hours
