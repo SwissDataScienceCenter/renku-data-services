@@ -352,6 +352,7 @@ class ShipwrightBuildRunParams:
     builder_image: str | None = None
     git_repository_revision: str | None = None
     context_dir: str | None = None
+    insecure_registries: str = ""
 
     def with_overrides(self, overrides: "config.BuildPlatformOverrides | None") -> "ShipwrightBuildRunParams":
         """Returns a copy of the BuildRun parameters with overrides applied."""
@@ -376,6 +377,7 @@ class ShipwrightBuildRunParams:
             builder_image=overrides.builder_image or self.builder_image,
             git_repository_revision=self.git_repository_revision,
             context_dir=self.context_dir,
+            insecure_registries=self.insecure_registries,
         )
 
 
