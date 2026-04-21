@@ -57,13 +57,15 @@ def launch_session(
     return launch_session_helper
 
 
-@pytest.mark.parametrize("prefix,private_prefix,must_raise",
+@pytest.mark.parametrize(
+    "prefix,private_prefix,must_raise",
     [
         ("dummy/image-prefix", "dummy/private-image-prefix", False),
         (None, "dummy/private-image-prefix", False),
         ("dummy/image-prefix", None, False),
         ("dummy/private-image-prefix", "dummy/private-image-prefix", True),
-    ])
+    ],
+)
 def test_same_build_image_prefix(monkeypatch, prefix, private_prefix, must_raise) -> None:
     if prefix is not None:
         monkeypatch.setenv("BUILD_OUTPUT_IMAGE_PREFIX", prefix)
