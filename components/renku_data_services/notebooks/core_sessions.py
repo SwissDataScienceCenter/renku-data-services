@@ -618,7 +618,8 @@ def __format_image_pull_secret(secret_name: str, access_token: str, registry_dom
             data={".dockerconfigjson": registry_secret},
             metadata=V1ObjectMeta(name=secret_name),
             type="kubernetes.io/dockerconfigjson",
-        )
+        ),
+        adopt=True,
     )
 
 
