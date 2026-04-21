@@ -412,6 +412,7 @@ class DependencyManager:
             user_repo=kc_user_repo,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_http_client_factory,
+            internal_token_mint=internal_token_mint,
         )
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,

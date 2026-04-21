@@ -12,6 +12,8 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
+from renku_data_services.authn.chained import ChainedAuthenticator
+from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
@@ -163,7 +165,9 @@ class OAuth2ConnectionsBP(CustomBlueprint):
 
     connected_services_repo: ConnectedServicesRepository
     oauth_client_factory: OAuthHttpClientFactory
-    authenticator: base_models.Authenticator
+    authenticator: base_models.Authenticator[base_models.APIUser]
+    internal_authenticator: RenkuSelfAuthenticator
+    internal_token_mint: RenkuSelfTokenMint
     nb_config: NotebooksConfig
 
     def get_all(self) -> BlueprintFactoryResponse:
@@ -217,7 +221,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
     def get_token(self) -> BlueprintFactoryResponse:
         """Get the access token for a specific OAuth2 connection."""
 
-        @authenticate(self.authenticator)
+        @authenticate(ChainedAuthenticator(chain=[self.internal_authenticator, self.authenticator]))
         async def _get_token(_: Request, user: base_models.APIUser, connection_id: ULID) -> JSONResponse:
             client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
             token = await client.get_token()
@@ -256,12 +260,8 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         """OAuth 2.0 token endpoint to support applications running in sessions.
 
         Details:
-            1. Decode the refresh_token value into an instance of RenkuTokens
-            2. Validate the access_token
-                -> if the access_token is invalid (expired), use the renku refresh_token
-                to get a fresh set of tokens
-            3. Send back the refreshed OAuth 2.0 access token and a the encoded value
-            of the current RenkuTokens
+            1. Check that `body.refresh_token` is a valid internal refresh token
+            2. Send back the refreshed OAuth 2.0 access token and a new internal refresh token
         """
 
         @validate(form=apispec.PostTokenRequest)
@@ -273,8 +273,8 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                 body=body,
                 connection_id=connection_id,
                 oauth_client_factory=self.oauth_client_factory,
-                authenticator=self.authenticator,
-                nb_config=self.nb_config,
+                internal_authenticator=self.internal_authenticator,
+                internal_token_mint=self.internal_token_mint,
             )
 
             return validated_json(apispec.PostTokenResponse, result)

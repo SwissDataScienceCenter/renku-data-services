@@ -341,6 +341,7 @@ class TestDependencyManager(DependencyManager):
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_client_factory,
             user_repo=kc_user_repo,
+            internal_token_mint=internal_token_mint,
         )
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
