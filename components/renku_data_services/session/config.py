@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from pydantic import ValidationError as PydanticValidationError
+from sanic_ext.exceptions import ValidationError
 
 from renku_data_services.app_config import logging
 from renku_data_services.session import crs as session_crs
@@ -51,6 +52,14 @@ class BuildsConfig:
         enabled = os.environ.get("IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
         build_output_image_prefix = os.environ.get("BUILD_OUTPUT_IMAGE_PREFIX")
         build_output_private_image_prefix = os.environ.get("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX")
+
+        if (
+            build_output_image_prefix is not None
+            and build_output_private_image_prefix is not None
+            and build_output_image_prefix == build_output_private_image_prefix
+        ):
+            raise ValidationError("Public and private builds cannot use the same image prefix")
+
         build_builder_image = os.environ.get("BUILD_BUILDER_IMAGE")
         build_run_image = os.environ.get("BUILD_RUN_IMAGE")
         build_strategy_name = os.environ.get("BUILD_STRATEGY_NAME")
