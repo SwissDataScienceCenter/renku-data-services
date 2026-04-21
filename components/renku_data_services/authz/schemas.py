@@ -966,7 +966,7 @@ definition resource_pool {
 v10 = AuthzSchemaMigration(
     up=[WriteSchemaRequest(schema=_v10)],
     down=[
-        DeleteRelationshipsRequest(relationship_filter=RelationshipFilter(resource_type="resource_pool_v10")),
+        DeleteRelationshipsRequest(relationship_filter=RelationshipFilter(resource_type=ResourceType.resource_pool.value)),
         WriteSchemaRequest(schema=_v9),
     ],
 )
