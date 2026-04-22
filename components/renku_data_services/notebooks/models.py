@@ -158,6 +158,28 @@ class SessionExtraResources:
     volume_mounts: list[ExtraVolumeMount] = field(default_factory=list)
     volumes: list[ExtraVolume] = field(default_factory=list)
 
+    def __extra_to_sidecar_container(self, ec: ExtraContainer) -> InitContainer:
+        """Convert a ExtracContainer value to an InitContainer value.
+
+        Both types have the exact same shape, we only change the restartPolicy to 'Always' to mark it as a sidcar.
+        """
+        ic = ec.model_dump()
+        ic["restartPolicy"] = "Always"
+        return InitContainer.model_construct(**ic)
+
+    def extra_container_as_sidecar(self) -> SessionExtraResources:
+        """Moves all extra containers to be sidecars."""
+        more_inits = [self.__extra_to_sidecar_container(e) for e in self.containers]
+        return SessionExtraResources(
+            containers=[],
+            data_connector_secrets=self.data_connector_secrets,
+            data_sources=self.data_sources,
+            init_containers=self.init_containers + more_inits,
+            secrets=self.secrets,
+            volume_mounts=self.volume_mounts,
+            volumes=self.volumes,
+        )
+
     def concat(self, added_extras: SessionExtraResources | None) -> SessionExtraResources:
         """Concatenates these session extras with more session extras."""
         if added_extras is None:

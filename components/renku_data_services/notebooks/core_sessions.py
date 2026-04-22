@@ -127,7 +127,6 @@ async def get_extra_init_containers(
     internal_token_mint: RenkuSelfTokenMint,
     storage_mount: PurePosixPath,
     work_dir: PurePosixPath,
-    session_mode: SessionMode,
     uid: int = 1000,
     gid: int = 1000,
 ) -> SessionExtraResources:
@@ -159,17 +158,6 @@ async def get_extra_init_containers(
         init_containers=session_init_containers,
         volumes=extra_volumes,
     )
-
-
-def __extra_to_sidecar_container(ec: ExtraContainer) -> InitContainer:
-    """Convert a ExtracContainer value to an InitContainer value.
-
-    Both types have the exact same shape, we only change the restartPolicy to 'Always' to mark it as a sidcar.
-    """
-    ic = ec.model_dump()
-    ic["restartPolicy"] = "Always"
-    logger.info(f">>>> INIT CONTAINER: {ic}")
-    return InitContainer.model_construct(**ic)
 
 
 async def get_extra_containers(
@@ -950,15 +938,13 @@ async def start_session(
             work_dir,
             uid=environment.uid,
             gid=environment.gid,
-            session_mode=launch_request.session_mode,
         )
     )
 
-    # Extra containers (only for interactive sessions, for jobs these have been placed as init containers)
-    if is_interactive:
-        session_extras = session_extras.concat(
-            await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
-        )
+    # Extra containers
+    session_extras = await get_extra_containers(
+        nb_config, server_name, user, repositories, git_providers, internal_token_mint
+    )
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings
@@ -1085,6 +1071,11 @@ async def start_session(
         labels["renku.io/anonymous-session"] = "true"
 
     logger.debug(f"Setting session labels: {labels}")
+    logger.debug(f">>>> BEFORE extras: {len(session_extras.containers)}  inits: {len(session_extras.init_containers)}")
+    if not is_interactive:
+        session_extras = session_extras.extra_container_as_sidecar()
+
+    logger.debug(f">>>> AFTER extras: {len(session_extras.containers)}  inits: {len(session_extras.init_containers)}")
 
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations, labels=labels),
@@ -1344,7 +1335,6 @@ async def patch_session(
             work_dir,
             uid=environment.uid,
             gid=environment.gid,
-            session_mode=session_mode,
         )
     )
 
@@ -1371,6 +1361,9 @@ async def patch_session(
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret.name, adopt=image_pull_secret.adopt)]
     else:
         patch.spec.imagePullSecrets = RESET
+
+    if session_mode.is_non_interactive:
+        session_extras = session_extras.extra_container_as_sidecar()
 
     # Construct session patch
     patch.spec.extraContainers = _make_patch_spec_list(
