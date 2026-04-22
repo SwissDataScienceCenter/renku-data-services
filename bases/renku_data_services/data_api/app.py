@@ -222,6 +222,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         storage_repo=dm.storage_repo,
         user_repo=dm.kc_user_repo,
         git_repositories_repo=dm.git_repositories_repo,
+        builds_config=dm.config.builds,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",
