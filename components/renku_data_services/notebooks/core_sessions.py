@@ -839,6 +839,7 @@ async def start_session(
     launcher_id = launcher.id
     project = await project_repo.get_project(user=user, project_id=launcher.project_id)
     is_interactive = launch_request.session_mode.is_interactive
+    logger.info(f">>>>> launching {launcher_id} is interactive: {is_interactive} ({launch_request.session_mode})")
 
     # Determine resource_class_id: the class can be overwritten at the user's request
     resource_class_id = launch_request.resource_class_id or launcher.resource_class_id
