@@ -46,6 +46,7 @@ from renku_data_services.notebooks.api.amalthea_patches.init_containers import u
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
+from renku_data_services.notebooks.cr_amalthea_session import ReadinessProbe2, Type3
 from renku_data_services.notebooks.crs import (
     AmaltheaMetadata,
     AmaltheaSessionSpec,
@@ -119,11 +120,14 @@ logger = logging.getLogger(__name__)
 
 async def get_extra_init_containers(
     nb_config: NotebooksConfig,
+    server_name: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     repositories: list[Repository],
     git_providers: list[GitProvider],
+    internal_token_mint: RenkuSelfTokenMint,
     storage_mount: PurePosixPath,
     work_dir: PurePosixPath,
+    session_mode: SessionMode,
     uid: int = 1000,
     gid: int = 1000,
 ) -> SessionExtraResources:
@@ -144,10 +148,27 @@ async def get_extra_init_containers(
     )
     if git_clone is not None:
         session_init_containers.append(InitContainer.model_validate(git_clone))
+
+    if session_mode == SessionMode.non_interactive:
+        extras = await get_extra_containers(
+            nb_config, server_name, user, repositories, git_providers, internal_token_mint
+        )
+        session_init_containers = session_init_containers + [__extra_to_init_container(e) for e in extras.containers]
+
     return SessionExtraResources(
         init_containers=session_init_containers,
         volumes=extra_volumes,
     )
+
+
+def __extra_to_init_container(ec: ExtraContainer) -> InitContainer:
+    """Convert a ExtracContainer value to an InitContainer value.
+
+    Both types have the exact same shape, we only change the restartPolicy to 'Always' to mark it as an InitContainer.
+    """
+    ic = ec.model_dump()
+    ic["restartPolicy"] = "Always"
+    return InitContainer.model_construct(**ic)
 
 
 async def get_extra_containers(
@@ -918,20 +939,24 @@ async def start_session(
     session_extras = session_extras.concat(
         await get_extra_init_containers(
             nb_config,
+            server_name,
             user,
             repositories,
             git_providers,
+            internal_token_mint,
             storage_mount,
             work_dir,
             uid=environment.uid,
             gid=environment.gid,
+            session_mode=launch_request.session_mode,
         )
     )
 
-    # Extra containers
-    session_extras = session_extras.concat(
-        await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
-    )
+    # Extra containers (only for interactive sessions, for jobs these have been placed as init containers)
+    if is_interactive:
+        session_extras = session_extras.concat(
+            await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
+        )
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings
@@ -1092,6 +1117,7 @@ async def start_session(
                 stripURLPath=environment.strip_path_prefix,
                 env=env,
                 remoteSecretRef=remote_secret.ref() if remote_secret else None,
+                readinessProbe=ReadinessProbe2(type=Type3.none) if not is_interactive else ReadinessProbe2(),
             ),
             ingress=ingress_config.get_k8s_ingress() if is_interactive else None,
             extraContainers=session_extras.containers,
@@ -1178,6 +1204,7 @@ async def patch_session(
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())
     is_getting_hibernated: bool = False
+    session_mode = SessionMode.from_amalthea_name(session.spec.sessionType)
 
     # Hibernation
     # TODO: Some patching should only be done when the session is in some states to avoid inadvertent restarts
@@ -1315,13 +1342,15 @@ async def patch_session(
             work_dir,
             uid=environment.uid,
             gid=environment.gid,
+            session_mode=session_mode,
         )
     )
 
     # Extra containers
-    session_extras = session_extras.concat(
-        await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
-    )
+    if session_mode.is_interactive:
+        session_extras = session_extras.concat(
+            await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
+        )
 
     # Patching the image pull secret
     image = session.spec.session.image
