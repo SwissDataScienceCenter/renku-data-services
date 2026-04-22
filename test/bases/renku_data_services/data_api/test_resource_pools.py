@@ -1774,7 +1774,8 @@ async def test_resource_pools_quota_with_partial_usage(
 
     # usage_available should be 3 hours which is 75 percent of the total 4 hours available
     assert resource_class["usage_available"] == 3.0
-    assert resource_class["usage_available_percentage"] == 75.0
+    # usage_limit_total should be 4 hours (200 credits total limit / 50 credits per hour)
+    assert resource_class["usage_limit_total"] == 4.0
 
 
 @pytest.mark.asyncio
@@ -1844,8 +1845,8 @@ async def test_resource_pools_quota_with_no_usage(
 
     # usage_available should be full quota: 200/50 = 4.0 hours
     assert resource_class["usage_available"] == 4.0
-    # usage_available_percentage should be 100%
-    assert resource_class["usage_available_percentage"] == 100.0
+    # usage_limit_total should be 4 hours (200 credits total limit / 50 credits per hour)
+    assert resource_class["usage_limit_total"] == 4.0
 
 
 @pytest.mark.asyncio
@@ -1927,8 +1928,8 @@ async def test_resource_pools_quota_exceeded(
 
     # usage_available should be 0 (quota exceeded)
     assert resource_class["usage_available"] == 0.0
-    # usage_available_percentage should be 0%
-    assert resource_class["usage_available_percentage"] == 0.0
+    # usage_limit_total should be 2.0 hours (50 credits/hour * 2 hours = 100 credits limit)
+    assert resource_class["usage_limit_total"] == 2.0
 
 
 @pytest.mark.asyncio
@@ -2002,8 +2003,8 @@ async def test_resource_pools_quota_with_no_limits(
 
     # usage_available should not exist in the response since it's None
     assert "usage_available" not in resource_class
-    # usage_available_percentage should not exist in the response since it's None
-    assert "usage_available_percentage" not in resource_class
+    # usage_limit_total should not exist in the response since it's None
+    assert "usage_limit_total" not in resource_class
 
 
 @pytest.mark.asyncio
@@ -2081,5 +2082,5 @@ async def test_resource_pools_quota_with_no_costs(
 
     # usage_available should not exist in the response since it's None
     assert "usage_available" not in resource_class
-    # usage_available_percentage should not exist in the response since it's None
-    assert "usage_available_percentage" not in resource_class
+    # usage_limit_total should not exist in the response since it's None
+    assert "usage_limit_total" not in resource_class

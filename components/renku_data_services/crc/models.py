@@ -112,7 +112,7 @@ class ResourceClass(ResourcesCompareMixin):
     tolerations: list[str] = field(default_factory=list)
     quota: str | None = None
     usage_available: float | None = None
-    usage_available_percentage: float | None = None
+    usage_limit_total: float | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
