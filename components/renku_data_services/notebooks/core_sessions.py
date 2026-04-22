@@ -814,6 +814,7 @@ async def start_session(
     launcher = await session_repo.get_launcher(user=user, launcher_id=launch_request.launcher_id)
     launcher_id = launcher.id
     project = await project_repo.get_project(user=user, project_id=launcher.project_id)
+    is_interactive = launch_request.session_mode.is_interactive
 
     # Determine resource_class_id: the class can be overwritten at the user's request
     resource_class_id = launch_request.resource_class_id or launcher.resource_class_id
@@ -943,11 +944,7 @@ async def start_session(
     storage_class = cluster_settings.get_storage_class()
     service_account_name = cluster_settings.service_account_name
 
-    ui_path = (
-        f"{ingress_config.url_path}/{environment.default_url.lstrip('/')}"
-        if launch_request.session_mode.is_non_interactive()
-        else ""
-    )
+    ui_path = f"{ingress_config.url_path}/{environment.default_url.lstrip('/')}" if is_interactive else ""
 
     # Annotations
     annotations: dict[str, str] = {
@@ -1017,18 +1014,29 @@ async def start_session(
     # Raise an error if there are invalid environment variables in the request body
     verify_launcher_env_variable_overrides(launcher, launch_request)
     env = [
-        SessionEnvItem(name="RENKU_BASE_URL_PATH", value=ingress_config.url_path),
-        SessionEnvItem(name="RENKU_BASE_URL", value=ingress_config.url),
         SessionEnvItem(name="RENKU_MOUNT_DIR", value=storage_mount.as_posix()),
-        SessionEnvItem(name="RENKU_SESSION", value="1"),
-        SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
-        SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
         SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
         SessionEnvItem(name="RENKU_SECRETS_PATH", value=project.secrets_mount_directory.as_posix()),
         SessionEnvItem(name="RENKU_PROJECT_ID", value=str(project.id)),
         SessionEnvItem(name="RENKU_PROJECT_PATH", value=project.path.serialize()),
         SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
     ]
+    if is_interactive:
+        env.extend(
+            [
+                SessionEnvItem(name="RENKU_BASE_URL_PATH", value=ingress_config.url_path),
+                SessionEnvItem(name="RENKU_BASE_URL", value=ingress_config.url),
+                SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
+                SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
+                SessionEnvItem(name="RENKU_SESSION", value="1"),
+            ]
+        )
+    if not is_interactive:
+        env.extend(
+            [
+                SessionEnvItem(name="RENKU_JOB", value="1"),
+            ]
+        )
     if session_location == SessionLocation.remote:
         assert resource_pool.remote is not None
         env.extend(
@@ -1083,7 +1091,7 @@ async def start_session(
                 env=env,
                 remoteSecretRef=remote_secret.ref() if remote_secret else None,
             ),
-            ingress=ingress_config.get_k8s_ingress(),
+            ingress=ingress_config.get_k8s_ingress() if is_interactive else None,
             extraContainers=session_extras.containers,
             initContainers=session_extras.init_containers,
             extraVolumes=session_extras.volumes,

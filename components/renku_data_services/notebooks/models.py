@@ -194,9 +194,15 @@ class SessionMode(StrEnum):
     interactive = "interactive"
     non_interactive = "non_interactive"
 
+    @property
     def is_non_interactive(self) -> bool:
         """Return true when non_interactive."""
         return self == SessionMode.non_interactive
+
+    @property
+    def is_interactive(self) -> bool:
+        """Return true when interactive."""
+        return not self.is_non_interactive
 
     def to_amalthea_name(self) -> str:
         """Return the value for the amalthea spec."""
