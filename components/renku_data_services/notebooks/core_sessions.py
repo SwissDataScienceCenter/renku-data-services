@@ -149,11 +149,11 @@ async def get_extra_init_containers(
     if git_clone is not None:
         session_init_containers.append(InitContainer.model_validate(git_clone))
 
-    if session_mode == SessionMode.non_interactive:
+    if session_mode.is_non_interactive:
         extras = await get_extra_containers(
             nb_config, server_name, user, repositories, git_providers, internal_token_mint
         )
-        session_init_containers = session_init_containers + [__extra_to_init_container(e) for e in extras.containers]
+        session_init_containers = session_init_containers + [__extra_to_sidecar_container(e) for e in extras.containers]
 
     return SessionExtraResources(
         init_containers=session_init_containers,
@@ -161,13 +161,14 @@ async def get_extra_init_containers(
     )
 
 
-def __extra_to_init_container(ec: ExtraContainer) -> InitContainer:
+def __extra_to_sidecar_container(ec: ExtraContainer) -> InitContainer:
     """Convert a ExtracContainer value to an InitContainer value.
 
-    Both types have the exact same shape, we only change the restartPolicy to 'Always' to mark it as an InitContainer.
+    Both types have the exact same shape, we only change the restartPolicy to 'Always' to mark it as a sidcar.
     """
     ic = ec.model_dump()
     ic["restartPolicy"] = "Always"
+    logger.info(f">>>> INIT CONTAINER: {ic}")
     return InitContainer.model_construct(**ic)
 
 
