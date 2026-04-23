@@ -217,7 +217,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             environment_image_source=models.EnvironmentImageSource.build,
             build_parameters_id=build_parameters_orm.id,
             build_parameters=build_parameters_orm,
-            strip_path_prefix=False,
+            strip_path_prefix=build_parameters_orm.frontend_variant == models.FrontendVariant.rstudio.value,
         )
         session.add(environment_orm)
         return environment_orm
@@ -779,7 +779,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 launcher.environment.environment_image_source = models.EnvironmentImageSource.build
                 launcher.environment.build_parameters_id = build_parameters_orm.id
                 launcher.environment.build_parameters = build_parameters_orm
-                launcher.environment.strip_path_prefix = False
+                launcher.environment.strip_path_prefix = (
+                    build_parameters_orm.frontend_variant == models.FrontendVariant.rstudio.value
+                )
 
                 await session.flush()
             case _:
