@@ -12,6 +12,7 @@ from renku_data_services.session.cr_shipwright_buildrun import Source as BuildSo
 from renku_data_services.session.cr_shipwright_buildrun import Spec as BuildRunSpec
 from renku_data_services.session.cr_shipwright_buildrun import Spec1 as BuildSpec
 from renku_data_services.session.cr_tekton_taskrun import TaskRunBase as _TaskRunBase
+from renku_data_services.session.models import FrontendVariant
 
 
 class Metadata(BaseModel):
@@ -38,6 +39,23 @@ class BuildRun(_BuildRun):
     apiVersion: str = "shipwright.io/v1beta1"
     # Here we overwrite the default from ASModel because it is too weakly typed
     metadata: Metadata  # type: ignore[assignment]
+
+    def __get_param_value(self, key: str) -> str | None:
+        if not self.spec.paramValues:
+            return None
+        res = next((i for i in self.spec.paramValues if i.name == key), None)
+        if not res:
+            return None
+        return res.value
+
+    @property
+    def frontend_variant(self) -> FrontendVariant | None:
+        """Get the frontend variant from the parameters."""
+        variant = self.__get_param_value("frontend")
+        try:
+            return FrontendVariant(variant) if variant is not None else None
+        except ValueError:
+            return None
 
 
 class GitSource(BuildSource):

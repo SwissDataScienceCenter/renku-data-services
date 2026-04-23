@@ -249,20 +249,22 @@ class ShipwrightClient:
             patch = [{"op": "replace", "path": "/metadata/ownerReferences", "value": [owner_reference]}]
             await self.secret_client.patch_secret(secret, patch)
 
-    async def update_image_build_status(self, buildrun_name: str, user_id: str) -> models.ShipwrightBuildStatusUpdate:
+    async def update_image_build_status(
+        self, buildrun_name: str, user_id: str
+    ) -> tuple[models.ShipwrightBuildStatusUpdate, models.FrontendVariant | None]:
         """Update the status of a build by pulling the corresponding BuildRun from Shipwright."""
         k8s_build = await self.get_build_run(name=buildrun_name, user_id=user_id)
 
         if k8s_build is None:
             return models.ShipwrightBuildStatusUpdate(
                 update=models.ShipwrightBuildStatusUpdateContent(status=models.BuildStatus.failed)
-            )
+            ), None
 
         k8s_build_status = k8s_build.status
         completion_time = k8s_build_status.completionTime if k8s_build_status else None
 
         if k8s_build_status is None or completion_time is None:
-            return models.ShipwrightBuildStatusUpdate(update=None)
+            return models.ShipwrightBuildStatusUpdate(update=None), k8s_build.frontend_variant
 
         conditions = k8s_build_status.conditions
         # NOTE: You can get a condition like this in some cases during autoscaling or for other reasons
@@ -287,7 +289,7 @@ class ShipwrightClient:
 
         if condition is not None and condition.status not in ["True", "False"]:
             # The buildrun is still running or pending
-            return models.ShipwrightBuildStatusUpdate(update=None)
+            return models.ShipwrightBuildStatusUpdate(update=None), k8s_build.frontend_variant
 
         buildSpec = k8s_build_status.buildSpec
         output = buildSpec.output if buildSpec else None
@@ -314,7 +316,7 @@ class ShipwrightClient:
                         repository_git_commit_sha=result_repository_git_commit_sha,
                     ),
                 )
-            )
+            ), k8s_build.frontend_variant
         else:
             return models.ShipwrightBuildStatusUpdate(
                 update=models.ShipwrightBuildStatusUpdateContent(
@@ -322,7 +324,7 @@ class ShipwrightClient:
                     completed_at=completion_time,
                     error_reason=condition.reason if condition is not None else None,
                 )
-            )
+            ), k8s_build.frontend_variant
 
     async def get_image_build_logs(
         self, buildrun_name: str, user_id: str, max_log_lines: int | None = None

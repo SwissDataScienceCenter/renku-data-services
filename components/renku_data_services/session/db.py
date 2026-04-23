@@ -199,25 +199,28 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         )
         session.add(build_parameters_orm)
 
+        build_env = models.BUILD_ENVIRONMENT_CONFIGS[
+            models.FrontendVariant(new_build_parameters_environment.frontend_variant)
+        ]
         environment_orm = schemas.EnvironmentORM(
             name=launcher.name,
             created_by_id=user.id,
             description=f"Generated environment for {launcher.name}",
             container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
-            default_url="/lab",  # TODO: This should come from the build
-            port=8888,  # TODO: This should come from the build
-            working_directory=None,  # TODO: This should come from the build
-            mount_directory=None,  # TODO: This should come from the build
-            uid=1000,  # TODO: This should come from the build
-            gid=1000,  # TODO: This should come from the build
-            environment_kind=models.EnvironmentKind.CUSTOM,
-            command=None,  # TODO: This should come from the build
-            args=None,  # TODO: This should come from the build
+            default_url=build_env.default_url,  # TODO: This should come from the build
+            port=build_env.port,  # TODO: This should come from the build
+            working_directory=build_env.working_directory,  # TODO: This should come from the build
+            mount_directory=build_env.mount_directory,  # TODO: This should come from the build
+            uid=build_env.uid,  # TODO: This should come from the build
+            gid=build_env.gid,  # TODO: This should come from the build
+            environment_kind=build_env.environment_kind,
+            command=build_env.command,  # TODO: This should come from the build
+            args=build_env.args,  # TODO: This should come from the build
             creation_date=datetime.now(UTC).replace(microsecond=0),
-            environment_image_source=models.EnvironmentImageSource.build,
+            environment_image_source=build_env.environment_image_source,
             build_parameters_id=build_parameters_orm.id,
             build_parameters=build_parameters_orm,
-            strip_path_prefix=build_parameters_orm.frontend_variant == models.FrontendVariant.rstudio.value,
+            strip_path_prefix=build_env.strip_path_prefix,
         )
         session.add(environment_orm)
         return environment_orm
@@ -459,28 +462,26 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 )
                 session.add(build_parameters_orm)
 
+                env = models.BUILD_ENVIRONMENT_CONFIGS[models.FrontendVariant(launcher.environment.frontend_variant)]
                 environment_orm = schemas.EnvironmentORM(
                     name=launcher.name,
                     created_by_id=user.id,
                     description=f"Generated environment for {launcher.name}",
                     container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
-                    default_url=constants.BUILD_URL_PATH_MAP.get(
-                        launcher.environment.frontend_variant, constants.BUILD_DEFAULT_URL_PATH
-                    ),
-                    port=constants.BUILD_PORT,  # TODO: This should come from the build
-                    working_directory=constants.BUILD_WORKING_DIRECTORY,  # TODO: This should come from the build
-                    mount_directory=constants.BUILD_MOUNT_DIRECTORY,  # TODO: This should come from the build
-                    uid=constants.BUILD_UID,  # TODO: This should come from the build
-                    gid=constants.BUILD_GID,  # TODO: This should come from the build
-                    environment_kind=models.EnvironmentKind.CUSTOM,
-                    command=None,  # TODO: This should come from the build
-                    args=None,  # TODO: This should come from the build
+                    default_url=env.default_url,
+                    port=env.port,
+                    working_directory=env.working_directory,
+                    mount_directory=env.mount_directory,
+                    uid=env.uid,
+                    gid=env.gid,
+                    environment_kind=env.environment_kind,
+                    command=env.command,
+                    args=env.args,
                     creation_date=datetime.now(UTC).replace(microsecond=0),
-                    environment_image_source=models.EnvironmentImageSource.build,
+                    environment_image_source=env.environment_image_source,
                     build_parameters_id=build_parameters_orm.id,
                     build_parameters=build_parameters_orm,
-                    strip_path_prefix=launcher.environment.frontend_variant
-                    == models.FrontendVariant.rstudio.value,  # TODO: Should this maybe be adjustable?
+                    strip_path_prefix=env.strip_path_prefix,  # TODO: Should this maybe be adjustable?
                 )
                 session.add(environment_orm)
 
@@ -764,24 +765,28 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 )
                 session.add(build_parameters_orm)
 
+                frontend_variant = models.FrontendVariant(new_custom_built_environment.frontend_variant)
+                build_env = models.BUILD_ENVIRONMENT_CONFIGS[frontend_variant]
                 launcher.environment.container_image = (
-                    "image:unknown-at-the-moment"  # TODO: This should come from the build
+                    build_env.container_image  # TODO: This should come from the build
                 )
-                launcher.environment.default_url = "/lab"  # TODO: This should come from the build
-                launcher.environment.port = 8888  # TODO: This should come from the build
-                launcher.environment.working_directory = None  # TODO: This should come from the build
-                launcher.environment.mount_directory = None  # TODO: This should come from the build
-                launcher.environment.uid = 1000  # TODO: This should come from the build
-                launcher.environment.gid = 1000  # TODO: This should come from the build
-                launcher.environment.environment_kind = models.EnvironmentKind.CUSTOM
-                launcher.environment.command = None  # TODO: This should come from the build
-                launcher.environment.args = None  # TODO: This should come from the build
-                launcher.environment.environment_image_source = models.EnvironmentImageSource.build
+                launcher.environment.default_url = build_env.default_url  # TODO: This should come from the build
+                launcher.environment.port = build_env.port  # TODO: This should come from the build
+                launcher.environment.working_directory = (
+                    build_env.working_directory
+                )  # TODO: This should come from the build
+                launcher.environment.mount_directory = (
+                    build_env.mount_directory
+                )  # TODO: This should come from the build
+                launcher.environment.uid = build_env.uid  # TODO: This should come from the build
+                launcher.environment.gid = build_env.gid  # TODO: This should come from the build
+                launcher.environment.environment_kind = build_env.environment_kind
+                launcher.environment.command = build_env.command  # TODO: This should come from the build
+                launcher.environment.args = build_env.args  # TODO: This should come from the build
+                launcher.environment.environment_image_source = build_env.environment_image_source
                 launcher.environment.build_parameters_id = build_parameters_orm.id
                 launcher.environment.build_parameters = build_parameters_orm
-                launcher.environment.strip_path_prefix = (
-                    build_parameters_orm.frontend_variant == models.FrontendVariant.rstudio.value
-                )
+                launcher.environment.strip_path_prefix = build_env.strip_path_prefix
 
                 await session.flush()
             case _:
@@ -1043,7 +1048,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         )
 
     async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession, user_id: str) -> None:
-        """Refresh the status of a build by querying Shipwright."""
+        """Refresh the status of a build by querying Shipwright.
+
+        The update of things other than the status are applied to the buildrun first
+        and then to the DB after the buildrun succeeds. So this updates more than just the status.
+        """
         if build.status != models.BuildStatus.in_progress:
             return
 
@@ -1053,7 +1062,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             return
 
         # TODO: consider how we can parallelize calls to `shipwright_client` for refreshes.
-        status_update = await self.shipwright_client.update_image_build_status(
+        status_update, frontend_var = await self.shipwright_client.update_image_build_status(
             buildrun_name=build.dump().k8s_name, user_id=user_id
         )
 
@@ -1081,6 +1090,19 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 environment.command = None
             if environment.args is not None:
                 environment.args = None
+
+            environment.container_image = build.result_image
+            build_env = models.BUILD_ENVIRONMENT_CONFIGS.get(frontend_var) if frontend_var else None
+            if build_env:
+                environment.default_url = build_env.default_url
+                environment.strip_path_prefix = build_env.strip_path_prefix
+                environment.port = build_env.port
+                environment.uid = build_env.uid
+                environment.gid = build_env.gid
+                environment.working_directory = build_env.working_directory
+                environment.mount_directory = build_env.mount_directory
+                environment.command = build_env.command
+                environment.args = build_env.args
 
         await session.flush()
         await session.refresh(build)
