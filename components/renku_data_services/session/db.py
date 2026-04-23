@@ -479,7 +479,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     environment_image_source=models.EnvironmentImageSource.build,
                     build_parameters_id=build_parameters_orm.id,
                     build_parameters=build_parameters_orm,
-                    strip_path_prefix=False,  # TODO: Should this maybe be adjustable?
+                    strip_path_prefix=launcher.environment.frontend_variant
+                    == models.FrontendVariant.rstudio.value,  # TODO: Should this maybe be adjustable?
                 )
                 session.add(environment_orm)
 
