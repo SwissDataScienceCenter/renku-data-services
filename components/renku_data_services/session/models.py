@@ -411,8 +411,8 @@ class ShipwrightBuildStatusUpdate:
     None represents "no update"."""
 
 
-BUILD_ENVIRONMENT_CONFIGS: Final[dict[FrontendVariant, UnsavedEnvironment]] = {
-    FrontendVariant.rstudio: UnsavedEnvironment(
+BUILD_ENVIRONMENT_CONFIGS: Final[dict[str, UnsavedEnvironment]] = {
+    FrontendVariant.rstudio.value: UnsavedEnvironment(
         name="rstudio",
         default_url="/",
         port=BUILD_PORT,
@@ -425,7 +425,7 @@ BUILD_ENVIRONMENT_CONFIGS: Final[dict[FrontendVariant, UnsavedEnvironment]] = {
         environment_image_source=EnvironmentImageSource.build,
         strip_path_prefix=True,
     ),
-    FrontendVariant.jupyterlab: UnsavedEnvironment(
+    FrontendVariant.jupyterlab.value: UnsavedEnvironment(
         name="jupyterlab",
         default_url="/lab",
         port=BUILD_PORT,
@@ -438,7 +438,7 @@ BUILD_ENVIRONMENT_CONFIGS: Final[dict[FrontendVariant, UnsavedEnvironment]] = {
         environment_image_source=EnvironmentImageSource.build,
         strip_path_prefix=False,
     ),
-    FrontendVariant.ttyd: UnsavedEnvironment(
+    FrontendVariant.ttyd.value: UnsavedEnvironment(
         name="ttyd",
         default_url="/",
         port=BUILD_PORT,
@@ -451,7 +451,7 @@ BUILD_ENVIRONMENT_CONFIGS: Final[dict[FrontendVariant, UnsavedEnvironment]] = {
         environment_image_source=EnvironmentImageSource.build,
         strip_path_prefix=False,
     ),
-    FrontendVariant.vscodium: UnsavedEnvironment(
+    FrontendVariant.vscodium.value: UnsavedEnvironment(
         name="vscodium",
         default_url="/",
         port=BUILD_PORT,

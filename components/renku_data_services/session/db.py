@@ -199,9 +199,12 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         )
         session.add(build_parameters_orm)
 
-        build_env = models.BUILD_ENVIRONMENT_CONFIGS[
-            models.FrontendVariant(new_build_parameters_environment.frontend_variant)
-        ]
+        build_env = models.BUILD_ENVIRONMENT_CONFIGS.get(new_build_parameters_environment.frontend_variant)
+        if not build_env:
+            raise errors.ValidationError(
+                message=f"Frontend variant {new_build_parameters_environment.frontend_variant} is not valid or "
+                "cannot be found."
+            )
         environment_orm = schemas.EnvironmentORM(
             name=launcher.name,
             created_by_id=user.id,
@@ -462,7 +465,12 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 )
                 session.add(build_parameters_orm)
 
-                env = models.BUILD_ENVIRONMENT_CONFIGS[models.FrontendVariant(launcher.environment.frontend_variant)]
+                env = models.BUILD_ENVIRONMENT_CONFIGS.get(launcher.environment.frontend_variant)
+                if not env:
+                    raise errors.ValidationError(
+                        message=f"Frontend variant {launcher.environment.frontend_variant} is not valid or "
+                        "cannot be found."
+                    )
                 environment_orm = schemas.EnvironmentORM(
                     name=launcher.name,
                     created_by_id=user.id,
@@ -766,7 +774,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 session.add(build_parameters_orm)
 
                 frontend_variant = models.FrontendVariant(new_custom_built_environment.frontend_variant)
-                build_env = models.BUILD_ENVIRONMENT_CONFIGS[frontend_variant]
+                build_env = models.BUILD_ENVIRONMENT_CONFIGS.get(frontend_variant)
+                if not build_env:
+                    raise errors.ValidationError(
+                        message=f"Frontend variant {frontend_variant} is not valid or cannot be found."
+                    )
                 launcher.environment.container_image = (
                     build_env.container_image  # TODO: This should come from the build
                 )

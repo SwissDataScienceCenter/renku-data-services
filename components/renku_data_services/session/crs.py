@@ -12,7 +12,6 @@ from renku_data_services.session.cr_shipwright_buildrun import Source as BuildSo
 from renku_data_services.session.cr_shipwright_buildrun import Spec as BuildRunSpec
 from renku_data_services.session.cr_shipwright_buildrun import Spec1 as BuildSpec
 from renku_data_services.session.cr_tekton_taskrun import TaskRunBase as _TaskRunBase
-from renku_data_services.session.models import FrontendVariant
 
 
 class Metadata(BaseModel):
@@ -49,13 +48,9 @@ class BuildRun(_BuildRun):
         return res.value
 
     @property
-    def frontend_variant(self) -> FrontendVariant | None:
+    def frontend_variant(self) -> str | None:
         """Get the frontend variant from the parameters."""
-        variant = self.__get_param_value("frontend")
-        try:
-            return FrontendVariant(variant) if variant is not None else None
-        except ValueError:
-            return None
+        return self.__get_param_value("frontend")
 
 
 class GitSource(BuildSource):

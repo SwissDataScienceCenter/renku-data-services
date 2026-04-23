@@ -251,7 +251,7 @@ class ShipwrightClient:
 
     async def update_image_build_status(
         self, buildrun_name: str, user_id: str
-    ) -> tuple[models.ShipwrightBuildStatusUpdate, models.FrontendVariant | None]:
+    ) -> tuple[models.ShipwrightBuildStatusUpdate, str | None]:
         """Update the status of a build by pulling the corresponding BuildRun from Shipwright."""
         k8s_build = await self.get_build_run(name=buildrun_name, user_id=user_id)
 
