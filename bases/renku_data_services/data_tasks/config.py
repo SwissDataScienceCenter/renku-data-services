@@ -52,6 +52,7 @@ class Config:
     short_task_period_s: int
     long_task_period_s: int
     enable_resource_request_tracking: bool
+    session_quota_alert_check_interval_s: int
 
     @classmethod
     def from_env(cls) -> Config:
@@ -69,6 +70,7 @@ class Config:
         x_short_task_period = int(os.environ.get("X_SHORT_TASK_PERIOD_S", 30))
         short_task_period = int(os.environ.get("SHORT_TASK_PERIOD_S", 2 * 60))
         long_task_period = int(os.environ.get("LONG_TASK_PERIOD_S", 3 * 60 * 60))
+        session_quota_alert_check_interval = int(os.environ.get("SESSION_QUOTA_ALERT_CHECK_INTERVAL_S", 5 * 60))
 
         k8s_config_root = os.environ.get("K8S_CONFIG_ROOT", "/secrets/kube_configs")
 
@@ -92,4 +94,5 @@ class Config:
             long_task_period_s=long_task_period,
             dummy_stores=dummy_stores,
             enable_resource_request_tracking=enable_resource_request_tracking,
+            session_quota_alert_check_interval_s=session_quota_alert_check_interval,
         )
