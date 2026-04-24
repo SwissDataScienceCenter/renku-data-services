@@ -907,7 +907,7 @@ class Repository2Users:
     disallowed: list[base_models.User] = field(default_factory=list)
 
 
-class UserRepository(_Base):
+class MemberRepository(_Base):
     """The adapter used for accessing resource pool users with SQLAlchemy."""
 
     def __init__(

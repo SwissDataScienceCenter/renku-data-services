@@ -477,7 +477,7 @@ async def test_resource_pools_access_control(
     inserted_public_rp = None
     inserted_private_rp = None
     pool_repo = app_manager_instance.rp_repo
-    user_repo = app_manager_instance.user_repo
+    member_repo = app_manager_instance.member_repo
     try:
         inserted_public_rp = await create_rp(public_rp, pool_repo, admin_user)
         assert inserted_public_rp.id is not None
@@ -491,11 +491,11 @@ async def test_resource_pools_access_control(
         assert any(inserted_private_rp.id == rp.id for rp in admin_rps)
         assert loggedin_user.id is not None
         user_to_add = base_models.User(keycloak_id=loggedin_user.id)
-        updated_users = await user_repo.update_resource_pool_users(
+        updated_members = await member_repo.update_resource_pool_users(
             admin_user, inserted_private_rp.id, [loggedin_user.id], append=True
         )
 
-        assert user_to_add in [remove_id_from_user(user) for user in updated_users]
+        assert user_to_add in [remove_id_from_user(user) for user in updated_members]
         loggedin_user_rps = await pool_repo.get_resource_pools(loggedin_user)
         assert any(inserted_private_rp.id == rp.id for rp in loggedin_user_rps)
     except (ValidationError, errors.ValidationError):
