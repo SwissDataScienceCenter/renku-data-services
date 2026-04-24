@@ -52,6 +52,10 @@ if TYPE_CHECKING:
     from renku_data_services.namespace.db import GroupRepository
     from renku_data_services.project.db import ProjectRepository
 
+if TYPE_CHECKING:
+    from renku_data_services.namespace.db import GroupRepository
+    from renku_data_services.project.db import ProjectRepository
+
 
 class _Base:
     def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, authz: Authz) -> None:
