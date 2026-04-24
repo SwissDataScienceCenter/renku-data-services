@@ -259,9 +259,6 @@ class DataSourceRepository:
 
         token_config["expiry"] = (datetime.now(UTC) + timedelta(seconds=expires_in)).isoformat()
 
-        # TODO: remove, this is for debug (forcing immediate refresh)
-        token_config["expiry"] = (datetime.now(UTC) - timedelta(days=1)).isoformat()
-
         token = json.dumps(token_config)
         token_url = request.url_for("oauth2_connections.post_token_endpoint", connection_id=connection.id)
         return _OAuth2ConfigPartial(token=token, token_url=token_url)
