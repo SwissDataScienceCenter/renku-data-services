@@ -335,10 +335,19 @@ class DependencyManager:
             authz=authz,
         )
 
+        project_repo = ProjectRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            group_repo=group_repo,
+            search_updates_repo=search_updates_repo,
+        )
+
         member_repo = MemberRepository(
             session_maker=config.db.async_session_maker,
             quotas_repo=quota_repo,
             user_repo=kc_user_repo,
+            group_repo=group_repo,
+            project_repo=project_repo,
             authz=authz,
         )
         resource_requests_repo = ResourceRequestsRepo(
@@ -359,12 +368,6 @@ class DependencyManager:
             secret_service_public_key=config.secrets.public_key,
         )
         reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
-        project_repo = ProjectRepository(
-            session_maker=config.db.async_session_maker,
-            authz=authz,
-            group_repo=group_repo,
-            search_updates_repo=search_updates_repo,
-        )
 
         git_repositories_repo = GitRepositoriesRepository(
             session_maker=config.db.async_session_maker,
