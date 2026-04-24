@@ -1,11 +1,13 @@
 """Models for sessions."""
 
+from __future__ import annotations
+
 import typing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from ulid import ULID
 
@@ -16,7 +18,15 @@ from renku_data_services.session import crs
 if TYPE_CHECKING:
     from renku_data_services.session import apispec, config
 
-from .constants import ENV_VARIABLE_NAME_MATCHER, ENV_VARIABLE_REGEX
+from .constants import (
+    BUILD_GID,
+    BUILD_MOUNT_DIRECTORY,
+    BUILD_PORT,
+    BUILD_UID,
+    BUILD_WORKING_DIRECTORY,
+    ENV_VARIABLE_NAME_MATCHER,
+    ENV_VARIABLE_REGEX,
+)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -190,17 +200,17 @@ class EnvVar:
     value: str | None = None
 
     @classmethod
-    def from_dict(cls, env_dict: dict[str, str | None]) -> list["EnvVar"]:
+    def from_dict(cls, env_dict: dict[str, str | None]) -> list[EnvVar]:
         """Create a list of EnvVar instances from a dictionary."""
         return [cls(name=name, value=value) for name, value in env_dict.items()]
 
     @classmethod
-    def from_apispec(cls, env_variables: list["apispec.EnvVar"]) -> list["EnvVar"]:
+    def from_apispec(cls, env_variables: list[apispec.EnvVar]) -> list[EnvVar]:
         """Create a list of EnvVar instances from apispec objects."""
         return [cls(name=env_var.name, value=env_var.value) for env_var in env_variables]
 
     @classmethod
-    def to_dict(cls, env_variables: list["EnvVar"]) -> dict[str, str | None]:
+    def to_dict(cls, env_variables: list[EnvVar]) -> dict[str, str | None]:
         """Convert to dict."""
         return {var.name: var.value for var in env_variables}
 
@@ -336,7 +346,7 @@ class ShipwrightBuildRunParams:
     git_repository_revision: str | None = None
     context_dir: str | None = None
 
-    def with_overrides(self, overrides: "config.BuildPlatformOverrides | None") -> "ShipwrightBuildRunParams":
+    def with_overrides(self, overrides: config.BuildPlatformOverrides | None) -> ShipwrightBuildRunParams:
         """Returns a copy of the BuildRun parameters with overrides applied."""
         if overrides is None:
             return self
@@ -379,3 +389,59 @@ class ShipwrightBuildStatusUpdate:
     """The update about a build.
 
     None represents "no update"."""
+
+
+BUILD_ENVIRONMENT_CONFIGS: Final[dict[str, UnsavedEnvironment]] = {
+    FrontendVariant.rstudio.value: UnsavedEnvironment(
+        name="rstudio",
+        default_url="/",
+        port=BUILD_PORT,
+        container_image="image:unknown-at-the-moment",
+        working_directory=BUILD_WORKING_DIRECTORY,
+        mount_directory=BUILD_MOUNT_DIRECTORY,
+        uid=BUILD_UID,
+        gid=BUILD_GID,
+        environment_kind=EnvironmentKind.CUSTOM,
+        environment_image_source=EnvironmentImageSource.build,
+        strip_path_prefix=True,
+    ),
+    FrontendVariant.jupyterlab.value: UnsavedEnvironment(
+        name="jupyterlab",
+        default_url="/lab",
+        port=BUILD_PORT,
+        container_image="image:unknown-at-the-moment",
+        working_directory=BUILD_WORKING_DIRECTORY,
+        mount_directory=BUILD_MOUNT_DIRECTORY,
+        uid=BUILD_UID,
+        gid=BUILD_GID,
+        environment_kind=EnvironmentKind.CUSTOM,
+        environment_image_source=EnvironmentImageSource.build,
+        strip_path_prefix=False,
+    ),
+    FrontendVariant.ttyd.value: UnsavedEnvironment(
+        name="ttyd",
+        default_url="/",
+        port=BUILD_PORT,
+        container_image="image:unknown-at-the-moment",
+        working_directory=BUILD_WORKING_DIRECTORY,
+        mount_directory=BUILD_MOUNT_DIRECTORY,
+        uid=BUILD_UID,
+        gid=BUILD_GID,
+        environment_kind=EnvironmentKind.CUSTOM,
+        environment_image_source=EnvironmentImageSource.build,
+        strip_path_prefix=False,
+    ),
+    FrontendVariant.vscodium.value: UnsavedEnvironment(
+        name="vscodium",
+        default_url="/",
+        port=BUILD_PORT,
+        container_image="image:unknown-at-the-moment",
+        working_directory=BUILD_WORKING_DIRECTORY,
+        mount_directory=BUILD_MOUNT_DIRECTORY,
+        uid=BUILD_UID,
+        gid=BUILD_GID,
+        environment_kind=EnvironmentKind.CUSTOM,
+        environment_image_source=EnvironmentImageSource.build,
+        strip_path_prefix=False,
+    ),
+}
