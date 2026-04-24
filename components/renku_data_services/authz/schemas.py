@@ -915,7 +915,7 @@ definition project {
     relation public_viewer: user:* | anonymous_user:*
     permission read = public_viewer + read_children
     permission read_children = viewer + write + project_namespace->read_children
-    permission write = editor + delete + project_namespace->write
+    permission write = editor + delete
     permission change_membership = delete
     permission delete = owner + project_platform->is_admin + project_namespace->delete
     permission non_public_read = owner + editor + viewer + project_namespace->read_children - public_viewer
@@ -934,7 +934,7 @@ definition data_connector {
     relation viewer: user
     relation public_viewer: user:* | anonymous_user:*
     permission read = public_viewer + viewer + write + data_connector_namespace->read_children
-    permission write = editor + delete + data_connector_namespace->write
+    permission write = editor + delete
     permission change_membership = delete
     permission delete = owner + data_connector_platform->is_admin + data_connector_namespace->delete
     permission non_public_read = owner + editor + viewer + data_connector_namespace->read_children - public_viewer
@@ -966,7 +966,9 @@ definition resource_pool {
 v10 = AuthzSchemaMigration(
     up=[WriteSchemaRequest(schema=_v10)],
     down=[
-        DeleteRelationshipsRequest(relationship_filter=RelationshipFilter(resource_type=ResourceType.resource_pool.value)),
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(resource_type=ResourceType.resource_pool.value)
+        ),
         WriteSchemaRequest(schema=_v9),
     ],
 )
