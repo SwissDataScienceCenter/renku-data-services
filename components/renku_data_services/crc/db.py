@@ -12,7 +12,7 @@ from asyncio import gather
 from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
 from dataclasses import asdict, dataclass, field
 from functools import wraps
-from typing import Any, Concatenate, Optional, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Any, Concatenate, Optional, ParamSpec, TypeVar
 from uuid import uuid4
 
 from sqlalchemy import NullPool, delete, false, select, true
@@ -36,6 +36,10 @@ from renku_data_services.k8s.client_interfaces import PriorityClassClient, Resou
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
 from renku_data_services.users.db import UserRepo
+
+if TYPE_CHECKING:
+    from renku_data_services.namespace.db import GroupRepository
+    from renku_data_services.project.db import ProjectRepository
 
 
 class _Base:
@@ -783,10 +787,14 @@ class MemberRepository(_Base):
         session_maker: Callable[..., AsyncSession],
         quotas_repo: QuotaRepository,
         user_repo: UserRepo,
+        group_repo: GroupRepository,
+        project_repo: ProjectRepository,
         authz: Authz,
     ) -> None:
         super().__init__(session_maker, quotas_repo, authz)
         self.kc_user_repo = user_repo
+        self.group_repo = group_repo
+        self.project_repo = project_repo
 
     @_only_admins
     async def get_resource_pool_users(
