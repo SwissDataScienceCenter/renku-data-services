@@ -26,7 +26,7 @@ class ScopeVerifier:
     """Verifies the scope claim for internal authentication tokens."""
 
     deposit_config: "DepositConfig"
-    k8s_client: "NotebookK8sClient"
+    notebook_k8s_client: "NotebookK8sClient"
     job_client: "DepositUploadJobClient"
 
     async def verify_scope(self, user: base_models.APIUser, scope: str) -> None:
