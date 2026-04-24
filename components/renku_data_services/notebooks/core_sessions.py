@@ -827,7 +827,6 @@ async def start_session(
     launcher_id = launcher.id
     project = await project_repo.get_project(user=user, project_id=launcher.project_id)
     is_interactive = launch_request.session_mode.is_interactive
-    logger.info(f">>>>> launching {launcher_id} is interactive: {is_interactive} ({launch_request.session_mode})")
 
     # Determine resource_class_id: the class can be overwritten at the user's request
     resource_class_id = launch_request.resource_class_id or launcher.resource_class_id
@@ -1070,12 +1069,8 @@ async def start_session(
     if user.is_anonymous:
         labels["renku.io/anonymous-session"] = "true"
 
-    logger.debug(f"Setting session labels: {labels}")
-    logger.debug(f">>>> BEFORE extras: {len(session_extras.containers)}  inits: {len(session_extras.init_containers)}")
     if not is_interactive:
         session_extras = session_extras.extra_container_as_sidecar()
-
-    logger.debug(f">>>> AFTER extras: {len(session_extras.containers)}  inits: {len(session_extras.init_containers)}")
 
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations, labels=labels),
