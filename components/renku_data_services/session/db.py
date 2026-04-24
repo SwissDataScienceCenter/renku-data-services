@@ -1103,6 +1103,12 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 environment.mount_directory = build_env.mount_directory
                 environment.command = build_env.command
                 environment.args = build_env.args
+            else:
+                logger.error(
+                    f"Could not find frontend variant {frontend_var} in the preset configurations and "
+                    "have skipped updating the launcher environment configuration. "
+                    "This may lead to a failing session. The frontend variant should be added to the code."
+                )
 
         await session.flush()
         await session.refresh(build)
