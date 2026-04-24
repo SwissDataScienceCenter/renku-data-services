@@ -15,6 +15,7 @@ from renku_data_services.data_connectors.models import DataConnectorSecret
 from renku_data_services.errors import errors
 from renku_data_services.errors.errors import ProgrammingError
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorageRequestOverride
+from renku_data_services.notebooks.cr_amalthea_session import SessionType as AmaltheaSessionType
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionV1Alpha1,
     DataSource,
@@ -226,21 +227,24 @@ class SessionMode(StrEnum):
         """Return true when interactive."""
         return not self.is_non_interactive
 
-    def to_amalthea_name(self) -> str:
+    def to_amalthea(self) -> AmaltheaSessionType:
         """Return the value for the amalthea spec."""
         match self:
             case SessionMode.interactive:
-                return "Interactive"
+                return AmaltheaSessionType.Interactive
             case SessionMode.non_interactive:
-                return "NonInteractive"
+                return AmaltheaSessionType.NonInteractive
 
     @classmethod
-    def from_amalthea_name(cls, name: str | None) -> SessionMode:
+    def from_amalthea(cls, name: AmaltheaSessionType | None) -> SessionMode:
         """Select a value based on the amalthea name. Returns interactive if the value is unknown."""
-        if name and name.lower() == "noninteractive":
-            return SessionMode.non_interactive
-        else:
-            return SessionMode.interactive
+        match name:
+            case None:
+                return SessionMode.interactive
+            case AmaltheaSessionType.NonInteractive:
+                return SessionMode.non_interactive
+            case AmaltheaSessionType.Interactive:
+                return SessionMode.interactive
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
