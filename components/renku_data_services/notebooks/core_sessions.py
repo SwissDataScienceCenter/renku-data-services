@@ -843,7 +843,7 @@ async def start_session(
         if isinstance(repo_data.metadata, RepoMetadata):
             metadata: RepoMetadata = repo_data.metadata
             if not metadata.pull_permission:
-                raise errors.ValidationError(message="User does not have access to image repository")
+                raise errors.ForbiddenError(message="User does not have access to image repository")
 
     # User secrets
     session_extras = SessionExtraResources()
