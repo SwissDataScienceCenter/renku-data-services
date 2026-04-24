@@ -257,4 +257,4 @@ class SessionLaunchRequest:
     @property
     def is_non_interactive(self) -> bool:
         """Whether this is a request to a non-interactive session."""
-        return self.session_mode == SessionMode.non_interactive
+        return self.session_mode.is_non_interactive

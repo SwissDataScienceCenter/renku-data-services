@@ -964,7 +964,6 @@ async def start_session(
         "renku.io/launcher_id": str(launcher_id),
         "renku.io/resource_class_id": str(resource_class.id),
         "renku.io/resource_pool_id": str(resource_pool.id),
-        "renku.io/session_type": str(launch_request.session_mode),
     }
 
     # Authentication
@@ -1125,7 +1124,7 @@ async def start_session(
             template=Template(metadata=AmaltheaMetadata(annotations=annotations, labels=labels)),
         ),
     )
-    logger.info(f"Push Session Culling: {session.spec.culling}")
+
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
         logger.debug(f"Creating {len(secrets_to_create)} session secrets")
