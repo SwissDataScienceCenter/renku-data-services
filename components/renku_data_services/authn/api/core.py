@@ -57,7 +57,7 @@ class ScopeVerifier:
         if not user.is_authenticated or not user.id:
             raise errors.UnauthorizedError()
 
-        session = await self.k8s_client.get_session(name=server_name, safe_username=user.id)
+        session = await self.notebook_k8s_client.get_session(name=server_name, safe_username=user.id)
         if session is None or session.status.state.value.lower() == cr_amalthea_session.State.Hibernated.value.lower():
             raise errors.ForbiddenError(detail=f"Failed to verify session scope '{server_name}'.")
         return None
