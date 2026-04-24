@@ -12,7 +12,7 @@ from asyncio import gather
 from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
 from dataclasses import asdict, dataclass, field
 from functools import wraps
-from typing import Any, Concatenate, Optional, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Any, Concatenate, Optional, ParamSpec, TypeVar
 from uuid import uuid4
 
 from sqlalchemy import NullPool, delete, false, select, true
@@ -40,6 +40,10 @@ from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from renku_data_services.namespace.db import GroupRepository
+    from renku_data_services.project.db import ProjectRepository
 
 
 class _Base:
@@ -860,10 +864,14 @@ class MemberRepository(_Base):
         session_maker: Callable[..., AsyncSession],
         quotas_repo: QuotaRepository,
         user_repo: UserRepo,
+        group_repo: GroupRepository,
+        project_repo: ProjectRepository,
         authz: Authz,
     ) -> None:
         super().__init__(session_maker, quotas_repo, authz)
         self.kc_user_repo = user_repo
+        self.group_repo = group_repo
+        self.project_repo = project_repo
 
     @_only_admins
     async def get_resource_pool_users(
