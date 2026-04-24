@@ -188,10 +188,8 @@ class NotebookK8sClient(SecretClient):
     ) -> list[AmaltheaSessionV1Alpha1]:
         """Get a list of sessions that belong to a user."""
         session_filter = {self.__username_label: safe_username}
-        if session_mode == SessionMode.interactive:
-            session_filter.update({"renku.io/session-type": str(SessionMode.interactive)})
-        if session_mode == SessionMode.non_interactive:
-            session_filter.update({"renku.io/session-type": str(SessionMode.non_interactive)})
+        if session_mode is not None:
+            session_filter.update({"renku.io/session-type": str(session_mode)})
         sessions = [
             self.__session_type.model_validate(s.manifest)
             async for s in self.__client.list(
