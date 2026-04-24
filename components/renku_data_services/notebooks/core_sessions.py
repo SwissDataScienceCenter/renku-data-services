@@ -1082,7 +1082,7 @@ async def start_session(
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
             priorityClassName=resource_class.quota,
-            sessionType=launch_request.session_mode.to_amalthea_name(),
+            sessionType=launch_request.session_mode.to_amalthea(),
             session=Session(
                 image=image,
                 imagePullPolicy=ImagePullPolicy.Always,
@@ -1191,7 +1191,7 @@ async def patch_session(
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())
     is_getting_hibernated: bool = False
-    session_mode = SessionMode.from_amalthea_name(session.spec.sessionType)
+    session_mode = SessionMode.from_amalthea(session.spec.sessionType)
 
     # Hibernation
     # TODO: Some patching should only be done when the session is in some states to avoid inadvertent restarts
@@ -1261,7 +1261,7 @@ async def patch_session(
             )
 
     patch.spec.culling = get_culling_patch(
-        user, rp, nb_config, body.lastInteraction, SessionMode.from_amalthea_name(session.spec.sessionType)
+        user, rp, nb_config, body.lastInteraction, SessionMode.from_amalthea(session.spec.sessionType)
     )
 
     # If the session is being hibernated we do not need to patch anything else that is

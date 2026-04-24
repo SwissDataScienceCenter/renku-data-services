@@ -316,7 +316,7 @@ class NotebookK8sClient(SecretClient):
 
     async def _get_pod_for_session(self, session: AmaltheaSessionV1Alpha1) -> Pod | None:
         """Get the pod associated to the given session."""
-        sess_mode = SessionMode.from_amalthea_name(session.spec.sessionType)
+        sess_mode = SessionMode.from_amalthea(session.spec.sessionType)
         pod_name = f"{session.metadata.name}-0"
         pod_gvk = GVK.from_kr8s_object(Pod)
         result: K8sObject | None = None
