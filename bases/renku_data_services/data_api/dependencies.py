@@ -32,7 +32,7 @@ from renku_data_services.connected_services.db import ConnectedServicesRepositor
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory, OAuthHttpClientFactory
 from renku_data_services.crc import models as crc_models
 from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
-from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolRepository, UserRepository
+from renku_data_services.crc.db import ClusterRepository, MemberRepository, QuotaRepository, ResourcePoolRepository
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -135,7 +135,7 @@ class DependencyManager:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     authz: Authz
-    user_repo: UserRepository
+    member_repo: MemberRepository
     rp_repo: ResourcePoolRepository
     storage_repo: StorageRepository
     project_repo: ProjectRepository
@@ -335,7 +335,7 @@ class DependencyManager:
             authz=authz,
         )
 
-        user_repo = UserRepository(
+        member_repo = MemberRepository(
             session_maker=config.db.async_session_maker,
             quotas_repo=quota_repo,
             user_repo=kc_user_repo,
@@ -465,7 +465,7 @@ class DependencyManager:
             user_store=user_store,
             quota_repo=quota_repo,
             kc_api=kc_api,
-            user_repo=user_repo,
+            member_repo=member_repo,
             rp_repo=rp_repo,
             storage_repo=storage_repo,
             reprovisioning_repo=reprovisioning_repo,
