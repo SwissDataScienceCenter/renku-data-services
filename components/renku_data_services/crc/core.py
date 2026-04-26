@@ -8,6 +8,7 @@ from ulid import ULID
 from renku_data_services.base_models import RESET, ResetType
 from renku_data_services.crc import apispec, models
 from renku_data_services.errors import errors
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
 
 
 def validate_quota(body: apispec.QuotaWithOptionalId) -> models.UnsavedQuota:
@@ -327,13 +328,6 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
     hibernation_threshold = (
         update.hibernation_threshold if update.hibernation_threshold is not None else existing.hibernation_threshold
     )
-    hibernation_warining_period = validate_hibernation_warning_period(
-        hibernation_threshold, update.hibernation_warning_period
-    )
-    if hibernation_warining_period is None:
-        hibernation_warining_period = existing.hibernation_warning_period
-    elif hibernation_warining_period is RESET:
-        hibernation_warining_period = None
 
     default = update.default if update.default is not None else existing.default
     public = update.public if update.public is not None else existing.public
@@ -389,11 +383,11 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             )
         case (models.RemoteConfigurationRunai(), models.RemoteConfigurationFirecrestPatch()):
             raise errors.ValidationError(
-                message="Cannot convert a RunAI remote into a Firecrest one. Please create a brand new pool."
+                message="Cannot convert a RunAI remote into a Firecrest one. Please create a brand-new pool."
             )
         case (models.RemoteConfigurationFirecrest(), models.RemoteConfigurationRunaiPatch()):
             raise errors.ValidationError(
-                message="Cannot convert a Firecrest remote into a RunAI one. Please create a brand new pool."
+                message="Cannot convert a Firecrest remote into a RunAI one. Please create a brand-new pool."
             )
         case (None, None):
             remote = RESET
@@ -635,3 +629,41 @@ def __validate_runtime_platform(body: apispec.RuntimePlatform | None) -> models.
             )
         )
     return models.RuntimePlatform(platform_str)
+
+
+async def calculate_available_usage(
+    resource_requests_repo: ResourceRequestsRepo,
+    resource_pool_id: int,
+    resource_class_id: int,
+    resource_usage: float | None,
+) -> tuple[float | None, float | None]:
+    """Calculate available hours and percentage for a resource class in a pool.
+
+    Return available hours and its percentage based on remaining quota, or (None, None) if no limits are set
+    """
+    limits = await resource_requests_repo.find_resource_pool_limits(resource_pool_id)
+    if not limits:
+        return None, None
+
+    # NOTE: Calculate quota based on user limit if it exists, otherwise use total limit
+    # NOTE: A value of 0 for the limit means that there is no limit, so we return None (instead of 0) to inform the
+    # caller that there is no limit.
+    # TODO: Are we sure that total limit is GE user limit?
+    available_quota = limits.user_limit.value or limits.total_limit.value
+    if available_quota <= 0:
+        return None, None
+
+    resource_class_cost = await resource_requests_repo.find_resource_class_costs(resource_pool_id, resource_class_id)
+    if not resource_class_cost or resource_class_cost.cost.value == 0:
+        # NOTE: No cost is defined, so we cannot calculate remaining hours
+        return None, None
+
+    total_hours = available_quota / resource_class_cost.cost.value
+    resource_usage = resource_usage or 0
+    remaining_quota = available_quota - resource_usage
+
+    if remaining_quota <= 0:
+        return 0.0, total_hours
+
+    remaining_hours = remaining_quota / resource_class_cost.cost.value
+    return remaining_hours, total_hours
