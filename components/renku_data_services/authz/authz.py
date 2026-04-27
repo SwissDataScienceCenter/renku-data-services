@@ -152,6 +152,8 @@ class _Relation(StrEnum):
                 return cls.editor
             case Role.VIEWER:
                 return cls.viewer
+            case Role.PROHIBITED:
+                return cls.prohibited
         raise errors.ProgrammingError(message=f"Cannot map role {role} to any authorization database relation")
 
     def to_role(self) -> Role:
@@ -163,7 +165,7 @@ class _Relation(StrEnum):
             case _Relation.viewer:
                 return Role.VIEWER
             case _Relation.prohibited:
-                raise errors.ProgrammingError(message="Cannot map prohibited relation to a role")
+                return Role.PROHIBITED
         raise errors.ProgrammingError(message=f"Cannot map relation {self} to any role")
 
 

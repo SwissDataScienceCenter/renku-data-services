@@ -2,15 +2,12 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
 
 from ulid import ULID
 
+from renku_data_services.base_models.core import ResourceType
 from renku_data_services.errors import errors
 from renku_data_services.namespace.apispec import GroupRole
-
-if TYPE_CHECKING:
-    from renku_data_services.base_models.core import ResourceType
 
 
 class Role(Enum):
@@ -19,6 +16,7 @@ class Role(Enum):
     OWNER = "owner"
     VIEWER = "viewer"
     EDITOR = "editor"
+    PROHIBITED = "prohibited"
 
     @classmethod
     def from_group_role(cls, role: GroupRole) -> "Role":
