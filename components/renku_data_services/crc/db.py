@@ -118,10 +118,10 @@ class ResourcePoolRepository(_Base):
             res = await session.execute(stmt)
             default_rp = res.scalars().first()
             if default_rp is None:
-                await self._create_rp(rp, session=session)
+                await self._create_default_rp(rp, session=session)
 
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
-    async def _create_rp(self, rp: models.UnsavedResourcePool, session: AsyncSession) -> models.ResourcePool:
+    async def _create_default_rp(self, rp: models.UnsavedResourcePool, session: AsyncSession) -> models.ResourcePool:
         default_rp = schemas.ResourcePoolORM.from_unsaved_model(new_resource_pool=rp, quota=None, cluster=None)
         session.add(default_rp)
         await session.flush()
