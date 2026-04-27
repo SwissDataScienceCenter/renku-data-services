@@ -59,6 +59,10 @@ class ScopeVerifier:
 
         session = await self.notebook_k8s_client.get_session(name=server_name, safe_username=user.id)
         if session is None or session.status.state.value.lower() == cr_amalthea_session.State.Hibernated.value.lower():
+            logger.error(
+                f"Failed to verify session scope '{server_name}', "
+                f"session status: {'not found' if session is None else session.status.state.value.lower()}."
+            )
             raise errors.ForbiddenError(detail=f"Failed to verify session scope '{server_name}'.")
         return None
 
@@ -77,6 +81,11 @@ class ScopeVerifier:
                 user_id=user.id,
             )
         )
-        if job is None or get_deposit_job_status(job).value.lower() != DepositStatus.in_progress.lower():
+        job_status = get_deposit_job_status(job).value.lower() if job is not None else None
+        if job is None or job_status != DepositStatus.in_progress.lower():
+            logger.error(
+                f"Failed to verify deposit job scope '{job_name}', "
+                f"job status: {'not found' if job_status is None else job_status}."
+            )
             raise errors.ForbiddenError(detail=f"Failed to verify deposit job scope '{job_name}'.")
         return None
