@@ -31,8 +31,7 @@ class ZenodoAPIClient:
     """Client to deal with Zenodo datasets."""
 
     def __init__(self) -> None:
-        # self.__zenodo_base_url = os.environ.get("ZENODO_URL", "https://zenodo.org").rstrip("/") + "/api"
-        self.__zenodo_base_url = os.environ.get("ZENODO_URL", "https://sandbox.zenodo.org").rstrip("/") + "/api"
+        self.__zenodo_base_url = os.environ.get("ZENODO_URL", "https://zenodo.org").rstrip("/") + "/api"
         self.__client = httpx.AsyncClient()
 
     async def create_deposit(self, api_key: str, title: str) -> DepositResponse:

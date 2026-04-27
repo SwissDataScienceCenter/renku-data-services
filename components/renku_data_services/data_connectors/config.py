@@ -63,6 +63,5 @@ class DepositConfig:
             node_selector=node_selector,
             namespace=os.environ["KUBERNETES_NAMESPACE"],
             cluster_id=DEFAULT_K8S_CLUSTER,
-            # zenodo_url=os.environ.get("ZENODO_URL", "https://zenodo.org").rstrip("/"),
-            zenodo_url=os.environ.get("ZENODO_URL", "https://sandbox.zenodo.org").rstrip("/"),
+            zenodo_url=os.environ.get("ZENODO_URL", "https://zenodo.org").rstrip("/"),
         )
