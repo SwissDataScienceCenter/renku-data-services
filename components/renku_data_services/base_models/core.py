@@ -452,3 +452,4 @@ class ResourceType(StrEnum):
     group = "group"
     user_namespace = "user_namespace"
     data_connector = "data_connector"
+    resource_pool = "resource_pool"

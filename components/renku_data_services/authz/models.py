@@ -2,15 +2,12 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
 
 from ulid import ULID
 
+from renku_data_services.base_models.core import ResourceType
 from renku_data_services.errors import errors
 from renku_data_services.namespace.apispec import GroupRole
-
-if TYPE_CHECKING:
-    from renku_data_services.base_models.core import ResourceType
 
 
 class Role(Enum):
@@ -19,6 +16,7 @@ class Role(Enum):
     OWNER = "owner"
     VIEWER = "viewer"
     EDITOR = "editor"
+    PROHIBITED = "prohibited"
 
     @classmethod
     def from_group_role(cls, role: GroupRole) -> "Role":
@@ -72,14 +70,20 @@ class UnsavedMember:
 
     def with_group(self, group_id: ULID) -> "Member":
         """Turn to member with group."""
-        return Member(role=self.role, user_id=self.user_id, resource_id=group_id)
+        return Member(
+            role=self.role,
+            user_id=self.user_id,
+            resource_id=group_id,
+            resource_type=ResourceType.group,
+        )
 
 
 @dataclass
 class Member(UnsavedMember):
     """Member stored in the database."""
 
-    resource_id: ULID
+    resource_id: ULID | int
+    resource_type: ResourceType = ResourceType.group
 
 
 class Change(Enum):
@@ -110,5 +114,5 @@ class CheckPermissionItem:
     """Represent a permission item to be checked by the authorization service."""
 
     resource_type: "ResourceType"
-    resource_id: str | ULID
+    resource_id: str | ULID | int
     scope: Scope

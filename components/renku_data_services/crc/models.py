@@ -11,6 +11,7 @@ from typing import Any, Final, Optional, Protocol, Self
 from kubernetes.utils import parse_quantity
 
 from renku_data_services import errors
+from renku_data_services.authz.models import MembershipChange
 from renku_data_services.base_models import ResetType
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sPatch, K8sResourceQuota
@@ -472,3 +473,17 @@ class RemoteConfigurationRunaiPatch:
 
 
 RemoteConfigurationPatch = ResetType | RemoteConfigurationFirecrestPatch | RemoteConfigurationRunaiPatch
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class DeletedResourcePool:
+    """A resource pool that has been deleted."""
+
+    id: int
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourcePoolMembershipChange:
+    """Returned by user-management methods so the authz_change decorator knows what to sync to SpiceDB."""
+
+    changes: list[MembershipChange]

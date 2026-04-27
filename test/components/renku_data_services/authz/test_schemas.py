@@ -513,6 +513,68 @@ def v7_schema() -> SpiceDBSchema:
     )
 
 
+@pytest.fixture
+def v9_schema() -> SpiceDBSchema:
+    return SpiceDBSchema(
+        schemas._v9,
+        relationships=[
+            "platform:renku#admin@user:admin1",
+            # pool1: public
+            "resource_pool:pool1#public_viewer@user:*",
+            "resource_pool:pool1#public_viewer@anonymous_user:*",
+            "resource_pool:pool1#prohibited@user:user2",
+            "resource_pool:pool1#resource_pool_platform@platform:renku",
+            # pool2: private, only user3 is a viewer
+            "resource_pool:pool2#viewer@user:user3",
+            "resource_pool:pool2#resource_pool_platform@platform:renku",
+            "resource_pool:pool2#prohibited@user:user2",
+        ],
+        assertions={
+            "assertTrue": [
+                # pool1 public: prove the pool is public
+                "resource_pool:pool1#read@user:user1",
+                "resource_pool:pool1#read@anonymous_user:anon1",
+                "resource_pool:pool1#read@user:admin1",
+                # pool2: pool is only usable by select users
+                "resource_pool:pool2#read@user:user3",
+                "resource_pool:pool2#read@user:admin1",
+                # admin can write
+                "resource_pool:pool1#write@user:admin1",
+            ],
+            "assertFalse": [
+                # prohibited user blocked
+                "resource_pool:pool1#read@user:user2",
+                "resource_pool:pool2#read@user:user2",
+                # non-viewer or anon can't use private pool
+                "resource_pool:pool2#read@user:user1",
+                "resource_pool:pool2#read@anonymous_user:anon1",
+                # viewer and random can't write
+                "resource_pool:pool2#write@user:user3",
+                "resource_pool:pool1#write@user:user1",
+            ],
+        },
+        validation={
+            # pool1: (public) list all resolution paths
+            "resource_pool:pool1#read": [
+                "[user:* - {user:user2}] is <resource_pool:pool1#public_viewer>",
+                "[anonymous_user:*] is <resource_pool:pool1#public_viewer>",
+                "[user:admin1] is <platform:renku#admin>",
+            ],
+            # pool2: (private) only viewer + admin, no wildcards
+            "resource_pool:pool2#read": [
+                "[user:user3] is <resource_pool:pool2#viewer>",
+                "[user:admin1] is <platform:renku#admin>",
+            ],
+            "resource_pool:pool1#write": [
+                "[user:admin1] is <platform:renku#admin>",
+            ],
+            "resource_pool:pool2#write": [
+                "[user:admin1] is <platform:renku#admin>",
+            ],
+        },
+    )
+
+
 def test_v1_schema(tmp_path: Path, v1_schema: SpiceDBSchema) -> None:
     validation_file = tmp_path / "validate.yaml"
     v1_schema.to_yaml(validation_file)
@@ -540,4 +602,10 @@ def test_v6_schema(tmp_path: Path, v6_schema: SpiceDBSchema) -> None:
 def test_v7_schema(tmp_path: Path, v7_schema: SpiceDBSchema) -> None:
     validation_file = tmp_path / "validate.yaml"
     v7_schema.to_yaml(validation_file)
+    check_call(["zed", "validate", validation_file.as_uri()])
+
+
+def test_v9_schema(tmp_path: Path, v9_schema: SpiceDBSchema) -> None:
+    validation_file = tmp_path / "validate.yaml"
+    v9_schema.to_yaml(validation_file)
     check_call(["zed", "validate", validation_file.as_uri()])
