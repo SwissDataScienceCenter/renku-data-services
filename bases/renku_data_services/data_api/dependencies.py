@@ -21,6 +21,7 @@ import renku_data_services.repositories
 import renku_data_services.search
 import renku_data_services.storage
 import renku_data_services.users
+from renku_data_services.authn.api.core import ScopeVerifier
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import EmptyGitlabAuthenticator, GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
@@ -173,6 +174,7 @@ class DependencyManager:
     job_client: DepositUploadJobClient
     secret_client: K8sSecretClient
     internal_token_mint: RenkuSelfTokenMint
+    internal_scope_verifier: ScopeVerifier
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -312,6 +314,11 @@ class DependencyManager:
         authz = Authz(config.authz_config)
         internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
         internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
+        internal_scope_verifier = ScopeVerifier(
+            deposit_config=config.deposit_config,
+            notebook_k8s_client=config.nb_config.k8s_v2_client,
+            job_client=job_client,
+        )
         search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
@@ -493,4 +500,5 @@ class DependencyManager:
             job_client=job_client,
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,
+            internal_scope_verifier=internal_scope_verifier,
         )

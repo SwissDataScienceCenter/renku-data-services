@@ -15,6 +15,7 @@ from sanic_testing.testing import ASGI_HOST, ASGI_PORT, SanicASGITestClient, Tes
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
+from renku_data_services.authn.api.core import ScopeVerifier
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.authz.authz import Authz
@@ -225,6 +226,11 @@ class TestDependencyManager(DependencyManager):
         authz = NonCachingAuthz(config.authz_config)
         internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
         internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
+        internal_scope_verifier = ScopeVerifier(
+            deposit_config=config.deposit_config,
+            notebook_k8s_client=config.nb_config.k8s_v2_client,
+            job_client=job_client,
+        )
         search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
         oauth_client_factory = DefaultOAuthHttpClientFactory(
             config.secrets.encryption_key, config.db.async_session_maker
@@ -407,6 +413,7 @@ class TestDependencyManager(DependencyManager):
             job_client=job_client,
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,
+            internal_scope_verifier=internal_scope_verifier,
         )
 
     def __post_init__(self) -> None:

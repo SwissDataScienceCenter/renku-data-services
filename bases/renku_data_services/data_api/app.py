@@ -195,7 +195,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         internal_authenticator=dm.internal_authenticator,
         internal_token_mint=dm.internal_token_mint,
-        nb_config=dm.config.nb_config,
+        internal_scope_verifier=dm.internal_scope_verifier,
     )
     repositories = RepositoriesBP(
         name="repositories",
@@ -299,6 +299,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         internal_authenticator=dm.internal_authenticator,
         internal_token_mint=dm.internal_token_mint,
+        internal_scope_verifier=dm.internal_scope_verifier,
     )
     app.blueprint(
         [
