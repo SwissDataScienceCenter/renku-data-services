@@ -1,7 +1,7 @@
 """Projects authorization adapter."""
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable, Collection
+from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
