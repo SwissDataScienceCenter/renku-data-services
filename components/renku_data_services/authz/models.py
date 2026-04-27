@@ -70,14 +70,20 @@ class UnsavedMember:
 
     def with_group(self, group_id: ULID) -> "Member":
         """Turn to member with group."""
-        return Member(role=self.role, user_id=self.user_id, resource_id=group_id)
+        return Member(
+            role=self.role,
+            user_id=self.user_id,
+            resource_id=group_id,
+            resource_type=ResourceType.group,
+        )
 
 
 @dataclass
 class Member(UnsavedMember):
     """Member stored in the database."""
 
-    resource_id: ULID
+    resource_id: ULID | int
+    resource_type: ResourceType = ResourceType.group
 
 
 class Change(Enum):
