@@ -10,6 +10,7 @@ from typing import Any
 
 from kubernetes import client
 
+from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.notebooks.api.amalthea_patches.utils import (
     get_certificates_volume_mounts,
@@ -30,8 +31,10 @@ from renku_data_services.project.models import SessionSecret
 
 
 async def git_clone_container_v2(
+    server_name: str,
     user: AuthenticatedAPIUser | AnonymousAPIUser,
     config: NotebooksConfig,
+    internal_token_mint: RenkuSelfTokenMint,
     repositories: list[Repository],
     git_providers: list[GitProvider],
     workspace_mount_path: PurePosixPath,
@@ -52,6 +55,9 @@ async def git_clone_container_v2(
         read_only_etc_certs=True,
     )
 
+    internal_token_scope = f"session:{server_name}"
+    internal_access_token = internal_token_mint.create_access_token(user=user, scope=internal_token_scope)
+
     prefix = "GIT_CLONE_"
     env = [
         {
@@ -68,7 +74,8 @@ async def git_clone_container_v2(
         },
         {
             "name": f"{prefix}USER__RENKU_TOKEN",
-            "value": str(user.access_token),
+            # "value": str(user.access_token),
+            "value": internal_access_token,
         },
         {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if user.is_anonymous else "1"},
         {

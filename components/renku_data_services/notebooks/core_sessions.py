@@ -116,7 +116,9 @@ logger = logging.getLogger(__name__)
 
 async def get_extra_init_containers(
     nb_config: NotebooksConfig,
+    server_name: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
+    internal_token_mint: RenkuSelfTokenMint,
     repositories: list[Repository],
     git_providers: list[GitProvider],
     storage_mount: PurePosixPath,
@@ -130,8 +132,10 @@ async def get_extra_init_containers(
     session_init_containers = [InitContainer.model_validate(sanitizer(cert_init))]
     extra_volumes = [ExtraVolume.model_validate(sanitizer(volume)) for volume in cert_vols]
     git_clone = await init_containers.git_clone_container_v2(
+        server_name=server_name,
         user=user,
         config=nb_config,
+        internal_token_mint=internal_token_mint,
         repositories=repositories,
         git_providers=git_providers,
         workspace_mount_path=storage_mount,
@@ -709,7 +713,7 @@ def get_remote_secret(
     internal_token_mint: RenkuSelfTokenMint,
 ) -> ExtraSecret | None:
     """Returns the secret containing the configuration for the remote session controller."""
-    if not user.is_authenticated or user.access_token is None or user.refresh_token is None:
+    if not user.is_authenticated or user.access_token is None:
         return None
     remote_provider = next(filter(lambda p: p.id == remote_provider_id, git_providers), None)
     if not remote_provider:
@@ -875,12 +879,14 @@ async def start_session(
     # More init containers
     session_extras = session_extras.concat(
         await get_extra_init_containers(
-            nb_config,
-            user,
-            repositories,
-            git_providers,
-            storage_mount,
-            work_dir,
+            nb_config=nb_config,
+            server_name=server_name,
+            user=user,
+            internal_token_mint=internal_token_mint,
+            repositories=repositories,
+            git_providers=git_providers,
+            storage_mount=storage_mount,
+            work_dir=work_dir,
             uid=environment.uid,
             gid=environment.gid,
         )
@@ -1236,12 +1242,14 @@ async def patch_session(
     # More init containers
     session_extras = session_extras.concat(
         await get_extra_init_containers(
-            nb_config,
-            user,
-            repositories,
-            git_providers,
-            storage_mount,
-            work_dir,
+            nb_config=nb_config,
+            server_name=server_name,
+            user=user,
+            internal_token_mint=internal_token_mint,
+            repositories=repositories,
+            git_providers=git_providers,
+            storage_mount=storage_mount,
+            work_dir=work_dir,
             uid=environment.uid,
             gid=environment.gid,
         )
