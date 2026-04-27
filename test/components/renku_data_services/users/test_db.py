@@ -15,7 +15,7 @@ from renku_data_services.users.models import UserInfo
 
 
 @dataclass
-class TestUsernameResolver(DbUsernameResolver):
+class UsernameResolver(DbUsernameResolver):
     session_maker: Callable[..., AsyncSession]
 
     def make_session(self) -> AsyncSession:
@@ -35,7 +35,7 @@ async def test_username_resolve(app_manager_instance) -> None:
     user_info1 = cast(UserInfo, await user_repo.get_or_create_user(user1, str(user1.id)))
     user_info2 = cast(UserInfo, await user_repo.get_or_create_user(user2, str(user2.id)))
 
-    resolver = TestUsernameResolver(app_manager_instance.config.db.async_session_maker)
+    resolver = UsernameResolver(app_manager_instance.config.db.async_session_maker)
     data = await resolver.resolve_usernames(Nel.of("a.b", _username(user_info1), _username(user_info2)))
     assert data is not None
     assert data.get(_username(user_info1)) == user_info1.id

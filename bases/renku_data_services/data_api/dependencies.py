@@ -36,12 +36,15 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
+from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import (
+    DepositUploadJobClient,
     K8sClusterClientsPool,
     K8sPriorityClassClient,
     K8sResourceQuotaClient,
+    K8sSecretClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv
 from renku_data_services.k8s.db import K8sDbCache
@@ -164,6 +167,9 @@ class DependencyManager:
     occurrence_repo: OccurrenceRepository
     resource_requests_repo: ResourceRequestsRepo
     resource_usage_service: ResourceUsageService
+    zenodo_client: ZenodoAPIClient
+    job_client: DepositUploadJobClient
+    secret_client: K8sSecretClient
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -249,6 +255,8 @@ class DependencyManager:
             ),
         )
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
+        job_client = DepositUploadJobClient(client)
+        secret_client = K8sSecretClient(client)
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
@@ -283,7 +291,6 @@ class DependencyManager:
             )
             if config.builds.enabled:
                 k8s_db_cache = K8sDbCache(config.db.async_session_maker)
-                default_kubeconfig = KubeConfigEnv()
                 shipwright_client = ShipwrightClient(
                     client=K8sClusterClientsPool(
                         lambda: get_clusters(
@@ -334,12 +341,21 @@ class DependencyManager:
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
         )
+
+        git_repositories_repo = GitRepositoriesRepository(
+            session_maker=config.db.async_session_maker,
+            oauth_client_factory=oauth_http_client_factory,
+            internal_gitlab_url=config.gitlab_url,
+            enable_internal_gitlab=config.enable_internal_gitlab,
+        )
+
         session_repo = SessionRepository(
             session_maker=config.db.async_session_maker,
             project_authz=authz,
             resource_pools=rp_repo,
             shipwright_client=shipwright_client,
             builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
         )
         project_migration_repo = ProjectMigrationRepository(
             session_maker=config.db.async_session_maker,
@@ -370,12 +386,6 @@ class DependencyManager:
             user_repo=kc_user_repo,
             secret_service_public_key=config.secrets.public_key,
         )
-        git_repositories_repo = GitRepositoriesRepository(
-            session_maker=config.db.async_session_maker,
-            oauth_client_factory=oauth_http_client_factory,
-            internal_gitlab_url=config.gitlab_url,
-            enable_internal_gitlab=config.enable_internal_gitlab,
-        )
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,
         )
@@ -395,7 +405,7 @@ class DependencyManager:
             authz=authz,
         )
         data_source_repo = DataSourceRepository(
-            nb_config=config.nb_config,
+            user_repo=kc_user_repo,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_http_client_factory,
         )
@@ -473,4 +483,7 @@ class DependencyManager:
             occurrence_repo=occurrence_repo,
             resource_requests_repo=resource_requests_repo,
             resource_usage_service=resource_usage_service,
+            zenodo_client=ZenodoAPIClient(),
+            job_client=job_client,
+            secret_client=secret_client,
         )

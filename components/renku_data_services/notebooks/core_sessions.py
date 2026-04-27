@@ -5,8 +5,6 @@ from __future__ import annotations
 import base64
 import json
 import os
-import random
-import string
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -29,6 +27,8 @@ from renku_data_services.crc.models import (
     ClusterSettings,
     GpuKind,
     RemoteConfigurationFirecrest,
+    RemoteConfigurationKind,
+    RemoteConfigurationRunai,
     ResourceClass,
     ResourcePool,
     SessionProtocol,
@@ -44,7 +44,6 @@ from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_c
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_extras
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
-from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.crs import (
     AmaltheaMetadata,
@@ -58,7 +57,6 @@ from renku_data_services.notebooks.crs import (
     AuthenticationType,
     Culling,
     CullingPatch,
-    DataSource,
     ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
@@ -105,10 +103,12 @@ from renku_data_services.notebooks.utils import (
 )
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.project.models import Project, SessionSecret
+from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.repositories.models import Metadata as RepoMetadata
+from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
-from renku_data_services.utils.cryptography import get_encryption_key
 
 logger = logging.getLogger(__name__)
 
@@ -260,102 +260,6 @@ async def __get_gitlab_image_pull_secret(
     )
 
     return ExtraSecret(secret)
-
-
-async def get_data_sources(
-    request: Request,
-    nb_config: NotebooksConfig,
-    user: AnonymousAPIUser | AuthenticatedAPIUser,
-    server_name: str,
-    data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
-    work_dir: PurePosixPath,
-    data_connectors_overrides: list[SessionDataConnectorOverride],
-    user_repo: UserRepo,
-    data_source_repo: DataSourceRepository,
-) -> SessionExtraResources:
-    """Generate cloud storage related resources."""
-    data_sources: list[DataSource] = []
-    secrets: list[ExtraSecret] = []
-    dcs: dict[str, RCloneStorage] = {}
-    dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
-    user_secret_key: str | None = None
-    async for dc in data_connectors_stream:
-        configuration = await data_source_repo.handle_configuration(
-            request=request, user=user, data_connector=dc.data_connector
-        )
-        if configuration is None:
-            continue
-        mount_folder = (
-            dc.data_connector.storage.target_path
-            if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
-            else (work_dir / dc.data_connector.storage.target_path).as_posix()
-        )
-        dcs[str(dc.data_connector.id)] = RCloneStorage(
-            source_path=dc.data_connector.storage.source_path,
-            mount_folder=mount_folder,
-            configuration=configuration,
-            readonly=dc.data_connector.storage.readonly,
-            name=dc.data_connector.name,
-            secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
-            storage_class=nb_config.cloud_storage.storage_class,
-        )
-        if len(dc.secrets) > 0:
-            dcs_secrets[str(dc.data_connector.id)] = dc.secrets
-    if isinstance(user, AuthenticatedAPIUser) and len(dcs_secrets) > 0:
-        secret_key = await user_repo.get_or_create_user_secret_key(user)
-        user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode("utf-8")
-    # NOTE: Check the cloud storage overrides from the request body and if any match
-    # then overwrite the projects cloud storages
-    # NOTE: Cloud storages in the session launch request body that are not from the DB will cause a 404 error
-    # TODO: Is this correct? -> NOTE: Overriding the configuration when a saved secret is there will cause a 422 error
-    for dco in data_connectors_overrides:
-        dc_id = str(dco.data_connector_id)
-        if dc_id not in dcs:
-            raise errors.MissingResourceError(
-                message=f"You have requested a data connector with ID {dc_id} which does not exist "
-                "or you don't have access to."
-            )
-        # NOTE: if 'skip' is true, we do not mount that data connector
-        if dco.skip:
-            del dcs[dc_id]
-            continue
-        if dco.target_path is not None and not PurePosixPath(dco.target_path).is_absolute():
-            dco.target_path = (work_dir / dco.target_path).as_posix()
-        dcs[dc_id] = dcs[dc_id].with_override(dco)
-
-    # Handle potential duplicate target_path
-    dcs = _deduplicate_target_paths(dcs)
-
-    for cs_id, cs in dcs.items():
-        secret_name = f"{server_name}-ds-{cs_id.lower()}"
-        secret_key_needed = len(dcs_secrets.get(cs_id, [])) > 0
-        if secret_key_needed and user_secret_key is None:
-            raise errors.ProgrammingError(
-                message=f"You have saved storage secrets for data connector {cs_id} "
-                f"associated with your user ID {user.id} but no key to decrypt them, "
-                "therefore we cannot mount the requested data connector. "
-                "Please report this to the renku administrators."
-            )
-        secret = ExtraSecret(
-            cs.secret(
-                secret_name,
-                await nb_config.k8s_v2_client.namespace(),
-                user_secret_key=user_secret_key if secret_key_needed else None,
-            )
-        )
-        secrets.append(secret)
-        data_sources.append(
-            DataSource(
-                mountPath=cs.mount_folder,
-                secretRef=secret.ref(),
-                accessMode="ReadOnlyMany" if cs.readonly else "ReadWriteOnce",
-            )
-        )
-    return SessionExtraResources(
-        data_sources=data_sources,
-        secrets=secrets,
-        data_connector_secrets=dcs_secrets,
-    )
 
 
 async def patch_data_sources(
@@ -714,7 +618,8 @@ def __format_image_pull_secret(secret_name: str, access_token: str, registry_dom
             data={".dockerconfigjson": registry_secret},
             metadata=V1ObjectMeta(name=secret_name),
             type="kubernetes.io/dockerconfigjson",
-        )
+        ),
+        adopt=True,
     )
 
 
@@ -745,6 +650,7 @@ async def get_image_pull_secret(
     user: APIUser,
     internal_gitlab_user: APIUser,
     image_check_repo: ImageCheckRepository,
+    builds_config: BuildsConfig,
 ) -> ExtraSecret | None:
     """Get an image pull secret."""
 
@@ -753,6 +659,18 @@ async def get_image_pull_secret(
     )
     if v2_secret:
         return v2_secret
+
+    if (
+        builds_config.enabled
+        and builds_config.build_output_private_image_prefix is not None
+        and image.startswith(builds_config.build_output_private_image_prefix)
+    ):
+        return ExtraSecret(
+            V1Secret(
+                metadata=V1ObjectMeta(name=builds_config.pull_private_image_secret_name),
+            ),
+            adopt=False,
+        )
 
     if (
         nb_config.enable_internal_gitlab
@@ -800,16 +718,22 @@ def get_remote_secret(
 
 
 def get_remote_env(
-    remote: RemoteConfigurationFirecrest,
+    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
     env = [
         SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value),
-        SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url),
-        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote.system_name),
     ]
-    if remote.partition:
-        env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote.partition))
+    if isinstance(remote, RemoteConfigurationRunai):
+        env.append(
+            SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url),
+        )
+    else:
+        env.append(SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value))
+        env.append(SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url))
+        env.append(SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote.system_name))
+        if remote.partition:
+            env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote.partition))
     return env
 
 
@@ -830,6 +754,8 @@ async def start_session(
     metrics: MetricsService,
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
+    git_repositories_repo: GitRepositoriesRepository,
+    builds_config: BuildsConfig,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -891,6 +817,21 @@ async def start_session(
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
+    if environment.build_parameters is not None:
+        build_repository = environment.build_parameters.repository
+        if build_repository not in [repository.url for repository in repositories]:
+            raise errors.ValidationError(message="Image was not built from a repository in this project")
+
+        repo_data = await git_repositories_repo.get_repository(
+            repository_url=build_repository, user=user, etag=None, internal_gitlab_user=internal_gitlab_user
+        )
+        if repo_data.is_error:
+            raise errors.ValidationError(message=str(repo_data.error))
+        if isinstance(repo_data.metadata, RepoMetadata):
+            metadata: RepoMetadata = repo_data.metadata
+            if not metadata.pull_permission:
+                raise errors.ValidationError(message="User does not have access to image repository")
+
     # User secrets
     session_extras = SessionExtraResources()
     session_extras = session_extras.concat(
@@ -905,16 +846,15 @@ async def start_session(
 
     # Data connectors
     session_extras = session_extras.concat(
-        await get_data_sources(
+        await data_source_repo.get_data_sources(
             request=request,
-            nb_config=nb_config,
-            server_name=server_name,
             user=user,
+            base_name=server_name,
             data_connectors_stream=data_connectors_stream,
             work_dir=work_dir,
             data_connectors_overrides=launch_request.data_connectors_overrides or [],
-            user_repo=user_repo,
-            data_source_repo=data_source_repo,
+            namespace=await nb_config.k8s_v2_client.namespace(),
+            storage_class=nb_config.cloud_storage.storage_class,
         )
     )
 
@@ -986,6 +926,7 @@ async def start_session(
         user=user,
         internal_gitlab_user=internal_gitlab_user,
         image_check_repo=image_check_repo,
+        builds_config=builds_config,
     )
     if image_secret:
         session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
@@ -994,19 +935,22 @@ async def start_session(
     remote_secret = None
     if session_location == SessionLocation.remote:
         assert resource_pool.remote is not None
-        if resource_pool.remote.provider_id is None:
-            raise errors.ProgrammingError(
-                message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_provider_id')."  # noqa E501
+        if resource_pool.remote.kind == RemoteConfigurationKind.firecrest:
+            assert isinstance(resource_pool.remote, RemoteConfigurationFirecrest)
+            if resource_pool.remote.provider_id is None:
+                raise errors.ProgrammingError(
+                    message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_provider_id')."  # noqa E501
+                )
+            # This way of authenticating with the remote session controller is only compatible with Firecrest for now
+            remote_secret = get_remote_secret(
+                user=user,
+                config=nb_config,
+                server_name=server_name,
+                remote_provider_id=resource_pool.remote.provider_id,
+                git_providers=git_providers,
             )
-        remote_secret = get_remote_secret(
-            user=user,
-            config=nb_config,
-            server_name=server_name,
-            remote_provider_id=resource_pool.remote.provider_id,
-            git_providers=git_providers,
-        )
-    if remote_secret is not None:
-        session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
+        if remote_secret is not None:
+            session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
 
     # Raise an error if there are invalid environment variables in the request body
     verify_launcher_env_variable_overrides(launcher, launch_request)
@@ -1035,11 +979,16 @@ async def start_session(
 
     labels = {"renku.io/safe-username": user.id}
 
+    if user.is_anonymous:
+        labels["renku.io/anonymous-session"] = "true"
+
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations),
         spec=AmaltheaSessionSpec(
             location=session_location,
-            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=True)] if image_secret else [],
+            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=image_secret.adopt)]
+            if image_secret
+            else [],
             codeRepositories=[],
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
@@ -1139,6 +1088,7 @@ async def patch_session(
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
     metrics: MetricsService,
+    builds_config: BuildsConfig,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -1290,6 +1240,7 @@ async def patch_session(
         image_check_repo=image_check_repo,
         user=user,
         internal_gitlab_user=internal_gitlab_user,
+        builds_config=builds_config,
     )
     if image_pull_secret:
         session_extras = session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
@@ -1322,59 +1273,6 @@ async def patch_session(
         return session
 
     return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch_serialized)
-
-
-def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RCloneStorage]:
-    """Ensures that the target paths for all storages are unique.
-
-    This method will attempt to de-duplicate the target_path for all items passed in,
-    and raise an error if it fails to generate unique target_path.
-    """
-    result_dcs: dict[str, RCloneStorage] = {}
-    mount_folders: dict[str, list[str]] = {}
-
-    def _find_mount_folder(dc: RCloneStorage) -> str:
-        mount_folder = dc.mount_folder
-        if mount_folder not in mount_folders:
-            return mount_folder
-        # 1. Try with a "-1", "-2", etc. suffix
-        mount_folder_try = f"{mount_folder}-{len(mount_folders[mount_folder])}"
-        if mount_folder_try not in mount_folders:
-            return mount_folder_try
-        # 2. Try with a random suffix
-        suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(4)])  # nosec B311
-        mount_folder_try = f"{mount_folder}-{suffix}"
-        if mount_folder_try not in mount_folders:
-            return mount_folder_try
-        raise errors.ValidationError(
-            message=f"Could not start session because two or more data connectors ({', '.join(mount_folders[mount_folder])}) share the same mount point '{mount_folder}'"  # noqa E501
-        )
-
-    for dc_id, dc in dcs.items():
-        original_mount_folder = dc.mount_folder
-        new_mount_folder = _find_mount_folder(dc)
-        # Keep track of the original mount folder here
-        if new_mount_folder != original_mount_folder:
-            logger.warning(f"Re-assigning data connector {dc_id} to mount point '{new_mount_folder}'")
-            dc_ids = mount_folders.get(original_mount_folder, [])
-            dc_ids.append(dc_id)
-            mount_folders[original_mount_folder] = dc_ids
-        # Keep track of the assigned mount folder here
-        dc_ids = mount_folders.get(new_mount_folder, [])
-        dc_ids.append(dc_id)
-        mount_folders[new_mount_folder] = dc_ids
-        result_dcs[dc_id] = dc.with_override(
-            override=SessionDataConnectorOverride(
-                skip=False,
-                data_connector_id=ULID.from_str(dc_id),
-                target_path=new_mount_folder,
-                configuration=None,
-                source_path=None,
-                readonly=None,
-            )
-        )
-
-    return result_dcs
 
 
 class _NamedResource(Protocol):

@@ -1,7 +1,7 @@
 """Base models for API specifications."""
 
 import pydantic
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from ulid import ULID
 
 # NOTE: We are monkeypatching the regex engine for the root model because
@@ -15,13 +15,13 @@ pydantic.RootModel.model_config = {"regex_engine": "python-re"}
 class BaseAPISpec(BaseModel):
     """Base API specification."""
 
-    class Config:
-        """Enables orm mode for pydantic."""
-
-        from_attributes = True
+    model_config = ConfigDict(
+        # Enables orm mode for pydantic."""
+        from_attributes=True,
         # NOTE: By default the pydantic library does not use python for regex but a rust crate
         # this rust crate does not support lookahead regex syntax but we need it in this component
-        regex_engine = "python-re"
+        regex_engine="python-re",
+    )
 
     @field_validator("id", mode="before", check_fields=False)
     @classmethod

@@ -91,6 +91,7 @@ async def test_resource_pool_creation_with_cluster_ids(
     cluster: KindCluster,
     kubeconfig_path: Path,
     monkeypatch,
+    admin_headers,
 ) -> None:
     payload = deepcopy(payload)
     monkeypatch.setenv("ALWAYS_READ_CLUSTERS", "true")
@@ -107,7 +108,7 @@ async def test_resource_pool_creation_with_cluster_ids(
                 "session_ingress_annotations": {},
                 "session_tls_secret_name": "a-domain-name-tls",
             },
-            headers={"Authorization": 'Bearer {"is_admin": true}'},
+            headers=admin_headers,
         )
         assert res.status_code == 201, res.text
         payload["cluster_id"] = res.json["id"]
@@ -127,7 +128,7 @@ async def test_resource_pool_creation_with_cluster_ids(
 )
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
-async def test_resource_pool_creation_with_remote(
+async def test_resource_pool_creation_with_remote_firecrest(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
     payload: dict[str, Any],
@@ -168,6 +169,55 @@ async def test_resource_pool_creation_with_remote(
             "provider_id": provider_payload["id"],
             "api_url": "https://example.org",
             "system_name": "my-system",
+        }
+
+
+@pytest.mark.parametrize(
+    "payload,expected_status_code",
+    resource_pool_payload,
+)
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+async def test_resource_pool_creation_with_remote_runai(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    payload: dict[str, Any],
+    expected_status_code: int,
+    cluster: KindCluster,
+) -> None:
+    # Create a provider
+    provider_payload = {
+        "id": "some-provider",
+        "kind": "gitlab",
+        "client_id": "some-client-id",
+        "display_name": "my oauth2 application",
+        "scope": "api",
+        "url": "https://example.org",
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=provider_payload)
+    assert res.status_code == 201, res.text
+
+    payload = deepcopy(payload)
+    if "cluster_id" in payload:
+        payload["cluster_id"] = None
+    payload["default"] = False
+    payload["public"] = False
+    payload["remote"] = {
+        "kind": "runai",
+        "provider_id": provider_payload["id"],
+        "base_url": "https://example.org",
+    }
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == expected_status_code, res.text
+
+    if res.status_code >= 200 and res.status_code < 400:
+        assert res.json is not None
+        rp = res.json
+        assert rp.get("remote") == {
+            "kind": "runai",
+            "provider_id": provider_payload["id"],
+            "base_url": "https://example.org",
         }
 
 
@@ -1376,7 +1426,7 @@ async def test_resource_pools_delete(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
-async def test_resource_pool_patch_remote(
+async def test_resource_pool_patch_remote_firecrest(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
     cluster: KindCluster,
@@ -1422,6 +1472,65 @@ async def test_resource_pool_patch_remote(
         "provider_id": provider_payload["id"],
         "api_url": "https://example.org",
         "system_name": "my-system",
+    }
+
+    # Patch to reset the resource pool
+    patch = {"default": False, "public": False, "remote": {}}
+
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    rp = res.json
+    assert "remote" not in rp
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+async def test_resource_pool_patch_remote_runai(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    cluster: KindCluster,
+) -> None:
+    # Create a provider
+    provider_payload = {
+        "id": "some-provider",
+        "kind": "gitlab",
+        "client_id": "some-client-id",
+        "display_name": "my oauth2 application",
+        "scope": "api",
+        "url": "https://example.org",
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=provider_payload)
+    assert res.status_code == 201, res.text
+
+    # First, create a non-remote resource pool
+    payload = deepcopy(resource_pool_payload_2)
+    if "cluster_id" in payload:
+        payload["cluster_id"] = None
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201, res.text
+    rp_id = res.json["id"]
+
+    # Patch with the remote configuration
+    patch = {
+        "default": False,
+        "public": False,
+        "remote": {
+            "kind": "runai",
+            "provider_id": provider_payload["id"],
+            "base_url": "https://example.org",
+        },
+    }
+
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    rp = res.json
+    assert rp.get("remote") == {
+        "kind": "runai",
+        "provider_id": provider_payload["id"],
+        "base_url": "https://example.org",
     }
 
     # Patch to reset the resource pool

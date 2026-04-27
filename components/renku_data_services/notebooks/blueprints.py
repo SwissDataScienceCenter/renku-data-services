@@ -31,6 +31,8 @@ from renku_data_services.notebooks.core_sessions import (
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
+from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
@@ -59,6 +61,8 @@ class NotebooksNewBP(CustomBlueprint):
     storage_repo: StorageRepository
     user_repo: UserRepo
     metrics: MetricsService
+    git_repositories_repo: GitRepositoriesRepository
+    builds_config: BuildsConfig
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -89,6 +93,8 @@ class NotebooksNewBP(CustomBlueprint):
                 metrics=self.metrics,
                 image_check_repo=self.image_check_repo,
                 data_source_repo=self.data_source_repo,
+                git_repositories_repo=self.git_repositories_repo,
+                builds_config=self.builds_config,
             )
             status = 201 if created else 200
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"), status)
@@ -115,7 +121,9 @@ class NotebooksNewBP(CustomBlueprint):
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
             session = await self.nb_config.k8s_v2_client.get_session(session_id, user.id)
             if session is None:
-                raise errors.ValidationError(message=f"The session with ID {session_id} does not exist.", quiet=True)
+                raise errors.MissingResourceError(
+                    message=f"The session with ID {session_id} does not exist.", quiet=True
+                )
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
         return "/sessions/<session_id>", ["GET"], _handler
@@ -159,6 +167,7 @@ class NotebooksNewBP(CustomBlueprint):
                 metrics=self.metrics,
                 image_check_repo=self.image_check_repo,
                 data_source_repo=self.data_source_repo,
+                builds_config=self.builds_config,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
