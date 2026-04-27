@@ -1,7 +1,7 @@
 """Projects authorization adapter."""
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable, Collection
+from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
@@ -744,27 +744,16 @@ class Authz:
                         authz_change = await db_repo.authz._remove_resource_pool(user, result)
                     case (
                         (AuthzOperation.create | AuthzOperation.delete),
-                        (ResourceType.resource_pool_member | ResourceType.resource_pool_prohibited),
+                        ResourceType.resource_pool,
                     ) if isinstance(result, ResourcePoolMembershipChange):
-                        authz_operation = {
-                            AuthzOperation.create: RelationshipUpdate.OPERATION_TOUCH,
-                            AuthzOperation.delete: RelationshipUpdate.OPERATION_DELETE,
-                        }[operation]
-                        relation = {
-                            ResourceType.resource_pool_member: _Relation.viewer.value,
-                            ResourceType.resource_pool_prohibited: _Relation.prohibited.value,
-                        }[resource]
-                        authz_change = await db_repo.authz._update_resource_pool_user_relationships(
-                            resource_pool_id=result.resource_pool_id,
-                            user_ids=result.user_ids,
-                            relation=relation,
-                            operation=authz_operation,
+                        authz_change = db_repo.authz._resource_pool_membership_changes_to_authz_change(
+                            result, operation
                         )
-                    case (
-                        (AuthzOperation.create | AuthzOperation.delete),
-                        (ResourceType.resource_pool_member | ResourceType.resource_pool_prohibited),
-                    ) if result is None:
-                        # Handle None returns (nothing to sync)
+                    case AuthzOperation.create, ResourceType.resource_pool if result is None:
+                        pass
+                    case AuthzOperation.delete, ResourceType.resource_pool if result is None:
+                        # NOTE: This means that the resource pool does not exist
+                        # in the first place so nothing was deleted
                         pass
                     case _:
                         resource_id: str | ULID | int | None = "unknown"
@@ -1449,39 +1438,38 @@ class Authz:
         undo = WriteRelationshipsRequest(updates=undo_updates)
         return _AuthzChange(apply=apply, undo=undo)
 
-    async def _update_resource_pool_user_relationships(
+    def _resource_pool_membership_changes_to_authz_change(
         self,
-        resource_pool_id: int,
-        user_ids: Collection[str],
-        relation: str,
-        operation: RelationshipUpdate.Operation.ValueType,
+        pool_change: ResourcePoolMembershipChange,
+        operation: AuthzOperation,
     ) -> _AuthzChange:
-        """Create an AuthzChange for resource pool user relationships.
+        """Convert resource pool membership changes into an AuthzChange.
 
         Args:
-            resource_pool_id: The ID of the resource pool.
-            user_ids: Keycloak IDs of the users to update.
-            relation: The SpiceDB relation name (e.g. "member", "prohibited").
-            operation: OPERATION_TOUCH to add, OPERATION_DELETE to remove.
+            pool_change: The resource pool membership changes to apply.
+            operation: The authorization operation (create or delete).
 
         Returns:
             An _AuthzChange with apply and undo WriteRelationshipsRequests.
         """
-        inverse_operation = {
-            RelationshipUpdate.OPERATION_TOUCH: RelationshipUpdate.OPERATION_DELETE,
-            RelationshipUpdate.OPERATION_DELETE: RelationshipUpdate.OPERATION_TOUCH,
-        }[operation]
         apply_updates: list[RelationshipUpdate] = []
         undo_updates: list[RelationshipUpdate] = []
 
-        for uid in user_ids:
-            rel = Relationship(
-                resource=_AuthzConverter.resource_pool(resource_pool_id),
-                relation=relation,
-                subject=_AuthzConverter.user_subject(uid),
-            )
-            apply_updates.append(RelationshipUpdate(operation=operation, relationship=rel))
-            undo_updates.append(RelationshipUpdate(operation=inverse_operation, relationship=rel))
+        for mc in pool_change.changes:
+            member = mc.member
+            relation = _Relation.from_role(member.role).value
+            resource = _AuthzConverter.resource_pool(cast(int, member.resource_id))
+            subject = _AuthzConverter.user_subject(member.user_id)
+            rel = Relationship(resource=resource, relation=relation, subject=subject)
+
+            if operation == AuthzOperation.create:
+                apply_updates.append(RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel))
+                undo_updates.append(RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel))
+            else:
+                apply_updates.append(
+                    RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel)
+                )
+                undo_updates.append(RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel))
 
         return _AuthzChange(
             apply=WriteRelationshipsRequest(updates=apply_updates),

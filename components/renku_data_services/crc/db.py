@@ -24,7 +24,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation
-from renku_data_services.authz.models import Scope
+from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope
 from renku_data_services.base_models import RESET
 from renku_data_services.base_models.core import ResetType, ResourceType
 from renku_data_services.crc import models
@@ -1016,36 +1016,46 @@ class UserRepository(_Base):
                 rp.users = list(users_to_add_exist) + users_to_add_missing
             return [usr.dump() for usr in rp.users]
 
-    async def _write_resource_pool_user_relationship(
-        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
+    def _build_pool_membership_change(
+        self, user_ids: Collection[str], resource_pool_id: int, role: Role, change: Change
     ) -> models.ResourcePoolMembershipChange | None:
         if not user_ids:
             return None
-        return models.ResourcePoolMembershipChange(resource_pool_id=resource_pool_id, user_ids=user_ids)
+        return models.ResourcePoolMembershipChange(
+            changes=[
+                MembershipChange(
+                    Member(
+                        role=role, user_id=uid, resource_id=resource_pool_id, resource_type=ResourceType.resource_pool
+                    ),
+                    change,
+                )
+                for uid in user_ids
+            ]
+        )
 
-    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool_member)
+    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
     async def _grant_resource_pool_members(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
     ) -> models.ResourcePoolMembershipChange | None:
-        return await self._write_resource_pool_user_relationship(api_user, resource_pool_id, user_ids, session=session)
+        return self._build_pool_membership_change(user_ids, resource_pool_id, Role.VIEWER, Change.ADD)
 
-    @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool_prohibited)
+    @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
     async def _unprohibit_resource_pool_users(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
     ) -> models.ResourcePoolMembershipChange | None:
-        return await self._write_resource_pool_user_relationship(api_user, resource_pool_id, user_ids, session=session)
+        return self._build_pool_membership_change(user_ids, resource_pool_id, Role.PROHIBITED, Change.REMOVE)
 
-    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool_prohibited)
+    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
     async def _prohibit_resource_pool_user(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
     ) -> models.ResourcePoolMembershipChange | None:
-        return await self._write_resource_pool_user_relationship(api_user, resource_pool_id, user_ids, session=session)
+        return self._build_pool_membership_change(user_ids, resource_pool_id, Role.PROHIBITED, Change.ADD)
 
-    @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool_member)
+    @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
     async def _revoke_resource_pool_member(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
     ) -> models.ResourcePoolMembershipChange | None:
-        return await self._write_resource_pool_user_relationship(api_user, resource_pool_id, user_ids, session=session)
+        return self._build_pool_membership_change(user_ids, resource_pool_id, Role.VIEWER, Change.REMOVE)
 
     @_only_admins
     async def update_user(self, api_user: base_models.APIUser, keycloak_id: str, **kwargs: Any) -> base_models.User:

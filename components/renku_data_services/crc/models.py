@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from math import ceil
@@ -11,6 +11,7 @@ from typing import Any, Final, Optional, Protocol, Self
 from kubernetes.utils import parse_quantity
 
 from renku_data_services import errors
+from renku_data_services.authz.models import MembershipChange
 from renku_data_services.base_models import ResetType
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sPatch, K8sResourceQuota
@@ -485,5 +486,4 @@ class DeletedResourcePool:
 class ResourcePoolMembershipChange:
     """Returned by user-management methods so the authz_change decorator knows what to sync to SpiceDB."""
 
-    resource_pool_id: int
-    user_ids: Collection[str]
+    changes: list[MembershipChange]
