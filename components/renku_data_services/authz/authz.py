@@ -70,6 +70,10 @@ from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpda
 
 logger = logging.getLogger(__name__)
 
+
+_ID = TypeVar("_ID", bound="str | ULID | int")
+
+
 _P = ParamSpec("_P")
 
 
@@ -232,7 +236,7 @@ class _AuthzConverter:
         return ObjectReference(object_type=ResourceType.resource_pool.value, object_id=str(id))
 
     @staticmethod
-    def to_object(resource_type: ResourceType, resource_id: str | ULID | int) -> ObjectReference:
+    def to_object(resource_type: ResourceType, resource_id: _ID) -> ObjectReference:
         """Convert a resource type and ID to an Authzed ObjectReference."""
         match (resource_type, resource_id):
             case (ResourceType.project, sid) if isinstance(sid, ULID):
@@ -328,9 +332,6 @@ def _is_allowed_on_resource(
     return decorator
 
 
-_ID = TypeVar("_ID", str, ULID, int)
-
-
 def _is_allowed(
     operation: Scope,
 ) -> Callable[
@@ -383,7 +384,7 @@ class Authz:
         return self._client
 
     async def _has_permission(
-        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | ULID | int | None, scope: Scope
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID | None, scope: Scope
     ) -> tuple[bool, ZedToken | None]:
         """Checks whether the provided user has a specific permission on the specific resource."""
         if not resource_id:
@@ -406,7 +407,7 @@ class Authz:
         return response.permissionship == CheckPermissionResponse.PERMISSIONSHIP_HAS_PERMISSION, response.checked_at
 
     async def has_permission(
-        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | ULID | int, scope: Scope
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID, scope: Scope
     ) -> bool:
         """Checks whether the provided user has a specific permission on the specific resource."""
         res, _ = await self._has_permission(user, resource_type, resource_id, scope)
