@@ -75,6 +75,19 @@ class UnsavedMember:
             user_id=self.user_id,
             resource_id=group_id,
             resource_type=ResourceType.group,
+            subject_type=ResourceType.user,
+        )
+
+    def with_resource_pool(
+        self, resource_id: ULID | int, resource_type: ResourceType, subject_type: ResourceType
+    ) -> "Member":
+        """Turn to member with group."""
+        return Member(
+            role=self.role,
+            user_id=self.user_id,
+            resource_id=resource_id,
+            resource_type=resource_type,
+            subject_type=subject_type,
         )
 
 
@@ -84,6 +97,7 @@ class Member(UnsavedMember):
 
     resource_id: ULID | int
     resource_type: ResourceType = ResourceType.group
+    subject_type: ResourceType = ResourceType.user
 
 
 class Change(Enum):
