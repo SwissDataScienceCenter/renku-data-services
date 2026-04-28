@@ -164,11 +164,10 @@ class SessionExtraResources:
 
         Both types have the exact same shape, we only change the restartPolicy to 'Always' to mark it as a sidcar.
         """
-        ic = ec.model_dump()
-        ic["restartPolicy"] = "Always"
+        ic = ec.model_copy(update={"restartPolicy": "Always"}).model_dump()
         return InitContainer.model_construct(**ic)
 
-    def extra_container_as_sidecar(self) -> SessionExtraResources:
+    def extra_container_as_sidecars(self) -> SessionExtraResources:
         """Moves all extra containers to be sidecars."""
         more_inits = [self.__extra_to_sidecar_container(e) for e in self.containers]
         return SessionExtraResources(
@@ -211,7 +210,7 @@ class SessionDataConnectorOverride(RCloneStorageRequestOverride):
     readonly: bool | None
 
 
-class SessionMode(StrEnum):
+class SessionType(StrEnum):
     """The session mode."""
 
     interactive = "interactive"
@@ -220,7 +219,7 @@ class SessionMode(StrEnum):
     @property
     def is_non_interactive(self) -> bool:
         """Return true when non_interactive."""
-        return self == SessionMode.non_interactive
+        return self == SessionType.non_interactive
 
     @property
     def is_interactive(self) -> bool:
@@ -230,21 +229,21 @@ class SessionMode(StrEnum):
     def to_amalthea(self) -> AmaltheaSessionType:
         """Return the value for the amalthea spec."""
         match self:
-            case SessionMode.interactive:
+            case SessionType.interactive:
                 return AmaltheaSessionType.Interactive
-            case SessionMode.non_interactive:
+            case SessionType.non_interactive:
                 return AmaltheaSessionType.NonInteractive
 
     @classmethod
-    def from_amalthea(cls, name: AmaltheaSessionType | None) -> SessionMode:
+    def from_amalthea(cls, name: AmaltheaSessionType | None) -> SessionType:
         """Select a value based on the amalthea name. Returns interactive if the value is unknown."""
         match name:
             case None:
-                return SessionMode.interactive
+                return SessionType.interactive
             case AmaltheaSessionType.NonInteractive:
-                return SessionMode.non_interactive
+                return SessionType.non_interactive
             case AmaltheaSessionType.Interactive:
-                return SessionMode.interactive
+                return SessionType.interactive
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -256,9 +255,9 @@ class SessionLaunchRequest:
     resource_class_id: int | None
     data_connectors_overrides: list[SessionDataConnectorOverride] | None
     env_variable_overrides: list[SessionEnvVar] | None
-    session_mode: SessionMode
+    session_type: SessionType
 
     @property
     def is_non_interactive(self) -> bool:
         """Whether this is a request to a non-interactive session."""
-        return self.session_mode.is_non_interactive
+        return self.session_type.is_non_interactive

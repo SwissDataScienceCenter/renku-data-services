@@ -29,7 +29,7 @@ from renku_data_services.k8s.models import (
 )
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
-from renku_data_services.notebooks.models import SessionMode
+from renku_data_services.notebooks.models import SessionType
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 
@@ -184,12 +184,12 @@ class NotebookK8sClient(SecretClient):
         return await self.__client.cluster_by_id(cluster_id)
 
     async def list_sessions(
-        self, safe_username: str, session_mode: SessionMode | None
+        self, safe_username: str, session_type: SessionType | None
     ) -> list[AmaltheaSessionV1Alpha1]:
         """Get a list of sessions that belong to a user."""
         session_filter = {self.__username_label: safe_username}
-        if session_mode is not None:
-            session_filter.update({"renku.io/session-type": str(session_mode)})
+        if session_type is not None:
+            session_filter.update({"renku.io/session-type": str(session_type)})
         sessions = [
             self.__session_type.model_validate(s.manifest)
             async for s in self.__client.list(
@@ -316,11 +316,11 @@ class NotebookK8sClient(SecretClient):
 
     async def _get_pod_for_session(self, session: AmaltheaSessionV1Alpha1) -> Pod | None:
         """Get the pod associated to the given session."""
-        sess_mode = SessionMode.from_amalthea(session.spec.sessionType)
+        sess_mode = SessionType.from_amalthea(session.spec.sessionType)
         pod_name = f"{session.metadata.name}-0"
         pod_gvk = GVK.from_kr8s_object(Pod)
         result: K8sObject | None = None
-        if sess_mode == SessionMode.non_interactive:
+        if sess_mode == SessionType.non_interactive:
             job_name = session.metadata.name
             async for j in self.__client.list(K8sObjectFilter(gvk=pod_gvk, label_selector={"job-name": job_name})):
                 result = j

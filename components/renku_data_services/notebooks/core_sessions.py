@@ -96,7 +96,7 @@ from renku_data_services.notebooks.models import (
     SessionEnvVar,
     SessionExtraResources,
     SessionLaunchRequest,
-    SessionMode,
+    SessionType,
 )
 from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
@@ -120,11 +120,9 @@ logger = logging.getLogger(__name__)
 
 async def get_extra_init_containers(
     nb_config: NotebooksConfig,
-    server_name: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     repositories: list[Repository],
     git_providers: list[GitProvider],
-    internal_token_mint: RenkuSelfTokenMint,
     storage_mount: PurePosixPath,
     work_dir: PurePosixPath,
     uid: int = 1000,
@@ -147,12 +145,6 @@ async def get_extra_init_containers(
     )
     if git_clone is not None:
         session_init_containers.append(InitContainer.model_validate(git_clone))
-
-    if session_mode.is_non_interactive:
-        extras = await get_extra_containers(
-            nb_config, server_name, user, repositories, git_providers, internal_token_mint
-        )
-        session_init_containers = session_init_containers + [__extra_to_sidecar_container(e) for e in extras.containers]
 
     return SessionExtraResources(
         init_containers=session_init_containers,
@@ -604,11 +596,11 @@ def get_culling(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
     resource_pool: ResourcePool,
     nb_config: NotebooksConfig,
-    session_mode: SessionMode,
+    session_type: SessionType,
 ) -> Culling:
     """Create the culling specification for an AmaltheaSession."""
 
-    if session_mode == SessionMode.non_interactive:
+    if session_type == SessionType.non_interactive:
         return _get_non_interactive_culling(resource_pool, nb_config)
     else:
         return _get_interactive_culling(user, resource_pool, nb_config)
@@ -619,7 +611,7 @@ def get_culling_patch(
     resource_pool: ResourcePool | None,
     nb_config: NotebooksConfig,
     lastInteraction: datetime | apispec.CurrentTime | None,
-    session_mode: SessionMode,
+    session_type: SessionType,
 ) -> CullingPatch:
     """Get the patch for the culling durations of a session."""
     lastInteractionDT: datetime | None = None
@@ -638,7 +630,7 @@ def get_culling_patch(
             # only update lastInteraction
             return CullingPatch(lastInteraction=lastInteractionDT or RESET)
         case rp:
-            culling = get_culling(user, rp, nb_config, session_mode) if resource_pool else Culling()
+            culling = get_culling(user, rp, nb_config, session_type) if resource_pool else Culling()
             return CullingPatch(
                 maxAge=culling.maxAge or RESET,
                 maxFailedDuration=culling.maxFailedDuration or RESET,
@@ -826,7 +818,7 @@ async def start_session(
     launcher = await session_repo.get_launcher(user=user, launcher_id=launch_request.launcher_id)
     launcher_id = launcher.id
     project = await project_repo.get_project(user=user, project_id=launcher.project_id)
-    is_interactive = launch_request.session_mode.is_interactive
+    is_interactive = launch_request.session_type.is_interactive
 
     # Determine resource_class_id: the class can be overwritten at the user's request
     resource_class_id = launch_request.resource_class_id or launcher.resource_class_id
@@ -838,7 +830,13 @@ async def start_session(
     )
     existing_session = await nb_config.k8s_v2_client.get_session(name=server_name, safe_username=user.id)
     if existing_session is not None:
-        return existing_session, False
+        if launch_request.session_type == SessionType.from_amalthea(existing_session.spec.sessionType):
+            return existing_session, False
+        else:
+            raise errors.ValidationError(
+                message=f"Session exists with type={existing_session.spec.sessionType}, "
+                "while request contains {launch_request.session_type}."
+            )
 
     # Fully determine the resource pool and resource class
     if resource_class_id is None:
@@ -863,7 +861,7 @@ async def start_session(
         raise errors.ValidationError(message="Anonymous users cannot start remote sessions.")
 
     if session_location == SessionLocation.remote and launch_request.is_non_interactive:
-        raise errors.ValidationError(message="Non-Interactive sessions are not possible for remote sessions")
+        raise errors.ValidationError(message="Non-Interactive sessions are not supported for remote sessions")
 
     environment = launcher.environment
     image = environment.container_image
@@ -928,11 +926,9 @@ async def start_session(
     session_extras = session_extras.concat(
         await get_extra_init_containers(
             nb_config,
-            server_name,
             user,
             repositories,
             git_providers,
-            internal_token_mint,
             storage_mount,
             work_dir,
             uid=environment.uid,
@@ -1062,14 +1058,14 @@ async def start_session(
 
     labels: dict[str, str] = {
         "renku.io/safe-username": user.id,
-        "renku.io/session-type": str(launch_request.session_mode),
+        "renku.io/session-type": str(launch_request.session_type),
     }
 
     if user.is_anonymous:
         labels["renku.io/anonymous-session"] = "true"
 
     if not is_interactive:
-        session_extras = session_extras.extra_container_as_sidecar()
+        session_extras = session_extras.extra_container_as_sidecars()
 
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations, labels=labels),
@@ -1082,7 +1078,7 @@ async def start_session(
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
             priorityClassName=resource_class.quota,
-            sessionType=launch_request.session_mode.to_amalthea(),
+            sessionType=launch_request.session_type.to_amalthea(),
             session=Session(
                 image=image,
                 imagePullPolicy=ImagePullPolicy.Always,
@@ -1110,7 +1106,7 @@ async def start_session(
             extraContainers=session_extras.containers,
             initContainers=session_extras.init_containers,
             extraVolumes=session_extras.volumes,
-            culling=get_culling(user, resource_pool, nb_config, launch_request.session_mode),
+            culling=get_culling(user, resource_pool, nb_config, launch_request.session_type),
             authentication=Authentication(
                 enabled=True,
                 type=AuthenticationType.oauth2proxy
@@ -1191,7 +1187,7 @@ async def patch_session(
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())
     is_getting_hibernated: bool = False
-    session_mode = SessionMode.from_amalthea(session.spec.sessionType)
+    session_type = SessionType.from_amalthea(session.spec.sessionType)
 
     # Hibernation
     # TODO: Some patching should only be done when the session is in some states to avoid inadvertent restarts
@@ -1261,7 +1257,7 @@ async def patch_session(
             )
 
     patch.spec.culling = get_culling_patch(
-        user, rp, nb_config, body.lastInteraction, SessionMode.from_amalthea(session.spec.sessionType)
+        user, rp, nb_config, body.lastInteraction, SessionType.from_amalthea(session.spec.sessionType)
     )
 
     # If the session is being hibernated we do not need to patch anything else that is
@@ -1333,7 +1329,7 @@ async def patch_session(
     )
 
     # Extra containers
-    if session_mode.is_interactive:
+    if session_type.is_interactive:
         session_extras = session_extras.concat(
             await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
         )
@@ -1356,8 +1352,8 @@ async def patch_session(
     else:
         patch.spec.imagePullSecrets = RESET
 
-    if session_mode.is_non_interactive:
-        session_extras = session_extras.extra_container_as_sidecar()
+    if session_type.is_non_interactive:
+        session_extras = session_extras.extra_container_as_sidecars()
 
     # Construct session patch
     patch.spec.extraContainers = _make_patch_spec_list(
@@ -1444,9 +1440,9 @@ def validate_session_post_request(body: apispec.SessionPostRequest) -> SessionLa
         resource_class_id=body.resource_class_id,
         data_connectors_overrides=data_connectors_overrides,
         env_variable_overrides=env_variable_overrides,
-        session_mode=SessionMode.non_interactive
+        session_type=SessionType.non_interactive
         if body.session_type == apispec.SessionType.non_interactive
-        else SessionMode.interactive,
+        else SessionType.interactive,
     )
 
 
