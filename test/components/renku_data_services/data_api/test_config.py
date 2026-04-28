@@ -19,6 +19,7 @@ from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 async def dependencies_dummy_fixture(monkeypatch):
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("VERSION", "9.9.9")
+    monkeypatch.setenv("KUBERNETES_NAMESPACE", "default")
     yield DependencyManager.from_env()
     # NOTE: _async_engine is a class variable and it persist across tests because pytest loads
     # all things once at the beginning of hte tests. So we reset it here so that it does not affect
