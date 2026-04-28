@@ -46,7 +46,11 @@ from renku_data_services.authz.models import (
     Visibility,
 )
 from renku_data_services.base_models.core import InternalServiceAdmin, ResourceType
-from renku_data_services.crc.models import DeletedResourcePool, ResourcePool, ResourcePoolMembershipChange
+from renku_data_services.crc.models import (
+    DeletedResourcePool,
+    ResourcePool,
+    ResourcePoolMembershipChange,
+)
 from renku_data_services.data_connectors.models import (
     DataConnector,
     DataConnectorToProjectLink,
@@ -136,6 +140,8 @@ class _Relation(StrEnum):
     editor = "editor"
     viewer = "viewer"
     public_viewer = "public_viewer"
+    group_viewer = "group_viewer"
+    project_viewer = "project_viewer"
     admin = "admin"
     project_platform = "project_platform"
     group_platform = "group_platform"
@@ -187,7 +193,7 @@ class AuthzOperation(StrEnum):
 
 class _AuthzConverter:
     @staticmethod
-    def project(id: ULID) -> ObjectReference:
+    def project(id: str | ULID) -> ObjectReference:
         return ObjectReference(object_type=ResourceType.project.value, object_id=str(id))
 
     @staticmethod
@@ -217,17 +223,17 @@ class _AuthzConverter:
         return ObjectReference(object_type=ResourceType.user, object_id="*")
 
     @staticmethod
-    def group(id: ULID) -> ObjectReference:
+    def group(id: str | ULID) -> ObjectReference:
         """The id should be the id of the GroupORM object in the DB."""
         return ObjectReference(object_type=ResourceType.group, object_id=str(id))
 
     @staticmethod
-    def user_namespace(id: ULID) -> ObjectReference:
+    def user_namespace(id: str | ULID) -> ObjectReference:
         """The id should be the id of the NamespaceORM object in the DB."""
         return ObjectReference(object_type=ResourceType.user_namespace, object_id=str(id))
 
     @staticmethod
-    def data_connector(id: ULID) -> ObjectReference:
+    def data_connector(id: str | ULID) -> ObjectReference:
         return ObjectReference(object_type=ResourceType.data_connector.value, object_id=str(id))
 
     @staticmethod
@@ -239,17 +245,17 @@ class _AuthzConverter:
     def to_object(resource_type: ResourceType, resource_id: _ID) -> ObjectReference:
         """Convert a resource type and ID to an Authzed ObjectReference."""
         match (resource_type, resource_id):
-            case (ResourceType.project, sid) if isinstance(sid, ULID):
+            case (ResourceType.project, sid) if isinstance(sid, (ULID, str)):
                 return _AuthzConverter.project(sid)
             case (ResourceType.user, sid) if isinstance(sid, str) or sid is None:
                 return _AuthzConverter.user(sid)
             case (ResourceType.anonymous_user, _):
                 return _AuthzConverter.anonymous_users()
-            case (ResourceType.user_namespace, rid) if isinstance(rid, ULID):
+            case (ResourceType.user_namespace, rid) if isinstance(rid, (ULID, str)):
                 return _AuthzConverter.user_namespace(rid)
-            case (ResourceType.group, rid) if isinstance(rid, ULID):
+            case (ResourceType.group, rid) if isinstance(rid, (ULID, str)):
                 return _AuthzConverter.group(rid)
-            case (ResourceType.data_connector, dcid) if isinstance(dcid, ULID):
+            case (ResourceType.data_connector, dcid) if isinstance(dcid, (ULID, str)):
                 return _AuthzConverter.data_connector(dcid)
             case (ResourceType.resource_pool, rid) if isinstance(rid, int):
                 return _AuthzConverter.resource_pool(rid)
@@ -1460,7 +1466,17 @@ class Authz:
             member = mc.member
             relation = _Relation.from_role(member.role).value
             resource = _AuthzConverter.resource_pool(cast(int, member.resource_id))
-            subject = _AuthzConverter.user_subject(member.user_id)
+
+            match member.subject_type:
+                case ResourceType.group if member.role == Role.VIEWER:
+                    relation = _Relation.group_viewer.value
+                    subject = SubjectReference(object=_AuthzConverter.to_object(ResourceType.group, member.user_id))
+                case ResourceType.project if member.role == Role.VIEWER:
+                    relation = _Relation.project_viewer.value
+                    subject = SubjectReference(object=_AuthzConverter.to_object(ResourceType.project, member.user_id))
+                case _:
+                    subject = _AuthzConverter.user_subject(member.user_id)
+
             rel = Relationship(resource=resource, relation=relation, subject=subject)
 
             if operation == AuthzOperation.create:
