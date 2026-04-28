@@ -32,7 +32,7 @@ from renku_data_services.notebooks.core_sessions import (
 )
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
-from renku_data_services.notebooks.models import SessionMode
+from renku_data_services.notebooks.models import SessionType
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.config import BuildsConfig
@@ -115,9 +115,9 @@ class NotebooksNewBP(CustomBlueprint):
             _: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, query: apispec.SessionsGetParametersQuery
         ) -> HTTPResponse:
             session_mode = (
-                SessionMode.non_interactive
+                SessionType.non_interactive
                 if query.session_type == apispec.SessionType.non_interactive
-                else SessionMode.interactive
+                else SessionType.interactive
             )
             sessions = await self.nb_config.k8s_v2_client.list_sessions(user.id, session_mode)
             output: list[dict] = []
