@@ -928,7 +928,8 @@ async def start_session(
         image_check_repo=image_check_repo,
         builds_config=builds_config,
     )
-    if image_secret:
+    # Adopt being false means the returned secret already exists and should be used as is
+    if image_secret and image_secret.adopt:
         session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
 
     # Remote session configuration
@@ -1243,7 +1244,9 @@ async def patch_session(
         builds_config=builds_config,
     )
     if image_pull_secret:
-        session_extras = session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
+        # Adopt being false means the returned secret already exists and should be used as is
+        if image_pull_secret.adopt:
+            session_extras = session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret.name, adopt=image_pull_secret.adopt)]
     else:
         patch.spec.imagePullSecrets = RESET
