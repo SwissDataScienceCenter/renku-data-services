@@ -11,11 +11,14 @@ from authzed.api.v1 import (
 )
 from ulid import ULID
 
-from renku_data_services.authz.authz import _AuthzConverter, _Relation
-from renku_data_services.authz.models import Member, Role, Scope, Visibility
+from renku_data_services.authz.authz import AuthzOperation, _AuthzConverter, _Relation
+from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
 from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import NamespacePath, ResourceType
-from renku_data_services.crc.models import DeletedResourcePool
+from renku_data_services.crc.models import (
+    DeletedResourcePool,
+    ResourcePoolMembershipChange,
+)
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.errors import errors
 from renku_data_services.migrations.core import run_migrations_for_app
@@ -70,6 +73,57 @@ def _rel(
             resource=_AuthzConverter.resource_pool(pool_id),
             relation=relation,
             subject=SubjectReference(object=_AuthzConverter.user(user_id)),
+        ),
+    )
+
+
+def _rel_member(
+    pool_id: int,
+    relation: str,
+    member_id: str,
+    member_type: ResourceType,
+    *,
+    op: int = RelationshipUpdate.OPERATION_TOUCH,
+) -> RelationshipUpdate:
+    """Helper to create a relationship for a polymorphic member."""
+    return RelationshipUpdate(
+        operation=op,
+        relationship=Relationship(
+            resource=_AuthzConverter.resource_pool(pool_id),
+            relation=relation,
+            subject=SubjectReference(object=ObjectReference(object_type=member_type, object_id=member_id)),
+        ),
+    )
+
+
+def _rel_generic(
+    res_type: ResourceType,
+    res_id: str | int,
+    relation: str,
+    sub_type: ResourceType,
+    sub_id: str,
+    *,
+    op: int = RelationshipUpdate.OPERATION_TOUCH,
+) -> RelationshipUpdate:
+    """Helper to create any relationship in Authzed."""
+    # Use converter for type-specific object references if available, otherwise fallback
+    res_ref = (
+        _AuthzConverter.get_resource_ref(res_type, res_id)
+        if hasattr(_AuthzConverter, "get_resource_ref")
+        else ObjectReference(object_type=res_type, object_id=str(res_id))
+    )
+    sub_ref = (
+        _AuthzConverter.get_resource_ref(sub_type, sub_id)
+        if hasattr(_AuthzConverter, "get_resource_ref")
+        else ObjectReference(object_type=sub_type, object_id=sub_id)
+    )
+
+    return RelationshipUpdate(
+        operation=op,
+        relationship=Relationship(
+            resource=res_ref,
+            relation=relation,
+            subject=SubjectReference(object=sub_ref),
         ),
     )
 
@@ -551,7 +605,68 @@ async def test_resource_pool_isolation(app_manager_instance: DependencyManager, 
     assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_b, Scope.READ)
 
 
-# Unique ID ranges per test — avoids cross-test interference in shared SpiceDB
+@pytest.mark.asyncio
+async def test_resource_pool_member_relationships_subject_types(app_manager_instance: DependencyManager):
+    """Verify that _resource_pool_membership_changes_to_authz_change uses correct subject types."""
+    authz = app_manager_instance.authz
+    pool_id = 9999
+
+    pool_change = ResourcePoolMembershipChange(
+        changes=[
+            MembershipChange(
+                Member(
+                    role=Role.VIEWER,
+                    user_id="user-1",
+                    resource_id=pool_id,
+                    resource_type=ResourceType.resource_pool,
+                    subject_type=None,
+                ),
+                Change.ADD,
+            ),
+            MembershipChange(
+                Member(
+                    role=Role.VIEWER,
+                    user_id="group-1",
+                    resource_id=pool_id,
+                    resource_type=ResourceType.resource_pool,
+                    subject_type=ResourceType.group,
+                ),
+                Change.ADD,
+            ),
+            MembershipChange(
+                Member(
+                    role=Role.VIEWER,
+                    user_id="project-1",
+                    resource_id=pool_id,
+                    resource_type=ResourceType.resource_pool,
+                    subject_type=ResourceType.project,
+                ),
+                Change.ADD,
+            ),
+        ]
+    )
+
+    authz_change = authz._resource_pool_membership_changes_to_authz_change(pool_change, AuthzOperation.create)
+
+    updates = authz_change.apply.updates
+    assert len(updates) == 3
+
+    # User subject
+    assert updates[0].relationship.relation == _Relation.viewer.value
+    assert updates[0].relationship.subject.object.object_type == ResourceType.user
+    assert updates[0].relationship.subject.object.object_id == "user-1"
+
+    # Group subject
+    assert updates[1].relationship.relation == _Relation.group_viewer.value
+    assert updates[1].relationship.subject.object.object_type == ResourceType.group
+    assert updates[1].relationship.subject.object.object_id == "group-1"
+
+    # Project subject
+    assert updates[2].relationship.relation == _Relation.project_viewer.value
+    assert updates[2].relationship.subject.object.object_type == ResourceType.project
+    assert updates[2].relationship.subject.object.object_id == "project-1"
+
+
 _ADD_DELETE_BASE = 9100
 _UNDO_BASE = 9110
 _VISIBILITY_BASE = 9120
@@ -727,3 +842,93 @@ async def test_resource_pool_delete_cleans_all_relations(
 
     await _assert_pool_access(authz, pool_id, admin_use=False, admin_write=False, user_use=False, anon_use=False)
     assert not await authz.has_permission(regular_user2, ResourceType.resource_pool, pool_id, Scope.READ)
+
+
+_POLY_BASE = 9500
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_polymorphic_inheritance(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
+    """Verify that members of a group or project gain access via direct_member traversal."""
+    authz = app_manager_instance.authz
+    pool_id = _POLY_BASE + 1
+    user_id = "user_poly_1"
+    group_id = "group_poly_1"
+    project_id = "project_poly_1"
+
+    # Setup: Admin and basic pool setup
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(pool_id, public=False)))
+
+    # 1. Group inheritance: pool -> group_viewer -> group -> user
+    updates = [
+        _rel_member(pool_id, "group_viewer", group_id, ResourceType.group),
+        _rel_generic(ResourceType.group, group_id, "viewer", ResourceType.user, user_id),
+    ]
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
+    assert await authz.has_permission(APIUser(id=user_id), ResourceType.resource_pool, pool_id, Scope.READ)
+
+    # 2. Project inheritance: pool -> project_viewer -> project -> user
+    pool_id2 = _POLY_BASE + 2
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(pool_id2, public=False)))
+    updates = [
+        _rel_member(pool_id2, "project_viewer", project_id, ResourceType.project),
+        _rel_generic(ResourceType.project, project_id, "viewer", ResourceType.user, user_id),
+    ]
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
+    assert await authz.has_permission(APIUser(id=user_id), ResourceType.resource_pool, pool_id2, Scope.READ)
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_polymorphic_prohibition(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
+    """Verify that the prohibited relation blocks access regardless of membership type."""
+    authz = app_manager_instance.authz
+    pool_id = _POLY_BASE + 3
+    user_id = "user_prohibit_1"
+    group_id = "group_prohibit_1"
+
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(pool_id, public=False)))
+
+    # Setup: user is in group, group is a viewer of pool, but user is prohibited
+    updates = [
+        _rel_member(pool_id, "group_viewer", group_id, ResourceType.group),
+        _rel_generic(ResourceType.group, group_id, "viewer", ResourceType.user, user_id),
+        _rel(pool_id, "prohibited", user_id),
+    ]
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
+    assert not await authz.has_permission(APIUser(id=user_id), ResourceType.resource_pool, pool_id, Scope.READ)
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_admin_bypass_polymorphic(
+    app_manager_instance: DependencyManager, bootstrap_admins
+) -> None:
+    """Verify that admins still bypass prohibition even in polymorphic pools."""
+    authz = app_manager_instance.authz
+    pool_id = _POLY_BASE + 4
+
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(pool_id, public=False)))
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(updates=[_rel(pool_id, "prohibited", admin_user.id)])
+    )
+    assert await authz.has_permission(admin_user, ResourceType.resource_pool, pool_id, Scope.READ)
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_no_indirect_inheritance(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
+    """Verify that only direct_member is traversed, not nested namespaces."""
+    authz = app_manager_instance.authz
+    pool_id = _POLY_BASE + 5
+    user_id = "user_indirect_1"
+    project_id = "project_indirect_1"
+    ns_id = "ns_indirect_1"
+
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(pool_id, public=False)))
+
+    # Setup: pool -> project_viewer -> project -> namespace -> user
+    updates = [
+        _rel_member(pool_id, "project_viewer", project_id, ResourceType.project),
+        _rel_generic(ResourceType.project, project_id, "project_namespace", ResourceType.user_namespace, ns_id),
+        _rel_generic(ResourceType.user_namespace, ns_id, "owner", ResourceType.user, user_id),
+    ]
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
+    assert not await authz.has_permission(APIUser(id=user_id), ResourceType.resource_pool, pool_id, Scope.READ)
