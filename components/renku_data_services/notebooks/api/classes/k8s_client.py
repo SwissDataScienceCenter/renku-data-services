@@ -319,20 +319,20 @@ class NotebookK8sClient(SecretClient):
         sess_mode = SessionType.from_amalthea(session.spec.sessionType)
         pod_name = f"{session.metadata.name}-0"
         pod_gvk = GVK.from_kr8s_object(Pod)
-        result: K8sObject | None = None
+        pod: K8sObject | None = None
         if sess_mode == SessionType.non_interactive:
             job_name = session.metadata.name
             async for j in self.__client.list(K8sObjectFilter(gvk=pod_gvk, label_selector={"job-name": job_name})):
-                result = j
+                pod = j
                 break
         else:
             pod_name = f"{session.metadata.name}-0"
-            result = await self._get(pod_name, pod_gvk, None)
+            pod = await self._get(pod_name, pod_gvk, None)
 
-        if result is None:
+        if pod is None:
             return None
-        cluster = await self.__client.cluster_by_id(result.cluster)
-        return Pod(resource=result.to_api_object(cluster.api), namespace=result.namespace, api=cluster.api)
+        cluster = await self.__client.cluster_by_id(pod.cluster)
+        return Pod(resource=pod.to_api_object(cluster.api), namespace=pod.namespace, api=cluster.api)
 
     async def get_session_logs(
         self, session_name: str, safe_username: str, max_log_lines: int | None = None
