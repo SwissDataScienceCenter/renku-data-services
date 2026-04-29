@@ -237,13 +237,10 @@ class SessionType(StrEnum):
     @classmethod
     def from_amalthea(cls, name: AmaltheaSessionType | None) -> SessionType:
         """Select a value based on the amalthea name. Returns interactive if the value is unknown."""
-        match name:
-            case None:
-                return SessionType.interactive
-            case AmaltheaSessionType.NonInteractive:
-                return SessionType.non_interactive
-            case AmaltheaSessionType.Interactive:
-                return SessionType.interactive
+        if name == AmaltheaSessionType.NonInteractive:
+            return SessionType.non_interactive
+        else:
+            return SessionType.interactive
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

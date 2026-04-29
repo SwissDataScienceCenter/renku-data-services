@@ -41,6 +41,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     RemoteSecretRef,
     RequiredDuringSchedulingIgnoredDuringExecution,
     RequiredDuringSchedulingIgnoredDuringExecutionItem,
+    SessionType,
     Size,
     State,
     Status,
@@ -232,6 +233,7 @@ class AmaltheaSessionSpec(_ASSpec):
     session: Session
     culling: Culling | None = None
     ingress: Ingress | None = None
+    sessionType: SessionType = Field(default=SessionType.Interactive)
 
 
 class AmaltheaSessionV1Alpha1(_ASModel):
