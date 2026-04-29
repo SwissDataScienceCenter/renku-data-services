@@ -8,6 +8,9 @@ spec:
     - name: platform-api-version
       description: The referenced version is the minimum version that all relevant buildpack implementations support.
       default: "0.12"
+    - name: insecure-registries
+      description: Comma separated list of registries to consider insecure (http or self-signed certificate).
+      default: ""
     - name: run-image
       description: The image to use as the base for all session images built with this strategy
       default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.1.0"
@@ -24,6 +27,8 @@ spec:
       env:
         - name: CNB_PLATFORM_API
           value: $(params.platform-api-version)
+        - name: CNB_INSECURE_REGISTRIES
+          value: $(params.insecure-registries)
         - name: BP_RENKU_FRONTENDS
           value: $(params.frontend)
         - name: PARAM_SOURCE_CONTEXT

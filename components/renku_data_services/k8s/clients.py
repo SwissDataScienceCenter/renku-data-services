@@ -346,6 +346,7 @@ class K8sCachedClusterClient(K8sClusterClient):
             if not obj.namespaced():
                 raise NotImplementedError("Caching of cluster scoped K8s resources is not supported")
             await self.__cache.upsert(obj)
+
         try:
             obj = await super().create(obj, refresh)
         except:
@@ -353,6 +354,10 @@ class K8sCachedClusterClient(K8sClusterClient):
             if obj.gvk in self.__kinds_to_cache:
                 await self.__cache.delete(obj)
             raise
+
+        if refresh and obj.gvk in self.__kinds_to_cache:
+            await self.__cache.upsert(obj)
+
         return obj
 
     async def patch(self, meta: K8sObjectMeta, patch: K8sPatches) -> K8sObject:

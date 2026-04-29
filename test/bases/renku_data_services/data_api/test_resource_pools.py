@@ -91,6 +91,7 @@ async def test_resource_pool_creation_with_cluster_ids(
     cluster: KindCluster,
     kubeconfig_path: Path,
     monkeypatch,
+    admin_headers,
 ) -> None:
     payload = deepcopy(payload)
     monkeypatch.setenv("ALWAYS_READ_CLUSTERS", "true")
@@ -107,7 +108,7 @@ async def test_resource_pool_creation_with_cluster_ids(
                 "session_ingress_annotations": {},
                 "session_tls_secret_name": "a-domain-name-tls",
             },
-            headers={"Authorization": 'Bearer {"is_admin": true}'},
+            headers=admin_headers,
         )
         assert res.status_code == 201, res.text
         payload["cluster_id"] = res.json["id"]
@@ -547,8 +548,8 @@ async def test_restricted_default_resource_pool_access(
     existing_users = res.json
     assert res.status_code == 200
     assert len(existing_users) >= 2
-    # Restrict one user to not have access to the default pool
-    no_default_user = existing_users[0]
+    # Restrict one user to not have access to the default pool (not user[0] who is admin)
+    no_default_user = existing_users[1]
     no_default_user_id = no_default_user["id"]
     no_default_access_token = json.dumps({"id": no_default_user_id})
     _, res = await sanic_client.delete(
@@ -557,7 +558,7 @@ async def test_restricted_default_resource_pool_access(
     )
     assert res.status_code == 204
     # The other user in the db should be able to access the default pool
-    default_access_user = existing_users[1]
+    default_access_user = existing_users[2]
     user_id = default_access_user["id"]
     access_token = json.dumps({"id": user_id})
     # Ensure non-authenticated users have access to the default pool
@@ -617,8 +618,8 @@ async def test_restricted_default_resource_pool_access_changes(
     existing_users = res.json
     assert res.status_code == 200
     assert len(existing_users) >= 2
-    # Restrict one user to not have access to the default pool
-    no_default_user = existing_users[0]
+    # Restrict one user to not have access to the default pool (not user[0] who is admin)
+    no_default_user = existing_users[1]
     no_default_user_id = no_default_user["id"]
     no_default_access_token = json.dumps({"id": no_default_user_id})
     _, res = await sanic_client.delete(
@@ -664,8 +665,8 @@ async def test_private_resource_pool_access(
     existing_users = res.json
     assert res.status_code == 200
     assert len(existing_users) >= 2
-    # Select one user that has no access
-    restricted_user = existing_users[0]
+    # Select one user that has no access (not user[0] who is admin)
+    restricted_user = existing_users[3]
     restricted_user_id = restricted_user["id"]
     restricted_access_token = json.dumps({"id": restricted_user_id})
     # Give another user access to the private pool
@@ -800,7 +801,8 @@ async def test_user_resource_pools(
     existing_users = res.json
     assert res.status_code == 200
     assert len(existing_users) >= 1
-    user = existing_users[0]
+    # not user[0] who is admin
+    user = existing_users[1]
     user_id = user["id"]
     user_access_token = json.dumps({"id": user_id})
     user_headers = {"Authorization": f"Bearer {user_access_token}"}
@@ -1643,3 +1645,51 @@ async def test_resource_class_empty_patch_noop(
     assert res.json is not None
     rc = res.json
     assert rc == default_rc
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_visibility_toggle(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    """E2E: toggling the public flag via PATCH updates Authzed access for non-admin users."""
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = True
+
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp_id = res.json["id"]
+
+    # Pick a regular user (not user[0] who is admin)
+    _, res = await sanic_client.get("/api/data/users", headers=admin_headers)
+    assert res.status_code == 200
+    assert len(res.json) >= 1
+    user_id = res.json[1]["id"]
+    user_headers = {"Authorization": f"Bearer {json.dumps({'id': user_id})}"}
+
+    # Visible while public
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_id}", headers=user_headers)
+    assert res.status_code == 200
+
+    # PATCH → private
+    _, res = await sanic_client.patch(
+        f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json={"public": False}
+    )
+    assert res.status_code == 200
+    assert res.json["public"] is False
+
+    # Hidden after going private
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_id}", headers=user_headers)
+    assert res.status_code == 404
+
+    # PATCH → public again
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json={"public": True})
+    assert res.status_code == 200
+    assert res.json["public"] is True
+
+    # Visible again
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_id}", headers=user_headers)
+    assert res.status_code == 200

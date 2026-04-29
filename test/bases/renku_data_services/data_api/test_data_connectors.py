@@ -445,20 +445,21 @@ async def test_post_data_connector_with_conflicting_slug(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("headers_and_error", [("unauthorized_headers", 401), ("member_1_headers", 403)])
+@pytest.mark.parametrize(
+    "headers_name,expected_status_code", [("unauthorized_headers", 401), ("member_1_headers", 403)]
+)
 async def test_post_data_connector_without_namespace_permission(
     # NOTE: dynamically requesting async fixtures with an already running event loop causes errors in pytest.
     # to prevent this, all used fixtures have to also be listed again, so they exist at test execution time and
     # are loaded from cache
     sanic_client: SanicASGITestClient,
     user_headers,
-    headers_and_error,
+    headers_name,
+    expected_status_code,
     unauthorized_headers,
     member_1_headers,
     request,
 ) -> None:
-    headers_name, status_code = headers_and_error
-
     _, response = await sanic_client.post(
         "/api/data/groups", headers=user_headers, json={"name": "My Group", "slug": "my-group"}
     )
@@ -477,9 +478,10 @@ async def test_post_data_connector_without_namespace_permission(
             "target_path": "my/target",
         },
     }
+
     _, response = await sanic_client.post("/api/data/data_connectors", headers=headers, json=payload)
 
-    assert response.status_code == status_code, response.text
+    assert response.status_code == expected_status_code, response.text
 
 
 @pytest.mark.asyncio

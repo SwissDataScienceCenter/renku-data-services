@@ -11,6 +11,9 @@ from renku_data_services.k8s.models import GVK
 BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX: Final[str] = "harbor.dev.renku.ch/renku-builds/"
 """The default container image prefix for Renku builds."""
 
+BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX: Final[str] = "harbor.dev.renku.ch/renku-builds-private/"
+"""The default container image prefix for Renku private builds."""
+
 BUILD_OUTPUT_IMAGE_NAME: Final[str] = "renku-build"
 """The container image name created from Renku builds."""
 
@@ -27,11 +30,14 @@ BUILD_URL_PATH_MAP: Final[dict[str, str]] = {
     "jupyterlab": "/lab",
 }
 
-BUILD_DEFAULT_BUILD_STRATEGY_NAME: Final[str] = "renku-buildpacks-v2"
+BUILD_DEFAULT_BUILD_STRATEGY_NAME: Final[str] = "renku-buildpacks-v3"
 """The name of the default build strategy."""
 
 BUILD_DEFAULT_PUSH_SECRET_NAME: Final[str] = "renku-build-secret"
 """The name of the default secret to use when pushing Renku builds."""
+
+BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME: Final[str] = "renku-build-private-secret"
+"""The name of the default secret to use when pushing Renku builds to the private image registry."""
 
 BUILD_RUN_DEFAULT_RETENTION_AFTER_FAILED: Final[timedelta] = timedelta(minutes=5)
 """The default retention TTL for BuildRuns when in failed state."""

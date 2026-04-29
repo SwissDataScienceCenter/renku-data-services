@@ -10,7 +10,7 @@ from urllib.parse import urlunparse
 
 from kubernetes.utils import parse_duration, parse_quantity
 from kubernetes.utils.duration import format_duration
-from pydantic import BaseModel, Field, field_serializer, field_validator, model_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_serializer
 from pydantic.types import HashableItemType
 from ulid import ULID
 
@@ -86,10 +86,7 @@ from renku_data_services.notebooks.cr_base import BaseCRD
 class Metadata(BaseModel):
     """Basic k8s metadata spec."""
 
-    class Config:
-        """Do not exclude unknown properties."""
-
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
     name: str
     namespace: str | None = None

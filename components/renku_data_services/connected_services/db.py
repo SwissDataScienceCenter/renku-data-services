@@ -241,6 +241,19 @@ class ConnectedServicesRepository:
 
         return connection
 
+    async def get_oauth2_connection_next_url_by_state(self, state: str) -> str | None:
+        """Get the saved next_url for a pending OAuth2 connection using state."""
+        if not state:
+            return None
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(schemas.OAuth2ConnectionORM)
+                .where(schemas.OAuth2ConnectionORM.state == state)
+                .where(schemas.OAuth2ConnectionORM.status == models.ConnectionStatus.pending)
+            )
+            connection = result.one_or_none()
+            return connection.next_url if connection else None
+
     async def get_provider_for_image(self, user: APIUser, image: Image) -> models.ImageProvider | None:
         """Find a provider supporting the given image."""
         registry_urls = [f"http://{image.hostname}", f"https://{image.hostname}"]

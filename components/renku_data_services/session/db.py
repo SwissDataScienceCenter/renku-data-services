@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,8 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.repositories.models import Metadata, RepositoryVisibility
 from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.k8s_client import ShipwrightClient
@@ -52,12 +54,14 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         resource_pools: ResourcePoolRepository,
         shipwright_client: ShipwrightClient | None,
         builds_config: BuildsConfig,
+        git_repositories_repo: GitRepositoriesRepository,
     ) -> None:
         self.session_maker = session_maker
         self.project_authz: Authz = project_authz
         self.resource_pools: ResourcePoolRepository = resource_pools
         self.shipwright_client = shipwright_client
         self.builds_config = builds_config
+        self.git_repositories_repo = git_repositories_repo
 
     async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
@@ -195,25 +199,31 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         )
         session.add(build_parameters_orm)
 
+        build_env = models.BUILD_ENVIRONMENT_CONFIGS.get(new_build_parameters_environment.frontend_variant)
+        if not build_env:
+            raise errors.ValidationError(
+                message=f"Frontend variant {new_build_parameters_environment.frontend_variant} is not valid or "
+                "cannot be found."
+            )
         environment_orm = schemas.EnvironmentORM(
             name=launcher.name,
             created_by_id=user.id,
             description=f"Generated environment for {launcher.name}",
-            container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
-            default_url="/lab",  # TODO: This should come from the build
-            port=8888,  # TODO: This should come from the build
-            working_directory=None,  # TODO: This should come from the build
-            mount_directory=None,  # TODO: This should come from the build
-            uid=1000,  # TODO: This should come from the build
-            gid=1000,  # TODO: This should come from the build
-            environment_kind=models.EnvironmentKind.CUSTOM,
-            command=None,  # TODO: This should come from the build
-            args=None,  # TODO: This should come from the build
+            container_image=build_env.container_image,
+            default_url=build_env.default_url,
+            port=build_env.port,
+            working_directory=build_env.working_directory,
+            mount_directory=build_env.mount_directory,
+            uid=build_env.uid,
+            gid=build_env.gid,
+            environment_kind=build_env.environment_kind,
+            command=build_env.command,
+            args=build_env.args,
             creation_date=datetime.now(UTC).replace(microsecond=0),
-            environment_image_source=models.EnvironmentImageSource.build,
+            environment_image_source=build_env.environment_image_source,
             build_parameters_id=build_parameters_orm.id,
             build_parameters=build_parameters_orm,
-            strip_path_prefix=False,
+            strip_path_prefix=build_env.strip_path_prefix,
         )
         session.add(environment_orm)
         return environment_orm
@@ -455,27 +465,31 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 )
                 session.add(build_parameters_orm)
 
+                env = models.BUILD_ENVIRONMENT_CONFIGS.get(launcher.environment.frontend_variant)
+                if not env:
+                    raise errors.ValidationError(
+                        message=f"Frontend variant {launcher.environment.frontend_variant} is not valid or "
+                        "cannot be found."
+                    )
                 environment_orm = schemas.EnvironmentORM(
                     name=launcher.name,
                     created_by_id=user.id,
                     description=f"Generated environment for {launcher.name}",
-                    container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
-                    default_url=constants.BUILD_URL_PATH_MAP.get(
-                        launcher.environment.frontend_variant, constants.BUILD_DEFAULT_URL_PATH
-                    ),
-                    port=constants.BUILD_PORT,  # TODO: This should come from the build
-                    working_directory=constants.BUILD_WORKING_DIRECTORY,  # TODO: This should come from the build
-                    mount_directory=constants.BUILD_MOUNT_DIRECTORY,  # TODO: This should come from the build
-                    uid=constants.BUILD_UID,  # TODO: This should come from the build
-                    gid=constants.BUILD_GID,  # TODO: This should come from the build
-                    environment_kind=models.EnvironmentKind.CUSTOM,
-                    command=None,  # TODO: This should come from the build
-                    args=None,  # TODO: This should come from the build
+                    container_image=env.container_image,
+                    default_url=env.default_url,
+                    port=env.port,
+                    working_directory=env.working_directory,
+                    mount_directory=env.mount_directory,
+                    uid=env.uid,
+                    gid=env.gid,
+                    environment_kind=env.environment_kind,
+                    command=env.command,
+                    args=env.args,
                     creation_date=datetime.now(UTC).replace(microsecond=0),
-                    environment_image_source=models.EnvironmentImageSource.build,
+                    environment_image_source=env.environment_image_source,
                     build_parameters_id=build_parameters_orm.id,
                     build_parameters=build_parameters_orm,
-                    strip_path_prefix=False,  # TODO: Should this maybe be adjustable?
+                    strip_path_prefix=env.strip_path_prefix,
                 )
                 session.add(environment_orm)
 
@@ -759,22 +773,26 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 )
                 session.add(build_parameters_orm)
 
-                launcher.environment.container_image = (
-                    "image:unknown-at-the-moment"  # TODO: This should come from the build
-                )
-                launcher.environment.default_url = "/lab"  # TODO: This should come from the build
-                launcher.environment.port = 8888  # TODO: This should come from the build
-                launcher.environment.working_directory = None  # TODO: This should come from the build
-                launcher.environment.mount_directory = None  # TODO: This should come from the build
-                launcher.environment.uid = 1000  # TODO: This should come from the build
-                launcher.environment.gid = 1000  # TODO: This should come from the build
-                launcher.environment.environment_kind = models.EnvironmentKind.CUSTOM
-                launcher.environment.command = None  # TODO: This should come from the build
-                launcher.environment.args = None  # TODO: This should come from the build
-                launcher.environment.environment_image_source = models.EnvironmentImageSource.build
+                frontend_variant = models.FrontendVariant(new_custom_built_environment.frontend_variant)
+                build_env = models.BUILD_ENVIRONMENT_CONFIGS.get(frontend_variant)
+                if not build_env:
+                    raise errors.ValidationError(
+                        message=f"Frontend variant {frontend_variant} is not valid or cannot be found."
+                    )
+                launcher.environment.container_image = build_env.container_image
+                launcher.environment.default_url = build_env.default_url
+                launcher.environment.port = build_env.port
+                launcher.environment.working_directory = build_env.working_directory
+                launcher.environment.mount_directory = build_env.mount_directory
+                launcher.environment.uid = build_env.uid
+                launcher.environment.gid = build_env.gid
+                launcher.environment.environment_kind = build_env.environment_kind
+                launcher.environment.command = build_env.command
+                launcher.environment.args = build_env.args
+                launcher.environment.environment_image_source = build_env.environment_image_source
                 launcher.environment.build_parameters_id = build_parameters_orm.id
                 launcher.environment.build_parameters = build_parameters_orm
-                launcher.environment.strip_path_prefix = False
+                launcher.environment.strip_path_prefix = build_env.strip_path_prefix
 
                 await session.flush()
             case _:
@@ -937,7 +955,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         launcher = launcher_orm.dump() if launcher_orm is not None else None
 
         if self.shipwright_client is not None:
-            params = self._get_buildrun_params(
+            params = await self._get_buildrun_params(
                 user=user, build=result, build_parameters=build_parameters, launcher=launcher
             )
             await self.shipwright_client.create_image_build(params=params, user_id=user.id)
@@ -1036,7 +1054,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         )
 
     async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession, user_id: str) -> None:
-        """Refresh the status of a build by querying Shipwright."""
+        """Refresh the status and environment of a build by querying Shipwright.
+
+        Once the build run has completed, the corresponding session launcher's environment
+        is updated to allow launching sessions with the newly built image.
+        """
         if build.status != models.BuildStatus.in_progress:
             return
 
@@ -1046,7 +1068,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             return
 
         # TODO: consider how we can parallelize calls to `shipwright_client` for refreshes.
-        status_update = await self.shipwright_client.update_image_build_status(
+        status_update, frontend_var = await self.shipwright_client.update_image_build_status(
             buildrun_name=build.dump().k8s_name, user_id=user_id
         )
 
@@ -1064,21 +1086,34 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             build.result_image = update.result.image
             build.result_repository_url = update.result.repository_url
             build.result_repository_git_commit_sha = update.result.repository_git_commit_sha
-            # Also update the session environment here
-            # TODO: move this to its own method where build parameters determine args
+
             environment = build.environment
             environment.container_image = build.result_image
-            # An older version was hardcoding the values but we can and should
-            # rely on the defaults for args and command
-            if environment.command is not None:
-                environment.command = None
-            if environment.args is not None:
-                environment.args = None
+            build_env = models.BUILD_ENVIRONMENT_CONFIGS.get(frontend_var) if frontend_var else None
+            if build_env:
+                # NOTE: This is necessary because if the environment changed from jupyterlab to ttyd (for example)
+                # then ttyd may use different configuration for some parameters. And if these are not updated
+                # properly the new session image will not run.
+                environment.default_url = build_env.default_url
+                environment.strip_path_prefix = build_env.strip_path_prefix
+                environment.port = build_env.port
+                environment.uid = build_env.uid
+                environment.gid = build_env.gid
+                environment.working_directory = build_env.working_directory
+                environment.mount_directory = build_env.mount_directory
+                environment.command = build_env.command
+                environment.args = build_env.args
+            else:
+                logger.error(
+                    f"Could not find frontend variant {frontend_var} in the preset configurations and "
+                    "have skipped updating the launcher environment configuration. "
+                    "This may lead to a failing session. The frontend variant should be added to the code."
+                )
 
         await session.flush()
         await session.refresh(build)
 
-    def _get_buildrun_params(
+    async def _get_buildrun_params(
         self,
         user: base_models.APIUser,
         build: models.Build,
@@ -1096,16 +1131,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         builder_image = self.builds_config.build_builder_image or constants.BUILD_DEFAULT_BUILDER_IMAGE
         run_image = self.builds_config.build_run_image or constants.BUILD_DEFAULT_RUN_IMAGE
 
-        output_image_prefix = (
-            self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
-        )
-        output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
-        output_image_tag = build.k8s_name
-        output_image = f"{output_image_prefix}{output_image_name}:{output_image_tag}"
-
         # TODO: define the build strategy from `build_parameters`
         build_strategy_name = self.builds_config.build_strategy_name or constants.BUILD_DEFAULT_BUILD_STRATEGY_NAME
-        push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
 
         node_selector = self.builds_config.node_selector
         tolerations = self.builds_config.tolerations
@@ -1130,6 +1157,48 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             annotations["renku.io/launcher_id"] = str(launcher.id)
             annotations["renku.io/project_id"] = str(launcher.project_id)
 
+        result = await self.git_repositories_repo.get_repository(
+            repository_url=git_repository,
+            user=user,
+            etag=None,
+            internal_gitlab_user=base_models.APIUser(),
+        )
+
+        if result.is_error:
+            raise errors.CannotStartBuildError(message=str(result.error))
+
+        authentication_secret: models.AuthenticationSecret | None = None
+        output_image_prefix = (
+            self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
+        )
+        push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
+
+        visibility: RepositoryVisibility = RepositoryVisibility.public
+        if isinstance(result.metadata, Metadata):
+            visibility = result.metadata.visibility
+
+        if visibility == RepositoryVisibility.private:
+            token: dict[str, Any] | None = await self.git_repositories_repo.get_token(
+                repository_url=git_repository, user=user
+            )
+            authentication_secret = models.AuthenticationSecret(
+                username="token",
+                password=token.get("access_token", "") if token is not None else "",
+            )
+
+            output_image_prefix = (
+                self.builds_config.build_output_private_image_prefix
+                or constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
+            )
+
+            push_secret_name = (
+                self.builds_config.push_private_secret_name or constants.BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME
+            )
+
+        output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
+        output_image_tag = build.k8s_name
+        output_image = f"{output_image_prefix}{output_image_name}:{output_image_tag}"
+
         params = models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
@@ -1138,6 +1207,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             output_image=output_image,
             build_strategy_name=build_strategy_name,
             push_secret_name=push_secret_name,
+            authentication_secret=authentication_secret,
             retention_after_failed=retention_after_failed,
             retention_after_succeeded=retention_after_succeeded,
             build_timeout=build_timeout,
@@ -1148,6 +1218,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             frontend=build_parameters.frontend_variant,
             git_repository_revision=git_repository_revision,
             context_dir=context_dir,
+            insecure_registries=self.builds_config.build_insecure_registries,
         )
 
         platform = models.Platform.linux_amd64
@@ -1182,14 +1253,15 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         project_authz: Authz,
     ) -> SessionEnvironmentRepositoryProtocol:
         """Create an instance of SessionEnvironmentRepositoryProtocol."""
-        # NOTE: resource_pools, shipwright_client and builds_config are set to None
-        # because the SessionEnvironmentRepositoryProtocol only exposes database
-        # operations for session environments.
+        # NOTE: resource_pools, shipwright_client, builds_config and git_repositories_repo
+        # are set to None because the SessionEnvironmentRepositoryProtocol only
+        # exposes database operations for session environments.
         instance = cls(
             session_maker,
             project_authz=project_authz,
             resource_pools=None,  # type: ignore
             shipwright_client=None,
             builds_config=None,  # type: ignore
+            git_repositories_repo=None,  # type: ignore
         )
         return instance

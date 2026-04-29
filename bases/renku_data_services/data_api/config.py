@@ -58,6 +58,8 @@ class Config:
         if db is None:
             db = DBConfig.from_env()
 
+        authz_config = AuthzConfig.from_env()
+
         if dummy_stores:
             keycloak = None
             gitlab_url = None
@@ -70,6 +72,7 @@ class Config:
             else:
                 gitlab_url = None
 
+        nb_config = NotebooksConfig.from_env(db, authz_config, enable_internal_gitlab=enable_internal_gitlab)
         return cls(
             enable_internal_gitlab=enable_internal_gitlab,
             version=os.environ.get("VERSION", "0.0.1"),
@@ -78,11 +81,11 @@ class Config:
             k8s_config_root=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
             db=db,
             builds=BuildsConfig.from_env(),
-            nb_config=NotebooksConfig.from_env(db, enable_internal_gitlab=enable_internal_gitlab),
+            nb_config=nb_config,
             secrets=PublicSecretsConfig.from_env(),
             sentry=SentryConfig.from_env(),
             posthog=PosthogConfig.from_env(),
-            authz_config=AuthzConfig.from_env(),
+            authz_config=authz_config,
             solr=SolrClientConfig.from_env(),
             trusted_proxies=TrustedProxiesConfig.from_env(),
             keycloak=keycloak,
@@ -91,5 +94,5 @@ class Config:
             gitlab_url=gitlab_url,
             log_cfg=LoggingConfig.from_env(),
             alertmanager_webhook_role=os.environ.get("ALERTMANAGER_WEBHOOK_ROLE", "alertmanager-webhook"),
-            deposit_config=DepositConfig.from_env(),
+            deposit_config=DepositConfig.from_env(nb_config.sessions.renku_url),
         )

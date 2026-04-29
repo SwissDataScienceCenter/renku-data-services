@@ -104,6 +104,9 @@ from renku_data_services.notebooks.utils import (
 )
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.project.models import Project, SessionSecret
+from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.repositories.models import Metadata as RepoMetadata
+from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
@@ -628,7 +631,8 @@ def __format_image_pull_secret(secret_name: str, access_token: str, registry_dom
             data={".dockerconfigjson": registry_secret},
             metadata=V1ObjectMeta(name=secret_name),
             type="kubernetes.io/dockerconfigjson",
-        )
+        ),
+        adopt=True,
     )
 
 
@@ -659,6 +663,7 @@ async def get_image_pull_secret(
     user: APIUser,
     internal_gitlab_user: APIUser,
     image_check_repo: ImageCheckRepository,
+    builds_config: BuildsConfig,
 ) -> ExtraSecret | None:
     """Get an image pull secret."""
 
@@ -667,6 +672,18 @@ async def get_image_pull_secret(
     )
     if v2_secret:
         return v2_secret
+
+    if (
+        builds_config.enabled
+        and builds_config.build_output_private_image_prefix is not None
+        and image.startswith(builds_config.build_output_private_image_prefix)
+    ):
+        return ExtraSecret(
+            V1Secret(
+                metadata=V1ObjectMeta(name=builds_config.pull_private_image_secret_name),
+            ),
+            adopt=False,
+        )
 
     if (
         nb_config.enable_internal_gitlab
@@ -749,6 +766,8 @@ async def start_session(
     metrics: MetricsService,
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
+    git_repositories_repo: GitRepositoriesRepository,
+    builds_config: BuildsConfig,
     internal_token_mint: RenkuSelfTokenMint,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
@@ -810,6 +829,21 @@ async def start_session(
     data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
+
+    if environment.build_parameters is not None:
+        build_repository = environment.build_parameters.repository
+        if build_repository not in [repository.url for repository in repositories]:
+            raise errors.ValidationError(message="Image was not built from a repository in this project")
+
+        repo_data = await git_repositories_repo.get_repository(
+            repository_url=build_repository, user=user, etag=None, internal_gitlab_user=internal_gitlab_user
+        )
+        if repo_data.is_error:
+            raise errors.ValidationError(message=str(repo_data.error))
+        if isinstance(repo_data.metadata, RepoMetadata):
+            metadata: RepoMetadata = repo_data.metadata
+            if not metadata.pull_permission:
+                raise errors.ValidationError(message="User does not have access to image repository")
 
     # User secrets
     session_extras = SessionExtraResources()
@@ -908,8 +942,10 @@ async def start_session(
         user=user,
         internal_gitlab_user=internal_gitlab_user,
         image_check_repo=image_check_repo,
+        builds_config=builds_config,
     )
-    if image_secret:
+
+    if image_secret and image_secret.secret.data is not None:
         session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
 
     # Remote session configuration
@@ -968,7 +1004,9 @@ async def start_session(
         metadata=Metadata(name=server_name, annotations=annotations),
         spec=AmaltheaSessionSpec(
             location=session_location,
-            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=True)] if image_secret else [],
+            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=image_secret.adopt)]
+            if image_secret
+            else [],
             codeRepositories=[],
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
@@ -1068,6 +1106,7 @@ async def patch_session(
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
     metrics: MetricsService,
+    builds_config: BuildsConfig,
     internal_token_mint: RenkuSelfTokenMint,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
@@ -1222,9 +1261,11 @@ async def patch_session(
         image_check_repo=image_check_repo,
         user=user,
         internal_gitlab_user=internal_gitlab_user,
+        builds_config=builds_config,
     )
     if image_pull_secret:
-        session_extras = session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
+        if image_pull_secret.secret.data is not None:
+            session_extras = session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret.name, adopt=image_pull_secret.adopt)]
     else:
         patch.spec.imagePullSecrets = RESET

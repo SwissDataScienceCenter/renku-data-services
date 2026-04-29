@@ -1,12 +1,16 @@
+from __future__ import annotations
+
 import random
 import string
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, cast
+from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
 from alembic.script import ScriptDirectory
+from authzed.api.v1 import ReadRelationshipsRequest, RelationshipFilter
 from sanic_testing.testing import SanicASGITestClient
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
@@ -15,7 +19,7 @@ from sqlalchemy.sql import bindparam
 from ulid import ULID
 
 from renku_data_services import errors
-from renku_data_services.base_models.core import Slug
+from renku_data_services.base_models.core import ResourceType, Slug
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import downgrade_migrations_for_app, get_alembic_config, run_migrations_for_app
 from renku_data_services.namespace import orm as ns_schemas
@@ -314,8 +318,8 @@ async def test_migration_to_75c83dd9d619(app_manager_instance: DependencyManager
 
     def find_by_col(data: Sequence[sa.Row[Any]], id_value: Any, id_index: int) -> tuple | None:
         for row in data:
-            if row.tuple()[id_index] == id_value:
-                return cast(tuple, row.tuple())
+            if row._tuple()[id_index] == id_value:
+                return cast(tuple, row._tuple())
         return None
 
     run_migrations_for_app("common", "450ae3930996")
@@ -588,12 +592,12 @@ async def test_migration_to_dcb9648c3c15(app_manager_instance: DependencyManager
     async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         k8s_objs = (await session.execute(sa.text('SELECT "group", version, kind FROM common.k8s_objects'))).all()
     assert len(k8s_objs) == 2
-    assert k8s_objs[0].tuple()[0] is None
-    assert k8s_objs[0].tuple()[1] == "v1"
-    assert k8s_objs[0].tuple()[2] == "pod"
-    assert k8s_objs[1].tuple()[0] == "amalthea.dev"
-    assert k8s_objs[1].tuple()[1] == "v1alpha1"
-    assert k8s_objs[1].tuple()[2] == "jupyterserver"
+    assert k8s_objs[0]._tuple()[0] is None
+    assert k8s_objs[0]._tuple()[1] == "v1"
+    assert k8s_objs[0]._tuple()[2] == "pod"
+    assert k8s_objs[1]._tuple()[0] == "amalthea.dev"
+    assert k8s_objs[1]._tuple()[1] == "v1alpha1"
+    assert k8s_objs[1]._tuple()[2] == "jupyterserver"
 
 
 @pytest.mark.asyncio
@@ -619,8 +623,8 @@ async def test_migration_to_c8061499b966(app_manager_instance: DependencyManager
         k8s_objs = (await session.execute(sa.text("SELECT name, cluster FROM common.k8s_objects"))).all()
     assert len(k8s_objs) == 2
     # Check that the cluster name was changed
-    assert k8s_objs[0].tuple()[1] == "0RENK1RENK2RENK3RENK4RENK5"
-    assert k8s_objs[1].tuple()[1] == "0RENK1RENK2RENK3RENK4RENK5"
+    assert k8s_objs[0]._tuple()[1] == "0RENK1RENK2RENK3RENK4RENK5"
+    assert k8s_objs[1]._tuple()[1] == "0RENK1RENK2RENK3RENK4RENK5"
     id = ULID()
     async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         await session.execute(
@@ -743,3 +747,199 @@ async def test_migration_to_66e2f1271cf6(app_manager_instance: DependencyManager
     async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         with pytest.raises(IntegrityError):
             await insert_slug(session, "dc_in_p", admin_user.namespace.id, p_for_dc_id, p_dc2_id)
+
+
+async def _seed_resource_pool_authz_migration_data(
+    app_manager_instance: DependencyManager,
+) -> dict[str, Any]:
+    token = uuid4().hex[:10]
+
+    pool_count = 34
+    public_pool_count = 5
+    membership_count = 598
+    no_default_access_count = 17
+    user_count = 620
+
+    user_prefix = f"migration-user-{token}"
+
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        await session.execute(
+            sa.text(
+                """
+                INSERT INTO resource_pools.resource_pools (name, public, "default", platform)
+                VALUES (:name, :public, :default, :platform)
+                RETURNING id, public, "default"
+                """
+            ),
+            [
+                {
+                    "name": f"migration-pool-{token}-{i}",
+                    "public": i < public_pool_count,
+                    "default": i == 0,
+                    "platform": "linux_amd64",
+                }
+                for i in range(pool_count)
+            ],
+        )
+
+        pool_rows = (
+            await session.execute(
+                sa.text(
+                    """
+                    SELECT id, name, public, "default"
+                    FROM resource_pools.resource_pools
+                    WHERE name LIKE :prefix
+                    ORDER BY id
+                    """
+                ),
+                {"prefix": f"migration-pool-{token}-%"},
+            )
+        ).all()
+
+        pool_ids = [row.id for row in pool_rows]
+
+        await session.execute(
+            sa.text(
+                """
+                INSERT INTO resource_pools.users (keycloak_id, no_default_access)
+                VALUES (:keycloak_id, :no_default_access)
+                RETURNING id
+                """
+            ),
+            [
+                {
+                    "keycloak_id": f"{user_prefix}-{i}",
+                    "no_default_access": i < no_default_access_count,
+                }
+                for i in range(user_count)
+            ],
+        )
+
+        user_rows = (
+            await session.execute(
+                sa.text(
+                    """
+                    SELECT id, keycloak_id, no_default_access
+                    FROM resource_pools.users
+                    WHERE keycloak_id LIKE :prefix
+                    ORDER BY id
+                    """
+                ),
+                {"prefix": f"{user_prefix}-%"},
+            )
+        ).all()
+
+        user_ids = [row.id for row in user_rows]
+
+        await session.execute(
+            sa.text(
+                """
+                INSERT INTO resource_pools.resource_pools_users (user_id, resource_pool_id)
+                VALUES (:user_id, :resource_pool_id)
+                """
+            ),
+            [
+                {
+                    "user_id": user_ids[i],
+                    "resource_pool_id": pool_ids[i % pool_count],
+                }
+                for i in range(membership_count)
+            ],
+        )
+
+    return {
+        "pool_ids": [str(pid) for pid in pool_ids],
+        "public_pool_ids": [str(row.id) for row in pool_rows if row.public],
+        "default_pool_id": str(next(row.id for row in pool_rows if row.default)),
+        "membership_count": membership_count,
+        "no_default_access_count": no_default_access_count,
+        "user_prefix": user_prefix,
+        "prohibited_user_ids": {f"{user_prefix}-{i}" for i in range(no_default_access_count)},
+    }
+
+
+async def _read_resource_pool_relationships(authz: Any) -> list[Any]:
+    request = ReadRelationshipsRequest(relationship_filter=RelationshipFilter(resource_type=ResourceType.resource_pool))
+    return [resp async for resp in authz.client.ReadRelationships(request)]
+
+
+def _is_seeded_pool(relationship: Any, seeded: dict[str, Any]) -> bool:
+    return relationship.relationship.resource.object_id in seeded["pool_ids"]
+
+
+def _is_seeded_user_subject(relationship: Any, seeded: dict[str, Any]) -> bool:
+    subject = relationship.relationship.subject
+    return subject.object.object_type == ResourceType.user and subject.object.object_id.startswith(
+        seeded["user_prefix"]
+    )
+
+
+def _count_seeded_relationships(
+    relationships: list[Any],
+    relation: str,
+    seeded: dict[str, Any],
+) -> int:
+    total = 0
+    for row in relationships:
+        rel = row.relationship
+        if rel.relation != relation:
+            continue
+        if not _is_seeded_pool(row, seeded):
+            continue
+        total += 1
+    return total
+
+
+def _count_seeded_user_relationships(
+    relationships: list[Any],
+    relation: str,
+    seeded: dict[str, Any],
+) -> int:
+    total = 0
+    for row in relationships:
+        rel = row.relationship
+        if rel.relation != relation:
+            continue
+        if not _is_seeded_pool(row, seeded):
+            continue
+        if not _is_seeded_user_subject(row, seeded):
+            continue
+        total += 1
+    return total
+
+
+@pytest.mark.asyncio
+async def test_migration_cd424c01676e_resource_pool_authz(
+    app_manager_instance: DependencyManager,
+    admin_user: UserInfo,
+) -> None:
+    RESOURCE_POOL_AUTHZ_PREV_REVISION = "68d751fb3525"
+    RESOURCE_POOL_AUTHZ_REVISION = "cd424c01676e"
+
+    # Arrange: move the DB to the revision right before the migration.
+    run_migrations_for_app("common", RESOURCE_POOL_AUTHZ_PREV_REVISION)
+
+    # Arrange: seed old-state data.
+    seeded = await _seed_resource_pool_authz_migration_data(app_manager_instance)
+
+    # Act: apply the target migration.
+    run_migrations_for_app("common", RESOURCE_POOL_AUTHZ_REVISION)
+
+    # Assert: relationships were created for the seeded pools/users.
+    relationships = await _read_resource_pool_relationships(app_manager_instance.authz)
+
+    assert _count_seeded_relationships(relationships, "resource_pool_platform", seeded) == len(seeded["pool_ids"])
+
+    assert _count_seeded_user_relationships(relationships, "viewer", seeded) == seeded["membership_count"]
+
+    assert _count_seeded_relationships(relationships, "public_viewer", seeded) == 2 * len(seeded["public_pool_ids"])
+
+    prohibited = [
+        row
+        for row in relationships
+        if row.relationship.relation == "prohibited"
+        and row.relationship.resource.object_id == seeded["default_pool_id"]
+        and row.relationship.subject.object.object_type == ResourceType.user
+        and row.relationship.subject.object.object_id in seeded["prohibited_user_ids"]
+    ]
+    assert len(prohibited) == seeded["no_default_access_count"]

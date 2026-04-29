@@ -13,7 +13,7 @@ from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_db_ids, validate_query
 from renku_data_services.base_models.validation import validated_json
-from renku_data_services.crc import apispec, models
+from renku_data_services.crc import apispec
 from renku_data_services.crc.core import (
     validate_cluster,
     validate_cluster_patch,
@@ -72,13 +72,7 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _get_one(
             request: Request, user: base_models.APIUser, resource_pool_id: int, query: apispec.UserResourceParams
         ) -> HTTPResponse:
-            rps: list[models.ResourcePool]
-            rps = await self.rp_repo.get_resource_pools(api_user=user, id=resource_pool_id, name=query.name)
-            if len(rps) < 1:
-                raise errors.MissingResourceError(
-                    message=f"The resource pool with id {resource_pool_id} cannot be found."
-                )
-            rp = rps[0]
+            rp = await self.rp_repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id, name=query.name)
             return validated_json(apispec.ResourcePoolWithId, rp)
 
         return "/resource_pools/<resource_pool_id>", ["GET"], _get_one
