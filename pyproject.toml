@@ -191,6 +191,7 @@ exclude_dirs = [
   "components/renku_data_services/connected_services/apispec.py",
   "components/renku_data_services/notebooks/cr_amalthea_session.py",
   "components/renku_data_services/notebooks/cr_jupyter_server.py",
+  "components/renku_data_services/authn/api/apispec.py",
 ]
 
 [tool.pytest.ini_options]
