@@ -8,11 +8,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1755530935,
-        "narHash": "sha256-i54nyC64jt/Weh5S0tWemGpiOp1r8fZGUpYE8WgtaJs=",
+        "lastModified": 1776238255,
+        "narHash": "sha256-ClPxl2WDe8PzO5hEEnhvqmU9U6je2HyNQ98smhZjd/w=",
         "owner": "eikek",
         "repo": "devshell-tools",
-        "rev": "5ac351010d3af467e25374be3a471aef7dae8748",
+        "rev": "6f5ba0ead2a272e1e39bc1b956e5cf973473375d",
         "type": "github"
       },
       "original": {
