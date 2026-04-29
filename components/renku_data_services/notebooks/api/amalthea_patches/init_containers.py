@@ -74,7 +74,6 @@ async def git_clone_container_v2(
         },
         {
             "name": f"{prefix}USER__RENKU_TOKEN",
-            # "value": str(user.access_token),
             "value": internal_access_token,
         },
         {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if user.is_anonymous else "1"},
