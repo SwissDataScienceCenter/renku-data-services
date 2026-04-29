@@ -1040,7 +1040,7 @@ async def start_session(
                 SessionEnvItem(name="RENKU_SESSION", value="1"),
             ]
         )
-    if not is_interactive:
+    else:
         env.extend(
             [
                 SessionEnvItem(name="RENKU_JOB", value="1"),
