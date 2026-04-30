@@ -91,10 +91,12 @@ class ImageCheckRepository:
     def __init__(
         self,
         nb_config: NotebooksConfig,
+        # builds_config: BuildsConfig,
         connected_services_repo: ConnectedServicesRepository,
         oauth_client_factory: OAuthHttpClientFactory,
     ) -> None:
         self.nb_config = nb_config
+        # self.builds_config = builds_config
         self.connected_services_repo = connected_services_repo
         self.oauth_client_factory = oauth_client_factory
 
@@ -102,6 +104,37 @@ class ImageCheckRepository:
         """Check access to the given image and provide image and access details."""
         reg_api: ImageRepoDockerAPI = image.repo_api()  # public images
         unauth_error: errors.UnauthorizedError | None = None
+
+        ## Access check code
+        ## !!! Issue: need to have the "session_launcher" context to verify access
+        # if environment.build_parameters is not None:
+        # build_repository = environment.build_parameters.repository
+        # if build_repository not in [repository.url for repository in repositories]:
+        #     raise errors.ValidationError(message="Image was not built from a repository in this project")
+
+        # repo_data = await git_repositories_repo.get_repository(
+        #     repository_url=build_repository, user=user, etag=None, internal_gitlab_user=internal_gitlab_user
+        # )
+        # if repo_data.is_error:
+        #     raise errors.ValidationError(message=str(repo_data.error))
+        # if isinstance(repo_data.metadata, RepoMetadata):
+        #     metadata: RepoMetadata = repo_data.metadata
+        #     if not metadata.pull_permission:
+        #         raise errors.ValidationError(message="User does not have access to image repository")
+
+        ## Secret ref code
+        # if (
+        #     builds_config.enabled
+        #     and builds_config.build_output_private_image_prefix is not None
+        #     and image.startswith(builds_config.build_output_private_image_prefix)
+        # ):
+        #     return ExtraSecret(
+        #         V1Secret(
+        #             metadata=V1ObjectMeta(name=builds_config.pull_private_image_secret_name),
+        #         ),
+        #         adopt=False,
+        #     )
+
         image_provider = await self.connected_services_repo.get_provider_for_image(user, image)
         connected_user = image_provider.connected_user if image_provider is not None else None
         connection = connected_user.connection if connected_user is not None else None
