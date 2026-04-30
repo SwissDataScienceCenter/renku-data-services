@@ -202,6 +202,15 @@ class GroupRepository:
             group_orm, _ = await self._get_group(session, user, slug)
         return group_orm.dump()
 
+    async def get_group_by_id(self, user: base_models.APIUser, group_id: ULID) -> models.Group:
+        """Get a group from the DB by its ID."""
+        async with self.session_maker() as session:
+            stmt = select(schemas.GroupORM).where(schemas.GroupORM.id == group_id)
+            group = await session.scalar(stmt)
+            if not group:
+                raise errors.MissingResourceError(message=f"The group with id {group_id} does not exist")
+            return group.dump()
+
     @with_db_transaction
     async def get_group_members(
         self, user: base_models.APIUser, slug: Slug, *, session: AsyncSession | None = None
