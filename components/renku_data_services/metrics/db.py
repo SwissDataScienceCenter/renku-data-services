@@ -1,5 +1,6 @@
 """Repository for the metrics staging table."""
 
+import asyncio
 from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
@@ -31,9 +32,36 @@ class MetricsRepository:
             async for metrics in result:
                 yield metrics
 
+    async def delete_all_metrics(self) -> None:
+        """Delete all metrics from the staging table."""
+        async with self.session_maker() as session, session.begin():
+            await session.execute(delete(MetricsORM))
+
     async def delete_processed_metrics(self, metrics_ids: list[ULID]) -> None:
         """Delete metrics events from the staging table."""
         if not metrics_ids:
             return
         async with self.session_maker() as session, session.begin():
             await session.execute(delete(MetricsORM).where(MetricsORM.id.in_(metrics_ids)))
+
+    async def wait_for_metrics(self, timeout: float = 5.0, poll_interval: float = 0.1) -> bool:
+        """Wait for metrics to be processed.
+
+        Polls for metrics events and returns when at least one event is found or timeout is reached.
+
+        Args:
+            timeout: Maximum time to wait in seconds
+            poll_interval: Time between polls in seconds
+
+        Returns:
+            True if metrics were found, False if timeout reached
+        """
+        import time
+
+        start_time = time.monotonic()
+        while time.monotonic() - start_time < timeout:
+            metrics = [m async for m in self.get_unprocessed_metrics()]
+            if metrics:
+                return True
+            await asyncio.sleep(poll_interval)
+        return False
