@@ -12,7 +12,7 @@ from asyncio import gather
 from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
 from dataclasses import asdict, dataclass, field
 from functools import wraps
-from typing import Any, Concatenate, Optional, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Any, Concatenate, Optional, ParamSpec, TypeVar
 from uuid import uuid4
 
 from sqlalchemy import NullPool, delete, false, select, true
@@ -30,12 +30,23 @@ from renku_data_services.base_models.core import ResetType, ResourceType
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import validate_resource_class_update, validate_resource_pool_update
-from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
+from renku_data_services.crc.models import (
+    ClusterPatch,
+    ClusterSettings,
+    MemberType,
+    ResourcePoolMemberIdentifier,
+    SavedClusterSettings,
+    SessionProtocol,
+)
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
 from renku_data_services.users.db import UserRepo
+
+if TYPE_CHECKING:
+    from renku_data_services.namespace.db import GroupRepository
+    from renku_data_services.project.db import ProjectRepository
 
 
 class _Base:
@@ -351,7 +362,7 @@ class ResourcePoolRepository(_Base):
         api_user: base_models.APIUser,
         new_resource_class: models.UnsavedResourceClass,
         *,
-        resource_pool_id: Optional[int] = None,
+        resource_pool_id: int | None = None,
     ) -> models.ResourceClass:
         """Insert a resource class in the database."""
         async with self.session_maker() as session, session.begin():
@@ -775,7 +786,7 @@ class Respository2Users:
     disallowed: list[base_models.User] = field(default_factory=list)
 
 
-class UserRepository(_Base):
+class MemberRepository(_Base):
     """The adapter used for accessing resource pool users with SQLAlchemy."""
 
     def __init__(
@@ -783,10 +794,14 @@ class UserRepository(_Base):
         session_maker: Callable[..., AsyncSession],
         quotas_repo: QuotaRepository,
         user_repo: UserRepo,
+        group_repo: GroupRepository,
+        project_repo: ProjectRepository,
         authz: Authz,
     ) -> None:
         super().__init__(session_maker, quotas_repo, authz)
         self.kc_user_repo = user_repo
+        self.group_repo = group_repo
+        self.project_repo = project_repo
 
     @_only_admins
     async def get_resource_pool_users(
@@ -924,14 +939,15 @@ class UserRepository(_Base):
             else:
                 removed_rps = [rp for rp in user.resource_pools if rp.id not in new_rp_ids]
                 user.resource_pools = list(rps_to_add)
+            member_identifier = ResourcePoolMemberIdentifier(member_id=keycloak_id, member_type=MemberType.USER)
             for rp in rps_to_add:
-                await self._grant_resource_pool_members(api_user, rp.id, [keycloak_id], session=session)
+                await self._grant_resource_pool_members(api_user, rp.id, [member_identifier], session=session)
                 if rp.default or rp.public:
                     await self._unprohibit_resource_pool_users(api_user, rp.id, [keycloak_id], session=session)
             for rp in removed_rps:
-                await self._revoke_resource_pool_member(api_user, rp.id, [keycloak_id], session=session)
+                await self._revoke_resource_pool_members(api_user, rp.id, [member_identifier], session=session)
                 if rp.default or rp.public:
-                    await self._prohibit_resource_pool_user(api_user, rp.id, [keycloak_id], session=session)
+                    await self._prohibit_resource_pool_users(api_user, rp.id, [keycloak_id], session=session)
             output: list[models.ResourcePool] = []
             for rp in rps_to_add:
                 quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
@@ -959,9 +975,10 @@ class UserRepository(_Base):
             )
             stmt = delete(schemas.resource_pools_users).where(schemas.resource_pools_users.c.user_id.in_(sub))
             await session.execute(stmt)
-            await self._revoke_resource_pool_member(api_user, resource_pool_id, [keycloak_id], session=session)
+            member_identifier = ResourcePoolMemberIdentifier(member_id=keycloak_id, member_type=MemberType.USER)
+            await self._revoke_resource_pool_members(api_user, resource_pool_id, [member_identifier], session=session)
             if rp.default or rp.public:
-                await self._prohibit_resource_pool_user(api_user, resource_pool_id, [keycloak_id], session=session)
+                await self._prohibit_resource_pool_users(api_user, resource_pool_id, [keycloak_id], session=session)
 
     @_only_admins
     async def update_resource_pool_users(
@@ -1011,51 +1028,144 @@ class UserRepository(_Base):
                 rp_user_ids = {rp.id for rp in rp.users}
                 users_to_add = [u for u in list(users_to_add_exist) + users_to_add_missing if u.id not in rp_user_ids]
                 rp.users.extend(users_to_add)
-                await self._grant_resource_pool_members(api_user, resource_pool_id, user_ids, session=session)
+                member_ids = [
+                    ResourcePoolMemberIdentifier(member_id=uid, member_type=MemberType.USER) for uid in user_ids
+                ]
+                await self._grant_resource_pool_members(api_user, resource_pool_id, member_ids, session=session)
             else:
                 rp.users = list(users_to_add_exist) + users_to_add_missing
             return [usr.dump() for usr in rp.users]
 
-    def _build_pool_membership_change(
-        self, user_ids: Collection[str], resource_pool_id: int, role: Role, change: Change
+    def _build_pool_membership_changes(
+        self,
+        resource_pool_id: int,
+        specs: Collection[tuple[str, ResourceType, Role]],
+        change: Change,
     ) -> models.ResourcePoolMembershipChange | None:
-        if not user_ids:
+        if not specs:
             return None
         return models.ResourcePoolMembershipChange(
             changes=[
                 MembershipChange(
                     Member(
-                        role=role, user_id=uid, resource_id=resource_pool_id, resource_type=ResourceType.resource_pool
+                        role=role,
+                        user_id=member_id,
+                        resource_id=resource_pool_id,
+                        resource_type=ResourceType.resource_pool,
+                        subject_type=subject_type,
                     ),
                     change,
                 )
-                for uid in user_ids
+                for member_id, subject_type, role in specs
             ]
         )
 
-    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
-    async def _grant_resource_pool_members(
-        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
-    ) -> models.ResourcePoolMembershipChange | None:
-        return self._build_pool_membership_change(user_ids, resource_pool_id, Role.VIEWER, Change.ADD)
+    async def _resolve_members(
+        self,
+        api_user: base_models.APIUser,
+        members: Collection[ResourcePoolMemberIdentifier],
+    ) -> list[tuple[str, ResourceType]]:
+        """Resolve ResourcePoolMemberIdentifiers to (internal_id, subject_type) tuples."""
+        resolved: list[tuple[str, ResourceType]] = []
+        for member in members:
+            match member.member_type:
+                case MemberType.USER:
+                    kc_user = await self.kc_user_repo.get_user(id=member.member_id)
+                    if kc_user is None:
+                        raise errors.MissingResourceError(message=f"User with ID {member.member_id} does not exist")
+                    resolved.append((kc_user.id, ResourceType.user))
+
+                case MemberType.GROUP:
+                    slug = member.group_slug
+                    assert slug is not None  # guaranteed by __post_init__
+                    group = await self.group_repo.get_group(api_user, slug)
+                    if group is None:
+                        raise errors.MissingResourceError(
+                            message=f"Group with slug {member.member_id!r} does not exist"
+                        )
+                    resolved.append((str(group.id), ResourceType.group))
+
+                case MemberType.PROJECT:
+                    path = member.project_path
+                    assert path is not None  # guaranteed by __post_init__
+                    ns_slug, proj_slug = path
+                    project = await self.project_repo.get_project_by_namespace_slug(
+                        user=api_user,
+                        namespace=ns_slug.value,
+                        slug=proj_slug,
+                    )
+                    if project is None:
+                        raise errors.MissingResourceError(message=f"Project {member.member_id!r} does not exist")
+                    resolved.append((str(project.id), ResourceType.project))
+
+        return resolved
 
     @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
     async def _unprohibit_resource_pool_users(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
     ) -> models.ResourcePoolMembershipChange | None:
-        return self._build_pool_membership_change(user_ids, resource_pool_id, Role.PROHIBITED, Change.REMOVE)
+        specs = [(uid, ResourceType.user, Role.PROHIBITED) for uid in user_ids]
+        return self._build_pool_membership_changes(resource_pool_id, specs, Change.REMOVE)
 
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
-    async def _prohibit_resource_pool_user(
+    async def _prohibit_resource_pool_users(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
     ) -> models.ResourcePoolMembershipChange | None:
-        return self._build_pool_membership_change(user_ids, resource_pool_id, Role.PROHIBITED, Change.ADD)
+        specs = [(uid, ResourceType.user, Role.PROHIBITED) for uid in user_ids]
+        return self._build_pool_membership_changes(resource_pool_id, specs, Change.ADD)
+
+    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
+    async def _grant_resource_pool_members(
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        members: Collection[ResourcePoolMemberIdentifier],
+        session: AsyncSession,
+    ) -> models.ResourcePoolMembershipChange | None:
+        specs = await self._resolve_members(api_user, members)
+        return self._build_pool_membership_changes(
+            resource_pool_id,
+            [(member_id, subject_type, Role.VIEWER) for member_id, subject_type in specs],
+            Change.ADD,
+        )
 
     @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
-    async def _revoke_resource_pool_member(
-        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
+    async def _revoke_resource_pool_members(
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        members: Collection[ResourcePoolMemberIdentifier],
+        session: AsyncSession,
     ) -> models.ResourcePoolMembershipChange | None:
-        return self._build_pool_membership_change(user_ids, resource_pool_id, Role.VIEWER, Change.REMOVE)
+        specs = await self._resolve_members(api_user, members)
+        return self._build_pool_membership_changes(
+            resource_pool_id,
+            [(member_id, subject_type, Role.VIEWER) for member_id, subject_type in specs],
+            Change.REMOVE,
+        )
+
+    @_only_admins
+    async def grant_resource_pool_members(
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        members: Collection[ResourcePoolMemberIdentifier],
+        append: bool = True,
+    ) -> None:
+        """Grant access to a resource pool for a collection of members (Users, Groups, Projects)."""
+        async with self.session_maker() as session, session.begin():
+            await self._grant_resource_pool_members(api_user, resource_pool_id, members, session=session)
+
+    @_only_admins
+    async def revoke_resource_pool_members(
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        members: Collection[ResourcePoolMemberIdentifier],
+    ) -> None:
+        """Revoke access to a resource pool for a collection of members (Users, Groups, Projects)."""
+        async with self.session_maker() as session, session.begin():
+            await self._revoke_resource_pool_members(api_user, resource_pool_id, members, session=session)
 
     @_only_admins
     async def update_user(self, api_user: base_models.APIUser, keycloak_id: str, **kwargs: Any) -> base_models.User:
@@ -1080,7 +1190,7 @@ class UserRepository(_Base):
 
                 for rp_id in default_rp_ids:
                     if no_default_access:
-                        await self._prohibit_resource_pool_user(api_user, rp_id, [keycloak_id], session=session)
+                        await self._prohibit_resource_pool_users(api_user, rp_id, [keycloak_id], session=session)
                     else:
                         await self._unprohibit_resource_pool_users(api_user, rp_id, [keycloak_id], session=session)
             return user.dump()

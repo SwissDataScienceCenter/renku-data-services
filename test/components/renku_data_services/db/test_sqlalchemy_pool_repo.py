@@ -1,15 +1,22 @@
 from dataclasses import asdict
+from unittest.mock import AsyncMock
 
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from pydantic import ValidationError
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models import APIUser
 from renku_data_services.crc import models
+from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.namespace import models as namespace_models
+from renku_data_services.project import models as project_models
 from test.components.renku_data_services.crc_models.hypothesis import (
     a_name,
     a_uuid_string,
@@ -477,7 +484,7 @@ async def test_resource_pools_access_control(
     inserted_public_rp = None
     inserted_private_rp = None
     pool_repo = app_manager_instance.rp_repo
-    user_repo = app_manager_instance.user_repo
+    member_repo = app_manager_instance.member_repo
     try:
         inserted_public_rp = await create_rp(public_rp, pool_repo, admin_user)
         assert inserted_public_rp.id is not None
@@ -490,12 +497,13 @@ async def test_resource_pools_access_control(
         assert all(inserted_private_rp.id != rp.id for rp in loggedin_user_rps)
         assert any(inserted_private_rp.id == rp.id for rp in admin_rps)
         assert loggedin_user.id is not None
+        await app_manager_instance.kc_user_repo._add_api_user(loggedin_user)
         user_to_add = base_models.User(keycloak_id=loggedin_user.id)
-        updated_users = await user_repo.update_resource_pool_users(
+        updated_members = await member_repo.update_resource_pool_users(
             admin_user, inserted_private_rp.id, [loggedin_user.id], append=True
         )
 
-        assert user_to_add in [remove_id_from_user(user) for user in updated_users]
+        assert user_to_add in [remove_id_from_user(user) for user in updated_members]
         loggedin_user_rps = await pool_repo.get_resource_pools(loggedin_user)
         assert any(inserted_private_rp.id == rp.id for rp in loggedin_user_rps)
     except (ValidationError, errors.ValidationError):
@@ -557,3 +565,275 @@ async def test_classes_filtering(
             await pool_repo.delete_resource_pool(admin_user, inserted_rp1.id)
         if inserted_rp2 is not None:
             await pool_repo.delete_resource_pool(admin_user, inserted_rp2.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_member_repository_polymorphic_membership(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+) -> None:
+    run_migrations_for_app("common")
+
+    # Mock quotas_repo to avoid K8s client errors
+    mock_quotas_repo = AsyncMock()
+    mock_quota = models.Quota(cpu=10.0, memory=100, gpu=0, id="mock-quota-id")
+
+    # Configure async methods
+    mock_quotas_repo.create_quota = AsyncMock(return_value=mock_quota)
+    mock_quotas_repo.get_quota = AsyncMock(return_value=mock_quota)
+
+    app_manager_instance.quotas_repo = mock_quotas_repo
+    app_manager_instance.rp_repo.quotas_repo = mock_quotas_repo
+
+    # Ensure admin user exists in the database
+    await app_manager_instance.kc_user_repo._add_api_user(admin_user)
+
+    member_repo = app_manager_instance.member_repo
+
+    pool_repo = app_manager_instance.rp_repo
+    group_repo = app_manager_instance.group_repo
+    project_repo = app_manager_instance.project_repo
+
+    # Create a resource pool
+    rp = models.UnsavedResourcePool(
+        name="test-poly-pool",
+        classes=[],
+        quota=models.UnsavedQuota(cpu=10.0, memory=100, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+    )
+    inserted_rp = await create_rp(rp, pool_repo, admin_user)
+
+    rp_id = inserted_rp.id
+
+    # 1. Test User membership
+    user_id = "user-123"
+    # Ensure user exists in the database
+    await app_manager_instance.kc_user_repo._add_api_user(APIUser(id=user_id, full_name="Test User"))
+    member = models.ResourcePoolMemberIdentifier(member_type=models.MemberType.USER, member_id=user_id)
+    await member_repo.grant_resource_pool_members(admin_user, rp_id, [member])
+
+    # 2. Test Group membership
+    group_slug = "group-456"
+    member_group = ResourcePoolMemberIdentifier(member_type=MemberType.GROUP, member_id=group_slug)
+    with pytest.raises(errors.MissingResourceError):
+        await member_repo.grant_resource_pool_members(admin_user, rp_id, [member_group])
+
+    await group_repo.insert_group(admin_user, namespace_models.UnsavedGroup(slug=group_slug, name="Test Group"))
+
+    group_member = models.ResourcePoolMemberIdentifier(member_type=models.MemberType.GROUP, member_id=group_slug)
+    await member_repo.grant_resource_pool_members(admin_user, rp_id, [group_member])
+
+    # 3. Test Project membership (addressed as "<namespace-slug>/<project-slug>")
+    await project_repo.insert_project(
+        admin_user,
+        project_models.UnsavedProject(
+            name="Test Project",
+            slug="test-proj",
+            namespace=group_slug,
+            visibility=Visibility.PUBLIC,
+            created_by=admin_user.id,
+        ),
+    )
+
+    project_path = f"{group_slug}/test-proj"
+    project_member = ResourcePoolMemberIdentifier(member_type=MemberType.PROJECT, member_id=project_path)
+    await member_repo.grant_resource_pool_members(admin_user, rp_id, [project_member])
+
+    # 4. Test failure for non-existent group
+    with pytest.raises(errors.MissingResourceError):
+        bad_group = models.ResourcePoolMemberIdentifier(
+            member_type=models.MemberType.GROUP, member_id="non-existent-group"
+        )
+        await member_repo.grant_resource_pool_members(admin_user, rp_id, [bad_group])
+
+    # 5. Test failure for non-existent project
+    # 5a. Non-existent project (well-formed path, but not in DB)
+    with pytest.raises(errors.MissingResourceError):
+        await member_repo.grant_resource_pool_members(
+            admin_user,
+            rp_id,
+            [
+                ResourcePoolMemberIdentifier(
+                    member_type=MemberType.PROJECT,
+                    member_id=f"{group_slug}/does-not-exist",
+                )
+            ],
+        )
+
+    # 5b. Malformed project identifier (ULID, bare slug, empty segment) rejected at construction.
+    for bad in (str(ULID()), "just-a-slug", "ns/", "/proj", "ns//proj"):
+        with pytest.raises(errors.ValidationError):
+            ResourcePoolMemberIdentifier(member_type=MemberType.PROJECT, member_id=bad)
+
+    # 5c. Malformed group identifier rejected at construction.
+    with pytest.raises(errors.ValidationError):
+        ResourcePoolMemberIdentifier(member_type=MemberType.GROUP, member_id="not a slug!")
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_member_repository_revoke_membership(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+    member_repo = app_manager_instance.member_repo
+    pool_repo = app_manager_instance.rp_repo
+
+    # Create a resource pool
+    rp = models.UnsavedResourcePool(
+        name="test-revoke-pool",
+        classes=[],
+        quota=models.UnsavedQuota(cpu=10.0, memory=100, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+    )
+    inserted_rp = await create_rp(rp, pool_repo, admin_user)
+    rp_id = inserted_rp.id
+
+    user_id = "user-revoke"
+    # Ensure user exists in the database
+    await app_manager_instance.kc_user_repo._add_api_user(APIUser(id=user_id, full_name="Revoke User"))
+    member_user = ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=user_id)
+
+    # Grant
+    await member_repo.grant_resource_pool_members(admin_user, rp_id, [member_user])
+
+    # Revoke
+    await member_repo.revoke_resource_pool_members(admin_user, rp_id, [member_user])
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_member_repository_rejects_unknown_user(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+) -> None:
+    run_migrations_for_app("common")
+
+    mock_quotas_repo = AsyncMock()
+    mock_quota = models.Quota(cpu=10.0, memory=100, gpu=0, id="mock-quota-id")
+    mock_quotas_repo.create_quota = AsyncMock(return_value=mock_quota)
+    mock_quotas_repo.get_quota = AsyncMock(return_value=mock_quota)
+    app_manager_instance.quotas_repo = mock_quotas_repo
+    app_manager_instance.rp_repo.quotas_repo = mock_quotas_repo
+
+    await app_manager_instance.kc_user_repo._add_api_user(admin_user)
+
+    member_repo = app_manager_instance.member_repo
+    pool_repo = app_manager_instance.rp_repo
+
+    rp = models.UnsavedResourcePool(
+        name="test-user-validation-pool",
+        classes=[],
+        quota=models.UnsavedQuota(cpu=10.0, memory=100, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+    )
+    inserted_rp = await create_rp(rp, pool_repo, admin_user)
+
+    # Empty id -> ValidationError
+    with pytest.raises(errors.ValidationError):
+        await member_repo.grant_resource_pool_members(
+            admin_user,
+            inserted_rp.id,
+            [ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id="")],
+        )
+
+    # Unknown keycloak id -> MissingResourceError
+    with pytest.raises(errors.MissingResourceError):
+        await member_repo.grant_resource_pool_members(
+            admin_user,
+            inserted_rp.id,
+            [ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id="does-not-exist")],
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_member_repository_rejects_bad_project_id(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+) -> None:
+    run_migrations_for_app("common")
+
+    mock_quotas_repo = AsyncMock()
+    mock_quota = models.Quota(cpu=10.0, memory=100, gpu=0, id="mock-quota-id")
+    mock_quotas_repo.create_quota = AsyncMock(return_value=mock_quota)
+    mock_quotas_repo.get_quota = AsyncMock(return_value=mock_quota)
+    app_manager_instance.quotas_repo = mock_quotas_repo
+    app_manager_instance.rp_repo.quotas_repo = mock_quotas_repo
+
+    await app_manager_instance.kc_user_repo._add_api_user(admin_user)
+
+    member_repo = app_manager_instance.member_repo
+    pool_repo = app_manager_instance.rp_repo
+
+    rp = models.UnsavedResourcePool(
+        name="test-bad-project-id-pool",
+        classes=[],
+        quota=models.UnsavedQuota(cpu=10.0, memory=100, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+    )
+    inserted_rp = await create_rp(rp, pool_repo, admin_user)
+
+    # Malformed ULID -> ValidationError
+    with pytest.raises(errors.ValidationError):
+        await member_repo.grant_resource_pool_members(
+            admin_user,
+            inserted_rp.id,
+            [ResourcePoolMemberIdentifier(member_type=MemberType.PROJECT, member_id="not-a-ulid")],
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_member_repository_accepts_group_by_either_identifier(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+) -> None:
+    run_migrations_for_app("common")
+
+    mock_quotas_repo = AsyncMock()
+    mock_quota = models.Quota(cpu=10.0, memory=100, gpu=0, id="mock-quota-id")
+    mock_quotas_repo.create_quota = AsyncMock(return_value=mock_quota)
+    mock_quotas_repo.get_quota = AsyncMock(return_value=mock_quota)
+    app_manager_instance.quotas_repo = mock_quotas_repo
+    app_manager_instance.rp_repo.quotas_repo = mock_quotas_repo
+
+    await app_manager_instance.kc_user_repo._add_api_user(admin_user)
+
+    member_repo = app_manager_instance.member_repo
+    pool_repo = app_manager_instance.rp_repo
+    group_repo = app_manager_instance.group_repo
+
+    rp = models.UnsavedResourcePool(
+        name="test-group-ident-pool",
+        classes=[],
+        quota=models.UnsavedQuota(cpu=10.0, memory=100, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+    )
+    inserted_rp = await create_rp(rp, pool_repo, admin_user)
+
+    group_slug = "group-ident"
+    await group_repo.insert_group(
+        admin_user,
+        namespace_models.UnsavedGroup(slug=group_slug, name="Ident Group"),
+    )
+
+    ident = group_slug
+    await member_repo.grant_resource_pool_members(
+        admin_user,
+        inserted_rp.id,
+        [ResourcePoolMemberIdentifier(member_type=MemberType.GROUP, member_id=ident)],
+    )

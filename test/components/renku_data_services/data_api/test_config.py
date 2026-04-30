@@ -19,6 +19,7 @@ from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 async def dependencies_dummy_fixture(monkeypatch):
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("VERSION", "9.9.9")
+    monkeypatch.setenv("KUBERNETES_NAMESPACE", "default")
     yield DependencyManager.from_env()
     # NOTE: _async_engine is a class variable and it persist across tests because pytest loads
     # all things once at the beginning of hte tests. So we reset it here so that it does not affect
@@ -32,7 +33,7 @@ def test_config_dummy(dependencies_dummy_fixture: DependencyManager) -> None:
     assert isinstance(dm.authenticator, DummyAuthenticator)
     assert dm.storage_repo is not None
     assert dm.rp_repo is not None
-    assert dm.user_repo is not None
+    assert dm.member_repo is not None
     assert dm.project_repo is not None
     assert dm.session_repo is not None
     assert dm.user_preferences_repo is not None
@@ -86,7 +87,7 @@ def test_config_no_dummy(config_no_dummy_fixture: DependencyManager) -> None:
     assert config.authenticator is not None
     assert config.storage_repo is not None
     assert config.rp_repo is not None
-    assert config.user_repo is not None
+    assert config.member_repo is not None
     assert config.project_repo is not None
     assert config.session_repo is not None
     assert config.user_preferences_repo is not None

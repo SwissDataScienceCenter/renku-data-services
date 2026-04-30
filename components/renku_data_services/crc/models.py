@@ -9,10 +9,12 @@ from math import ceil
 from typing import Any, Final, Optional, Protocol, Self
 
 from kubernetes.utils import parse_quantity
+from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.authz.models import MembershipChange
 from renku_data_services.base_models import ResetType
+from renku_data_services.base_models.core import ResourceType, Slug
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sPatch, K8sResourceQuota
 
@@ -487,3 +489,82 @@ class ResourcePoolMembershipChange:
     """Returned by user-management methods so the authz_change decorator knows what to sync to SpiceDB."""
 
     changes: list[MembershipChange]
+
+
+class MemberType(StrEnum):
+    """Types of members for resource pool."""
+
+    USER = "user"
+    GROUP = "group"
+    PROJECT = "project"
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourcePoolMemberIdentifier:
+    """Identifier for a member in a resource pool.
+
+    Identifier semantics by member_type:
+      - USER    : Keycloak user id (string)
+      - GROUP   : group slug, e.g. "my-group"
+      - PROJECT : project path slug, e.g. "my-group/my-project"
+
+    Groups and projects are addressed by their human-readable slug rather than
+    by internal id (ULID). This mirrors how they are referenced elsewhere in the
+    public API and avoids leaking storage identifiers into admin workflows.
+    """
+
+    member_id: str
+    member_type: MemberType
+
+    def __post_init__(self) -> None:
+        if not self.member_id or not self.member_id.strip():
+            raise errors.ValidationError(message="member_id must be a non-empty string")
+        match self.member_type:
+            case MemberType.GROUP:
+                Slug(self.member_id)
+            case MemberType.PROJECT:
+                # Expect exactly "<namespace-slug>/<project-slug>".
+                parts = self.member_id.split("/")
+                if len(parts) != 2 or not all(parts):
+                    raise errors.ValidationError(
+                        message=(
+                            f"Project identifier {self.member_id!r} must be of the form "
+                            "'<namespace-slug>/<project-slug>'"
+                        )
+                    )
+                Slug(parts[0])
+                Slug(parts[1])
+            case MemberType.USER:
+                pass
+
+    @property
+    def project_path(self) -> tuple[Slug, Slug] | None:
+        """Return (namespace_slug, project_slug) for PROJECT members, else None."""
+        if self.member_type is not MemberType.PROJECT:
+            return None
+        ns, proj = self.member_id.split("/", 1)
+        return Slug(ns), Slug(proj)
+
+    @property
+    def group_slug(self) -> Slug | None:
+        """Return the group Slug for GROUP members, else None."""
+        if self.member_type is not MemberType.GROUP:
+            return None
+        return Slug(self.member_id)
+
+    @classmethod
+    def from_resource(cls, resource_type: ResourceType, resource_id: ULID) -> ResourcePoolMemberIdentifier:
+        """Create a member identifier from an authz-backed resource reference.
+
+        .. warning::
+            This is a read-path helper. SpiceDB stores groups and projects by
+            internal id (ULID for projects), not by slug. The caller is
+            responsible for resolving those ids to slugs *before* constructing
+            a write-path identifier; otherwise the resulting object will fail
+            validation at construction time for PROJECT (and possibly GROUP).
+        """
+        if resource_type == ResourceType.group:
+            return cls(member_id=str(resource_id), member_type=MemberType.GROUP)
+        if resource_type == ResourceType.project:
+            return cls(member_id=str(resource_id), member_type=MemberType.PROJECT)
+        return cls(member_id=str(resource_id), member_type=MemberType.USER)
