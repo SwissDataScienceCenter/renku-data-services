@@ -553,7 +553,7 @@ class ResourcePoolMemberIdentifier:
         return Slug(self.member_id)
 
     @classmethod
-    def from_resource(cls, resource_type: ResourceType, resource_id: str | ULID) -> ResourcePoolMemberIdentifier:
+    def from_resource(cls, resource_type: ResourceType, resource_id: ULID) -> ResourcePoolMemberIdentifier:
         """Create a member identifier from an authz-backed resource reference.
 
         .. warning::

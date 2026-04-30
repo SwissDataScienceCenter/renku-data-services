@@ -610,6 +610,8 @@ async def test_resource_pool_member_relationships_subject_types(app_manager_inst
     """Verify that _resource_pool_membership_changes_to_authz_change uses correct subject types."""
     authz = app_manager_instance.authz
     pool_id = 9999
+    group_id = str(ULID())
+    project_id = str(ULID())
 
     pool_change = ResourcePoolMembershipChange(
         changes=[
@@ -626,7 +628,7 @@ async def test_resource_pool_member_relationships_subject_types(app_manager_inst
             MembershipChange(
                 Member(
                     role=Role.VIEWER,
-                    user_id="group-1",
+                    user_id=group_id,
                     resource_id=pool_id,
                     resource_type=ResourceType.resource_pool,
                     subject_type=ResourceType.group,
@@ -636,7 +638,7 @@ async def test_resource_pool_member_relationships_subject_types(app_manager_inst
             MembershipChange(
                 Member(
                     role=Role.VIEWER,
-                    user_id="project-1",
+                    user_id=project_id,
                     resource_id=pool_id,
                     resource_type=ResourceType.resource_pool,
                     subject_type=ResourceType.project,
@@ -659,12 +661,12 @@ async def test_resource_pool_member_relationships_subject_types(app_manager_inst
     # Group subject
     assert updates[1].relationship.relation == _Relation.group_viewer.value
     assert updates[1].relationship.subject.object.object_type == ResourceType.group
-    assert updates[1].relationship.subject.object.object_id == "group-1"
+    assert updates[1].relationship.subject.object.object_id == group_id
 
     # Project subject
     assert updates[2].relationship.relation == _Relation.project_viewer.value
     assert updates[2].relationship.subject.object.object_type == ResourceType.project
-    assert updates[2].relationship.subject.object.object_id == "project-1"
+    assert updates[2].relationship.subject.object.object_id == project_id
 
 
 _ADD_DELETE_BASE = 9100
