@@ -14,7 +14,7 @@ import httpx
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
 from renku_data_services.base_models.metrics import MetricsService
-from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.db import ResourcePoolQueryRepository
 from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.db import K8sDbCache
@@ -186,7 +186,7 @@ async def collect_metrics(
     event_type: str,
     user_id: str,
     metrics: MetricsService,
-    rp_repo: ResourcePoolRepository,
+    rp_repo: ResourcePoolQueryRepository,
 ) -> None:
     """Track product metrics."""
     user = APIUser(id=user_id)
@@ -226,7 +226,9 @@ async def collect_metrics(
             pass
 
 
-def k8s_object_handler(cache: K8sDbCache, metrics: MetricsService, rp_repo: ResourcePoolRepository) -> EventHandler:
+def k8s_object_handler(
+    cache: K8sDbCache, metrics: MetricsService, rp_repo: ResourcePoolQueryRepository
+) -> EventHandler:
     """Listens and to k8s events and updates the cache."""
 
     async def handler(obj: APIObjectInCluster, event_type: str) -> None:
