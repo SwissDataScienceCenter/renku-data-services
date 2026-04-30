@@ -1154,24 +1154,15 @@ class MemberRepository(_Base):
                     resolved.append((kc_user.id, ResourceType.user))
 
                 case MemberType.GROUP:
-                    slug = member.group_slug
-                    assert slug is not None  # guaranteed by __post_init__
-                    group = await self.group_repo.get_group(api_user, slug)
+                    group_id = ULID.from_str(member.member_id)
+                    group = await self.group_repo.get_group_by_id(api_user, group_id)
                     if group is None:
-                        raise errors.MissingResourceError(
-                            message=f"Group with slug {member.member_id!r} does not exist"
-                        )
+                        raise errors.MissingResourceError(message=f"Group with id {member.member_id!r} does not exist")
                     resolved.append((str(group.id), ResourceType.group))
 
                 case MemberType.PROJECT:
-                    path = member.project_path
-                    assert path is not None  # guaranteed by __post_init__
-                    ns_slug, proj_slug = path
-                    project = await self.project_repo.get_project_by_namespace_slug(
-                        user=api_user,
-                        namespace=ns_slug.value,
-                        slug=proj_slug,
-                    )
+                    project_id = ULID.from_str(member.member_id)
+                    project = await self.project_repo.get_project_by_id(api_user, project_id)
                     if project is None:
                         raise errors.MissingResourceError(message=f"Project {member.member_id!r} does not exist")
                     resolved.append((str(project.id), ResourceType.project))

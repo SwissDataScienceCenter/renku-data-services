@@ -124,6 +124,25 @@ class ProjectRepository:
 
             return project_orm.dump(with_documentation=with_documentation)
 
+    async def get_project_by_id(self, user: base_models.APIUser, project_id: ULID) -> models.Project:
+        """Get one project from the database by ID without checking permissions.
+
+        This is intended for admin-only use cases such as resolving SpiceDB
+        subject references back to human-readable paths.
+        """
+        if not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id)
+            result = await session.execute(stmt)
+            project_orm = result.scalars().first()
+
+            if project_orm is None:
+                raise errors.MissingResourceError(message=f"Project with id '{project_id}' does not exist.")
+
+            return project_orm.dump()
+
     async def get_all_copied_projects(
         self, user: base_models.APIUser, project_id: ULID, only_writable: bool
     ) -> list[models.Project]:
