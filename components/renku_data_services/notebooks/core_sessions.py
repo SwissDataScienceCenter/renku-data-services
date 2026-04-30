@@ -833,7 +833,7 @@ async def start_session(
         else:
             raise errors.ValidationError(
                 message=f"Session exists with type={existing_session.spec.sessionType}, "
-                "while request contains {launch_request.session_type}."
+                f"while request contains {launch_request.session_type}."
             )
 
     # Fully determine the resource pool and resource class
