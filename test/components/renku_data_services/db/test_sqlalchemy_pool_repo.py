@@ -572,30 +572,17 @@ async def test_classes_filtering(
 async def test_member_repository_polymorphic_membership(
     app_manager_instance: DependencyManager,
     admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
-
-    # Mock quotas_repo to avoid K8s client errors
-    mock_quotas_repo = AsyncMock()
-    mock_quota = models.Quota(cpu=10.0, memory=100, gpu=0, id="mock-quota-id")
-
-    # Configure async methods
-    mock_quotas_repo.create_quota = AsyncMock(return_value=mock_quota)
-    mock_quotas_repo.get_quota = AsyncMock(return_value=mock_quota)
-
-    app_manager_instance.quotas_repo = mock_quotas_repo
-    app_manager_instance.rp_repo.quotas_repo = mock_quotas_repo
-
-    # Ensure admin user exists in the database
-    await app_manager_instance.kc_user_repo._add_api_user(admin_user)
-
     member_repo = app_manager_instance.member_repo
-
     pool_repo = app_manager_instance.rp_repo
     group_repo = app_manager_instance.group_repo
     project_repo = app_manager_instance.project_repo
 
-    # Create a resource pool
+    # Ensure admin user exists in the database
+    await app_manager_instance.kc_user_repo._add_api_user(admin_user)
+
     rp = models.UnsavedResourcePool(
         name="test-poly-pool",
         classes=[],
@@ -617,17 +604,24 @@ async def test_member_repository_polymorphic_membership(
 
     # 2. Test Group membership
     group_slug = "group-456"
-    member_group = ResourcePoolMemberIdentifier(member_type=MemberType.GROUP, member_id=group_slug)
+    # Group doesn't exist yet, should fail
+    group_ulid = str(ULID())
+    member_group = ResourcePoolMemberIdentifier(member_type=MemberType.GROUP, member_id=group_ulid)
     with pytest.raises(errors.MissingResourceError):
         await member_repo.grant_resource_pool_members(admin_user, rp_id, [member_group])
 
-    await group_repo.insert_group(admin_user, namespace_models.UnsavedGroup(slug=group_slug, name="Test Group"))
+    # Now insert the group and retry with its actual ULID
+    inserted_group = await group_repo.insert_group(
+        admin_user, namespace_models.UnsavedGroup(slug=group_slug, name="Test Group")
+    )
 
-    group_member = models.ResourcePoolMemberIdentifier(member_type=models.MemberType.GROUP, member_id=group_slug)
+    group_member = models.ResourcePoolMemberIdentifier(
+        member_type=models.MemberType.GROUP, member_id=str(inserted_group.id)
+    )
     await member_repo.grant_resource_pool_members(admin_user, rp_id, [group_member])
 
-    # 3. Test Project membership (addressed as "<namespace-slug>/<project-slug>")
-    await project_repo.insert_project(
+    # 3. Test Project membership
+    inserted_project = await project_repo.insert_project(
         admin_user,
         project_models.UnsavedProject(
             name="Test Project",
@@ -638,19 +632,16 @@ async def test_member_repository_polymorphic_membership(
         ),
     )
 
-    project_path = f"{group_slug}/test-proj"
-    project_member = ResourcePoolMemberIdentifier(member_type=MemberType.PROJECT, member_id=project_path)
+    project_member = ResourcePoolMemberIdentifier(member_type=MemberType.PROJECT, member_id=str(inserted_project.id))
     await member_repo.grant_resource_pool_members(admin_user, rp_id, [project_member])
 
-    # 4. Test failure for non-existent group
+    # 4. Test failure for non-existent group (valid ULID format, but not in DB)
     with pytest.raises(errors.MissingResourceError):
-        bad_group = models.ResourcePoolMemberIdentifier(
-            member_type=models.MemberType.GROUP, member_id="non-existent-group"
-        )
+        bad_group = models.ResourcePoolMemberIdentifier(member_type=models.MemberType.GROUP, member_id=str(ULID()))
         await member_repo.grant_resource_pool_members(admin_user, rp_id, [bad_group])
 
     # 5. Test failure for non-existent project
-    # 5a. Non-existent project (well-formed path, but not in DB)
+    # 5a. Non-existent project (valid ULID, but not in DB)
     with pytest.raises(errors.MissingResourceError):
         await member_repo.grant_resource_pool_members(
             admin_user,
@@ -658,13 +649,13 @@ async def test_member_repository_polymorphic_membership(
             [
                 ResourcePoolMemberIdentifier(
                     member_type=MemberType.PROJECT,
-                    member_id=f"{group_slug}/does-not-exist",
+                    member_id=str(ULID()),
                 )
             ],
         )
 
-    # 5b. Malformed project identifier (ULID, bare slug, empty segment) rejected at construction.
-    for bad in (str(ULID()), "just-a-slug", "ns/", "/proj", "ns//proj"):
+    # 5b. Malformed project identifier (not a ULID) rejected at construction.
+    for bad in ("not-a-ulid", "just-a-slug", "ns/", "/proj", "ns//proj"):
         with pytest.raises(errors.ValidationError):
             ResourcePoolMemberIdentifier(member_type=MemberType.PROJECT, member_id=bad)
 
@@ -792,48 +783,3 @@ async def test_member_repository_rejects_bad_project_id(
             inserted_rp.id,
             [ResourcePoolMemberIdentifier(member_type=MemberType.PROJECT, member_id="not-a-ulid")],
         )
-
-
-@pytest.mark.asyncio
-@pytest.mark.xdist_group("sessions")
-async def test_member_repository_accepts_group_by_either_identifier(
-    app_manager_instance: DependencyManager,
-    admin_user: base_models.APIUser,
-) -> None:
-    run_migrations_for_app("common")
-
-    mock_quotas_repo = AsyncMock()
-    mock_quota = models.Quota(cpu=10.0, memory=100, gpu=0, id="mock-quota-id")
-    mock_quotas_repo.create_quota = AsyncMock(return_value=mock_quota)
-    mock_quotas_repo.get_quota = AsyncMock(return_value=mock_quota)
-    app_manager_instance.quotas_repo = mock_quotas_repo
-    app_manager_instance.rp_repo.quotas_repo = mock_quotas_repo
-
-    await app_manager_instance.kc_user_repo._add_api_user(admin_user)
-
-    member_repo = app_manager_instance.member_repo
-    pool_repo = app_manager_instance.rp_repo
-    group_repo = app_manager_instance.group_repo
-
-    rp = models.UnsavedResourcePool(
-        name="test-group-ident-pool",
-        classes=[],
-        quota=models.UnsavedQuota(cpu=10.0, memory=100, gpu=0),
-        public=False,
-        default=False,
-        platform=models.RuntimePlatform.linux_amd64,
-    )
-    inserted_rp = await create_rp(rp, pool_repo, admin_user)
-
-    group_slug = "group-ident"
-    await group_repo.insert_group(
-        admin_user,
-        namespace_models.UnsavedGroup(slug=group_slug, name="Ident Group"),
-    )
-
-    ident = group_slug
-    await member_repo.grant_resource_pool_members(
-        admin_user,
-        inserted_rp.id,
-        [ResourcePoolMemberIdentifier(member_type=MemberType.GROUP, member_id=ident)],
-    )
