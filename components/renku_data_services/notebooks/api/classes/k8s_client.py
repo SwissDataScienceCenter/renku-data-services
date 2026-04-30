@@ -322,7 +322,9 @@ class NotebookK8sClient(SecretClient):
         pod: K8sObject | None = None
         if sess_mode == SessionType.non_interactive:
             job_name = session.metadata.name
-            async for j in self.__client.list(K8sObjectFilter(gvk=pod_gvk, label_selector={"job-name": job_name})):
+            async for j in self.__client.list(
+                K8sObjectFilter(gvk=pod_gvk, label_selector={"batch.kubernetes.io/job-name": job_name})
+            ):
                 pod = j
                 break
         else:
