@@ -55,9 +55,6 @@ async def git_clone_container_v2(
         read_only_etc_certs=True,
     )
 
-    internal_token_scope = f"session:{server_name}"
-    internal_access_token = internal_token_mint.create_access_token(user=user, scope=internal_token_scope)
-
     prefix = "GIT_CLONE_"
     env = [
         {
@@ -71,10 +68,6 @@ async def git_clone_container_v2(
         {
             "name": f"{prefix}USER__USERNAME",
             "value": user.email,
-        },
-        {
-            "name": f"{prefix}USER__RENKU_TOKEN",
-            "value": internal_access_token,
         },
         {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if user.is_anonymous else "1"},
         {
@@ -116,6 +109,15 @@ async def git_clone_container_v2(
                     "name": f"{prefix}USER__FULL_NAME",
                     "value": full_name,
                 },
+            )
+        if user.id and user.email:
+            internal_token_scope = f"session:{server_name}"
+            internal_access_token = internal_token_mint.create_access_token(user=user, scope=internal_token_scope)
+            env.append(
+                {
+                    "name": f"{prefix}USER__RENKU_TOKEN",
+                    "value": internal_access_token,
+                }
             )
 
     # Set up git repositories
