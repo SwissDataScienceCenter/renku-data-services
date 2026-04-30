@@ -263,7 +263,11 @@ class TestDependencyManager(DependencyManager):
         gitlab_client: base_models.GitlabAPIProtocol
         config.authz_config = AuthzConfigStack.from_env()
         nb_authz = NonCachingAuthz(config.authz_config)
+        # Monkey patching authz to non caching authz in rp_repo.
         config.nb_config.k8s_v2_client._NotebookK8sClient__rp_repo.authz = nb_authz
+        config.nb_config.k8s_v2_client._NotebookK8sClient__rp_repo._ResourcePoolRepository__query_repository.authz = (
+            nb_authz
+        )
         kc_api: IKeycloakAPI
 
         default_kubeconfig = KubeConfigEnv()
