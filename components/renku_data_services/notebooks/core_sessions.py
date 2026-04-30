@@ -937,8 +937,8 @@ async def start_session(
     )
 
     # Extra containers
-    session_extras = await get_extra_containers(
-        nb_config, server_name, user, repositories, git_providers, internal_token_mint
+    session_extras = session_extras.concat(
+        await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
     )
 
     # Cluster settings (ingress, storage class, etc)
