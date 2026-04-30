@@ -5,7 +5,13 @@ from dataclasses import dataclass
 from typing import Self
 
 from renku_data_services import errors
-from renku_data_services.app_config.config import KeycloakConfig, PosthogConfig, SentryConfig, TrustedProxiesConfig
+from renku_data_services.app_config.config import (
+    InternalAuthenticationConfig,
+    KeycloakConfig,
+    PosthogConfig,
+    SentryConfig,
+    TrustedProxiesConfig,
+)
 from renku_data_services.app_config.logging import Config as LoggingConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.data_connectors.config import DepositConfig
@@ -36,6 +42,7 @@ class Config:
     trusted_proxies: TrustedProxiesConfig
     keycloak: KeycloakConfig | None
     user_preferences: UserPreferencesConfig
+    internal_authn_config: InternalAuthenticationConfig
     gitlab_url: str | None
     log_cfg: LoggingConfig
     version: str
@@ -83,6 +90,7 @@ class Config:
             trusted_proxies=TrustedProxiesConfig.from_env(),
             keycloak=keycloak,
             user_preferences=UserPreferencesConfig.from_env(),
+            internal_authn_config=InternalAuthenticationConfig.from_env(),
             gitlab_url=gitlab_url,
             log_cfg=LoggingConfig.from_env(),
             alertmanager_webhook_role=os.environ.get("ALERTMANAGER_WEBHOOK_ROLE", "alertmanager-webhook"),

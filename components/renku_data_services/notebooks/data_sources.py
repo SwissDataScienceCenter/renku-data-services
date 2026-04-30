@@ -1,22 +1,24 @@
 """Handling of data sources which require an OAuth2 connection."""
 
 import json
+import math
 import random
 import string
 from collections.abc import AsyncIterator
 from configparser import ConfigParser
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from io import StringIO
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from sanic import Request
 from ulid import ULID
 
 from renku_data_services.app_config import logging
+from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.base_models import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.core import APIUser
-from renku_data_services.connected_services.apispec_extras import RenkuTokens
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import ProviderKind
 from renku_data_services.connected_services.oauth_http import (
@@ -64,13 +66,15 @@ class DataSourceRepository:
         connected_services_repo: ConnectedServicesRepository,
         oauth_client_factory: OAuthHttpClientFactory,
         user_repo: UserRepo,
+        internal_token_mint: RenkuSelfTokenMint,
     ) -> None:
         self.connected_services_repo = connected_services_repo
         self.oauth_client_factory = oauth_client_factory
         self.user_repo = user_repo
+        self.internal_token_mint = internal_token_mint
 
     async def handle_configuration(
-        self, request: Request, user: APIUser, data_connector: DataConnector | GlobalDataConnector
+        self, request: Request, user: APIUser, data_connector: DataConnector | GlobalDataConnector, scope: str | None
     ) -> dict[str, Any] | None:
         """Ajusts the configuration of the input data connector if it requires an OAuth2 connection.
 
@@ -85,7 +89,7 @@ class DataSourceRepository:
             return data_connector.storage.configuration
 
         oauth2_part = await self._get_oauth2_configuration_part(
-            request=request, user=user, data_connector=data_connector
+            request=request, user=user, data_connector=data_connector, scope=scope
         )
         if oauth2_part is None:
             return None
@@ -112,6 +116,7 @@ class DataSourceRepository:
         user: APIUser,
         data_connector: DataConnector | GlobalDataConnector,
         rclone_ini_config: str,
+        scope: str | None,
     ) -> str | None:
         """Handles patching the rclone configuration of a data connector when a session is resumed.
 
@@ -142,7 +147,7 @@ class DataSourceRepository:
             return None
 
         oauth2_part = await self._get_oauth2_configuration_part(
-            request=request, user=user, data_connector=data_connector
+            request=request, user=user, data_connector=data_connector, scope=scope
         )
         if oauth2_part is None:
             return None
@@ -201,7 +206,11 @@ class DataSourceRepository:
                 return None
 
     async def _get_oauth2_configuration_part(
-        self, request: Request, user: APIUser, data_connector: DataConnector
+        self,
+        request: Request,
+        user: APIUser,
+        data_connector: DataConnector,
+        scope: str | None,
     ) -> _OAuth2ConfigPartial | None:
         """Get the OAuth2 configuration fields."""
         provider_kind = self._get_oauth2_provider_kind(data_connector=data_connector)
@@ -236,14 +245,20 @@ class DataSourceRepository:
             "access_token": token_set.access_token,
             "token_type": "Bearer",
         }
-        if user.access_token and user.refresh_token:
-            renku_tokens = RenkuTokens(
-                access_token=user.access_token,
-                refresh_token=user.refresh_token,
-            )
-            token_config["refresh_token"] = renku_tokens.encode()
-        if token_set.expires_at_iso:
-            token_config["expiry"] = token_set.expires_at_iso
+        expires_in_td = self.internal_token_mint.long_refresh_token_expiration
+        expires_in = int(expires_in_td.total_seconds())
+        renku_token = self.internal_token_mint.create_refresh_token(
+            user=user, scope=scope, refresh_expires_in=expires_in_td
+        )
+        token_config["refresh_token"] = renku_token
+
+        if token_set.expires_at:
+            exp = datetime.fromtimestamp(token_set.expires_at, UTC)
+            expires_in_token_set = math.floor((exp - datetime.now(UTC)).total_seconds())
+            expires_in = min(expires_in, expires_in_token_set)
+
+        token_config["expiry"] = (datetime.now(UTC) + timedelta(seconds=expires_in)).isoformat()
+
         token = json.dumps(token_config)
         token_url = request.url_for("oauth2_connections.post_token_endpoint", connection_id=connection.id)
         return _OAuth2ConfigPartial(token=token, token_url=token_url)
@@ -252,6 +267,7 @@ class DataSourceRepository:
         self,
         request: Request,
         user: AnonymousAPIUser | AuthenticatedAPIUser,
+        resource_type: Literal["session", "deposit_job"],
         base_name: str,
         data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
         work_dir: PurePosixPath,
@@ -265,9 +281,13 @@ class DataSourceRepository:
         dcs: dict[str, RCloneStorage] = {}
         dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
         user_secret_key: str | None = None
+        internal_token_scope = f"{resource_type}:{base_name}"
         async for dc in data_connectors_stream:
             configuration = await self.handle_configuration(
-                request=request, user=user, data_connector=dc.data_connector
+                request=request,
+                user=user,
+                data_connector=dc.data_connector,
+                scope=internal_token_scope,
             )
             if configuration is None:
                 continue
