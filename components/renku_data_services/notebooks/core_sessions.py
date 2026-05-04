@@ -838,6 +838,9 @@ async def start_session(
         repo_data = await git_repositories_repo.get_repository(
             repository_url=build_repository, user=user, etag=None, internal_gitlab_user=internal_gitlab_user
         )
+
+        logger.info(f"environment.build_parameters.repository => repo_data = {repo_data}")
+
         if repo_data.is_error:
             raise errors.ValidationError(message=str(repo_data.error))
         if isinstance(repo_data.metadata, RepoMetadata):
