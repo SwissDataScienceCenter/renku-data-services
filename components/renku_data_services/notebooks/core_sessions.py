@@ -1169,8 +1169,7 @@ async def patch_session(
         # Affinities
         patch.spec.affinity = node_affinity_patch_from_resource_class(rc, nb_config.sessions.affinity_model)
         # Priority class (if a quota is being used)
-        if rc.quota is None:
-            patch.spec.priorityClassName = RESET
+        patch.spec.priorityClassName = rc.quota if rc.quota else RESET
         # Service account name
         if rp.cluster is not None:
             patch.spec.service_account_name = (
