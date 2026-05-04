@@ -450,6 +450,19 @@ class CullingPatch(CullingDurationParsingMixin):
     lastInteraction: datetime | ResetType | None = None
 
 
+class TemplateMetadataPatch(BaseCRD):
+    """Patch for the session template metadata."""
+
+    annotations: dict[str, str | ResetType] | ResetType | None = None
+    labels: dict[str, str | ResetType] | ResetType | None = None
+
+
+class TemplatePatch(BaseCRD):
+    """Patch for the session template."""
+
+    metadata: TemplateMetadataPatch | ResetType | None = None
+
+
 class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     """Patch for the spec of an amalthea session."""
 
@@ -464,6 +477,7 @@ class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     session: AmaltheaSessionV1Alpha1SpecSessionPatch | None = None
     culling: CullingPatch | ResetType | None = None
     service_account_name: str | ResetType | None = None
+    template: TemplatePatch | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):

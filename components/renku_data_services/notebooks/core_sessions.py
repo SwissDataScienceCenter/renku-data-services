@@ -83,6 +83,8 @@ from renku_data_services.notebooks.crs import (
     State,
     Storage,
     Template,
+    TemplateMetadataPatch,
+    TemplatePatch,
     TlsSecret,
 )
 from renku_data_services.notebooks.data_sources import DataSourceRepository
@@ -1158,14 +1160,23 @@ async def patch_session(
         if not patch.metadata:
             patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
         # Patch the resource pool and class ID in the annotations
-        patch.metadata.annotations = {"renku.io/resource_pool_id": str(rp.id)}
-        patch.metadata.annotations = {"renku.io/resource_class_id": str(body.resource_class_id)}
+        annotations: dict[str, str | ResetType] = dict()
+        annotations.update(session.metadata.annotations)
+        annotations["renku.io/resource_class_id"] = str(rc.id)
+        annotations["renku.io/resource_pool_id"] = str(rp.id)
+        patch.metadata.annotations = annotations
+        # Patch the resource pool and class ID in the template annotations
+        annotations: dict[str, str | ResetType] = dict()
+        if session.spec.template and session.spec.template.metadata and session.spec.template.metadata.annotations:
+            annotations.update(session.spec.template.metadata.annotations)
+        annotations["renku.io/resource_class_id"] = str(rc.id)
+        annotations["renku.io/resource_pool_id"] = str(rp.id)
+        patch.spec.template = TemplatePatch(metadata=TemplateMetadataPatch(annotations=annotations))
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
         patch.spec.session.resources = resources_patch_from_resource_class(rc)
         # Tolerations
-        tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
-        patch.spec.tolerations = tolerations
+        patch.spec.tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
         # Affinities
         patch.spec.affinity = node_affinity_patch_from_resource_class(rc, nb_config.sessions.affinity_model)
         # Priority class (if a quota is being used)
