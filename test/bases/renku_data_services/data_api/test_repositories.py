@@ -111,7 +111,7 @@ async def test_get_repository_without_connection(
 
 @pytest.mark.asyncio
 async def test_get_one_repository(oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection):
-    connection = await create_oauth2_connection("provider_1")
+    connection = await create_oauth2_connection("provider_2")
     repository_url = "https://example.org/username/my_repo.git"
 
     _, res = await oauth2_test_client.get(
@@ -122,7 +122,7 @@ async def test_get_one_repository(oauth2_test_client: SanicASGITestClient, user_
     assert res.json is not None
     result = res.json
     assert result.get("connection", {}).get("id") == connection["id"]
-    assert result.get("provider", {}).get("id") == "provider_1"
+    assert result.get("provider", {}).get("id") == "provider_2"
     assert result.get("metadata") is not None
     repository_metadata = result["metadata"]
     assert repository_metadata.get("git_url") == repository_url
