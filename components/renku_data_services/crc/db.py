@@ -55,12 +55,14 @@ _ORM = TypeVar("_ORM", schemas.ResourcePoolORM, schemas.ResourceClassORM)
 async def _filter_by_authz(
     api_user: base_models.APIUser,
     stmt: Select[tuple[_ORM]],
-    authz: Authz,
+    authz: Authz | None,
 ) -> Select[tuple[_ORM]]:
     """Modifies a select query to list resource pools based on whether the user is logged in or not."""
     output = stmt
     if api_user.is_admin:
         return output
+    if authz is None:
+        raise errors.ProgrammingError(message="Authz must be set for non admin request")
     allowed_resource_pools = await authz.resources_with_permission(
         api_user, api_user.id, ResourceType.resource_pool, Scope.READ
     )
@@ -103,42 +105,13 @@ def _only_admins(
     return decorated_function
 
 
-class ResourcePoolRepository(_Base):
+class ResourcePoolQueryRepository:
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, authz: Authz):
-        super().__init__(session_maker, quotas_repo, authz)
-        self.__cluster_repo = ClusterRepository(session_maker=self.session_maker)
-
-    async def initialize(self, async_connection_url: str, rp: models.UnsavedResourcePool) -> None:
-        """Add the default resource pool if it does not already exist."""
-        logger.info("Initializing default resource pool...")
-        engine = create_async_engine(async_connection_url, poolclass=NullPool)
-        session_maker = async_sessionmaker(
-            engine,
-            expire_on_commit=True,
-        )
-        async with session_maker() as session, session.begin():
-            stmt = select(schemas.ResourcePoolORM.default == true())
-            res = await session.execute(stmt)
-            default_rp = res.scalars().first()
-            if default_rp is None:
-                logger.info("Creating default resource pool.")
-                new_rp = await self._create_default_rp(rp, session=session)
-                logger.info(f"Created resource pool {new_rp.id}")
-            else:
-                logger.info("Default resource pool already exists.")
-        await engine.dispose(close=True)
-
-    @with_db_transaction
-    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
-    async def _create_default_rp(self, rp: models.UnsavedResourcePool, session: AsyncSession) -> models.ResourcePool:
-        default_rp = schemas.ResourcePoolORM.from_unsaved_model(new_resource_pool=rp, quota=None, cluster=None)
-        session.add(default_rp)
-        await session.flush()
-        await session.refresh(default_rp)
-        result = default_rp.dump(quota=None)
-        return result
+    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, authz: Authz | None):
+        self.session_maker = session_maker
+        self.quotas_repo = quotas_repo
+        self.authz = authz
 
     async def get_resource_pools(
         self, api_user: base_models.APIUser, id: int | None = None, name: Optional[str] = None
@@ -278,6 +251,117 @@ class ResourcePoolRepository(_Base):
                 output.append(rp.dump(quota, criteria))
             return output
 
+    async def get_classes(
+        self,
+        api_user: Optional[base_models.APIUser] = None,
+        id: Optional[int] = None,
+        name: Optional[str] = None,
+        resource_pool_id: Optional[int] = None,
+    ) -> list[models.ResourceClass]:
+        """Get classes from the database."""
+        async with self.session_maker() as session:
+            stmt = select(schemas.ResourceClassORM).join(
+                schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool, isouter=True
+            )
+            if resource_pool_id is not None:
+                stmt = stmt.where(schemas.ResourcePoolORM.id == resource_pool_id)
+            if id is not None:
+                stmt = stmt.where(schemas.ResourceClassORM.id == id)
+            if name is not None:
+                stmt = stmt.where(schemas.ResourceClassORM.name == name)
+
+            # Apply user access control if api_user is provided
+            if api_user is not None:
+                # NOTE: The line below ensures that the right users can access the right resources, do not remove.
+                stmt = await _filter_by_authz(api_user, stmt, self.authz)
+
+            res = await session.execute(stmt)
+            orms = res.scalars().all()
+            return [orm.dump() for orm in orms]
+
+    async def get_resource_class(self, api_user: base_models.APIUser, id: int) -> models.ResourceClass:
+        """Get a specific resource class by its ID."""
+        classes = await self.get_classes(api_user, id)
+        if len(classes) == 0:
+            raise errors.MissingResourceError(message=f"The resource class with ID {id} cannot be found")
+        return classes[0]
+
+
+class ResourcePoolRepository(_Base):
+    """The adapter used for accessing and modifying resource pools with SQLAlchemy."""
+
+    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, authz: Authz):
+        super().__init__(session_maker, quotas_repo, authz)
+        self.__query_repository = ResourcePoolQueryRepository(session_maker, quotas_repo, self.authz)
+        self.__cluster_repo = ClusterRepository(session_maker=self.session_maker)
+
+    async def initialize(self, async_connection_url: str, rp: models.UnsavedResourcePool) -> None:
+        """Add the default resource pool if it does not already exist."""
+        logger.info("Initializing default resource pool...")
+        engine = create_async_engine(async_connection_url, poolclass=NullPool)
+        session_maker = async_sessionmaker(
+            engine,
+            expire_on_commit=True,
+        )
+        async with session_maker() as session, session.begin():
+            stmt = select(schemas.ResourcePoolORM.default == true())
+            res = await session.execute(stmt)
+            default_rp = res.scalars().first()
+            if default_rp is None:
+                logger.info("Creating default resource pool.")
+                new_rp = await self._create_default_rp(rp, session=session)
+                logger.info(f"Created resource pool {new_rp.id}")
+            else:
+                logger.info("Default resource pool already exists.")
+        await engine.dispose(close=True)
+
+    @with_db_transaction
+    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
+    async def _create_default_rp(self, rp: models.UnsavedResourcePool, session: AsyncSession) -> models.ResourcePool:
+        default_rp = schemas.ResourcePoolORM.from_unsaved_model(new_resource_pool=rp, quota=None, cluster=None)
+        session.add(default_rp)
+        await session.flush()
+        await session.refresh(default_rp)
+        result = default_rp.dump(quota=None)
+        return result
+
+    async def get_resource_pools(
+        self, api_user: base_models.APIUser, id: int | None = None, name: Optional[str] = None
+    ) -> list[models.ResourcePool]:
+        """Get resource pools from database."""
+        return await self.__query_repository.get_resource_pools(api_user, id, name)
+
+    async def get_resource_pool_from_class(
+        self, api_user: base_models.APIUser, resource_class_id: int
+    ) -> models.ResourcePool:
+        """Get the resource pool the class belongs to."""
+        return await self.__query_repository.get_resource_pool_from_class(api_user, resource_class_id)
+
+    async def get_resource_pool(
+        self, api_user: base_models.APIUser, resource_pool_id: int, name: str | None = None
+    ) -> models.ResourcePool:
+        """Get a specific resource pool by ID with Authzed permission check."""
+        return await self.__query_repository.get_resource_pool(api_user, resource_pool_id, name)
+
+    async def get_default_resource_pool(self) -> models.ResourcePool:
+        """Get the default resource pool."""
+        return await self.__query_repository.get_default_resource_pool()
+
+    async def get_default_resource_class(self) -> models.ResourceClass:
+        """Get the default resource class in the default resource pool."""
+        return await self.__query_repository.get_default_resource_class()
+
+    async def filter_resource_pools(
+        self,
+        api_user: base_models.APIUser,
+        cpu: float = 0,
+        memory: int = 0,
+        max_storage: int = 0,
+        gpu: int = 0,
+    ) -> list[models.ResourcePool]:
+        """Get resource pools from database with indication of which resource class matches the specified criteria."""
+        return await self.__query_repository.filter_resource_pools(api_user, cpu, memory, max_storage, gpu)
+
     @_only_admins
     async def insert_resource_pool(
         self, api_user: base_models.APIUser, new_resource_pool: models.UnsavedResourcePool
@@ -330,32 +414,11 @@ class ResourcePoolRepository(_Base):
         resource_pool_id: Optional[int] = None,
     ) -> list[models.ResourceClass]:
         """Get classes from the database."""
-        async with self.session_maker() as session:
-            stmt = select(schemas.ResourceClassORM).join(
-                schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool, isouter=True
-            )
-            if resource_pool_id is not None:
-                stmt = stmt.where(schemas.ResourcePoolORM.id == resource_pool_id)
-            if id is not None:
-                stmt = stmt.where(schemas.ResourceClassORM.id == id)
-            if name is not None:
-                stmt = stmt.where(schemas.ResourceClassORM.name == name)
-
-            # Apply user access control if api_user is provided
-            if api_user is not None:
-                # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-                stmt = await _filter_by_authz(api_user, stmt, self.authz)
-
-            res = await session.execute(stmt)
-            orms = res.scalars().all()
-            return [orm.dump() for orm in orms]
+        return await self.__query_repository.get_classes(api_user, id, name, resource_pool_id)
 
     async def get_resource_class(self, api_user: base_models.APIUser, id: int) -> models.ResourceClass:
         """Get a specific resource class by its ID."""
-        classes = await self.get_classes(api_user, id)
-        if len(classes) == 0:
-            raise errors.MissingResourceError(message=f"The resource class with ID {id} cannot be found")
-        return classes[0]
+        return await self.__query_repository.get_resource_class(api_user, id)
 
     @_only_admins
     async def insert_resource_class(
