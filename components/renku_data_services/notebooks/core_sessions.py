@@ -830,8 +830,6 @@ async def start_session(
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
-    #    and builds_config.build_output_private_image_prefix is not None
-    #         and image.startswith(builds_config.build_output_private_image_prefix)
     if (
         environment.build_parameters is not None
         and builds_config.build_output_private_image_prefix
