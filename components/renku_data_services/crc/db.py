@@ -1184,7 +1184,7 @@ class MemberRepository(_Base):
 
     @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
-    async def _prohibit_resource_pool_user(
+    async def _prohibit_resource_pool_users(
         self,
         api_user: base_models.APIUser,
         resource_pool_id: int,
