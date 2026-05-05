@@ -375,10 +375,15 @@ class Authz:
     authz_config: AuthzConfig
     _platform: ClassVar[ObjectReference] = field(default=_AuthzConverter.platform())
     _client: AsyncClient | None = field(default=None, init=False)
+    _loop: asyncio.AbstractEventLoop | None = field(default=None, init=False)
 
     @property
     def client(self) -> AsyncClient:
         """The authzed DB asynchronous client."""
+        running_loop = asyncio.get_running_loop()
+        # Drop the current client if it is attached to a different event loop
+        if self._loop != running_loop:
+            self._client = None
         if not self._client:
             self._client = self.authz_config.authz_async_client()
         return self._client
