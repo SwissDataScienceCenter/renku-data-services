@@ -1707,7 +1707,6 @@ async def test_resource_pool_visibility_toggle(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
-
 @pytest.mark.parametrize("total_limit,user_limit", [(1000, 200), (200, 1000), (200, 0), (0, 200)])
 async def test_resource_pools_quota_with_partial_usage(
     sanic_client,
@@ -1860,6 +1859,7 @@ async def test_resource_pools_quota_with_no_usage(
     # usage_hours_total should be 4 hours (200 credits total limit / 50 credits per hour)
     assert resource_class["usage_hours_total"] == 4.0
 
+
 async def test_resource_pool_members_add_group(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -1916,10 +1916,8 @@ async def test_resource_pool_members_add_group(
     assert member_1_user.id in user_ids
 
 
-
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
-
 async def test_resource_pools_quota_exceeded(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -2000,6 +1998,7 @@ async def test_resource_pools_quota_exceeded(
     # usage_hours_total should be 2.0 hours (50 credits/hour * 2 hours = 100 credits limit)
     assert resource_class["usage_hours_total"] == 2.0
 
+
 async def test_resource_pool_members_add_project(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -2056,10 +2055,8 @@ async def test_resource_pool_members_add_project(
     assert member_1_user.id in user_ids
 
 
-
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
-
 async def test_resource_pools_quota_with_no_limits(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -2132,6 +2129,7 @@ async def test_resource_pools_quota_with_no_limits(
     # usage_hours_total should not exist in the response since it's None
     assert "usage_hours_total" not in resource_class
 
+
 async def test_resource_pool_members_put_replaces(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -2174,10 +2172,8 @@ async def test_resource_pool_members_put_replaces(
     assert members[0]["id"] == group2["id"]
 
 
-
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
-
 async def test_resource_pools_quota_with_no_costs(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -2253,6 +2249,7 @@ async def test_resource_pools_quota_with_no_costs(
     assert "usage_hours_remaining" not in resource_class
     # usage_hours_total should not exist in the response since it's None
     assert "usage_hours_total" not in resource_class
+
 
 async def test_resource_pool_members_delete(
     sanic_client: SanicASGITestClient,
@@ -2931,4 +2928,3 @@ async def test_resource_pool_members_delete_nonexistent_project(
         headers=admin_headers,
     )
     assert res.status_code == 204
-
