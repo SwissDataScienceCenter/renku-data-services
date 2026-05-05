@@ -163,9 +163,6 @@ def create_app() -> Sanic:
     async def do_migrations(_: Sanic) -> None:
         logger.info("running migrations")
         run_migrations_for_app("common")
-        await dependency_manager.rp_repo.initialize(
-            dependency_manager.config.db.conn_url(async_client=False), dependency_manager.default_resource_pool
-        )
 
     @app.main_process_start
     async def do_solr_migrations(app: Sanic) -> None:
@@ -188,6 +185,11 @@ def create_app() -> Sanic:
         if getattr(app.ctx, "solr_reindex", False):
             logger.info("Creating solr reindex task, as required by migrations.")
             app.add_task(solr_reindex(dependency_manager.search_reprovisioning))
+        app.add_task(
+            dependency_manager.rp_repo.initialize(
+                dependency_manager.config.db.conn_url(async_client=False), dependency_manager.default_resource_pool
+            )
+        )
 
     return app
 

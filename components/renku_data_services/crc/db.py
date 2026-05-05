@@ -23,6 +23,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope
 from renku_data_services.base_models import RESET
@@ -36,6 +37,9 @@ from renku_data_services.k8s.client_interfaces import PriorityClassClient, Resou
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
 from renku_data_services.users.db import UserRepo
+from renku_data_services.utils.core import with_db_transaction
+
+logger = logging.getLogger(__name__)
 
 
 class _Base:
@@ -108,6 +112,7 @@ class ResourcePoolRepository(_Base):
 
     async def initialize(self, async_connection_url: str, rp: models.UnsavedResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""
+        logger.info("Initializing default resource pool...")
         engine = create_async_engine(async_connection_url, poolclass=NullPool)
         session_maker = async_sessionmaker(
             engine,
@@ -118,8 +123,14 @@ class ResourcePoolRepository(_Base):
             res = await session.execute(stmt)
             default_rp = res.scalars().first()
             if default_rp is None:
-                await self._create_default_rp(rp, session=session)
+                logger.info("Creating default resource pool.")
+                new_rp = await self._create_default_rp(rp, session=session)
+                logger.info(f"Created resource pool {new_rp.id}")
+            else:
+                logger.info("Default resource pool already exists.")
+        await engine.dispose(close=True)
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
     async def _create_default_rp(self, rp: models.UnsavedResourcePool, session: AsyncSession) -> models.ResourcePool:
         default_rp = schemas.ResourcePoolORM.from_unsaved_model(new_resource_pool=rp, quota=None, cluster=None)
@@ -279,6 +290,7 @@ class ResourcePoolRepository(_Base):
                 session=session,
             )
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
     async def _insert_resource_pool(
         self, api_user: base_models.APIUser, new_resource_pool: models.UnsavedResourcePool, session: AsyncSession
@@ -504,6 +516,7 @@ class ResourcePoolRepository(_Base):
                 )
             return result
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.update, resource=ResourceType.resource_pool)
     async def _update_resource_pool(
         self,
@@ -523,6 +536,7 @@ class ResourcePoolRepository(_Base):
                 session=session,
             )
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
     async def _delete_resource_pool(
         self, api_user: base_models.APIUser, id: int, session: AsyncSession
@@ -924,14 +938,16 @@ class UserRepository(_Base):
             else:
                 removed_rps = [rp for rp in user.resource_pools if rp.id not in new_rp_ids]
                 user.resource_pools = list(rps_to_add)
+            # TODO: the authz changes below are done in separate db transactions,
+            # TODO: use only one (collect everything into a single authz change)
             for rp in rps_to_add:
-                await self._grant_resource_pool_members(api_user, rp.id, [keycloak_id], session=session)
+                await self._grant_resource_pool_members(api_user, rp.id, [keycloak_id])
                 if rp.default or rp.public:
-                    await self._unprohibit_resource_pool_users(api_user, rp.id, [keycloak_id], session=session)
+                    await self._unprohibit_resource_pool_users(api_user, rp.id, [keycloak_id])
             for rp in removed_rps:
-                await self._revoke_resource_pool_member(api_user, rp.id, [keycloak_id], session=session)
+                await self._revoke_resource_pool_member(api_user, rp.id, [keycloak_id])
                 if rp.default or rp.public:
-                    await self._prohibit_resource_pool_user(api_user, rp.id, [keycloak_id], session=session)
+                    await self._prohibit_resource_pool_user(api_user, rp.id, [keycloak_id])
             output: list[models.ResourcePool] = []
             for rp in rps_to_add:
                 quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
@@ -1033,27 +1049,47 @@ class UserRepository(_Base):
             ]
         )
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
     async def _grant_resource_pool_members(
-        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        user_ids: Collection[str],
+        session: AsyncSession | None = None,
     ) -> models.ResourcePoolMembershipChange | None:
         return self._build_pool_membership_change(user_ids, resource_pool_id, Role.VIEWER, Change.ADD)
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
     async def _unprohibit_resource_pool_users(
-        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        user_ids: Collection[str],
+        session: AsyncSession | None = None,
     ) -> models.ResourcePoolMembershipChange | None:
         return self._build_pool_membership_change(user_ids, resource_pool_id, Role.PROHIBITED, Change.REMOVE)
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
     async def _prohibit_resource_pool_user(
-        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        user_ids: Collection[str],
+        session: AsyncSession | None = None,
     ) -> models.ResourcePoolMembershipChange | None:
         return self._build_pool_membership_change(user_ids, resource_pool_id, Role.PROHIBITED, Change.ADD)
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
     async def _revoke_resource_pool_member(
-        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        user_ids: Collection[str],
+        session: AsyncSession | None = None,
     ) -> models.ResourcePoolMembershipChange | None:
         return self._build_pool_membership_change(user_ids, resource_pool_id, Role.VIEWER, Change.REMOVE)
 
