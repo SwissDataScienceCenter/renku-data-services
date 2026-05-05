@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
-from typing import ClassVar, Concatenate, ParamSpec, Protocol, TypeVar, cast
+from typing import Any, ClassVar, Concatenate, Literal, ParamSpec, Protocol, TypeVar, cast, overload
 
 from authzed.api.v1 import (
     AsyncClient,
@@ -241,8 +241,44 @@ class _AuthzConverter:
         """The id should be the id of the ResourcePoolORM object in the DB."""
         return ObjectReference(object_type=ResourceType.resource_pool.value, object_id=str(id))
 
+    @overload
     @staticmethod
-    def to_object(resource_type: ResourceType, resource_id: _ID) -> ObjectReference:
+    def to_object(resource_type: Literal[ResourceType.project], resource_id: ULID) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.group], resource_id: ULID) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.user_namespace], resource_id: ULID) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.data_connector], resource_id: ULID) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.user], resource_id: str | None) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.anonymous_user], resource_id: Any) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.resource_pool], resource_id: int) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.platform], resource_id: Any) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: ResourceType, resource_id: _ID | None) -> ObjectReference: ...
+
+    @staticmethod
+    def to_object(resource_type: ResourceType, resource_id: _ID | None) -> ObjectReference:
         """Convert a resource type and ID to an Authzed ObjectReference."""
         match (resource_type, resource_id):
             case (ResourceType.project, sid) if isinstance(sid, ULID):
@@ -396,6 +432,67 @@ class Authz:
             self._client = self.authz_config.authz_async_client()
         return self._client
 
+    @overload
+    async def _has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.project], resource_id: ULID, scope: Scope
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.group], resource_id: ULID, scope: Scope
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.user_namespace],
+        resource_id: ULID,
+        scope: Scope,
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.data_connector],
+        resource_id: ULID,
+        scope: Scope,
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.user], resource_id: str, scope: Scope
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.anonymous_user],
+        resource_id: Any,
+        scope: Scope,
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.resource_pool],
+        resource_id: int,
+        scope: Scope,
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.platform], resource_id: Any, scope: Scope
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID | None, scope: Scope
+    ) -> tuple[bool, ZedToken | None]: ...
+
     async def _has_permission(
         self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID | None, scope: Scope
     ) -> tuple[bool, ZedToken | None]:
@@ -418,6 +515,67 @@ class Authz:
             )
         )
         return response.permissionship == CheckPermissionResponse.PERMISSIONSHIP_HAS_PERMISSION, response.checked_at
+
+    @overload
+    async def has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.project], resource_id: ULID, scope: Scope
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.group], resource_id: ULID, scope: Scope
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.user_namespace],
+        resource_id: ULID,
+        scope: Scope,
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.data_connector],
+        resource_id: ULID,
+        scope: Scope,
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.user], resource_id: str, scope: Scope
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.anonymous_user],
+        resource_id: Any,
+        scope: Scope,
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.resource_pool],
+        resource_id: int,
+        scope: Scope,
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.platform], resource_id: Any, scope: Scope
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID, scope: Scope
+    ) -> bool: ...
 
     async def has_permission(
         self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID, scope: Scope
@@ -524,7 +682,7 @@ class Authz:
         self,
         user: base_models.APIUser,
         resource_type: ResourceType,
-        resource_id: str,
+        resource_id: _ID,
         scope: Scope,  # The scope that the users should be allowed to exercise on the resource
         *,
         zed_token: ZedToken | None = None,
@@ -545,6 +703,46 @@ class Authz:
             if response.permissionship == LOOKUP_PERMISSIONSHIP_HAS_PERMISSION:
                 ids.append(response.subject.subject_object_id)
         return ids
+
+    async def get_resource_pool_members(
+        self,
+        user: base_models.APIUser,
+        resource_pool_id: int,
+        *,
+        zed_token: ZedToken | None = None,
+    ) -> list[tuple[str, str, str]]:
+        """Get all members of a resource pool from Authzed.
+
+        Returns a list of tuples: (subject_type, subject_id, relation).
+        Skips public_viewer and resource_pool_platform relations.
+        """
+        if isinstance(user, InternalServiceAdmin):
+            pass
+        elif not user.is_admin:
+            return []
+
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        rel_filter = RelationshipFilter(
+            resource_type=ResourceType.resource_pool.value,
+            optional_resource_id=str(resource_pool_id),
+        )
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(
+                consistency=consistency,
+                relationship_filter=rel_filter,
+            )
+        )
+
+        members: list[tuple[str, str, str]] = []
+        skip_relations = {_Relation.public_viewer.value, _Relation.resource_pool_platform.value}
+        async for response in responses:
+            rel = response.relationship
+            if rel.relation in skip_relations:
+                continue
+            subject_type = rel.subject.object.object_type
+            subject_id = rel.subject.object.object_id
+            members.append((subject_type, subject_id, rel.relation))
+        return members
 
     async def get_all_members(
         self, resource_type: ResourceType, *, zed_token: ZedToken | None = None
@@ -1476,10 +1674,14 @@ class Authz:
             resource = _AuthzConverter.resource_pool(cast(int, member.resource_id))
 
             match member.subject_type:
-                case ResourceType.group if member.role == Role.VIEWER:
+                case ResourceType.group:
+                    if member.role == Role.PROHIBITED:
+                        raise errors.ValidationError(message="Groups cannot be prohibited from resource pools")
                     relation = _Relation.group_viewer.value
                     subject = SubjectReference(object=_AuthzConverter.group(ULID.from_str(member.user_id)))
-                case ResourceType.project if member.role == Role.VIEWER:
+                case ResourceType.project:
+                    if member.role == Role.PROHIBITED:
+                        raise errors.ValidationError(message="Projects cannot be prohibited from resource pools")
                     relation = _Relation.project_viewer.value
                     subject = SubjectReference(object=_AuthzConverter.project(ULID.from_str(member.user_id)))
                 case _:
