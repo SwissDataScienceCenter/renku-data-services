@@ -383,6 +383,7 @@ class Authz:
         running_loop = asyncio.get_running_loop()
         # Drop the current client if it is attached to a different event loop
         if self._loop != running_loop:
+            logger.info(f"Event loop mis-match, old = {self._loop}, new = {running_loop}")
             self._client = None
         if not self._client:
             self._client = self.authz_config.authz_async_client()

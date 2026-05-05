@@ -23,6 +23,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope
 from renku_data_services.base_models import RESET
@@ -37,6 +38,8 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
+
+logger = logging.getLogger(__name__)
 
 
 class _Base:
@@ -109,6 +112,7 @@ class ResourcePoolRepository(_Base):
 
     async def initialize(self, async_connection_url: str, rp: models.UnsavedResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""
+        logger.info("Initializing default resource pool...")
         engine = create_async_engine(async_connection_url, poolclass=NullPool)
         session_maker = async_sessionmaker(
             engine,
@@ -119,7 +123,11 @@ class ResourcePoolRepository(_Base):
             res = await session.execute(stmt)
             default_rp = res.scalars().first()
             if default_rp is None:
-                await self._create_default_rp(rp, session=session)
+                logger.info("Creating default resource pool.")
+                new_rp = await self._create_default_rp(rp, session=session)
+                logger.info(f"Created resource pool {new_rp.id}")
+            else:
+                logger.info("Default resource pool already exists.")
 
     @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
