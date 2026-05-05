@@ -1245,7 +1245,11 @@ class MemberRepository(_Base):
     @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
     async def _prohibit_resource_pool_users(
-        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        user_ids: Collection[str],
+        session: AsyncSession | None = None,
     ) -> models.ResourcePoolMembershipChange:
         specs = [(uid, ResourceType.user, Role.PROHIBITED) for uid in user_ids]
         return self._build_pool_membership_changes(resource_pool_id, specs, Change.ADD)

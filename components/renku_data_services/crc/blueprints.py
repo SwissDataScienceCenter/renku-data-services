@@ -1,6 +1,7 @@
 """Compute resource control (CRC) app."""
 
 import asyncio
+from contextlib import suppress
 from dataclasses import dataclass
 
 from sanic import HTTPResponse, Request, empty, json
@@ -353,14 +354,12 @@ class ResourcePoolMembersBP(CustomBlueprint):
                 member_id=member_id,
                 member_type=MemberType(member_type),
             )
-            try:
+            with suppress(errors.MissingResourceError):
                 await self.repo.revoke_resource_pool_members(
                     api_user=user,
                     resource_pool_id=resource_pool_id,
                     members=[identifier],
                 )
-            except errors.MissingResourceError:
-                pass  # Already removed or was not part of the pool
             return HTTPResponse(status=204)
 
         return "/resource_pools/<resource_pool_id>/members/<member_type>/<member_id>", ["DELETE"], _delete
