@@ -830,7 +830,11 @@ async def start_session(
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
-    if environment.build_parameters is not None:
+    if (
+        environment.build_parameters is not None
+        and builds_config.build_output_private_image_prefix
+        and image.startswith(builds_config.build_output_private_image_prefix)
+    ):
         build_repository = environment.build_parameters.repository
         if build_repository not in [repository.url for repository in repositories]:
             raise errors.ValidationError(message="Image was not built from a repository in this project")
@@ -838,12 +842,15 @@ async def start_session(
         repo_data = await git_repositories_repo.get_repository(
             repository_url=build_repository, user=user, etag=None, internal_gitlab_user=internal_gitlab_user
         )
-        if repo_data.is_error:
-            raise errors.ValidationError(message=str(repo_data.error))
-        if isinstance(repo_data.metadata, RepoMetadata):
-            metadata: RepoMetadata = repo_data.metadata
-            if not metadata.pull_permission:
-                raise errors.ValidationError(message="User does not have access to image repository")
+
+        if (
+            repo_data.is_error
+            or not isinstance(repo_data.metadata, RepoMetadata)
+            or not repo_data.metadata.pull_permission
+        ):
+            raise errors.ForbiddenError(
+                message="You do not have pull access to the code repository used for this session."
+            )
 
     # User secrets
     session_extras = SessionExtraResources()
