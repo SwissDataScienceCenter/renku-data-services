@@ -24,6 +24,7 @@ from renku_data_services.crc.core import (
     validate_resource_pool_put_or_patch,
 )
 from renku_data_services.crc.db import ClusterRepository, MemberRepository, ResourcePoolRepository
+from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
 
@@ -243,6 +244,157 @@ class ResourcePoolUsersBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/resource_pools/<resource_pool_id>/users/<user_id>", ["DELETE"], _delete
+
+
+@dataclass(kw_only=True)
+class ResourcePoolMembersBP(CustomBlueprint):
+    """Handlers for dealing with polymorphic members of individual resource pools."""
+
+    repo: MemberRepository
+    authenticator: base_models.Authenticator
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get all members of a specific resource pool."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        async def _get_all(_: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
+            members = await self.repo.get_resource_pool_members(user, resource_pool_id)
+            return validated_json(
+                apispec.PoolMembers,
+                [{"member_type": m.member_type.value, "id": m.member_id, "relation": m.relation} for m in members],
+            )
+
+        return "/resource_pools/<resource_pool_id>/members", ["GET"], _get_all
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Add members to a specific resource pool."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        @validate(json=apispec.PoolMembers)
+        async def _post(
+            _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolMembers
+        ) -> HTTPResponse:
+            return await self._put_post(user, resource_pool_id, body, post=True)
+
+        return "/resource_pools/<resource_pool_id>/members", ["POST"], _post
+
+    def put(self) -> BlueprintFactoryResponse:
+        """Set the members of a specific resource pool."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        @validate(json=apispec.PoolMembers)
+        async def _put(
+            _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolMembers
+        ) -> HTTPResponse:
+            return await self._put_post(user, resource_pool_id, body, post=False)
+
+        return "/resource_pools/<resource_pool_id>/members", ["PUT"], _put
+
+    async def _put_post(
+        self, user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolMembers, post: bool = True
+    ) -> HTTPResponse:
+        identifiers = self._to_identifiers(body)
+        updated = await self.repo.update_resource_pool_members(
+            api_user=user,
+            resource_pool_id=resource_pool_id,
+            members=identifiers,
+            append=post,
+        )
+        return validated_json(
+            apispec.PoolMembers,
+            [{"member_type": m.member_type.value, "id": m.member_id, "relation": m.relation} for m in updated],
+            status=201 if post else 200,
+        )
+
+    def get(self) -> BlueprintFactoryResponse:
+        """Check if a specific member belongs to a resource pool."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        async def _get(
+            _: Request, user: base_models.APIUser, resource_pool_id: int, member_type: str, member_id: str
+        ) -> HTTPResponse:
+            members = await self.repo.get_resource_pool_members(user, resource_pool_id)
+            for m in members:
+                if m.member_type.value == member_type and m.member_id == member_id:
+                    payload = {"member_type": m.member_type.value, "id": m.member_id, "relation": m.relation}
+                    match member_type:
+                        case "user":
+                            return validated_json(apispec.PoolMemberUser, payload)
+                        case "group":
+                            return validated_json(apispec.PoolMemberGroup, payload)
+                        case "project":
+                            return validated_json(apispec.PoolMemberProject, payload)
+                        case _:
+                            raise errors.ValidationError(message=f"Invalid member type: {member_type}")
+            raise errors.MissingResourceError(
+                message=f"The member with type {member_type} and id {member_id} does not belong to the resource pool."
+            )
+
+        return "/resource_pools/<resource_pool_id>/members/<member_type>/<member_id>", ["GET"], _get
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Remove a specific member from a resource pool."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        async def _delete(
+            _: Request, user: base_models.APIUser, resource_pool_id: int, member_type: str, member_id: str
+        ) -> HTTPResponse:
+            identifier = ResourcePoolMemberIdentifier(
+                member_id=member_id,
+                member_type=MemberType(member_type),
+            )
+            try:
+                await self.repo.revoke_resource_pool_members(
+                    api_user=user,
+                    resource_pool_id=resource_pool_id,
+                    members=[identifier],
+                )
+            except errors.MissingResourceError:
+                pass  # Already removed or was not part of the pool
+            return HTTPResponse(status=204)
+
+        return "/resource_pools/<resource_pool_id>/members/<member_type>/<member_id>", ["DELETE"], _delete
+
+    @staticmethod
+    def _to_identifiers(body: apispec.PoolMembers) -> list[ResourcePoolMemberIdentifier]:
+        identifiers: list[ResourcePoolMemberIdentifier] = []
+        for item in body.root:
+            match item:
+                case apispec.PoolMemberUser():
+                    identifiers.append(
+                        ResourcePoolMemberIdentifier(
+                            member_id=item.id,
+                            member_type=MemberType.USER,
+                            relation=item.relation.value,
+                        )
+                    )
+                case apispec.PoolMemberGroup():
+                    identifiers.append(
+                        ResourcePoolMemberIdentifier(
+                            member_id=item.id,
+                            member_type=MemberType.GROUP,
+                            relation=item.relation.value,
+                        )
+                    )
+                case apispec.PoolMemberProject():
+                    identifiers.append(
+                        ResourcePoolMemberIdentifier(
+                            member_id=item.id,
+                            member_type=MemberType.PROJECT,
+                            relation=item.relation.value,
+                        )
+                    )
+        return identifiers
 
 
 @dataclass(kw_only=True)
