@@ -39,6 +39,19 @@ class BuildRun(_BuildRun):
     # Here we overwrite the default from ASModel because it is too weakly typed
     metadata: Metadata  # type: ignore[assignment]
 
+    def __get_param_value(self, key: str) -> str | None:
+        if not self.spec.paramValues:
+            return None
+        res = next((i for i in self.spec.paramValues if i.name == key), None)
+        if not res:
+            return None
+        return res.value
+
+    @property
+    def frontend_variant(self) -> str | None:
+        """Get the frontend variant from the parameters."""
+        return self.__get_param_value("frontend")
+
 
 class GitSource(BuildSource):
     """Git repository as a source for builds."""

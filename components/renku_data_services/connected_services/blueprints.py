@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import unquote, urlparse, urlunparse
+from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, empty, json, redirect
 from sanic.response import JSONResponse
@@ -12,6 +12,9 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
+from renku_data_services.authn.api.core import ScopeVerifier
+from renku_data_services.authn.chained import ChainedAuthenticator
+from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
@@ -30,7 +33,6 @@ from renku_data_services.connected_services.oauth_http import (
     OAuthHttpError,
     OAuthHttpFactoryError,
 )
-from renku_data_services.notebooks.config import NotebooksConfig
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +135,16 @@ class OAuth2ClientsBP(CustomBlueprint):
 
             callback_url = self._get_callback_url(request)
 
+            if params.error:
+                next_url = await self.connected_services_repo.get_oauth2_connection_next_url_by_state(params.state)
+                if next_url:
+                    return redirect(to=self._append_query_params(next_url, params))
+                logger.info(
+                    "OAuth callback returned an error but no pending connection next_url was found "
+                    f"for state={params.state!r}"
+                )
+                raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
             client = await self.oauth_http_client_factory.fetch_token(
                 state=params.state, raw_url=request.url, callback_url=callback_url
             )
@@ -156,6 +168,17 @@ class OAuth2ClientsBP(CustomBlueprint):
             logger.warning("Forcing the callback URL to use https. Trusted proxies configuration may be incorrect.")
         return https_callback_url
 
+    @staticmethod
+    def _append_query_params(url: str, params: CallbackParams) -> str:
+        allowed_keys = {"error", "error_description", "state", "error_uri", "code", "iss"}
+        allowed_params = [(k, v) for k, v in params.model_dump(include=allowed_keys, exclude_none=True).items() if v]
+        if not allowed_params:
+            return url
+        parsed = urlparse(url)
+        existing_params = parse_qsl(parsed.query, keep_blank_values=True)
+        merged_query = urlencode([*existing_params, *allowed_params])
+        return urlunparse(parsed._replace(query=merged_query))
+
 
 @dataclass(kw_only=True)
 class OAuth2ConnectionsBP(CustomBlueprint):
@@ -163,8 +186,10 @@ class OAuth2ConnectionsBP(CustomBlueprint):
 
     connected_services_repo: ConnectedServicesRepository
     oauth_client_factory: OAuthHttpClientFactory
-    authenticator: base_models.Authenticator
-    nb_config: NotebooksConfig
+    authenticator: base_models.Authenticator[base_models.APIUser]
+    internal_authenticator: RenkuSelfAuthenticator
+    internal_token_mint: RenkuSelfTokenMint
+    internal_scope_verifier: ScopeVerifier
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all OAuth2 connections."""
@@ -217,7 +242,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
     def get_token(self) -> BlueprintFactoryResponse:
         """Get the access token for a specific OAuth2 connection."""
 
-        @authenticate(self.authenticator)
+        @authenticate(ChainedAuthenticator(chain=[self.internal_authenticator, self.authenticator]))
         async def _get_token(_: Request, user: base_models.APIUser, connection_id: ULID) -> JSONResponse:
             client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
             token = await client.get_token()
@@ -256,25 +281,19 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         """OAuth 2.0 token endpoint to support applications running in sessions.
 
         Details:
-            1. Decode the refresh_token value into an instance of RenkuTokens
-            2. Validate the access_token
-                -> if the access_token is invalid (expired), use the renku refresh_token
-                to get a fresh set of tokens
-            3. Send back the refreshed OAuth 2.0 access token and a the encoded value
-            of the current RenkuTokens
+            1. Check that `body.refresh_token` is a valid internal refresh token
+            2. Send back the refreshed OAuth 2.0 access token and a new internal refresh token
         """
 
         @validate(form=apispec.PostTokenRequest)
-        async def _post_token_endpoint(
-            request: Request, body: apispec.PostTokenRequest, connection_id: ULID
-        ) -> JSONResponse:
+        async def _post_token_endpoint(_: Request, body: apispec.PostTokenRequest, connection_id: ULID) -> JSONResponse:
             result = await handle_oauth2_token_refresh(
-                request=request,
                 body=body,
                 connection_id=connection_id,
                 oauth_client_factory=self.oauth_client_factory,
-                authenticator=self.authenticator,
-                nb_config=self.nb_config,
+                internal_authenticator=self.internal_authenticator,
+                internal_token_mint=self.internal_token_mint,
+                internal_scope_verifier=self.internal_scope_verifier,
             )
 
             return validated_json(apispec.PostTokenResponse, result)

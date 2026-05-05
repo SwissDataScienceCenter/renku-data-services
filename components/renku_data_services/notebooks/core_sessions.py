@@ -20,6 +20,7 @@ from ulid import ULID
 from yaml import safe_dump
 
 from renku_data_services.app_config import logging
+from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
@@ -82,6 +83,8 @@ from renku_data_services.notebooks.crs import (
     State,
     Storage,
     Template,
+    TemplateMetadataPatch,
+    TemplatePatch,
     TlsSecret,
 )
 from renku_data_services.notebooks.data_sources import DataSourceRepository
@@ -105,6 +108,7 @@ from renku_data_services.project.db import ProjectRepository, ProjectSessionSecr
 from renku_data_services.project.models import Project, SessionSecret
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata as RepoMetadata
+from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
@@ -147,14 +151,21 @@ async def get_extra_init_containers(
 
 async def get_extra_containers(
     nb_config: NotebooksConfig,
+    server_name: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     repositories: list[Repository],
     git_providers: list[GitProvider],
+    internal_token_mint: RenkuSelfTokenMint,
 ) -> SessionExtraResources:
     """Get the extra containers added to amalthea sessions."""
     conts: list[ExtraContainer] = []
     git_proxy_container = await git_proxy.main_container(
-        user=user, config=nb_config, repositories=repositories, git_providers=git_providers
+        server_name=server_name,
+        user=user,
+        config=nb_config,
+        repositories=repositories,
+        git_providers=git_providers,
+        internal_token_mint=internal_token_mint,
     )
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
@@ -315,8 +326,13 @@ async def patch_data_sources(
         except Exception as err:
             logger.warning(f"Error decoding 'configData' for data connector {str(dc_id)}, skipping! {err}")
             continue
+        internal_token_scope = f"session:{server_name}"
         new_config_data = await data_source_repo.handle_patching_configuration(
-            request=request, user=user, data_connector=dc.data_connector, rclone_ini_config=existing_config_data
+            request=request,
+            user=user,
+            data_connector=dc.data_connector,
+            rclone_ini_config=existing_config_data,
+            scope=internal_token_scope,
         )
         if not new_config_data:
             continue
@@ -617,7 +633,8 @@ def __format_image_pull_secret(secret_name: str, access_token: str, registry_dom
             data={".dockerconfigjson": registry_secret},
             metadata=V1ObjectMeta(name=secret_name),
             type="kubernetes.io/dockerconfigjson",
-        )
+        ),
+        adopt=True,
     )
 
 
@@ -648,6 +665,7 @@ async def get_image_pull_secret(
     user: APIUser,
     internal_gitlab_user: APIUser,
     image_check_repo: ImageCheckRepository,
+    builds_config: BuildsConfig,
 ) -> ExtraSecret | None:
     """Get an image pull secret."""
 
@@ -656,6 +674,18 @@ async def get_image_pull_secret(
     )
     if v2_secret:
         return v2_secret
+
+    if (
+        builds_config.enabled
+        and builds_config.build_output_private_image_prefix is not None
+        and image.startswith(builds_config.build_output_private_image_prefix)
+    ):
+        return ExtraSecret(
+            V1Secret(
+                metadata=V1ObjectMeta(name=builds_config.pull_private_image_secret_name),
+            ),
+            adopt=False,
+        )
 
     if (
         nb_config.enable_internal_gitlab
@@ -678,6 +708,7 @@ def get_remote_secret(
     server_name: str,
     remote_provider_id: str,
     git_providers: list[GitProvider],
+    internal_token_mint: RenkuSelfTokenMint,
 ) -> ExtraSecret | None:
     """Returns the secret containing the configuration for the remote session controller."""
     if not user.is_authenticated or user.access_token is None or user.refresh_token is None:
@@ -685,17 +716,15 @@ def get_remote_secret(
     remote_provider = next(filter(lambda p: p.id == remote_provider_id, git_providers), None)
     if not remote_provider:
         return None
-    renku_base_url = "https://" + config.sessions.ingress.host
-    renku_base_url = renku_base_url.rstrip("/")
-    renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
+    internal_token_scope = f"session:{server_name}"
+    internal_access_token = internal_token_mint.create_access_token(user=user, scope=internal_token_scope)
+    internal_refresh_token = internal_token_mint.create_refresh_token(user=user, scope=internal_token_scope)
     secret_data = {
-        "RSC_AUTH_KIND": "renku",
+        "RSC_AUTH_KIND": "renku_v2",
         "RSC_AUTH_TOKEN_URI": remote_provider.access_token_url,
-        "RSC_AUTH_RENKU_ACCESS_TOKEN": user.access_token,
-        "RSC_AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
-        "RSC_AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
-        "RSC_AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
-        "RSC_AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
+        "RSC_AUTH_RENKU_TOKEN_URI": f"https://{config.sessions.ingress.host}/api/data/internal/authentication/token",
+        "RSC_AUTH_RENKU_ACCESS_TOKEN": internal_access_token,
+        "RSC_AUTH_RENKU_REFRESH_TOKEN": internal_refresh_token,
     }
     secret_name = f"{server_name}-remote-secret"
     secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
@@ -740,6 +769,8 @@ async def start_session(
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
     git_repositories_repo: GitRepositoriesRepository,
+    builds_config: BuildsConfig,
+    internal_token_mint: RenkuSelfTokenMint,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -833,6 +864,7 @@ async def start_session(
         await data_source_repo.get_data_sources(
             request=request,
             user=user,
+            resource_type="session",
             base_name=server_name,
             data_connectors_stream=data_connectors_stream,
             work_dir=work_dir,
@@ -857,7 +889,9 @@ async def start_session(
     )
 
     # Extra containers
-    session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
+    session_extras = session_extras.concat(
+        await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
+    )
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings
@@ -910,8 +944,10 @@ async def start_session(
         user=user,
         internal_gitlab_user=internal_gitlab_user,
         image_check_repo=image_check_repo,
+        builds_config=builds_config,
     )
-    if image_secret:
+
+    if image_secret and image_secret.secret.data is not None:
         session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
 
     # Remote session configuration
@@ -931,6 +967,7 @@ async def start_session(
                 server_name=server_name,
                 remote_provider_id=resource_pool.remote.provider_id,
                 git_providers=git_providers,
+                internal_token_mint=internal_token_mint,
             )
         if remote_secret is not None:
             session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
@@ -969,7 +1006,9 @@ async def start_session(
         metadata=Metadata(name=server_name, annotations=annotations),
         spec=AmaltheaSessionSpec(
             location=session_location,
-            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=True)] if image_secret else [],
+            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=image_secret.adopt)]
+            if image_secret
+            else [],
             codeRepositories=[],
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
@@ -1069,6 +1108,8 @@ async def patch_session(
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
     metrics: MetricsService,
+    builds_config: BuildsConfig,
+    internal_token_mint: RenkuSelfTokenMint,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -1133,19 +1174,27 @@ async def patch_session(
         if not patch.metadata:
             patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
         # Patch the resource pool and class ID in the annotations
-        patch.metadata.annotations = {"renku.io/resource_pool_id": str(rp.id)}
-        patch.metadata.annotations = {"renku.io/resource_class_id": str(body.resource_class_id)}
+        annotations: dict[str, str | ResetType] = dict()
+        annotations.update(session.metadata.annotations)
+        annotations["renku.io/resource_class_id"] = str(rc.id)
+        annotations["renku.io/resource_pool_id"] = str(rp.id)
+        patch.metadata.annotations = annotations
+        # Patch the resource pool and class ID in the template annotations
+        annotations: dict[str, str | ResetType] = dict()
+        if session.spec.template and session.spec.template.metadata and session.spec.template.metadata.annotations:
+            annotations.update(session.spec.template.metadata.annotations)
+        annotations["renku.io/resource_class_id"] = str(rc.id)
+        annotations["renku.io/resource_pool_id"] = str(rp.id)
+        patch.spec.template = TemplatePatch(metadata=TemplateMetadataPatch(annotations=annotations))
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
         patch.spec.session.resources = resources_patch_from_resource_class(rc)
         # Tolerations
-        tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
-        patch.spec.tolerations = tolerations
+        patch.spec.tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
         # Affinities
         patch.spec.affinity = node_affinity_patch_from_resource_class(rc, nb_config.sessions.affinity_model)
         # Priority class (if a quota is being used)
-        if rc.quota is None:
-            patch.spec.priorityClassName = RESET
+        patch.spec.priorityClassName = rc.quota if rc.quota else RESET
         # Service account name
         if rp.cluster is not None:
             patch.spec.service_account_name = (
@@ -1230,7 +1279,9 @@ async def patch_session(
     )
 
     # Extra containers
-    session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
+    session_extras = session_extras.concat(
+        await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
+    )
 
     # Patching the image pull secret
     image = session.spec.session.image
@@ -1241,9 +1292,11 @@ async def patch_session(
         image_check_repo=image_check_repo,
         user=user,
         internal_gitlab_user=internal_gitlab_user,
+        builds_config=builds_config,
     )
     if image_pull_secret:
-        session_extras = session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
+        if image_pull_secret.secret.data is not None:
+            session_extras = session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret.name, adopt=image_pull_secret.adopt)]
     else:
         patch.spec.imagePullSecrets = RESET

@@ -8,6 +8,7 @@ from sanic_ext import validate
 
 from renku_data_services import base_models
 from renku_data_services.app_config import logging
+from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
@@ -32,6 +33,7 @@ from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
@@ -45,6 +47,7 @@ class NotebooksNewBP(CustomBlueprint):
 
     authenticator: base_models.Authenticator
     internal_gitlab_authenticator: base_models.Authenticator
+    internal_token_mint: RenkuSelfTokenMint
     nb_config: NotebooksConfig
     cluster_repo: ClusterRepository
     data_connector_repo: DataConnectorRepository
@@ -61,6 +64,7 @@ class NotebooksNewBP(CustomBlueprint):
     user_repo: UserRepo
     metrics: MetricsService
     git_repositories_repo: GitRepositoriesRepository
+    builds_config: BuildsConfig
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -92,6 +96,8 @@ class NotebooksNewBP(CustomBlueprint):
                 image_check_repo=self.image_check_repo,
                 data_source_repo=self.data_source_repo,
                 git_repositories_repo=self.git_repositories_repo,
+                builds_config=self.builds_config,
+                internal_token_mint=self.internal_token_mint,
             )
             status = 201 if created else 200
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"), status)
@@ -164,6 +170,8 @@ class NotebooksNewBP(CustomBlueprint):
                 metrics=self.metrics,
                 image_check_repo=self.image_check_repo,
                 data_source_repo=self.data_source_repo,
+                builds_config=self.builds_config,
+                internal_token_mint=self.internal_token_mint,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 

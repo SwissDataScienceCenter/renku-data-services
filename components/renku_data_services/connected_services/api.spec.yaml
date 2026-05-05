@@ -490,16 +490,22 @@ components:
       properties:
         access_token:
           type: string
+          example: "some_access_token"
         token_type:
           type: string
+          example: "Bearer"
         expires_in:
           type: integer
+          example: 600
         refresh_token:
           type: string
+          example: "some_refresh_token"
         refresh_expires_in:
           type: integer
+          example: 3600
         scope:
           type: string
+          example: "api"
       required:
         - access_token
         - token_type
@@ -601,7 +607,7 @@ components:
       example: https://renkulab.io/auth/realms/Renku
     PostTokenGrantType:
       type: string
-      description: A grant type for OAuth 2.0 (see RFC 6749)
+      description: A grant type for OAuth 2.0 (see RFC 6749).
       enum:
         - refresh_token
     ErrorResponse:

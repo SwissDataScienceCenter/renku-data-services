@@ -9,6 +9,7 @@ from sanic_ext.extras.validation.validators import VALIDATION_ERROR
 from ulid import ULID
 
 from renku_data_services import errors
+from renku_data_services.authn.api.blueprints import InternalAuthenticationBP
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
 from renku_data_services.base_models.core import Slug
@@ -192,7 +193,9 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         connected_services_repo=dm.connected_services_repo,
         oauth_client_factory=dm.oauth_http_client_factory,
         authenticator=dm.authenticator,
-        nb_config=dm.config.nb_config,
+        internal_authenticator=dm.internal_authenticator,
+        internal_token_mint=dm.internal_token_mint,
+        internal_scope_verifier=dm.internal_scope_verifier,
     )
     repositories = RepositoriesBP(
         name="repositories",
@@ -222,6 +225,8 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         storage_repo=dm.storage_repo,
         user_repo=dm.kc_user_repo,
         git_repositories_repo=dm.git_repositories_repo,
+        builds_config=dm.config.builds,
+        internal_token_mint=dm.internal_token_mint,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",
@@ -291,6 +296,13 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         rr_svc=dm.resource_usage_service,
         authenticator=dm.authenticator,
     )
+    internal_authentication = InternalAuthenticationBP(
+        name="internal_authentication",
+        url_prefix=url_prefix,
+        internal_authenticator=dm.internal_authenticator,
+        internal_token_mint=dm.internal_token_mint,
+        internal_scope_verifier=dm.internal_scope_verifier,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -321,6 +333,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             notifications.blueprint(),
             capacity_reservation.blueprint(),
             resource_usage.blueprint(),
+            internal_authentication.blueprint(),
         ]
     )
     if builds is not None:
