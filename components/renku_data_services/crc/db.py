@@ -128,6 +128,7 @@ class ResourcePoolRepository(_Base):
                 logger.info(f"Created resource pool {new_rp.id}")
             else:
                 logger.info("Default resource pool already exists.")
+        await engine.dispose(close=True)
 
     @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
