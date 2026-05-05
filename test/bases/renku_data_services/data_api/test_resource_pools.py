@@ -1698,3 +1698,844 @@ async def test_resource_pool_visibility_toggle(
     # Visible again
     _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_id}", headers=user_headers)
     assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_add_group(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    member_1_headers,
+    member_1_user,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(
+        sanic_client, "test-pool-group", admin=True, members=[{"id": member_1_user.id, "role": "viewer"}]
+    )
+
+    # Add the group to the pool via /members
+    member_payload = [{"member_type": "group", "id": group["id"], "relation": "group_viewer"}]
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=member_payload,
+    )
+    assert res.status_code == 201
+
+    # GET /members should return the group
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    members = res.json
+    group_members = [m for m in members if m.get("member_type") == "group" and m.get("id") == group["id"]]
+    assert len(group_members) == 1
+
+    # member_1 (in the group) should now be able to access the pool
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # GET /users should resolve and include member_1
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/users",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    users = res.json
+    user_ids = [u["id"] for u in users]
+    assert member_1_user.id in user_ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_add_project(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_project,
+    member_1_headers,
+    member_1_user,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    project = await create_project(
+        sanic_client, "test-pool-project", admin=True, members=[{"id": member_1_user.id, "role": "viewer"}]
+    )
+
+    # Add the project to the pool via /members
+    member_payload = [{"member_type": "project", "id": project["id"], "relation": "project_viewer"}]
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=member_payload,
+    )
+    assert res.status_code == 201
+
+    # GET /members should return the project
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    members = res.json
+    project_members = [m for m in members if m.get("member_type") == "project" and m.get("id") == project["id"]]
+    assert len(project_members) == 1
+
+    # member_1 (in the project) should now be able to access the pool
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # GET /users should resolve and include member_1
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/users",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    users = res.json
+    user_ids = [u["id"] for u in users]
+    assert member_1_user.id in user_ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_put_replaces(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group1 = await create_group(sanic_client, "test-group-1", admin=True)
+    group2 = await create_group(sanic_client, "test-group-2", admin=True)
+
+    # Add group1
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group1["id"], "relation": "group_viewer"}],
+    )
+    assert res.status_code == 201
+
+    # PUT with only group2 should replace
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group2["id"], "relation": "group_viewer"}],
+    )
+    assert res.status_code == 200
+
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    members = res.json
+    assert len(members) == 1
+    assert members[0]["id"] == group2["id"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_delete(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    member_1_headers,
+    member_1_user,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(
+        sanic_client,
+        "test-del-group",
+        admin=True,
+        members=[{"id": member_1_user.id, "role": "viewer"}],
+    )
+
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group["id"], "relation": "group_viewer"}],
+    )
+    assert res.status_code == 201
+
+    # member_1 can access the pool
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # Delete the group from the pool
+    _, res = await sanic_client.delete(
+        f"/api/data/resource_pools/{rp['id']}/members/group/{group['id']}",
+        headers=admin_headers,
+    )
+    assert res.status_code == 204
+
+    # member_1 can no longer access the pool
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_get_includes_relation(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    _, res = await sanic_client.get("/api/data/users", headers=admin_headers)
+    existing_users = res.json
+    user = existing_users[1]
+
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": user["id"], "relation": "viewer"}],
+    )
+    assert res.status_code == 201
+
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    members = res.json
+    assert len(members) == 1
+    assert members[0]["member_type"] == "user"
+    assert members[0]["id"] == user["id"]
+    assert members[0]["relation"] == "viewer"
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_users_resolved_via_authz_empty_for_public(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = True
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/users",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    assert res.json == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_empty_array(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    # POST empty array should succeed and return 201
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[],
+    )
+    assert res.status_code == 201
+    assert res.json == []
+
+    # PUT empty array should succeed and return 200
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[],
+    )
+    assert res.status_code == 200
+    assert res.json == []
+
+    # PUT empty array on /users should also succeed
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/users",
+        headers=admin_headers,
+        json=[],
+    )
+    assert res.status_code == 200
+    assert res.json == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_users_put_syncs_authz(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    member_1_user,
+    member_1_headers,
+    member_2_user,
+    member_2_headers,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Add user1 to the pool
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/users",
+        headers=admin_headers,
+        json=[{"id": member_1_user.id}],
+    )
+    assert res.status_code == 201
+
+    # Verify user1 can access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # PUT replace with only user2
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/users",
+        headers=admin_headers,
+        json=[{"id": member_2_user.id}],
+    )
+    assert res.status_code == 200
+
+    # Verify user1 can NO LONGER access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 404
+
+    # Verify user2 CAN access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_2_headers,
+    )
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_put_replaces_prohibited(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    member_1_user,
+    member_1_headers,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Add user1 as viewer
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": member_1_user.id, "relation": "viewer"}],
+    )
+    assert res.status_code == 201
+
+    # Verify user1 can access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # PUT replace with user1 as prohibited
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": member_1_user.id, "relation": "prohibited"}],
+    )
+    assert res.status_code == 200
+
+    # Verify GET /members shows prohibited
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    members = res.json
+    assert len(members) == 1
+    assert members[0]["relation"] == "prohibited"
+
+    # Verify user1 can NO LONGER access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 404
+
+    # PUT replace back with viewer
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": member_1_user.id, "relation": "viewer"}],
+    )
+    assert res.status_code == 200
+
+    # Verify user1 can access again
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_put_mixed_types(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    create_project,
+    member_1_user,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(sanic_client, "test-mixed-group", admin=True)
+    project = await create_project(sanic_client, "test-mixed-project", admin=True)
+
+    # PUT with user + group + project
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[
+            {"member_type": "user", "id": member_1_user.id, "relation": "viewer"},
+            {"member_type": "group", "id": group["id"], "relation": "group_viewer"},
+            {"member_type": "project", "id": project["id"], "relation": "project_viewer"},
+        ],
+    )
+    assert res.status_code == 200
+    members = res.json
+    assert len(members) == 3
+    types = {m["member_type"] for m in members}
+    assert types == {"user", "group", "project"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_add_user_via_members(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    member_1_user,
+    member_1_headers,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Add user via /members (not legacy /users)
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": member_1_user.id, "relation": "viewer"}],
+    )
+    assert res.status_code == 201
+
+    # User should be able to access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_get_single_member(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(sanic_client, "test-single-group", admin=True)
+
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group["id"], "relation": "group_viewer"}],
+    )
+    assert res.status_code == 201
+
+    # GET single member
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members/group/{group['id']}",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    assert res.json["member_type"] == "group"
+    assert res.json["id"] == group["id"]
+
+    # GET non-existent member
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members/user/nonexistent",
+        headers=admin_headers,
+    )
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_add_nonexistent_group(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    fake_group_id = str(ULID())
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": fake_group_id, "relation": "group_viewer"}],
+    )
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_add_nonexistent_project(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    fake_project_id = str(ULID())
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "project", "id": fake_project_id, "relation": "project_viewer"}],
+    )
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_add_prohibited_group(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(sanic_client, "test-prohibited-group", admin=True)
+
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group["id"], "relation": "prohibited"}],
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_delete_user_inherited_access(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    member_1_user,
+    member_1_headers,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(
+        sanic_client,
+        "test-inherited-group",
+        admin=True,
+        members=[{"id": member_1_user.id, "role": "viewer"}],
+    )
+
+    # Add group to pool
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group["id"], "relation": "group_viewer"}],
+    )
+    assert res.status_code == 201
+
+    # member_1 has inherited access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # Try to DELETE the user directly (they only have inherited access)
+    _, res = await sanic_client.delete(
+        f"/api/data/resource_pools/{rp['id']}/members/user/{member_1_user.id}",
+        headers=admin_headers,
+    )
+    # Should return 204 because user is not a direct member
+    assert res.status_code == 204
+
+    # member_1 should STILL have access through the group
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_put_preserves_admin(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    member_1_user,
+    member_1_headers,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(sanic_client, "test-admin-preserve-group", admin=True)
+
+    # Add user1 as direct viewer
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": member_1_user.id, "relation": "viewer"}],
+    )
+    assert res.status_code == 201
+
+    # user1 can access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # Admin can access (inherited admin permission)
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+
+    # PUT replace with only the group
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group["id"], "relation": "group_viewer"}],
+    )
+    assert res.status_code == 200
+
+    # user1 should NO LONGER have access (direct relation removed)
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 404
+
+    # Admin should STILL have access (inherited admin relation not corrupted)
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_malformed_discriminator(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Missing member_type
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"id": "some-id", "relation": "viewer"}],
+    )
+    assert res.status_code == 422
+
+    # Invalid member_type
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "invalid", "id": "some-id", "relation": "viewer"}],
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_unknown_relation(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    member_1_user,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Unknown relation "view" (typo) should be rejected
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": member_1_user.id, "relation": "view"}],
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_delete_nonexistent_group(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    fake_group_id = str(ULID())
+    _, res = await sanic_client.delete(
+        f"/api/data/resource_pools/{rp['id']}/members/group/{fake_group_id}",
+        headers=admin_headers,
+    )
+    assert res.status_code == 204
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_delete_nonexistent_project(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    fake_project_id = str(ULID())
+    _, res = await sanic_client.delete(
+        f"/api/data/resource_pools/{rp['id']}/members/project/{fake_project_id}",
+        headers=admin_headers,
+    )
+    assert res.status_code == 204
