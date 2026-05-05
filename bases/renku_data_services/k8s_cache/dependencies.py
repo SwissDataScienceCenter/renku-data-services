@@ -61,7 +61,7 @@ class DependencyManager:
         """The resource quota repository."""
         if not self._quota_repo:
             # NOTE: We only need the QuotaRepository to instantiate the ResourcePoolQueryRepository which is used
-            # to get the resource class and pool information for metrics. We don't need quota information for metricsat
+            # to get the resource class and pool information for metrics. We don't need quota information for metrics
             # at all so we use the dummy client for quotas here as we don't actually access k8s, just the db.
             self._quota_repo = QuotaRepository(DummyResourceQuotaClient(), DummyPriorityClassClient())
         return self._quota_repo

@@ -62,7 +62,7 @@ async def _filter_by_authz(
     if api_user.is_admin:
         return output
     if authz is None:
-        raise errors.ProgrammingError(message="Authz must be set in for non admin request")
+        raise errors.ProgrammingError(message="Authz must be set for non admin request")
     allowed_resource_pools = await authz.resources_with_permission(
         api_user, api_user.id, ResourceType.resource_pool, Scope.READ
     )
