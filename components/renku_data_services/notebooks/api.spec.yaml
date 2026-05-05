@@ -311,6 +311,7 @@ components:
           - stopping
           - failed
           - hibernated
+          - succeeded
           type: string
         will_hibernate_at:
           format: date-time

@@ -327,6 +327,8 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             state = apispec.State1.running
         elif self.status.state == State.NotReady and self.metadata.deletionTimestamp is not None:
             state = apispec.State1.stopping
+        elif self.status.state == State.Succeeded:
+            state = apispec.State1.succeeded
         else:
             state = apispec.State1.starting
 
