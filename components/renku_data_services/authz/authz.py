@@ -46,7 +46,11 @@ from renku_data_services.authz.models import (
     Visibility,
 )
 from renku_data_services.base_models.core import InternalServiceAdmin, ResourceType
-from renku_data_services.crc.models import DeletedResourcePool, ResourcePool, ResourcePoolMembershipChange
+from renku_data_services.crc.models import (
+    DeletedResourcePool,
+    ResourcePool,
+    ResourcePoolMembershipChange,
+)
 from renku_data_services.data_connectors.models import (
     DataConnector,
     DataConnectorToProjectLink,
@@ -136,6 +140,8 @@ class _Relation(StrEnum):
     editor = "editor"
     viewer = "viewer"
     public_viewer = "public_viewer"
+    group_viewer = "group_viewer"
+    project_viewer = "project_viewer"
     admin = "admin"
     project_platform = "project_platform"
     group_platform = "group_platform"
@@ -1468,7 +1474,17 @@ class Authz:
             member = mc.member
             relation = _Relation.from_role(member.role).value
             resource = _AuthzConverter.resource_pool(cast(int, member.resource_id))
-            subject = _AuthzConverter.user_subject(member.user_id)
+
+            match member.subject_type:
+                case ResourceType.group if member.role == Role.VIEWER:
+                    relation = _Relation.group_viewer.value
+                    subject = SubjectReference(object=_AuthzConverter.group(ULID.from_str(member.user_id)))
+                case ResourceType.project if member.role == Role.VIEWER:
+                    relation = _Relation.project_viewer.value
+                    subject = SubjectReference(object=_AuthzConverter.project(ULID.from_str(member.user_id)))
+                case _:
+                    subject = _AuthzConverter.user_subject(member.user_id)
+
             rel = Relationship(resource=resource, relation=relation, subject=subject)
 
             if operation == AuthzOperation.create:

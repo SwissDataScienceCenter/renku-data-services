@@ -9,10 +9,12 @@ from math import ceil
 from typing import Any, Final, Optional, Protocol, Self
 
 from kubernetes.utils import parse_quantity
+from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.authz.models import MembershipChange
 from renku_data_services.base_models import ResetType
+from renku_data_services.base_models.core import ResourceType
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sPatch, K8sResourceQuota
 
@@ -487,3 +489,48 @@ class ResourcePoolMembershipChange:
     """Returned by user-management methods so the authz_change decorator knows what to sync to SpiceDB."""
 
     changes: list[MembershipChange]
+
+
+class MemberType(StrEnum):
+    """Types of members for resource pool."""
+
+    USER = "user"
+    GROUP = "group"
+    PROJECT = "project"
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourcePoolMemberIdentifier:
+    """Identifier for a member in a resource pool.
+
+    Identifier semantics by member_type:
+      - USER    : Keycloak user id (string)
+      - GROUP   : group id (ULID)
+      - PROJECT : project id (ULID)
+    """
+
+    member_id: str
+    member_type: MemberType
+
+    def __post_init__(self) -> None:
+        if not self.member_id or not self.member_id.strip():
+            raise errors.ValidationError(message="member_id must be a non-empty string")
+        match self.member_type:
+            case MemberType.GROUP | MemberType.PROJECT:
+                try:
+                    ULID.from_str(self.member_id)
+                except ValueError as e:
+                    raise errors.ValidationError(
+                        message=f"Member identifier {self.member_id!r} must be a valid ULID"
+                    ) from e
+            case MemberType.USER:
+                pass
+
+    @classmethod
+    def from_resource(cls, resource_type: ResourceType, resource_id: ULID) -> ResourcePoolMemberIdentifier:
+        """Create a member identifier from an authz-backed resource reference."""
+        if resource_type == ResourceType.group:
+            return cls(member_id=str(resource_id), member_type=MemberType.GROUP)
+        if resource_type == ResourceType.project:
+            return cls(member_id=str(resource_id), member_type=MemberType.PROJECT)
+        return cls(member_id=str(resource_id), member_type=MemberType.USER)
