@@ -1018,6 +1018,7 @@ class MemberRepository(_Base):
                 user.resource_pools = list(rps_to_add)
             # TODO: the authz changes below are done in separate db transactions,
             # TODO: use only one (collect everything into a single authz change)
+            member_identifier = ResourcePoolMemberIdentifier(member_id=keycloak_id, member_type=MemberType.USER)
             for rp in rps_to_add:
                 await self._grant_resource_pool_members(api_user, rp.id, [member_identifier])
                 if rp.default or rp.public:
@@ -1200,7 +1201,7 @@ class MemberRepository(_Base):
         api_user: base_models.APIUser,
         resource_pool_id: int,
         members: Collection[ResourcePoolMemberIdentifier],
-        session: AsyncSession,
+        session: AsyncSession | None = None,
     ) -> models.ResourcePoolMembershipChange | None:
         specs = await self._resolve_members(api_user, members)
         return self._build_pool_membership_changes(
@@ -1216,7 +1217,7 @@ class MemberRepository(_Base):
         api_user: base_models.APIUser,
         resource_pool_id: int,
         members: Collection[ResourcePoolMemberIdentifier],
-        session: AsyncSession,
+        session: AsyncSession | None = None,
     ) -> models.ResourcePoolMembershipChange | None:
         specs = await self._resolve_members(api_user, members)
         return self._build_pool_membership_changes(
