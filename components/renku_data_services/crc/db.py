@@ -289,6 +289,7 @@ class ResourcePoolQueryRepository:
 
 class ResourcePoolRepository(_Base):
     """The adapter used for accessing and modifying resource pools with SQLAlchemy."""
+
     def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, authz: Authz):
         super().__init__(session_maker, quotas_repo, authz)
         self.__query_repository = ResourcePoolQueryRepository(session_maker, quotas_repo, self.authz)
