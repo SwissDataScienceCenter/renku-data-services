@@ -511,6 +511,7 @@ class ResourcePoolMemberIdentifier:
 
     member_id: str
     member_type: MemberType
+    relation: str = ""
 
     def __post_init__(self) -> None:
         if not self.member_id or not self.member_id.strip():
@@ -525,6 +526,17 @@ class ResourcePoolMemberIdentifier:
                     ) from e
             case MemberType.USER:
                 pass
+        # Apply defaults if relation is empty
+        object.__setattr__(
+            self,
+            "relation",
+            self.relation
+            or {
+                MemberType.USER: "viewer",
+                MemberType.GROUP: "group_viewer",
+                MemberType.PROJECT: "project_viewer",
+            }.get(self.member_type, "viewer"),
+        )
 
     @classmethod
     def from_resource(cls, resource_type: ResourceType, resource_id: ULID) -> ResourcePoolMemberIdentifier:
