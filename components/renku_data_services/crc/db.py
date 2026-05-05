@@ -36,6 +36,7 @@ from renku_data_services.k8s.client_interfaces import PriorityClassClient, Resou
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
 from renku_data_services.users.db import UserRepo
+from renku_data_services.utils.core import with_db_transaction
 
 
 class _Base:
@@ -120,6 +121,7 @@ class ResourcePoolRepository(_Base):
             if default_rp is None:
                 await self._create_default_rp(rp, session=session)
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
     async def _create_default_rp(self, rp: models.UnsavedResourcePool, session: AsyncSession) -> models.ResourcePool:
         default_rp = schemas.ResourcePoolORM.from_unsaved_model(new_resource_pool=rp, quota=None, cluster=None)
@@ -279,6 +281,7 @@ class ResourcePoolRepository(_Base):
                 session=session,
             )
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
     async def _insert_resource_pool(
         self, api_user: base_models.APIUser, new_resource_pool: models.UnsavedResourcePool, session: AsyncSession
@@ -504,6 +507,7 @@ class ResourcePoolRepository(_Base):
                 )
             return result
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.update, resource=ResourceType.resource_pool)
     async def _update_resource_pool(
         self,
@@ -523,6 +527,7 @@ class ResourcePoolRepository(_Base):
                 session=session,
             )
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
     async def _delete_resource_pool(
         self, api_user: base_models.APIUser, id: int, session: AsyncSession
@@ -1033,24 +1038,28 @@ class UserRepository(_Base):
             ]
         )
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
     async def _grant_resource_pool_members(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
     ) -> models.ResourcePoolMembershipChange | None:
         return self._build_pool_membership_change(user_ids, resource_pool_id, Role.VIEWER, Change.ADD)
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
     async def _unprohibit_resource_pool_users(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
     ) -> models.ResourcePoolMembershipChange | None:
         return self._build_pool_membership_change(user_ids, resource_pool_id, Role.PROHIBITED, Change.REMOVE)
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
     async def _prohibit_resource_pool_user(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
     ) -> models.ResourcePoolMembershipChange | None:
         return self._build_pool_membership_change(user_ids, resource_pool_id, Role.PROHIBITED, Change.ADD)
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
     async def _revoke_resource_pool_member(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
