@@ -1269,6 +1269,7 @@ class MemberRepository(_Base):
             Change.ADD,
         )
 
+    @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
     async def _revoke_resource_pool_members(
         self,
