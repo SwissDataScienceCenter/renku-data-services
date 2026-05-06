@@ -336,9 +336,22 @@ class ResourcePoolQueryRepository:
 class ResourcePoolRepository(_Base):
     """The adapter used for accessing and modifying resource pools with SQLAlchemy."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, authz: Authz):
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        quotas_repo: QuotaRepository,
+        authz: Authz,
+        resource_usage_service: ResourceUsageService | None = None,
+        resource_requests_repo: ResourceRequestsRepo | None = None,
+    ):
         super().__init__(session_maker, quotas_repo, authz)
-        self.__query_repository = ResourcePoolQueryRepository(session_maker, quotas_repo, self.authz)
+        self.__query_repository = ResourcePoolQueryRepository(
+            session_maker,
+            quotas_repo,
+            self.authz,
+            resource_usage_service=resource_usage_service,
+            resource_requests_repo=resource_requests_repo,
+        )
         self.__cluster_repo = ClusterRepository(session_maker=self.session_maker)
 
     async def initialize(self, async_connection_url: str, rp: models.UnsavedResourcePool) -> None:
