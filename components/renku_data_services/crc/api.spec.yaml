@@ -1181,10 +1181,10 @@ components:
           properties:
             matching:
               type: boolean
-            usage_available:
-              $ref: "#/components/schemas/UsageAvailable"
-            usage_limit_total:
-              $ref: "#/components/schemas/UsageLimitTotal"
+            usage_hours_remaining:
+              $ref: "#/components/schemas/UsageHoursRemaining"
+            usage_hours_total:
+              $ref: "#/components/schemas/UsageHoursTotal"
       example:
         name: "resource class"
         default: true
@@ -1485,8 +1485,8 @@ components:
           $ref: "#/components/schemas/Ulid"
         platform:
           $ref: "#/components/schemas/RuntimePlatform"
-        resource_usage:
-          $ref: "#/components/schemas/ResourceUsage"
+        credits_used:
+          $ref: "#/components/schemas/CreditsUsed"
       required: ["classes", "name", "id", "public", "default", "platform"]
       example:
         quota:
@@ -1632,24 +1632,23 @@ components:
       minimum: 0
       # Max value for int64 in postgres
       maximum: 9223372036854775807
-    UsageAvailable:
+    UsageHoursRemaining:
       type: number
       format: double
-      description: Amount of a resource available (in hours)
+      description: Number of resource hours remaining for the user
       example: 3.141
       minimum: 0
-    UsageLimitTotal:
+    UsageHoursTotal:
       type: number
       format: double
-      description: Total number of a resources hours available to the user
+      description: Total number of resource hours available to the user
       example: 10
       minimum: 0
       default: null
-    ResourceUsage:
-      type: number
-      format: double
-      description: Amount of a resource used (in credits)
-      example: 3.141
+    CreditsUsed:
+      type: integer
+      description: Amount of the resource credits used so far
+      example: 300
       minimum: 0
     Storage:
       type: integer

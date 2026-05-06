@@ -111,8 +111,8 @@ class ResourceClass(ResourcesCompareMixin):
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
     quota: str | None = None
-    usage_available: float | None = None
-    usage_limit_total: float | None = None
+    usage_hours_remaining: float | None = None
+    usage_hours_total: float | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -346,7 +346,7 @@ class ResourcePool:
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = None
     cluster: SavedClusterSettings | None = None
     platform: RuntimePlatform
-    resource_usage: float | None = None
+    credits_used: int | None = None
 
     def get_resource_class(self, resource_class_id: int) -> ResourceClass | None:
         """Find a specific resource class in the resource pool by the resource class id."""

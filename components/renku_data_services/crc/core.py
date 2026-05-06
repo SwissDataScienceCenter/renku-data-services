@@ -631,26 +631,27 @@ def __validate_runtime_platform(body: apispec.RuntimePlatform | None) -> models.
     return models.RuntimePlatform(platform_str)
 
 
-async def calculate_available_usage(
+async def calculate_usage_hours(
     resource_requests_repo: ResourceRequestsRepo,
     resource_pool_id: int,
     resource_class_id: int,
-    resource_usage: float | None,
+    credits_used: int,
 ) -> tuple[float | None, float | None]:
-    """Calculate available hours and percentage for a resource class in a pool.
-
-    Return available hours and its percentage based on remaining quota, or (None, None) if no limits are set
-    """
+    """Return remaining and total hours for a resource class, or (None, None) if no limits are set."""
     limits = await resource_requests_repo.find_resource_pool_limits(resource_pool_id)
     if not limits:
         return None, None
 
-    # NOTE: Calculate quota based on user limit if it exists, otherwise use total limit
+    # NOTE: Calculate quota based on the minimum of user and total limits that is set. User and total limits can be set
+    # independent of each other.
+    total_quota = (
+        min(limits.user_limit.value, limits.total_limit.value)
+        if limits.user_limit.value and limits.total_limit.value
+        else max(limits.user_limit.value, limits.total_limit.value)
+    )
     # NOTE: A value of 0 for the limit means that there is no limit, so we return None (instead of 0) to inform the
     # caller that there is no limit.
-    # TODO: Are we sure that total limit is GE user limit?
-    available_quota = limits.user_limit.value or limits.total_limit.value
-    if available_quota <= 0:
+    if total_quota <= 0:
         return None, None
 
     resource_class_cost = await resource_requests_repo.find_resource_class_costs(resource_pool_id, resource_class_id)
@@ -658,9 +659,8 @@ async def calculate_available_usage(
         # NOTE: No cost is defined, so we cannot calculate remaining hours
         return None, None
 
-    total_hours = available_quota / resource_class_cost.cost.value
-    resource_usage = resource_usage or 0
-    remaining_quota = available_quota - resource_usage
+    total_hours = total_quota / resource_class_cost.cost.value
+    remaining_quota = total_quota - credits_used
 
     if remaining_quota <= 0:
         return 0.0, total_hours

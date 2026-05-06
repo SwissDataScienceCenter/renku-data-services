@@ -1702,10 +1702,19 @@ async def test_resource_pool_visibility_toggle(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
+@pytest.mark.parametrize("total_limit,user_limit", [(1000, 200), (200, 1000), (200, 0), (0, 200)])
 async def test_resource_pools_quota_with_partial_usage(
-    sanic_client, admin_headers, user_headers, regular_user, valid_resource_pool_payload, cluster, app_manager_instance
+    sanic_client,
+    admin_headers,
+    user_headers,
+    regular_user,
+    valid_resource_pool_payload,
+    cluster,
+    app_manager_instance,
+    total_limit,
+    user_limit,
 ) -> None:
-    """Test resource pools endpoint returns correct resource_usage and usage_available."""
+    """Test resource pools endpoint returns correct credits_used and usage_hours_remaining."""
     payload = valid_resource_pool_payload.copy()
     payload["classes"] = [
         {
@@ -1737,8 +1746,8 @@ async def test_resource_pools_quota_with_partial_usage(
     # Set limits total=1000 credits and user=200 credits
     limits = ResourcePoolLimits(
         pool_id=resource_pool_id,
-        total_limit=Credit.from_int(1000),
-        user_limit=Credit.from_int(200),
+        total_limit=Credit.from_int(total_limit),
+        user_limit=Credit.from_int(user_limit),
     )
     await repo.set_resource_pool_limits(limits)
 
@@ -1767,15 +1776,15 @@ async def test_resource_pools_quota_with_partial_usage(
     resource_pool = next((p for p in res.json if p["id"] == resource_pool_id), None)
     assert resource_pool is not None, "Resource pool not found in response"
 
-    # resource_usage should be 50 credits that equals to 1 hour
-    assert resource_pool["resource_usage"] == 50.0
+    # credits_used should be 50 credits that equals to 1 hour
+    assert resource_pool["credits_used"] == 50
 
     resource_class = resource_pool["classes"][0]
 
-    # usage_available should be 3 hours which is 75 percent of the total 4 hours available
-    assert resource_class["usage_available"] == 3.0
-    # usage_limit_total should be 4 hours (200 credits total limit / 50 credits per hour)
-    assert resource_class["usage_limit_total"] == 4.0
+    # usage_hours_remaining should be 3 hours which is 75 percent of the total 4 hours available
+    assert resource_class["usage_hours_remaining"] == 3.0
+    # usage_hours_total should be 4 hours (200 credits total limit / 50 credits per hour)
+    assert resource_class["usage_hours_total"] == 4.0
 
 
 @pytest.mark.asyncio
@@ -1789,10 +1798,7 @@ async def test_resource_pools_quota_with_no_usage(
     cluster: KindCluster,
     app_manager_instance,
 ) -> None:
-    """Test resource pools endpoint returns correct usage_available when user has no usage."""
-    from renku_data_services.resource_usage.db import ResourceRequestsRepo
-    from renku_data_services.resource_usage.model import Credit, ResourceClassCost, ResourcePoolLimits
-
+    """Test resource pools endpoint returns correct usage_hours_remaining when user has no usage."""
     payload = valid_resource_pool_payload.copy()
     payload["classes"] = [
         {
@@ -1838,15 +1844,15 @@ async def test_resource_pools_quota_with_no_usage(
     resource_pool = next((p for p in res.json if p["id"] == resource_pool_id), None)
     assert resource_pool is not None, "Resource pool not found in response"
 
-    # resource_usage should not exist in the response since it's None
-    assert "resource_usage" not in resource_pool
+    # credits_used should not exist in the response since it's None
+    assert "credits_used" not in resource_pool
 
     resource_class = resource_pool["classes"][0]
 
-    # usage_available should be full quota: 200/50 = 4.0 hours
-    assert resource_class["usage_available"] == 4.0
-    # usage_limit_total should be 4 hours (200 credits total limit / 50 credits per hour)
-    assert resource_class["usage_limit_total"] == 4.0
+    # usage_hours_remaining should be full quota: 200/50 = 4.0 hours
+    assert resource_class["usage_hours_remaining"] == 4.0
+    # usage_hours_total should be 4 hours (200 credits total limit / 50 credits per hour)
+    assert resource_class["usage_hours_total"] == 4.0
 
 
 @pytest.mark.asyncio
@@ -1921,15 +1927,15 @@ async def test_resource_pools_quota_exceeded(
     resource_pool = next((p for p in res.json if p["id"] == resource_pool_id), None)
     assert resource_pool is not None, "Resource pool not found in response"
 
-    # resource_usage should be 150 credits (3 hours * 50 credits/hour)
-    assert resource_pool["resource_usage"] == 150.0
+    # credits_used should be 150 credits (3 hours * 50 credits/hour)
+    assert resource_pool["credits_used"] == 150
 
     resource_class = resource_pool["classes"][0]
 
-    # usage_available should be 0 (quota exceeded)
-    assert resource_class["usage_available"] == 0.0
-    # usage_limit_total should be 2.0 hours (50 credits/hour * 2 hours = 100 credits limit)
-    assert resource_class["usage_limit_total"] == 2.0
+    # usage_hours_remaining should be 0 (quota exceeded)
+    assert resource_class["usage_hours_remaining"] == 0.0
+    # usage_hours_total should be 2.0 hours (50 credits/hour * 2 hours = 100 credits limit)
+    assert resource_class["usage_hours_total"] == 2.0
 
 
 @pytest.mark.asyncio
@@ -1943,7 +1949,7 @@ async def test_resource_pools_quota_with_no_limits(
     cluster: KindCluster,
     app_manager_instance,
 ) -> None:
-    """Test resource pools endpoint returns null for usage_available when no limits are set."""
+    """Test resource pools endpoint returns null for usage_hours_remaining when no limits are set."""
     payload = valid_resource_pool_payload.copy()
     payload["classes"] = [
         {
@@ -1996,15 +2002,15 @@ async def test_resource_pools_quota_with_no_limits(
     resource_pool = next((p for p in res.json if p["id"] == resource_pool_id), None)
     assert resource_pool is not None, "Resource pool not found in response"
 
-    # resource_usage should still be calculated
-    assert resource_pool["resource_usage"] == 50.0
+    # credits_used should still be calculated
+    assert resource_pool["credits_used"] == 50
 
     resource_class = resource_pool["classes"][0]
 
-    # usage_available should not exist in the response since it's None
-    assert "usage_available" not in resource_class
-    # usage_limit_total should not exist in the response since it's None
-    assert "usage_limit_total" not in resource_class
+    # usage_hours_remaining should not exist in the response since it's None
+    assert "usage_hours_remaining" not in resource_class
+    # usage_hours_total should not exist in the response since it's None
+    assert "usage_hours_total" not in resource_class
 
 
 @pytest.mark.asyncio
@@ -2018,7 +2024,7 @@ async def test_resource_pools_quota_with_no_costs(
     cluster: KindCluster,
     app_manager_instance,
 ) -> None:
-    """Test resource pools endpoint returns null for usage_available when no costs are defined."""
+    """Test resource pools endpoint returns null for usage_hours_remaining when no costs are defined."""
     payload = valid_resource_pool_payload.copy()
     payload["classes"] = [
         {
@@ -2075,12 +2081,12 @@ async def test_resource_pools_quota_with_no_costs(
     resource_pool = next((p for p in res.json if p["id"] == resource_pool_id), None)
     assert resource_pool is not None, "Resource pool not found in response"
 
-    # resource_usage should be 0
-    assert resource_pool["resource_usage"] == 0.0
+    # credits_used should be 0
+    assert resource_pool["credits_used"] == 0
 
     resource_class = resource_pool["classes"][0]
 
-    # usage_available should not exist in the response since it's None
-    assert "usage_available" not in resource_class
-    # usage_limit_total should not exist in the response since it's None
-    assert "usage_limit_total" not in resource_class
+    # usage_hours_remaining should not exist in the response since it's None
+    assert "usage_hours_remaining" not in resource_class
+    # usage_hours_total should not exist in the response since it's None
+    assert "usage_hours_total" not in resource_class

@@ -31,7 +31,7 @@ from renku_data_services.base_models.core import ResetType, ResourceType
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import (
-    calculate_available_usage,
+    calculate_usage_hours,
     validate_resource_class_update,
     validate_resource_pool_update,
 )
@@ -261,30 +261,34 @@ class ResourcePoolQueryRepository:
             stmt = await _filter_by_authz(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             output: list[models.ResourcePool] = []
+            rp: schemas.ResourcePoolORM
             for rp in res.scalars().all():
                 quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id())
 
                 # TODO: Do we need to calculate usage/remaining for admins!?
-                resource_usage = None
+                credits_used = None
                 if self.resource_usage_service and api_user.is_authenticated:
                     usage_summary = await self.resource_usage_service.usage_of_running_week(rp.id, api_user.id)
                     if not usage_summary.is_empty():
                         # TODO: Should we use the cost_raw and runtime_hours here instead?
                         # TODO: Should we calculate usage for individual entries?
-                        resource_usage = usage_summary.cost.value
+                        credits_used = usage_summary.cost
 
-                rp_model = rp.dump(quota, criteria, resource_usage)
+                rp_model = rp.dump(quota, criteria, credits_used)
 
                 if self.resource_requests_repo:
                     updated_classes = []
                     for resource_class in rp_model.classes:
-                        usage_available, usage_limit_total = await calculate_available_usage(
-                            self.resource_requests_repo, rp.id, resource_class.id, resource_usage
+                        usage_hours_remaining, usage_hours_total = await calculate_usage_hours(
+                            self.resource_requests_repo,
+                            rp.id,
+                            resource_class.id,
+                            credits_used.value if credits_used else 0,
                         )
                         updated_class = replace(
                             resource_class,
-                            usage_available=usage_available,
-                            usage_limit_total=usage_limit_total,
+                            usage_hours_remaining=usage_hours_remaining,
+                            usage_hours_total=usage_hours_total,
                         )
                         updated_classes.append(updated_class)
 

@@ -30,6 +30,7 @@ from renku_data_services.crc import models
 from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
+from renku_data_services.resource_usage.model import Credit
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 logger = logging.getLogger(__name__)
@@ -143,9 +144,7 @@ class ResourceClassORM(BaseORM):
         )
 
     def dump(
-        self,
-        matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None,
-        usage_available: float | None = None,
+        self, matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None
     ) -> models.ResourceClass:
         """Create a resource class model from the ORM object."""
         matching: bool | None = None
@@ -169,7 +168,6 @@ class ResourceClassORM(BaseORM):
             tolerations=[toleration.key for toleration in self.tolerations],
             matching=matching,
             quota=self.resource_pool.quota if self.resource_pool else None,
-            usage_available=usage_available,
         )
 
 
@@ -333,7 +331,7 @@ class ResourcePoolORM(BaseORM):
         self,
         quota: models.Quota | None,
         class_match_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None,
-        resource_usage: float | None = None,
+        credits_used: Credit | None = None,
     ) -> models.ResourcePool:
         """Create a resource pool model from the ORM object and a quota."""
         classes: list[ResourceClassORM] = self.classes
@@ -363,7 +361,7 @@ class ResourcePoolORM(BaseORM):
             remote=remote,
             cluster=cluster,
             platform=self.platform,
-            resource_usage=resource_usage,
+            credits_used=credits_used.value if credits_used else None,
         )
 
     def _dump_remote(self) -> models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | None:
