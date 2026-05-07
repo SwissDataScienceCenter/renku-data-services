@@ -7,7 +7,7 @@ import socket
 import stat
 import subprocess
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from multiprocessing import Lock
 from pathlib import Path
 from shutil import copytree, rmtree
@@ -172,7 +172,7 @@ async def db_instance(monkeysession, worker_id, app_manager, event_loop) -> Asyn
 
 
 @pytest_asyncio.fixture
-async def authz_instance(app_manager: DependencyManager, monkeypatch) -> AsyncGenerator[AuthzConfig]:
+async def authz_instance(app_manager: TestDependencyManager, monkeypatch) -> AsyncGenerator[AuthzConfig]:
     monkeypatch.setenv("AUTHZ_DB_KEY", f"renku-{uuid4().hex}")
     app_manager.config.authz_config.push(AuthzConfig.from_env())
     yield app_manager.config.authz_config
@@ -544,7 +544,9 @@ def kubeconfig_path(monkeysession, disable_cluster_creation, tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def cluster(cluster_name, kubeconfig_path: Path, monkeysession, disable_cluster_creation, builds_enabled):
+def cluster(
+    cluster_name, kubeconfig_path: Path, monkeysession, disable_cluster_creation, builds_enabled
+) -> Generator[KindCluster, None]:
     # NOTE: The config_name of the cluster has to match the name of the
     # kubeconfig file in the K8S_CONFIGS_ROOT folder
     monkeysession.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())

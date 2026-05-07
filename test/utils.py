@@ -88,7 +88,7 @@ class StackSessionMaker:
     def __init__(self, parent: DBConfigStack) -> None:
         self.parent = parent
 
-    def __call__(self, *args: Any, **kwds: Any) -> AsyncSession:
+    def __call__(self, *args: Any, **kwargs: Any) -> AsyncSession:
         return self.parent.current.async_session_maker()
 
 
@@ -350,8 +350,14 @@ class TestDependencyManager(DependencyManager):
             user_repo=kc_user_repo,
             authz=authz,
         )
+        resource_requests_repo = ResourceRequestsRepo(session_maker=config.db.async_session_maker)
+        resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
         rp_repo = ResourcePoolRepository(
-            session_maker=config.db.async_session_maker, quotas_repo=quota_repo, authz=authz
+            session_maker=config.db.async_session_maker,
+            quotas_repo=quota_repo,
+            resource_usage_service=resource_usage_service,
+            authz=authz,
+            resource_requests_repo=resource_requests_repo,
         )
         storage_repo = StorageRepository(
             session_maker=config.db.async_session_maker,
@@ -649,7 +655,7 @@ async def create_storage(storage_dict: dict[str, Any], repo: StorageRepository, 
 async def create_user_preferences(
     project_slug: str, repo: UserPreferencesRepository, user: base_models.APIUser
 ) -> user_preferences_models.UserPreferences:
-    """Create user preferencers by adding a pinned project"""
+    """Create user preferences by adding a pinned project"""
     user_preferences = await repo.add_pinned_project(requested_by=user, project_slug=project_slug)
     assert user_preferences is not None
     assert user_preferences.user_id is not None
