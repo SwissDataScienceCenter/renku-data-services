@@ -29,6 +29,7 @@ from renku_data_services.k8s.models import (
 )
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
+from renku_data_services.notebooks.models import SessionType
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 
@@ -182,15 +183,20 @@ class NotebookK8sClient(SecretClient):
 
         return await self.__client.cluster_by_id(cluster_id)
 
-    async def list_sessions(self, safe_username: str) -> list[AmaltheaSessionV1Alpha1]:
+    async def list_sessions(
+        self, safe_username: str, session_type: SessionType | None
+    ) -> list[AmaltheaSessionV1Alpha1]:
         """Get a list of sessions that belong to a user."""
+        session_filter = {self.__username_label: safe_username}
+        if session_type is not None:
+            session_filter.update({"renku.io/session-type": str(session_type)})
         sessions = [
             self.__session_type.model_validate(s.manifest)
             async for s in self.__client.list(
                 K8sObjectFilter(
                     gvk=self.__session_gvk,
                     user_id=safe_username,
-                    label_selector={self.__username_label: safe_username},
+                    label_selector=session_filter,
                 )
             )
         ]
@@ -308,6 +314,28 @@ class NotebookK8sClient(SecretClient):
         await self.patch_statefulset_tokens(session_name, renku_tokens, safe_username)
         await self.patch_image_pull_secret(session_name, gitlab_token, safe_username)
 
+    async def _get_pod_for_session(self, session: AmaltheaSessionV1Alpha1) -> Pod | None:
+        """Get the pod associated to the given session."""
+        sess_mode = SessionType.from_amalthea(session.spec.sessionType)
+        pod_name = f"{session.metadata.name}-0"
+        pod_gvk = GVK.from_kr8s_object(Pod)
+        pod: K8sObject | None = None
+        if sess_mode == SessionType.non_interactive:
+            job_name = session.metadata.name
+            async for j in self.__client.list(
+                K8sObjectFilter(gvk=pod_gvk, label_selector={"batch.kubernetes.io/job-name": job_name})
+            ):
+                pod = j
+                break
+        else:
+            pod_name = f"{session.metadata.name}-0"
+            pod = await self._get(pod_name, pod_gvk, None)
+
+        if pod is None:
+            return None
+        cluster = await self.__client.cluster_by_id(pod.cluster)
+        return Pod(resource=pod.to_api_object(cluster.api), namespace=pod.namespace, api=cluster.api)
+
     async def get_session_logs(
         self, session_name: str, safe_username: str, max_log_lines: int | None = None
     ) -> dict[str, str]:
@@ -319,16 +347,13 @@ class NotebookK8sClient(SecretClient):
             raise errors.MissingResourceError(
                 message=f"Cannot find session {session_name} for user {safe_username} to retrieve logs."
             )
-        pod_name = f"{session_name}-0"
-        result = await self._get(pod_name, GVK.from_kr8s_object(Pod), None)
+        pod = await self._get_pod_for_session(session)
 
         logs: dict[str, str] = {}
-        if result is None:
+        if pod is None:
             return logs
 
-        cluster = await self.__client.cluster_by_id(result.cluster)
-
-        pod = Pod(resource=result.to_api_object(cluster.api), namespace=result.namespace, api=cluster.api)
+        pod_name = pod.name
 
         containers = [container.name for container in pod.spec.containers + pod.spec.get("initContainers", [])]
         for container in containers:

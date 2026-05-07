@@ -1,6 +1,9 @@
 """Basic models for amalthea sessions."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, cast
 
@@ -12,6 +15,7 @@ from renku_data_services.data_connectors.models import DataConnectorSecret
 from renku_data_services.errors import errors
 from renku_data_services.errors.errors import ProgrammingError
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorageRequestOverride
+from renku_data_services.notebooks.cr_amalthea_session import SessionType as AmaltheaSessionType
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionV1Alpha1,
     DataSource,
@@ -155,7 +159,28 @@ class SessionExtraResources:
     volume_mounts: list[ExtraVolumeMount] = field(default_factory=list)
     volumes: list[ExtraVolume] = field(default_factory=list)
 
-    def concat(self, added_extras: "SessionExtraResources | None") -> "SessionExtraResources":
+    def __extra_to_sidecar_container(self, ec: ExtraContainer) -> InitContainer:
+        """Convert a ExtracContainer value to an InitContainer value.
+
+        Both types have the exact same shape, we only change the restartPolicy to 'Always' to mark it as a sidcar.
+        """
+        ic = ec.model_copy(update={"restartPolicy": "Always"}).model_dump()
+        return InitContainer.model_construct(**ic)
+
+    def extra_container_as_sidecars(self) -> SessionExtraResources:
+        """Moves all extra containers to be sidecars."""
+        more_inits = [self.__extra_to_sidecar_container(e) for e in self.containers]
+        return SessionExtraResources(
+            containers=[],
+            data_connector_secrets=self.data_connector_secrets,
+            data_sources=self.data_sources,
+            init_containers=self.init_containers + more_inits,
+            secrets=self.secrets,
+            volume_mounts=self.volume_mounts,
+            volumes=self.volumes,
+        )
+
+    def concat(self, added_extras: SessionExtraResources | None) -> SessionExtraResources:
         """Concatenates these session extras with more session extras."""
         if added_extras is None:
             return self
@@ -185,6 +210,39 @@ class SessionDataConnectorOverride(RCloneStorageRequestOverride):
     readonly: bool | None
 
 
+class SessionType(StrEnum):
+    """The session mode."""
+
+    interactive = "interactive"
+    non_interactive = "non_interactive"
+
+    @property
+    def is_non_interactive(self) -> bool:
+        """Return true when non_interactive."""
+        return self == SessionType.non_interactive
+
+    @property
+    def is_interactive(self) -> bool:
+        """Return true when interactive."""
+        return not self.is_non_interactive
+
+    def to_amalthea(self) -> AmaltheaSessionType:
+        """Return the value for the amalthea spec."""
+        match self:
+            case SessionType.interactive:
+                return AmaltheaSessionType.Interactive
+            case SessionType.non_interactive:
+                return AmaltheaSessionType.NonInteractive
+
+    @classmethod
+    def from_amalthea(cls, name: AmaltheaSessionType | None) -> SessionType:
+        """Select a value based on the amalthea name. Returns interactive if the value is unknown."""
+        if name == AmaltheaSessionType.NonInteractive:
+            return SessionType.non_interactive
+        else:
+            return SessionType.interactive
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SessionLaunchRequest:
     """Model for requesting a session launch."""
@@ -194,3 +252,9 @@ class SessionLaunchRequest:
     resource_class_id: int | None
     data_connectors_overrides: list[SessionDataConnectorOverride] | None
     env_variable_overrides: list[SessionEnvVar] | None
+    session_type: SessionType
+
+    @property
+    def is_non_interactive(self) -> bool:
+        """Whether this is a request to a non-interactive session."""
+        return self.session_type.is_non_interactive

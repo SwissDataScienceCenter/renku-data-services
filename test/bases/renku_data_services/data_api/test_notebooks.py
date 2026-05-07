@@ -73,7 +73,11 @@ async def amalthea_session(
     session = AmaltheaSessionV1Alpha1(
         metadata=dict(
             name=server_name,
-            labels={"renku.io/safe-username": regular_user_api_user.id, "renku.io/userId": regular_user_api_user.id},
+            labels={
+                "renku.io/safe-username": regular_user_api_user.id,
+                "renku.io/userId": regular_user_api_user.id,
+                "renku.io/session-type": "interactive",
+            },
             annotations={
                 "renku.io/resource_class_id": str(rc["id"]),
                 "renku.io/project_id": proj["id"],
