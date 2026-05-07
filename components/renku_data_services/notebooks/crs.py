@@ -41,6 +41,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     RemoteSecretRef,
     RequiredDuringSchedulingIgnoredDuringExecution,
     RequiredDuringSchedulingIgnoredDuringExecutionItem,
+    SessionType,
     Size,
     State,
     Status,
@@ -232,6 +233,7 @@ class AmaltheaSessionSpec(_ASSpec):
     session: Session
     culling: Culling | None = None
     ingress: Ingress | None = None
+    sessionType: SessionType = Field(default=SessionType.Interactive)
 
 
 class AmaltheaSessionV1Alpha1(_ASModel):
@@ -325,6 +327,8 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             state = apispec.State1.running
         elif self.status.state == State.NotReady and self.metadata.deletionTimestamp is not None:
             state = apispec.State1.stopping
+        elif self.status.state == State.Succeeded:
+            state = apispec.State1.succeeded
         else:
             state = apispec.State1.starting
 
