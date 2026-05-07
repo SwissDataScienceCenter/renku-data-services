@@ -259,7 +259,7 @@ class ShipwrightClient:
         k8s_build = await self.get_build_run(name=buildrun_name, user_id=user_id)
 
         if k8s_build is None:
-            logger.info(f"Buildrun {buildrun_name} considered failed because we cannot find it in the cluster.")
+            logger.warning(f"Buildrun {buildrun_name} considered failed because we cannot find it in the cluster.")
             return models.ShipwrightBuildStatusUpdate(
                 update=models.ShipwrightBuildStatusUpdateContent(status=models.BuildStatus.failed)
             ), None
@@ -268,9 +268,6 @@ class ShipwrightClient:
         completion_time = k8s_build_status.completionTime if k8s_build_status else None
 
         if k8s_build_status is None or completion_time is None:
-            logger.info(
-                f"Buildrun {buildrun_name} considered in progress because its status or completion time is missing."
-            )
             return models.ShipwrightBuildStatusUpdate(update=None), k8s_build.frontend_variant
 
         conditions = k8s_build_status.conditions
@@ -329,8 +326,12 @@ class ShipwrightClient:
                         error_reason=condition.reason if condition is not None else None,
                     )
                 ), k8s_build.frontend_variant
+            case None:
+                logger.warning(
+                    f"Buildrun {buildrun_name} is missing Succeeded condition, considered to be in progress."
+                )
+                return models.ShipwrightBuildStatusUpdate(update=None), k8s_build.frontend_variant
             case _:
-                logger.info(f"Buildrun {buildrun_name} in progress with condition {condition}")
                 return models.ShipwrightBuildStatusUpdate(update=None), k8s_build.frontend_variant
 
     async def get_image_build_logs(
