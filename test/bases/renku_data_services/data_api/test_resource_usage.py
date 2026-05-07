@@ -63,14 +63,14 @@ async def test_resource_usage_for_admin(
     rp_id = await create_resource_pool(sanic_client)
     _, res = await sanic_client.get(
         f"/api/data/resource_pools/{rp_id}/usage?user_id=123",
-        headers={"Authorization": 'Bearer {"is_admin": false}'},
+        headers={"Authorization": 'Bearer {"id": "id2", "is_admin": false}'},
     )
 
     assert res.status_code == 403, res.text
 
     _, res = await sanic_client.get(
         f"/api/data/resource_pools/{rp_id}/usage?user_id=123",
-        headers={"Authorization": 'Bearer {"is_admin": true}'},
+        headers={"Authorization": '{"id": "id1", "is_admin": true}'},
     )
 
     assert res.status_code == 200, res.text
