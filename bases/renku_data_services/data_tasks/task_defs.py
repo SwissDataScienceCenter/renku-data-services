@@ -27,7 +27,10 @@ from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAd
 from renku_data_services.base_models.metrics import MetricsEvent
 from renku_data_services.data_tasks.dependencies import DependencyManager
 from renku_data_services.data_tasks.taskman import TaskDefininions
+from renku_data_services.k8s.models import K8sObject, K8sObjectFilter
 from renku_data_services.namespace.models import NamespaceKind
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
+from renku_data_services.notifications.models import UnsavedAlert
 from renku_data_services.solr.solr_client import DefaultSolrClient
 
 logger = logging.getLogger(__name__)
@@ -122,8 +125,8 @@ async def sync_user_namespaces(dm: DependencyManager) -> None:
             await dm.authz.client.WriteRelationships(authz_change.apply)
             num_authz += 1
         except Exception as err:
-            # NOTE: We do not rollback the authz changes here because it is OK if something is in Authz DB
-            # but not in the message queue but not vice-versa.
+            # NOTE: We do not roll back the authz changes here because it is OK if something is in Authz DB
+            # but not in the message queue but not vice versa.
             logger.error(f"Failed to sync user namespace {user_namespace} because {err}")
             await tx.rollback()
         else:
@@ -442,6 +445,126 @@ async def record_resource_requests(dm: DependencyManager) -> None:
         await asyncio.sleep(interval_seconds)
 
 
+def _extract_session_quota_metadata(session: K8sObject) -> tuple[str, str, int, int | None] | None:
+    """Extract session name, user id, resource pool id and resource class id from an AmaltheaSession object."""
+    manifest = session.manifest
+
+    state = str(manifest.get("status", {}).get("state", "")).lower()
+    if state != "running":
+        return None
+
+    labels = manifest.get("metadata", {}).get("labels", {})
+    user_id = labels.get("renku.io/safe-username")
+    if not user_id:
+        return None
+
+    annotations = manifest.get("metadata", {}).get("annotations", {})
+    resource_pool_id_raw = annotations.get("renku.io/resource_pool_id")
+    if resource_pool_id_raw is None:
+        return None
+    resource_pool_id = int(resource_pool_id_raw)
+
+    resource_class_id_raw = annotations.get("renku.io/resource_class_id")
+    resource_class_id = int(resource_class_id_raw) if resource_class_id_raw is not None else None
+
+    return session.name, user_id, resource_pool_id, resource_class_id
+
+
+async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
+    """Check all active sessions and send alerts if the remaining user quota is below threshold."""
+    admin_user = InternalServiceAdmin(id=ServiceAdminId.capacity_reservation)
+    session_filter = K8sObjectFilter(gvk=AMALTHEA_SESSION_GVK)
+
+    async for session in dm.k8s_client.list(session_filter):
+        try:
+            metadata = _extract_session_quota_metadata(session)
+            if metadata is None:
+                continue
+
+            session_name, user_id, resource_pool_id, resource_class_id = metadata
+            usage = await dm.resource_usage_service.get_running_week(resource_pool_id=resource_pool_id, user_id=user_id)
+            if usage is None:
+                continue
+
+            # NOTE: We add a margin to warn users one iteration earlier
+            resource_class_cost = None
+            margin = 0
+            if resource_class_id is not None:
+                resource_class_cost = await dm.resource_requests_repo.find_resource_class_costs(
+                    resource_pool_id, resource_class_id
+                )
+                if resource_class_cost is not None:
+                    cost = resource_class_cost.cost.value
+                    margin = int(cost * dm.config.session_quota_alert_check_interval_s / 3600)
+
+            available_quota = usage.pool_limits.user_limit.value or usage.pool_limits.total_limit.value
+            if available_quota <= 0:
+                continue
+
+            if usage.user_usage.cost.value >= available_quota:
+                await dm.k8s_client.patch(session, {"spec": {"hibernated": True}})
+                logger.info(f"Paused session {session_name} for user {user_id} due to quota exhaustion")
+                hibernation_alert = UnsavedAlert(
+                    user_id=user_id,
+                    event_type="session_quota_exhausted",
+                    session_name=session_name,
+                    title="Session paused due to quota exhaustion",
+                    message=f"Your session {session_name} in resource pool {resource_pool_id} has been paused because"
+                    " you have used all of your quota.",
+                )
+                await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=hibernation_alert)
+                continue
+
+            usage_percentage = ((usage.user_usage.cost.value + margin) / available_quota) * 100
+            remaining_percentage = 100 - usage_percentage
+
+            if remaining_percentage > dm.config.session_quota_alert_remaining_threshold_p:
+                continue
+
+            critical_alert_sent = False
+            if resource_class_cost is not None and resource_class_cost.cost.value > 0:
+                remaining_credits = available_quota - usage.user_usage.cost.value
+                remaining_minutes = (remaining_credits / resource_class_cost.cost.value) * 60
+                margin = int(dm.config.session_quota_alert_check_interval_s / 60)
+                if remaining_minutes < (dm.config.session_quota_alert_critical_m + margin):
+                    critical_alert = UnsavedAlert(
+                        user_id=user_id,
+                        event_type="session_quota_critically_low",
+                        session_name=session_name,
+                        title="Session quota expiring soon",
+                        message=f"Your session in resource pool {resource_pool_id} will run out of quota in less than "
+                        f"{remaining_minutes:.0f} minutes.",
+                    )
+                    await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=critical_alert)
+                    logger.info(f"Created critical quota alert for user {user_id}, session {session_name}")
+                    critical_alert_sent = True
+
+            if not critical_alert_sent:
+                alert = UnsavedAlert(
+                    user_id=user_id,
+                    event_type="session_quota_low",
+                    session_name=session_name,
+                    title="Session quota running low",
+                    message=f"You have used {usage_percentage:.1f}% of your quota in resource pool {resource_pool_id}.",
+                )
+                await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=alert)
+                logger.info(f"Created quota alert for user {user_id}, session {session_name}")
+        except Exception as e:
+            logger.warning(f"Failed to check quota for pod: {e}")
+            continue
+
+
+async def monitor_session_quota_and_send_alerts(dm: DependencyManager) -> None:
+    """Periodically check session quotas and send alerts when the remaining quota is low."""
+    while True:
+        try:
+            await _check_session_quota_and_send_alerts(dm)
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
+        else:
+            await asyncio.sleep(dm.config.session_quota_alert_check_interval_s)
+
+
 def all_tasks(dm: DependencyManager) -> TaskDefininions:
     """A dict of task factories to be managed in main."""
     # Impl. note: We pass the entire config to the coroutines, because
@@ -467,5 +590,6 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
             "monitor_capacity_reservations": lambda: monitor_capacity_reservations(dm),
             "cleanup_orphaned_capacity_reservations": lambda: cleanup_orphaned_capacity_reservations(dm),
             "record_resource_requests": lambda: record_resource_requests(dm),
+            "monitor_session_quota_and_send_alerts": lambda: monitor_session_quota_and_send_alerts(dm),
         }
     )
