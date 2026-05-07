@@ -1,6 +1,7 @@
 """An abstraction over the kr8s kubernetes client and the k8s-watcher."""
 
 from collections.abc import AsyncIterable
+from logging import getLogger
 from typing import TYPE_CHECKING
 
 import httpx
@@ -21,10 +22,12 @@ from renku_data_services.session.constants import (
     DUMMY_TASK_RUN_USER_ID,
     TASK_RUN_GVK,
 )
-from renku_data_services.session.crs import BuildRun, TaskRun
+from renku_data_services.session.crs import BuildRun, Condition, TaskRun
 
 if TYPE_CHECKING:
     from renku_data_services.k8s.clients import K8sClusterClientsPool
+
+logger = getLogger(__name__)
 
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
@@ -256,6 +259,7 @@ class ShipwrightClient:
         k8s_build = await self.get_build_run(name=buildrun_name, user_id=user_id)
 
         if k8s_build is None:
+            logger.info(f"Buildrun {buildrun_name} considered failed because we cannot find it in the cluster.")
             return models.ShipwrightBuildStatusUpdate(
                 update=models.ShipwrightBuildStatusUpdateContent(status=models.BuildStatus.failed)
             ), None
@@ -264,6 +268,9 @@ class ShipwrightClient:
         completion_time = k8s_build_status.completionTime if k8s_build_status else None
 
         if k8s_build_status is None or completion_time is None:
+            logger.info(
+                f"Buildrun {buildrun_name} considered in progress because its status or completion time is missing."
+            )
             return models.ShipwrightBuildStatusUpdate(update=None), k8s_build.frontend_variant
 
         conditions = k8s_build_status.conditions
@@ -287,44 +294,44 @@ class ShipwrightClient:
         # So I needed something to keep mypy happy. The real name of the field is "type"
         condition = next(filter(lambda c: c.type == "Succeeded", conditions or []), None)
 
-        if condition is not None and condition.status not in ["True", "False"]:
-            # The buildrun is still running or pending
-            return models.ShipwrightBuildStatusUpdate(update=None), k8s_build.frontend_variant
+        match condition:
+            case Condition(reason="Succeeded", status="True"):
+                buildSpec = k8s_build_status.buildSpec
+                output = buildSpec.output if buildSpec else None
+                result_image = output.image if output else "unknown"
 
-        buildSpec = k8s_build_status.buildSpec
-        output = buildSpec.output if buildSpec else None
-        result_image = output.image if output else "unknown"
+                source = buildSpec.source if buildSpec else None
+                git_obj = source.git if source else None
+                result_repository_url = git_obj.url if git_obj else "unknown"
 
-        source = buildSpec.source if buildSpec else None
-        git_obj = source.git if source else None
-        result_repository_url = git_obj.url if git_obj else "unknown"
-
-        source_2 = k8s_build_status.source
-        git_obj_2 = source_2.git if source_2 else None
-        result_repository_git_commit_sha = git_obj_2.commitSha if git_obj_2 else None
-        result_repository_git_commit_sha = result_repository_git_commit_sha or "unknown"
-
-        if condition is not None and condition.reason == "Succeeded" and condition.status == "True":
-            return models.ShipwrightBuildStatusUpdate(
-                update=models.ShipwrightBuildStatusUpdateContent(
-                    status=models.BuildStatus.succeeded,
-                    completed_at=completion_time,
-                    result=models.BuildResult(
+                source_2 = k8s_build_status.source
+                git_obj_2 = source_2.git if source_2 else None
+                result_repository_git_commit_sha = git_obj_2.commitSha if git_obj_2 else None
+                result_repository_git_commit_sha = result_repository_git_commit_sha or "unknown"
+                return models.ShipwrightBuildStatusUpdate(
+                    update=models.ShipwrightBuildStatusUpdateContent(
+                        status=models.BuildStatus.succeeded,
                         completed_at=completion_time,
-                        image=result_image,
-                        repository_url=result_repository_url,
-                        repository_git_commit_sha=result_repository_git_commit_sha,
-                    ),
-                )
-            ), k8s_build.frontend_variant
-        else:
-            return models.ShipwrightBuildStatusUpdate(
-                update=models.ShipwrightBuildStatusUpdateContent(
-                    status=models.BuildStatus.failed,
-                    completed_at=completion_time,
-                    error_reason=condition.reason if condition is not None else None,
-                )
-            ), k8s_build.frontend_variant
+                        result=models.BuildResult(
+                            completed_at=completion_time,
+                            image=result_image,
+                            repository_url=result_repository_url,
+                            repository_git_commit_sha=result_repository_git_commit_sha,
+                        ),
+                    )
+                ), k8s_build.frontend_variant
+            case Condition(status="False", type="Succeeded"):
+                logger.info(f"Buildrun {buildrun_name} failed with condition {condition}")
+                return models.ShipwrightBuildStatusUpdate(
+                    update=models.ShipwrightBuildStatusUpdateContent(
+                        status=models.BuildStatus.failed,
+                        completed_at=completion_time,
+                        error_reason=condition.reason if condition is not None else None,
+                    )
+                ), k8s_build.frontend_variant
+            case _:
+                logger.info(f"Buildrun {buildrun_name} in progress with condition {condition}")
+                return models.ShipwrightBuildStatusUpdate(update=None), k8s_build.frontend_variant
 
     async def get_image_build_logs(
         self, buildrun_name: str, user_id: str, max_log_lines: int | None = None
