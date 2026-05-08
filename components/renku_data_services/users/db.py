@@ -140,10 +140,14 @@ class UserRepo(DbUsernameResolver):
         """
         async with self.session_maker() as session, session.begin():
             user = await self.get_user(id=id)
-            if not requested_by.is_admin and user and requested_by.id != user.id:
-                return None
             if not user and id == requested_by.id:
-                return await self._add_api_user(requested_by)
+                user = await self._add_api_user(requested_by)
+            if not user:
+                return None
+            # If the user is not admin or they are not requesting their own info we hide some fields
+            strip_sensitive_info = not requested_by.is_admin or requested_by.id != user.id
+            if strip_sensitive_info:
+                user = user.redact_email()
             return user
 
     @only_authenticated
