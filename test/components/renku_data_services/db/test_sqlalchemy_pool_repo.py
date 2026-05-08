@@ -713,6 +713,7 @@ async def test_member_repository_rejects_unknown_user(
     mock_quotas_repo.get_quota = AsyncMock(return_value=mock_quota)
     app_manager_instance.quotas_repo = mock_quotas_repo
     app_manager_instance.rp_repo.quotas_repo = mock_quotas_repo
+    app_manager_instance.rp_repo._ResourcePoolRepository__query_repository.quotas_repo = mock_quotas_repo
 
     await app_manager_instance.kc_user_repo._add_api_user(admin_user)
 
@@ -760,6 +761,7 @@ async def test_member_repository_rejects_bad_project_id(
     mock_quotas_repo.get_quota = AsyncMock(return_value=mock_quota)
     app_manager_instance.quotas_repo = mock_quotas_repo
     app_manager_instance.rp_repo.quotas_repo = mock_quotas_repo
+    app_manager_instance.rp_repo._ResourcePoolRepository__query_repository.quotas_repo = mock_quotas_repo
 
     await app_manager_instance.kc_user_repo._add_api_user(admin_user)
 
