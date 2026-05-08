@@ -6,6 +6,7 @@ from typing import Any
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
 from sanic_ext import validate
+from sentry_sdk import is_initialized
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -95,8 +96,16 @@ class KCUsersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_one(_: Request, user: base_models.APIUser, user_id: str) -> JSONResponse:
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user_id)
+            if user_info and not user.is_admin and user.id != user_info.id:
+                raise errors.MissingResourceError(
+                    message=f"The user with ID {user_id} cannot be found or you do not have permissions to access "
+                    "the information."
+                )
             if not user_info:
-                raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
+                raise errors.MissingResourceError(
+                    message=f"The user with ID {user_id} cannot be found or you do not have permissions to access "
+                    "the information."
+                )
             return validated_json(
                 apispec.UserWithId,
                 dict(
