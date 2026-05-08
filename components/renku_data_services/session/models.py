@@ -235,6 +235,29 @@ class EnvVar:
             raise errors.ValidationError(message="\n".join(error_msgs))
 
 
+class SessionType(StrEnum):
+    """The session type."""
+
+    interactive = "interactive"
+    non_interactive = "non_interactive"
+    app = "app"
+
+    @property
+    def is_non_interactive(self) -> bool:
+        """Return true when non_interactive."""
+        return self == SessionType.non_interactive
+
+    @property
+    def is_interactive(self) -> bool:
+        """Return true when interactive."""
+        return self == SessionType.interactive
+
+    @property
+    def is_app(self) -> bool:
+        """Return true when this is 'app'."""
+        return self == SessionType.app
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedSessionLauncher:
     """Session launcher model that has not been persisted in the DB."""
@@ -247,6 +270,7 @@ class UnsavedSessionLauncher:
     env_variables: list[EnvVar] | None
     environment: str | UnsavedEnvironment | UnsavedBuildParameters
     """When a string is passed for the environment it should be the ID of an existing environment."""
+    session_type: SessionType
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
