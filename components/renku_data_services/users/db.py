@@ -140,6 +140,8 @@ class UserRepo(DbUsernameResolver):
         """
         async with self.session_maker() as session, session.begin():
             user = await self.get_user(id=id)
+            if not requested_by.is_admin and user and requested_by.id != user.id:
+                return None
             if not user and id == requested_by.id:
                 return await self._add_api_user(requested_by)
             return user
