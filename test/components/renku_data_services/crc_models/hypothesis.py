@@ -55,6 +55,7 @@ def rc_non_default_strat(draw):
             max_storage=draw(a_rc_storage),
             memory=draw(a_rc_memory),
             default=False,
+            quota_enforced=draw(a_bool),
             tolerations=draw(a_tolerations_list),
             node_affinities=draw(st.lists(node_affinity_strat(), max_size=3)),
         )
@@ -72,6 +73,7 @@ def rc_default_strat(draw):
             max_storage=draw(a_rc_storage),
             memory=draw(a_rc_memory),
             default=True,
+            quota_enforced=draw(a_bool),
         )
     except errors.ValidationError:
         assume(False)

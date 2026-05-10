@@ -97,6 +97,7 @@ class ResourceClassORM(BaseORM):
     default_storage: Mapped[int] = mapped_column(BigInteger)
     default: Mapped[bool] = mapped_column(default=False)
     gpu: Mapped[int] = mapped_column(BigInteger, default=0)
+    quota_enforced: Mapped[bool] = mapped_column(default=True)
     resource_pool_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
     )
@@ -138,6 +139,7 @@ class ResourceClassORM(BaseORM):
             default=new_resource_class.default,
             default_storage=new_resource_class.default_storage,
             gpu=new_resource_class.gpu,
+            quota_enforced=new_resource_class.quota_enforced,
             resource_pool_id=resource_pool_id,
             tolerations=tolerations,
             node_affinities=node_affinities,
@@ -168,6 +170,7 @@ class ResourceClassORM(BaseORM):
             tolerations=[toleration.key for toleration in self.tolerations],
             matching=matching,
             quota=self.resource_pool.quota if self.resource_pool else None,
+            quota_enforced=self.quota_enforced,
         )
 
 

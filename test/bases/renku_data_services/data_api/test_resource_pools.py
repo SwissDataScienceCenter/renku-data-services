@@ -28,6 +28,7 @@ resource_pool_payload = [
                     "default": True,
                     "node_affinities": [],
                     "tolerations": [],
+                    "quota_enforced": False,
                 }
             ],
             "quota": {"cpu": 100, "memory": 100, "gpu": 0},
@@ -287,6 +288,7 @@ async def test_resource_class_filtering(
             "default_storage": 1,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": False,
         },
         {
             "name": "resource class 2",
@@ -330,6 +332,8 @@ async def test_resource_class_filtering(
     matching_class = matching_classes[0]
     matching_class.pop("id")
     matching_class.pop("matching")
+    # NOTE: `quota_enforced` is True by default
+    new_classes[2]["quota_enforced"] = True
     assert matching_class == new_classes[2]
     # Test without any filtering
     _, res = await sanic_client.get(
@@ -1270,6 +1274,7 @@ resource_pool_payload_2 = {
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": False,
         }
     ],
     "quota": {"cpu": 100.0, "memory": 100, "gpu": 0},
@@ -1320,6 +1325,8 @@ async def _resource_pools_request(
         for i, c in enumerate(input_payload["classes"]):
             if "id" not in c:
                 c["id"] = rp["classes"][i]["id"]
+            if "quota_enforced" not in c:
+                c["quota_enforced"] = True
 
         if "platform" not in input_payload:
             input_payload["platform"] = "linux/amd64"

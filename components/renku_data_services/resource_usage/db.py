@@ -137,6 +137,14 @@ class ResourceRequestsRepo:
         async with self.session_maker() as session, session.begin():
             await session.execute(stmt, {"id": resource_class_id})
 
+    async def get_quota_enforced(self, resource_class_id: int) -> bool | None:
+        """Return the quota_enforced flag for a resource class, or None if the resource class does not exist."""
+        stmt = sa.text("""select quota_enforced from resource_pools.resource_classes where id = :class_id""")
+        async with self.session_maker() as session:
+            result = await session.execute(stmt, {"class_id": resource_class_id})
+            row = result.one_or_none()
+            return None if row is None else bool(row.quota_enforced)
+
     async def find_resource_class_costs(
         self, resource_pool_id: int, resource_class_id: int
     ) -> ResourceClassCostWithPool | None:
@@ -200,7 +208,7 @@ class ResourceRequestsRepo:
     async def find_resource_pool_limits(self, pool: int) -> ResourcePoolLimits | None:
         """Finds the limits of the given resource pool.
 
-        If the resource pool doesn't exists, None is returned. If the pool exists, but has no
+        If the resource pool doesn't exist, None is returned. If the pool exists, but has no
         limits defined, the limits returned are set to 0.
         """
         stmt = sa.text("""

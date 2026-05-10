@@ -93,6 +93,7 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     default_storage: int = 1
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
+    quota_enforced: bool = True
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -113,6 +114,7 @@ class ResourceClass(ResourcesCompareMixin):
     quota: str | None = None
     usage_hours_remaining: float | None = None
     usage_hours_total: float | None = None
+    quota_enforced: bool = True
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -128,6 +130,7 @@ class ResourceClassPatch:
     default_storage: int | None = None
     node_affinities: list[NodeAffinity] | None = None
     tolerations: list[str] | None = None
+    quota_enforced: bool | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

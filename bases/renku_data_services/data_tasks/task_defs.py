@@ -497,7 +497,8 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
             if usage_p <= usage_threshold_p:
                 continue
 
-            # NOTE: Without the resource_class_id, we cannot calculate the remaining time
+            # NOTE: Without the resource_class_id, we cannot calculate the remaining time or know if quota is enforced
+            # on the resource class
             if resource_class_id:
                 if usage.user_usage.cost.value >= total_quota:
                     message = f"Your session {session_name} in resource pool {resource_pool_id} has exhausted its quota"
@@ -505,11 +506,21 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
                         f"Session {session_name} for user {user_id} has exhausted its quota in resource pool "
                         f"{resource_pool_id}"
                     )
+                    title = "Quota exhausted"
+
+                    # NOTE: Only hibernate the session if quota_enforced is set on the resource class
+                    quota_enforced = await dm.resource_requests_repo.get_quota_enforced(resource_class_id)
+                    if quota_enforced:
+                        message = f"{message} and has been paused"
+                        log_message = f"{log_message} and has been paused"
+                        title = "Session paused due to quota exhaustion"
+                        await dm.k8s_client.patch(session, {"spec": {"hibernated": True}})
+
                     hibernation_alert = UnsavedAlert(
                         user_id=user_id,
                         event_type="session_quota_exhausted",
                         session_name=session_name,
-                        title="Session paused due to quota exhaustion",
+                        title=title,
                         message=message,
                     )
                     await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=hibernation_alert)
@@ -546,7 +557,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
             await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=alert)
             logger.info(f"Created quota alert for user {user_id}, session {session_name}")
         except Exception as e:
-            logger.warning(f"Failed to check quota for pod: {e}")
+            logger.warning(f"Failed to check quota for pod: {e}", exc_info=True)
             continue
 
 
