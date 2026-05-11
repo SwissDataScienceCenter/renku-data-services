@@ -233,7 +233,7 @@ class ResourceRequestsRepo:
             sum(memory_request * (extract(epoch from mem_time) / 3600)) as mem_hours,
             sum(disk_request * (extract(epoch from disk_time) / 3600)) as disk_hours,
             sum(gpu_request * (extract(epoch from gpu_time) / 3600)) as gpu_hours
-          from "resource_pools"."resource_requests_view"
+          from "resource_pools"."resource_requests_view_v2"
           where capture_date::date >= :from and capture_date::date <= :until
               {by_user} {by_rp}
           group by cluster_id, resource_class_id, resource_pool_id,

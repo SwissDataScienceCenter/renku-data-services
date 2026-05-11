@@ -145,11 +145,11 @@ class ResourceRequestsLogORM(BaseORM):
 class ResourceRequestsViewORM(BaseORM):
     """View for resource requests."""
 
-    __tablename__ = "resource_requests_view"
+    __tablename__ = "resource_requests_view_v2"
 
     __table_args__ = (
         # info tells tools like Alembic to ignore this during 'revision'
-        {"info": {"is_iew": True}}
+        {"info": {"is_view": True}}
     )
 
     id: Mapped[ULID] = mapped_column("id", ULIDType(), nullable=False, primary_key=True)
