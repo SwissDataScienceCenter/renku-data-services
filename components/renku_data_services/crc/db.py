@@ -1203,12 +1203,12 @@ class MemberRepository(_Base):
                         ResourcePoolMemberIdentifier(member_id=uid, member_type=MemberType.USER)
                         for uid in to_remove_ids
                     ]
-                    await self._revoke_resource_pool_members(api_user, resource_pool_id, to_remove, session=session)
+                    await self._revoke_resource_pool_members(api_user, resource_pool_id, to_remove)
                 if to_add_ids:
                     to_add = [
                         ResourcePoolMemberIdentifier(member_id=uid, member_type=MemberType.USER) for uid in to_add_ids
                     ]
-                    await self._grant_resource_pool_members(api_user, resource_pool_id, to_add, session=session)
+                    await self._grant_resource_pool_members(api_user, resource_pool_id, to_add)
             return [usr.dump() for usr in rp.users]
 
     @staticmethod
@@ -1443,11 +1443,11 @@ class MemberRepository(_Base):
                 to_add = [m for m in members if (m.member_type, m.member_id, m.relation) not in current_set]
 
                 if to_remove:
-                    await self._revoke_resource_pool_members(api_user, resource_pool_id, to_remove, session=session)
+                    await self._revoke_resource_pool_members(api_user, resource_pool_id, to_remove)
                 if to_add:
-                    await self._grant_resource_pool_members(api_user, resource_pool_id, to_add, session=session)
+                    await self._grant_resource_pool_members(api_user, resource_pool_id, to_add)
             else:
-                await self._grant_resource_pool_members(api_user, resource_pool_id, members, session=session)
+                await self._grant_resource_pool_members(api_user, resource_pool_id, members)
 
         return await self.get_resource_pool_members(api_user, resource_pool_id)
 
