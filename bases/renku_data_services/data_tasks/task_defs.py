@@ -27,8 +27,12 @@ from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAd
 from renku_data_services.base_models.metrics import MetricsEvent
 from renku_data_services.data_tasks.dependencies import DependencyManager
 from renku_data_services.data_tasks.taskman import TaskDefininions
+from renku_data_services.k8s.models import K8sObject, K8sObjectFilter
 from renku_data_services.namespace.models import NamespaceKind
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
+from renku_data_services.notifications.models import UnsavedAlert
 from renku_data_services.solr.solr_client import DefaultSolrClient
+from renku_data_services.utils.core import get_nonzero_minimum
 
 logger = logging.getLogger(__name__)
 
@@ -122,8 +126,8 @@ async def sync_user_namespaces(dm: DependencyManager) -> None:
             await dm.authz.client.WriteRelationships(authz_change.apply)
             num_authz += 1
         except Exception as err:
-            # NOTE: We do not rollback the authz changes here because it is OK if something is in Authz DB
-            # but not in the message queue but not vice-versa.
+            # NOTE: We do not roll back the authz changes here because it is OK if something is in Authz DB
+            # but not in the message queue but not vice versa.
             logger.error(f"Failed to sync user namespace {user_namespace} because {err}")
             await tx.rollback()
         else:
@@ -442,6 +446,121 @@ async def record_resource_requests(dm: DependencyManager) -> None:
         await asyncio.sleep(interval_seconds)
 
 
+def _extract_session_quota_metadata(session: K8sObject) -> tuple[str, str, int, int | None] | None:
+    """Extract session name, user id, resource pool id and resource class id from an AmaltheaSession object."""
+    manifest = session.manifest
+
+    state = str(manifest.get("status", {}).get("state", "")).lower()
+    if state != "running":
+        return None
+
+    labels = manifest.get("metadata", {}).get("labels", {})
+    user_id = labels.get("renku.io/safe-username")
+    if not user_id:
+        return None
+
+    annotations = manifest.get("metadata", {}).get("annotations", {})
+    resource_pool_id_raw = annotations.get("renku.io/resource_pool_id")
+    if resource_pool_id_raw is None:
+        return None
+    resource_pool_id = int(resource_pool_id_raw)
+
+    resource_class_id_raw = annotations.get("renku.io/resource_class_id")
+    resource_class_id = int(resource_class_id_raw) if resource_class_id_raw else None
+
+    return session.name, user_id, resource_pool_id, resource_class_id
+
+
+async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
+    """Check all active sessions and send alerts if the remaining user quota is below threshold."""
+    admin_user = InternalServiceAdmin(id=ServiceAdminId.capacity_reservation)
+    session_filter = K8sObjectFilter(gvk=AMALTHEA_SESSION_GVK)
+
+    async for session in dm.k8s_client.list(session_filter):
+        try:
+            metadata = _extract_session_quota_metadata(session)
+            if not metadata:
+                continue
+
+            session_name, user_id, resource_pool_id, resource_class_id = metadata
+
+            usage = await dm.resource_usage_service.get_running_week(resource_pool_id=resource_pool_id, user_id=user_id)
+            if not usage:
+                continue
+
+            total_quota = get_nonzero_minimum(usage.pool_limits.user_limit.value, usage.pool_limits.total_limit.value)
+            if total_quota <= 0:
+                continue
+
+            usage_p = (usage.user_usage.cost.value / total_quota) * 100
+            usage_threshold_p = 100 - dm.config.session_quota_alert_remaining_threshold_p
+            if usage_p <= usage_threshold_p:
+                continue
+
+            # NOTE: Without the resource_class_id, we cannot calculate the remaining time
+            if resource_class_id:
+                if usage.user_usage.cost.value >= total_quota:
+                    message = f"Your session {session_name} in resource pool {resource_pool_id} has exhausted its quota"
+                    log_message = (
+                        f"Session {session_name} for user {user_id} has exhausted its quota in resource pool "
+                        f"{resource_pool_id}"
+                    )
+                    hibernation_alert = UnsavedAlert(
+                        user_id=user_id,
+                        event_type="session_quota_exhausted",
+                        session_name=session_name,
+                        title="Session paused due to quota exhaustion",
+                        message=message,
+                    )
+                    await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=hibernation_alert)
+                    logger.info(log_message)
+                    continue
+
+                resource_class_cost = await dm.resource_requests_repo.find_resource_class_costs(
+                    resource_pool_id, resource_class_id
+                )
+
+                if resource_class_cost and resource_class_cost.cost.value > 0:
+                    remaining_credits = total_quota - usage.user_usage.cost.value
+                    remaining_minutes = (remaining_credits / resource_class_cost.cost.value) * 60
+                    if remaining_minutes < dm.config.session_quota_alert_critical_m:
+                        critical_alert = UnsavedAlert(
+                            user_id=user_id,
+                            event_type="session_quota_critically_low",
+                            session_name=session_name,
+                            title="Session quota expiring soon",
+                            message=f"Your session in resource pool {resource_pool_id} will run out of quota in "
+                            + f"approximately {remaining_minutes:.0f} minutes.",
+                        )
+                        await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=critical_alert)
+                        logger.info(f"Created critical quota alert for user {user_id}, session {session_name}")
+                        continue
+
+            alert = UnsavedAlert(
+                user_id=user_id,
+                event_type="session_quota_low",
+                session_name=session_name,
+                title="Session quota running low",
+                message=f"You have used {usage_p:.1f}% of your quota in resource pool {resource_pool_id}.",
+            )
+            await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=alert)
+            logger.info(f"Created quota alert for user {user_id}, session {session_name}")
+        except Exception as e:
+            logger.warning(f"Failed to check quota for pod: {e}")
+            continue
+
+
+async def monitor_session_quota_and_send_alerts(dm: DependencyManager) -> None:
+    """Periodically check session quotas and send alerts when the remaining quota is low."""
+    while True:
+        try:
+            await _check_session_quota_and_send_alerts(dm)
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
+        else:
+            await asyncio.sleep(dm.config.session_quota_alert_check_interval_s)
+
+
 def all_tasks(dm: DependencyManager) -> TaskDefininions:
     """A dict of task factories to be managed in main."""
     # Impl. note: We pass the entire config to the coroutines, because
@@ -467,5 +586,6 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
             "monitor_capacity_reservations": lambda: monitor_capacity_reservations(dm),
             "cleanup_orphaned_capacity_reservations": lambda: cleanup_orphaned_capacity_reservations(dm),
             "record_resource_requests": lambda: record_resource_requests(dm),
+            "monitor_session_quota_and_send_alerts": lambda: monitor_session_quota_and_send_alerts(dm),
         }
     )
