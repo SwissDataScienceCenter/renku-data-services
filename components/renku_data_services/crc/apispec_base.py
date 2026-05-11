@@ -2,7 +2,7 @@
 
 from pathlib import PurePosixPath
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from ulid import ULID
 
 from renku_data_services.session import models
