@@ -530,7 +530,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
                             session_name=session_name,
                             title="Session quota expiring soon",
                             message=f"Your session in resource pool {resource_pool_id} will run out of quota in "
-                            + f"{remaining_minutes:.0f} minutes.",
+                            + f"approximately {remaining_minutes:.0f} minutes.",
                         )
                         await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=critical_alert)
                         logger.info(f"Created critical quota alert for user {user_id}, session {session_name}")
