@@ -1113,8 +1113,26 @@ components:
           $ref: "#/components/schemas/NodeAffinityList"
     ResourceClass:
       type: object
-      allOf:
-        - $ref: "#/components/schemas/ResourceClassProperties"
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        max_storage:
+          $ref: "#/components/schemas/Storage"
+        default_storage:
+          $ref: "#/components/schemas/Storage"
+        tolerations:
+          $ref: "#/components/schemas/K8sLabelList"
+        node_affinities:
+          $ref: "#/components/schemas/NodeAffinityList"
       required:
         - name
         - default
@@ -1150,12 +1168,29 @@ components:
         id: 1
         max_storage: 50
     ResourceClassWithId:
-      allOf:
-        - $ref: "#/components/schemas/ResourceClassProperties"
-        - type: object
-          properties:
-            id:
-              $ref: "#/components/schemas/IntegerId"
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        max_storage:
+          $ref: "#/components/schemas/Storage"
+        default_storage:
+          $ref: "#/components/schemas/Storage"
+        tolerations:
+          $ref: "#/components/schemas/K8sLabelList"
+        node_affinities:
+          $ref: "#/components/schemas/NodeAffinityList"
+        id:
+          $ref: "#/components/schemas/IntegerId"
       required:
         - name
         - default
