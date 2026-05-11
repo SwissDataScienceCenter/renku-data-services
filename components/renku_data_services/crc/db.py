@@ -264,14 +264,10 @@ class ResourcePoolQueryRepository:
             rp: schemas.ResourcePoolORM
             for rp in res.scalars().all():
                 quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id())
-
-                # TODO: Do we need to calculate usage/remaining for admins!?
                 credits_used = None
                 if self.resource_usage_service and api_user.is_authenticated:
                     usage_summary = await self.resource_usage_service.usage_of_running_week(rp.id, api_user.id)
                     if not usage_summary.is_empty():
-                        # TODO: Should we use the cost_raw and runtime_hours here instead?
-                        # TODO: Should we calculate usage for individual entries?
                         credits_used = usage_summary.cost
 
                 rp_model = rp.dump(quota, criteria, credits_used)

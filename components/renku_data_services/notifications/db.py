@@ -103,7 +103,7 @@ class NotificationsRepository:
             return alert_orm.dump()
 
     def __update_alert(self, alert: schemas.AlertORM, update: models.AlertPatch) -> None:
-        if update.resolved is True:
+        if update.resolved:
             alert.resolved_date = datetime.now(UTC)
 
     async def get_alerts_by_properties(

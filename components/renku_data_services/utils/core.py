@@ -236,3 +236,8 @@ async def get_openbis_pat(
                 "from creating a personal access token."
             )
         return json2["result"][0]["permId"], valid_to
+
+
+def get_nonzero_minimum(a: int, b: int) -> int:
+    """Return the minimum nonzero value, where both inputs are non-negative."""
+    return a if b == 0 else b if a == 0 else min(a, b)
