@@ -3,7 +3,7 @@
 from pathlib import PurePosixPath
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from ulid import ULID
 
 from renku_data_services.session import models
@@ -17,7 +17,7 @@ class BaseAPISpec(BaseModel):
         from_attributes=True,
     )
 
-    @field_validator("*", mode="before", check_fields=False)
+    @model_validator(mode="before")
     @classmethod
     def serialize_ulid(cls, value: Any) -> Any:
         """Handle ULIDs."""
