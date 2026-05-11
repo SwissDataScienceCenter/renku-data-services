@@ -1,7 +1,6 @@
 """Base models for API specifications."""
 
 from pathlib import PurePosixPath
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 from ulid import ULID
