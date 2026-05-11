@@ -145,7 +145,7 @@ class UserRepo(DbUsernameResolver):
             if not user:
                 return None
             # If the user is not admin or they are not requesting their own info we hide some fields
-            strip_sensitive_info = not requested_by.is_admin or requested_by.id != user.id
+            strip_sensitive_info = requested_by.id != user.id and not requested_by.is_admin
             if strip_sensitive_info:
                 user = user.redact_email()
             return user
