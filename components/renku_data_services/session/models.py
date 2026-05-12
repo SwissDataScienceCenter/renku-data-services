@@ -235,8 +235,8 @@ class EnvVar:
             raise errors.ValidationError(message="\n".join(error_msgs))
 
 
-class SessionType(StrEnum):
-    """The session type."""
+class LauncherType(StrEnum):
+    """The launcher type."""
 
     interactive = "interactive"
     non_interactive = "non_interactive"
@@ -245,17 +245,17 @@ class SessionType(StrEnum):
     @property
     def is_non_interactive(self) -> bool:
         """Return true when non_interactive."""
-        return self == SessionType.non_interactive
+        return self == LauncherType.non_interactive
 
     @property
     def is_interactive(self) -> bool:
         """Return true when interactive."""
-        return self == SessionType.interactive
+        return self == LauncherType.interactive
 
     @property
     def is_app(self) -> bool:
         """Return true when this is 'app'."""
-        return self == SessionType.app
+        return self == LauncherType.app
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -270,7 +270,7 @@ class UnsavedSessionLauncher:
     env_variables: list[EnvVar] | None
     environment: str | UnsavedEnvironment | UnsavedBuildParameters
     """When a string is passed for the environment it should be the ID of an existing environment."""
-    session_type: SessionType
+    launcher_type: LauncherType
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

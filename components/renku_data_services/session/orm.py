@@ -160,8 +160,8 @@ class SessionLauncherORM(BaseORM):
     )
     """Environment variables to set in the session."""
 
-    session_type: Mapped[models.SessionType] = mapped_column(
-        "session_type", default=models.SessionType.interactive, nullable=False, index=True
+    launcher_type: Mapped[models.LauncherType] = mapped_column(
+        "launcher_type", default=models.LauncherType.interactive, nullable=False, index=True
     )
 
     @classmethod
@@ -192,7 +192,7 @@ class SessionLauncherORM(BaseORM):
             disk_storage=self.disk_storage,
             env_variables=models.EnvVar.from_dict(self.env_variables) if self.env_variables else None,
             environment=self.environment.dump(),
-            session_type=self.session_type,
+            launcher_type=self.launcher_type,
         )
 
 

@@ -552,7 +552,7 @@ components:
           $ref: "#/components/schemas/IsArchivedPatch"
         strip_path_prefix:
           $ref: "#/components/schemas/StripPathPrefixPatch"
-    SessionType:
+    LauncherType:
       type: string
       enum:
         - interactive
@@ -586,8 +586,8 @@ components:
           $ref: "#/components/schemas/DiskStorage"
         env_variables:
           $ref: "#/components/schemas/EnvVariables"
-        session_type:
-          $ref: "#/components/schemas/SessionType"
+        launcher_type:
+          $ref: "#/components/schemas/LauncherType"
       required:
         - id
         - project_id
@@ -595,7 +595,7 @@ components:
         - creation_date
         - environment
         - resource_class_id
-        - session_type
+        - launcher_type
     SessionLauncherPost:
       description: Data required to create a session launcher
       type: object
@@ -613,8 +613,8 @@ components:
           $ref: "#/components/schemas/DiskStorage"
         env_variables:
           $ref: "#/components/schemas/EnvVariables"
-        session_type:
-          $ref: "#/components/schemas/SessionType"
+        launcher_type:
+          $ref: "#/components/schemas/LauncherType"
           default: interactive
         environment:
           oneOf:
@@ -624,7 +624,7 @@ components:
         - name
         - project_id
         - environment
-        - session_type
+        - launcher_type
       example:
         project_id: 01AN4Z79ZS5XN0F25N3DB94T4R
         name: Renku R Session
