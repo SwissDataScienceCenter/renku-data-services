@@ -1030,7 +1030,7 @@ async def start_session(
         SessionEnvItem(name="RENKU_PROJECT_PATH", value=project.path.serialize()),
         SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
     ]
-    if is_interactive:
+    if is_interactive or is_app:
         env.extend(
             [
                 SessionEnvItem(name="RENKU_BASE_URL_PATH", value=ingress_config.url_path),

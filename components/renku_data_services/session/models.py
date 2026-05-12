@@ -243,9 +243,10 @@ class UnsavedSessionLauncher:
     name: str
     description: str | None
     resource_class_id: int | None
-    disk_storage: int | None
-    env_variables: list[EnvVar] | None
+    disk_storage: int | None  # ignore for now also
+    env_variables: list[EnvVar] | None  # ignore for apps
     environment: str | UnsavedEnvironment | UnsavedBuildParameters
+    type: str  ## added by eike
     """When a string is passed for the environment it should be the ID of an existing environment."""
 
 

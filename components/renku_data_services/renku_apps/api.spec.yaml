@@ -7,6 +7,18 @@ info:
 servers:
   - url: /api/data
 paths:
+  /apps:
+    post:
+      summary: Create an app - ask for session launcher id
+    get:
+      summary: List all apps
+  /apps/{app_id}:
+    get:
+      summary: Get an app
+    patch:
+      summary: Disable an app
+    delete:
+    
   /projects/{project_id}/app:
     post:
       summary: Create an app
@@ -152,3 +164,4 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+           $ref: "#/components/schemas/ErrorResponse"

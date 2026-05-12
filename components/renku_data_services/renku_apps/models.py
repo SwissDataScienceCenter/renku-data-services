@@ -23,6 +23,7 @@ class UnsavedApp:
     image: str
     created_by: str
     status: AppState = AppState.PENDING
+    url: str
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -38,4 +39,5 @@ class App(UnsavedApp):
 class AppPatch:
     """A patch for an existing app."""
 
-    image: str | None = None
+    disabled: bool
+    image: str | None = None  # remove - will be part of session launcher

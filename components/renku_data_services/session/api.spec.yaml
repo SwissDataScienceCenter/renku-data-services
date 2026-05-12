@@ -580,6 +580,7 @@ components:
           $ref: "#/components/schemas/DiskStorage"
         env_variables:
           $ref: "#/components/schemas/EnvVariables"
+        ## Added type here by eike - type can be app
       required:
         - id
         - project_id
