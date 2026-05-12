@@ -1,0 +1,154 @@
+openapi: 3.0.2
+info:
+  title: Renku Data Services API
+  description: |
+    A service that allows users to manage apps on Renku.
+  version: v1
+servers:
+  - url: /api/data
+paths:
+  /projects/{project_id}/app:
+    post:
+      summary: Create an app
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+          description: The ID of the project to create the app for.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppPost"
+      responses:
+        "201":
+          description: App created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/App"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - apps
+    get:
+      summary: Retrieve an app
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+          description: The ID of the project to retrieve the app for.
+      responses:
+        "200":
+          description: The app for the specified project.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/App"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - apps
+components:
+  schemas:
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+
+    AppState:
+      type: string
+      enum:
+        - pending
+        - ready
+        - failed
+
+    App:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        image:
+          type: string
+        status:
+          $ref: "#/components/schemas/AppState"
+        url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+      required:
+        - id
+        - project_id
+        - image
+        - status
+        - url
+        - created_at
+        - updated_at
+        - created_by
+
+    AppPost:
+      type: object
+      additionalProperties: false
+      properties:
+        image:
+          type: string
+      required:
+        - image
+
+    AppPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        image:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: A more detailed optional message showing what the problem was
+            message:
+              type: string
+              example: Something went wrong - please try again later
+            trace_id:
+              description: Sentry trace ID for linking to corresponding log entries
+              example: ac93950e9e114a55c67fb8e5ef519bbe
+              type: string
+          required:
+            - code
+            - message
+      required:
+        - error
+
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
