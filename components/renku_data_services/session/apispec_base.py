@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, field_validator
 from ulid import ULID
 
-from renku_data_services.session import models
+from renku_data_services.session import apispec, models
 
 
 class BaseAPISpec(BaseModel):
@@ -54,3 +54,12 @@ class BaseAPISpec(BaseModel):
         if isinstance(val, PurePosixPath):
             return val.as_posix()
         return val
+
+    @field_validator("launcher_type", mode="before")
+    @classmethod
+    def convert_to_api_launcher_type(cls, lt: models.LauncherType) -> apispec.LauncherType:
+        """Convert the model launcher type into a valid value when serializing."""
+        if lt == models.LauncherType.non_interactive:
+            return apispec.LauncherType.non_interactive
+        else:
+            return apispec.LauncherType.interactive
