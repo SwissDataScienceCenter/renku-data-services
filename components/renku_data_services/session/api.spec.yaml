@@ -557,7 +557,7 @@ components:
       enum:
         - interactive
         - non-interactive
-        - app
+        #- app  #not yet supported
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array

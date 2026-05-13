@@ -242,21 +242,6 @@ class LauncherType(StrEnum):
     non_interactive = "non_interactive"
     app = "app"
 
-    @property
-    def is_non_interactive(self) -> bool:
-        """Return true when non_interactive."""
-        return self == LauncherType.non_interactive
-
-    @property
-    def is_interactive(self) -> bool:
-        """Return true when interactive."""
-        return self == LauncherType.interactive
-
-    @property
-    def is_app(self) -> bool:
-        """Return true when this is 'app'."""
-        return self == LauncherType.app
-
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedSessionLauncher:

@@ -112,7 +112,7 @@ from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata as RepoMetadata
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.models import SessionLauncher
+from renku_data_services.session.models import LauncherType, SessionLauncher
 from renku_data_services.users.db import UserRepo
 
 logger = logging.getLogger(__name__)
@@ -818,7 +818,7 @@ async def start_session(
     launcher = await session_repo.get_launcher(user=user, launcher_id=launch_request.launcher_id)
     launcher_id = launcher.id
     project = await project_repo.get_project(user=user, project_id=launcher.project_id)
-    is_interactive = launch_request.session_type.is_interactive
+    session_type = SessionType.from_launcher_type(launcher.launcher_type)
 
     # Determine resource_class_id: the class can be overwritten at the user's request
     resource_class_id = launch_request.resource_class_id or launcher.resource_class_id
@@ -830,12 +830,12 @@ async def start_session(
     )
     existing_session = await nb_config.k8s_v2_client.get_session(name=server_name, safe_username=user.id)
     if existing_session is not None:
-        if launch_request.session_type == SessionType.from_amalthea(existing_session.spec.sessionType):
+        if session_type == SessionType.from_amalthea(existing_session.spec.sessionType):
             return existing_session, False
         else:
             raise errors.ValidationError(
                 message=f"Session exists with type={existing_session.spec.sessionType}, "
-                f"while request contains {launch_request.session_type}."
+                f"while launcher contains {session_type}."
             )
 
     # Fully determine the resource pool and resource class
@@ -860,7 +860,7 @@ async def start_session(
     if session_location == SessionLocation.remote and not user.is_authenticated:
         raise errors.ValidationError(message="Anonymous users cannot start remote sessions.")
 
-    if session_location == SessionLocation.remote and launch_request.is_non_interactive:
+    if session_location == SessionLocation.remote and launcher.launcher_type != LauncherType.interactive:
         raise errors.ValidationError(message="Non-Interactive sessions are not supported for remote sessions")
 
     environment = launcher.environment
@@ -954,7 +954,7 @@ async def start_session(
     storage_class = cluster_settings.get_storage_class()
     service_account_name = cluster_settings.service_account_name
 
-    ui_path = f"{ingress_config.url_path}/{environment.default_url.lstrip('/')}" if is_interactive else ""
+    ui_path = f"{ingress_config.url_path}/{environment.default_url.lstrip('/')}" if session_type.is_interactive else ""
 
     # Annotations
     annotations: dict[str, str] = {
@@ -1030,7 +1030,7 @@ async def start_session(
         SessionEnvItem(name="RENKU_PROJECT_PATH", value=project.path.serialize()),
         SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
     ]
-    if is_interactive:
+    if session_type.is_interactive:
         env.extend(
             [
                 SessionEnvItem(name="RENKU_BASE_URL_PATH", value=ingress_config.url_path),
@@ -1058,13 +1058,13 @@ async def start_session(
 
     labels: dict[str, str] = {
         "renku.io/safe-username": user.id,
-        "renku.io/session-type": str(launch_request.session_type),
+        "renku.io/session-type": str(launcher.launcher_type),
     }
 
     if user.is_anonymous:
         labels["renku.io/anonymous-session"] = "true"
 
-    if not is_interactive:
+    if session_type.is_non_interactive:
         session_extras = session_extras.extra_container_as_sidecars()
 
     session = AmaltheaSessionV1Alpha1(
@@ -1078,7 +1078,7 @@ async def start_session(
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
             priorityClassName=resource_class.quota,
-            sessionType=launch_request.session_type.to_amalthea(),
+            sessionType=session_type.to_amalthea(),
             session=Session(
                 image=image,
                 imagePullPolicy=ImagePullPolicy.Always,
@@ -1100,13 +1100,15 @@ async def start_session(
                 stripURLPath=environment.strip_path_prefix,
                 env=env,
                 remoteSecretRef=remote_secret.ref() if remote_secret else None,
-                readinessProbe=ReadinessProbe2(type=Type3.none) if not is_interactive else ReadinessProbe2(),
+                readinessProbe=ReadinessProbe2(type=Type3.none)
+                if session_type.is_non_interactive
+                else ReadinessProbe2(),
             ),
-            ingress=ingress_config.get_k8s_ingress() if is_interactive else None,
+            ingress=ingress_config.get_k8s_ingress() if session_type.is_interactive else None,
             extraContainers=session_extras.containers,
             initContainers=session_extras.init_containers,
             extraVolumes=session_extras.volumes,
-            culling=get_culling(user, resource_pool, nb_config, launch_request.session_type),
+            culling=get_culling(user, resource_pool, nb_config, session_type),
             authentication=Authentication(
                 enabled=True,
                 type=AuthenticationType.oauth2proxy
@@ -1466,9 +1468,6 @@ def validate_session_post_request(body: apispec.SessionPostRequest) -> SessionLa
         resource_class_id=body.resource_class_id,
         data_connectors_overrides=data_connectors_overrides,
         env_variable_overrides=env_variable_overrides,
-        session_type=SessionType.non_interactive
-        if body.session_type == apispec.SessionType.non_interactive
-        else SessionType.interactive,
     )
 
 
