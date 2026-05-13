@@ -112,7 +112,7 @@ from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata as RepoMetadata
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.models import LauncherType, SessionLauncher
+from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
 
 logger = logging.getLogger(__name__)
@@ -860,7 +860,7 @@ async def start_session(
     if session_location == SessionLocation.remote and not user.is_authenticated:
         raise errors.ValidationError(message="Anonymous users cannot start remote sessions.")
 
-    if session_location == SessionLocation.remote and launcher.launcher_type != LauncherType.interactive:
+    if session_location == SessionLocation.remote and session_type.is_non_interactive:
         raise errors.ValidationError(message="Non-Interactive sessions are not supported for remote sessions")
 
     environment = launcher.environment
@@ -1058,7 +1058,7 @@ async def start_session(
 
     labels: dict[str, str] = {
         "renku.io/safe-username": user.id,
-        "renku.io/session-type": str(launcher.launcher_type),
+        "renku.io/session-type": str(session_type),
     }
 
     if user.is_anonymous:
