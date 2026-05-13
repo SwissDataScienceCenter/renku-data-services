@@ -61,9 +61,9 @@
   dict({
     'description': 'A session launcher.',
     'disk_storage': 42,
+    'launcher_type': 'interactive',
     'name': 'Launcher',
     'resource_class_id': 1,
-    'session_type': 'interactive',
   })
 # ---
 # name: test_project_copy_creates_new_build_and_environment_instances.1
