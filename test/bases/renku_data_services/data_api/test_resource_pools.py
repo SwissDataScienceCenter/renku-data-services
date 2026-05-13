@@ -1887,6 +1887,8 @@ async def test_resource_pool_members_add_group(
         json=member_payload,
     )
     assert res.status_code == 201
+    assert res.json[0]["slug"] == "test-pool-group"
+    assert res.json[0]["name"] == "test-pool-group"
 
     # GET /members should return the group
     _, res = await sanic_client.get(
@@ -1897,6 +1899,8 @@ async def test_resource_pool_members_add_group(
     members = res.json
     group_members = [m for m in members if m.get("member_type") == "group" and m.get("id") == group["id"]]
     assert len(group_members) == 1
+    assert group_members[0]["slug"] == "test-pool-group"
+    assert group_members[0]["name"] == "test-pool-group"
 
     # member_1 (in the group) should now be able to access the pool
     _, res = await sanic_client.get(
@@ -2026,6 +2030,8 @@ async def test_resource_pool_members_add_project(
         json=member_payload,
     )
     assert res.status_code == 201
+    assert res.json[0]["namespace"] == "admin.doe/test-pool-project"
+    assert res.json[0]["name"] == "test-pool-project"
 
     # GET /members should return the project
     _, res = await sanic_client.get(
@@ -2036,6 +2042,8 @@ async def test_resource_pool_members_add_project(
     members = res.json
     project_members = [m for m in members if m.get("member_type") == "project" and m.get("id") == project["id"]]
     assert len(project_members) == 1
+    assert project_members[0]["namespace"] == "admin.doe/test-pool-project"
+    assert project_members[0]["name"] == "test-pool-project"
 
     # member_1 (in the project) should now be able to access the pool
     _, res = await sanic_client.get(
@@ -2161,6 +2169,8 @@ async def test_resource_pool_members_put_replaces(
         json=[{"member_type": "group", "id": group2["id"], "relation": "group_viewer"}],
     )
     assert res.status_code == 200
+    assert res.json[0]["slug"] == "test-group-2"
+    assert res.json[0]["name"] == "test-group-2"
 
     _, res = await sanic_client.get(
         f"/api/data/resource_pools/{rp['id']}/members",
@@ -2170,6 +2180,8 @@ async def test_resource_pool_members_put_replaces(
     members = res.json
     assert len(members) == 1
     assert members[0]["id"] == group2["id"]
+    assert members[0]["slug"] == "test-group-2"
+    assert members[0]["name"] == "test-group-2"
 
 
 @pytest.mark.asyncio
@@ -2326,6 +2338,7 @@ async def test_resource_pool_members_get_includes_relation(
         json=[{"member_type": "user", "id": user["id"], "relation": "viewer"}],
     )
     assert res.status_code == 201
+    assert "email" in res.json[0]
 
     _, res = await sanic_client.get(
         f"/api/data/resource_pools/{rp['id']}/members",
@@ -2337,6 +2350,7 @@ async def test_resource_pool_members_get_includes_relation(
     assert members[0]["member_type"] == "user"
     assert members[0]["id"] == user["id"]
     assert members[0]["relation"] == "viewer"
+    assert "email" in members[0]
 
 
 @pytest.mark.asyncio
@@ -2497,6 +2511,7 @@ async def test_resource_pool_members_put_replaces_prohibited(
         json=[{"member_type": "user", "id": member_1_user.id, "relation": "prohibited"}],
     )
     assert res.status_code == 200
+    assert "email" in res.json[0]
 
     # Verify GET /members shows prohibited
     _, res = await sanic_client.get(
@@ -2507,6 +2522,7 @@ async def test_resource_pool_members_put_replaces_prohibited(
     members = res.json
     assert len(members) == 1
     assert members[0]["relation"] == "prohibited"
+    assert "email" in members[0]
 
     # Verify user1 can NO LONGER access
     _, res = await sanic_client.get(
@@ -2566,6 +2582,15 @@ async def test_resource_pool_members_put_mixed_types(
     assert len(members) == 3
     types = {m["member_type"] for m in members}
     assert types == {"user", "group", "project"}
+    for m in members:
+        if m["member_type"] == "user":
+            assert "email" in m
+        elif m["member_type"] == "group":
+            assert m["slug"] == "test-mixed-group"
+            assert m["name"] == "test-mixed-group"
+        elif m["member_type"] == "project":
+            assert m["namespace"] == "admin.doe/test-mixed-project"
+            assert m["name"] == "test-mixed-project"
 
 
 @pytest.mark.asyncio
@@ -2591,6 +2616,7 @@ async def test_resource_pool_members_add_user_via_members(
         json=[{"member_type": "user", "id": member_1_user.id, "relation": "viewer"}],
     )
     assert res.status_code == 201
+    assert "email" in res.json[0]
 
     # User should be able to access
     _, res = await sanic_client.get(
@@ -2623,6 +2649,8 @@ async def test_resource_pool_members_get_single_member(
         json=[{"member_type": "group", "id": group["id"], "relation": "group_viewer"}],
     )
     assert res.status_code == 201
+    assert res.json[0]["slug"] == "test-single-group"
+    assert res.json[0]["name"] == "test-single-group"
 
     # GET single member
     _, res = await sanic_client.get(
@@ -2632,6 +2660,8 @@ async def test_resource_pool_members_get_single_member(
     assert res.status_code == 200
     assert res.json["member_type"] == "group"
     assert res.json["id"] == group["id"]
+    assert res.json["slug"] == "test-single-group"
+    assert res.json["name"] == "test-single-group"
 
     # GET non-existent member
     _, res = await sanic_client.get(
