@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     Interval,
     MetaData,
@@ -41,6 +42,9 @@ class ResourceRequestsLogORM(BaseORM):
     """Table for recording resource requests."""
 
     __tablename__ = "resource_requests_log"
+    __table_args__ = (
+        Index("ix_uid_phase", "uid", "phase"),
+    )  # uid and phase used in calculating corrected intervals and view
 
     id: Mapped[ULID] = mapped_column(
         "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
@@ -65,7 +69,7 @@ class ResourceRequestsLogORM(BaseORM):
     api_version: Mapped[str] = mapped_column("api_version", String(), nullable=False)
     """The k8s apiVersion of the object."""
 
-    phase: Mapped[str] = mapped_column("phase", String(), nullable=False)
+    phase: Mapped[str] = mapped_column("phase", String(), nullable=False, index=True)
     """The k8s uid of the pod."""
 
     capture_date: Mapped[datetime] = mapped_column("capture_date", DateTime(timezone=True), nullable=False, index=True)
@@ -74,22 +78,22 @@ class ResourceRequestsLogORM(BaseORM):
     capture_interval: Mapped[timedelta] = mapped_column("capture_interval", Interval(), nullable=False)
     """The configured capture interval for that point."""
 
-    user_id: Mapped[str | None] = mapped_column("user_id", String(), nullable=True)
+    user_id: Mapped[str | None] = mapped_column("user_id", String(), nullable=True, index=True)
     """The user id associated to the request data."""
 
-    project_id: Mapped[ULID | None] = mapped_column("project_id", ULIDType(), nullable=True)
+    project_id: Mapped[ULID | None] = mapped_column("project_id", ULIDType(), nullable=True, index=True)
     """A project id associated to the requests data."""
 
     launcher_id: Mapped[ULID | None] = mapped_column("launcher_id", ULIDType(), nullable=True)
     """The launcher id used to start the session."""
 
-    resource_class_id: Mapped[int | None] = mapped_column("resource_class_id", Integer(), nullable=True)
+    resource_class_id: Mapped[int | None] = mapped_column("resource_class_id", Integer(), nullable=True, index=True)
     """The resource class id used to start the session."""
 
     resource_class_cost: Mapped[Credit | None] = mapped_column("resource_class_cost", CreditType(), nullable=True)
     """The resource class cost at the time of snapshot."""
 
-    resource_pool_id: Mapped[int | None] = mapped_column("resource_pool_id", Integer(), nullable=True)
+    resource_pool_id: Mapped[int | None] = mapped_column("resource_pool_id", Integer(), nullable=True, index=True)
     """The resource class id used to start the session."""
 
     since: Mapped[datetime | None] = mapped_column("since", DateTime(timezone=True), nullable=True)
