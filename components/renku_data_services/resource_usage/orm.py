@@ -183,8 +183,8 @@ class ResourceRequestsViewORM(BaseORM):
     capture_date: Mapped[datetime] = mapped_column("capture_date", DateTime(timezone=True), nullable=False)
     """The timestamp the values were captured."""
 
-    capture_interval: Mapped[timedelta] = mapped_column("capture_interval", Interval(), nullable=False)
-    """The configured capture interval for that point."""
+    capture_interval: Mapped[timedelta] = mapped_column("corrected_interval", Interval(), nullable=False)
+    """The configured capture interval for that point, note that the corrected interval should be used."""
 
     user_id: Mapped[str | None] = mapped_column("user_id", String(), nullable=True)
     """The user id associated to the request data."""
