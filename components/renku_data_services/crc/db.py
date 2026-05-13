@@ -925,6 +925,10 @@ class ResourcePoolMemberResult:
     member_type: MemberType
     member_id: str
     relation: str
+    slug: str | None = None
+    name: str | None = None
+    email: str | None = None
+    namespace: str | None = None
 
 
 class MemberRepository(_Base):
@@ -1376,17 +1380,25 @@ class MemberRepository(_Base):
         for subject_type, subject_id, relation in raw_members:
             match subject_type:
                 case ResourceType.user.value:
+                    user_info = await self.kc_user_repo.get_user(id=subject_id)
                     results.append(
-                        ResourcePoolMemberResult(member_type=MemberType.USER, member_id=subject_id, relation=relation)
+                        ResourcePoolMemberResult(
+                            member_type=MemberType.USER,
+                            member_id=subject_id,
+                            relation=relation,
+                            email=user_info.email or "" if user_info else "",
+                        )
                     )
                 case ResourceType.group.value:
                     try:
-                        await self.group_repo.get_group_by_id(api_user, ULID.from_str(subject_id))
+                        group = await self.group_repo.get_group_by_id(api_user, ULID.from_str(subject_id))
                         results.append(
                             ResourcePoolMemberResult(
                                 member_type=MemberType.GROUP,
                                 member_id=subject_id,
                                 relation=relation,
+                                slug=group.slug,
+                                name=group.name,
                             )
                         )
                     except (errors.MissingResourceError, ValueError):
@@ -1395,12 +1407,14 @@ class MemberRepository(_Base):
                         )
                 case ResourceType.project.value:
                     try:
-                        await self.project_repo.get_project_by_id(api_user, ULID.from_str(subject_id))
+                        project = await self.project_repo.get_project_by_id(api_user, ULID.from_str(subject_id))
                         results.append(
                             ResourcePoolMemberResult(
                                 member_type=MemberType.PROJECT,
                                 member_id=subject_id,
                                 relation=relation,
+                                namespace=project.path.serialize(),
+                                name=project.name,
                             )
                         )
                     except (errors.MissingResourceError, ValueError):

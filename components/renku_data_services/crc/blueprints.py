@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import suppress
 from dataclasses import dataclass
+from typing import Any
 
 from sanic import HTTPResponse, Request, empty, json
 from sanic_ext import validate
@@ -24,7 +25,12 @@ from renku_data_services.crc.core import (
     validate_resource_pool_post,
     validate_resource_pool_put_or_patch,
 )
-from renku_data_services.crc.db import ClusterRepository, MemberRepository, ResourcePoolRepository
+from renku_data_services.crc.db import (
+    ClusterRepository,
+    MemberRepository,
+    ResourcePoolMemberResult,
+    ResourcePoolRepository,
+)
 from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
@@ -263,8 +269,8 @@ class ResourcePoolMembersBP(CustomBlueprint):
         async def _get_all(_: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
             members = await self.repo.get_resource_pool_members(user, resource_pool_id)
             return validated_json(
-                apispec.PoolMembers,
-                [{"member_type": m.member_type.value, "id": m.member_id, "relation": m.relation} for m in members],
+                apispec.PoolMembersResponse,
+                [self._dump_member_response(m) for m in members],
             )
 
         return "/resource_pools/<resource_pool_id>/members", ["GET"], _get_all
@@ -301,15 +307,10 @@ class ResourcePoolMembersBP(CustomBlueprint):
         self, user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolMembers, post: bool = True
     ) -> HTTPResponse:
         identifiers = self._to_identifiers(body)
-        updated = await self.repo.update_resource_pool_members(
-            api_user=user,
-            resource_pool_id=resource_pool_id,
-            members=identifiers,
-            append=post,
-        )
+        members = await self.repo.update_resource_pool_members(user, resource_pool_id, identifiers, append=post)
         return validated_json(
-            apispec.PoolMembers,
-            [{"member_type": m.member_type.value, "id": m.member_id, "relation": m.relation} for m in updated],
+            apispec.PoolMembersResponse,
+            [self._dump_member_response(m) for m in members],
             status=201 if post else 200,
         )
 
@@ -325,14 +326,14 @@ class ResourcePoolMembersBP(CustomBlueprint):
             members = await self.repo.get_resource_pool_members(user, resource_pool_id)
             for m in members:
                 if m.member_type.value == member_type and m.member_id == member_id:
-                    payload = {"member_type": m.member_type.value, "id": m.member_id, "relation": m.relation}
+                    payload = self._dump_member_response(m)
                     match member_type:
                         case "user":
-                            return validated_json(apispec.PoolMemberUser, payload)
+                            return validated_json(apispec.PoolMemberUserResponse, payload)
                         case "group":
-                            return validated_json(apispec.PoolMemberGroup, payload)
+                            return validated_json(apispec.PoolMemberGroupResponse, payload)
                         case "project":
-                            return validated_json(apispec.PoolMemberProject, payload)
+                            return validated_json(apispec.PoolMemberProjectResponse, payload)
                         case _:
                             raise errors.ValidationError(message=f"Invalid member type: {member_type}")
             raise errors.MissingResourceError(
@@ -394,6 +395,25 @@ class ResourcePoolMembersBP(CustomBlueprint):
                         )
                     )
         return identifiers
+
+    @staticmethod
+    def _dump_member_response(m: ResourcePoolMemberResult) -> dict[str, Any]:
+        """Serialize a member result for GET responses."""
+        result: dict[str, Any] = {
+            "member_type": m.member_type.value,
+            "id": m.member_id,
+            "relation": m.relation,
+        }
+        match m.member_type:
+            case MemberType.USER:
+                result["email"] = m.email or ""
+            case MemberType.PROJECT:
+                result["namespace"] = m.namespace or ""
+                result["name"] = m.name or ""
+            case MemberType.GROUP:
+                result["slug"] = m.slug or ""
+                result["name"] = m.name or ""
+        return result
 
 
 @dataclass(kw_only=True)
