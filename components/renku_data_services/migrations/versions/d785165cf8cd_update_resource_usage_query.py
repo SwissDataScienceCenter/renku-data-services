@@ -24,7 +24,7 @@ def upgrade() -> None:
     -- NOTE: The capture_interval is a configuration value, currently set at 10mins, that is why the explanation uses 10mins
     -- NOTE: least function below ignores NULL
     create or replace view "resource_pools"."resource_requests_view_v2" as
-    select 
+    select
         *,
         least(lead(capture_date) over (partition by uid, phase order by capture_date) - capture_date, capture_interval) as corrected_interval
     from

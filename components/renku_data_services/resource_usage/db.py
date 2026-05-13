@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.app_config import logging
+from renku_data_services.resource_usage.constants import ACTIVE_PHASES
 from renku_data_services.resource_usage.model import (
     Credit,
     ResourceClassCostWithPool,
@@ -88,7 +89,11 @@ class ResourceRequestsRepo:
         return result
 
     async def find_view(
-        self, start: datetime, end: datetime, chunk_size: int = 100
+        self,
+        start: datetime,
+        end: datetime,
+        chunk_size: int = 100,
+        only_active_phases: bool = True,
     ) -> AsyncIterator[ResourceRequestsViewORM]:
         """Select view records."""
         stmt = (
@@ -97,6 +102,8 @@ class ResourceRequestsRepo:
             .where(ResourceRequestsViewORM.capture_date <= end)
             .order_by(ResourceRequestsViewORM.capture_date.desc())
         )
+        if only_active_phases:
+            stmt = stmt.where(ResourceRequestsViewORM.phase.in_(ACTIVE_PHASES))
         async with self.session_maker() as session:
             result = await session.stream(stmt.execution_options(yield_per=chunk_size))
             async for e in result.scalars():
@@ -226,21 +233,28 @@ class ResourceRequestsRepo:
             resource_pool_id,
             resource_class_id,
             coalesce(resource_class_cost, 0) as resource_class_cost,
-            sum(greatest(cpu_time, mem_time, gpu_time, '0 second'::interval)) as runtime_hour,
+            sum(greatest(corrected_interval, '0 second'::interval)) as runtime_hour,
             capture_date::date,
             gpu_slice,
-            sum(cpu_request * (extract(epoch from cpu_time) / 3600)) as cpu_hours,
-            sum(memory_request * (extract(epoch from mem_time) / 3600)) as mem_hours,
-            sum(disk_request * (extract(epoch from disk_time) / 3600)) as disk_hours,
-            sum(gpu_request * (extract(epoch from gpu_time) / 3600)) as gpu_hours
+            sum(cpu_request * (extract(epoch from corrected_interval) / 3600)) as cpu_hours,
+            sum(memory_request * (extract(epoch from corrected_interval) / 3600)) as mem_hours,
+            sum(disk_request * (extract(epoch from corrected_interval) / 3600)) as disk_hours,
+            sum(gpu_request * (extract(epoch from corrected_interval) / 3600)) as gpu_hours
           from "resource_pools"."resource_requests_view_v2"
           where capture_date::date >= :from and capture_date::date <= :until
+              and phase = ANY(:active_phases)
               {by_user} {by_rp}
           group by cluster_id, resource_class_id, resource_pool_id,
             coalesce(resource_class_cost, 0),
             user_id, capture_date::date, gpu_slice
         """  # nosec: B608
-        params = {"from": rq.since, "until": rq.until, "user_id": rq.user_id, "resource_pool_id": rq.resource_pool_id}
+        params = {
+            "from": rq.since,
+            "until": rq.until,
+            "user_id": rq.user_id,
+            "resource_pool_id": rq.resource_pool_id,
+            "active_phases": tuple(ACTIVE_PHASES),
+        }
 
         async with self.session_maker() as session:
             query = sa.text(stmt).execution_options(yield_per=chunk_size)
