@@ -224,6 +224,7 @@ class ResourceRequestsRepo:
 
     async def find_usage(self, rq: ResourceUsageQuery, chunk_size: int = 500) -> AsyncGenerator[ResourceUsage]:
         """Find resource usage."""
+        # TODO: Include or handle PVCs more gracefully rather than just filtering them out
         by_user = " and user_id = :user_id " if rq.user_id is not None else ""
         by_rp = " and resource_pool_id = :resource_pool_id " if rq.resource_pool_id is not None else ""
         stmt = f"""
@@ -233,6 +234,9 @@ class ResourceRequestsRepo:
             resource_pool_id,
             resource_class_id,
             coalesce(resource_class_cost, 0) as resource_class_cost,
+            -- NOTE: runtime_hour is logical only if you filter for pods
+            -- When PVCs are included then the runtime doubles or is increased by a factor
+            -- equal to the number of PVCs, and we have 1 pvc for the session and 1 for each data connector.
             sum(greatest(corrected_interval, '0 second'::interval)) as runtime_hour,
             capture_date::date,
             gpu_slice,
@@ -242,7 +246,7 @@ class ResourceRequestsRepo:
             sum(gpu_request * (extract(epoch from corrected_interval) / 3600)) as gpu_hours
           from "resource_pools"."resource_requests_view_v2"
           where capture_date::date >= :from and capture_date::date <= :until
-              and phase = ANY(:active_phases)
+              and phase = ANY(:active_phases) and kind = 'Pod'
               {by_user} {by_rp}
           group by cluster_id, resource_class_id, resource_pool_id,
             coalesce(resource_class_cost, 0),
