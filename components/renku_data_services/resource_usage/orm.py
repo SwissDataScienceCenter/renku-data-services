@@ -7,6 +7,7 @@ from typing import cast
 
 from sqlalchemy import (
     CheckConstraint,
+    ColumnElement,
     DateTime,
     Float,
     ForeignKey,
@@ -15,8 +16,10 @@ from sqlalchemy import (
     Interval,
     MetaData,
     String,
+    case,
     text,
 )
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
 
@@ -222,17 +225,57 @@ class ResourceRequestsViewORM(BaseORM):
     disk_request: Mapped[DataSize | None] = mapped_column("disk_request", DataSizeType(), nullable=True)
     """The disk request."""
 
-    cpu_time: Mapped[timedelta | None] = mapped_column("cpu_time", Interval(), nullable=True)
-    """The time period the cpu_request was observed."""
+    @hybrid_property
+    def cpu_time(self) -> timedelta | None:
+        """The time period the cpu_request was observed."""
+        return None if self.cpu_request is None else self.capture_interval
 
-    memory_time: Mapped[timedelta | None] = mapped_column("mem_time", Interval(), nullable=True)
-    """The time period the memory_request was observed."""
+    @cpu_time.inplace.expression
+    @classmethod
+    def _cpu_time(cls) -> ColumnElement[timedelta | None]:
+        return cast(
+            ColumnElement[timedelta | None],
+            case((cls.cpu_request.is_(None), None), else_=cls.capture_interval),
+        )
 
-    disk_time: Mapped[timedelta | None] = mapped_column("disk_time", Interval(), nullable=True)
-    """The time period the disk_request was observed."""
+    @hybrid_property
+    def memory_time(self) -> timedelta | None:
+        """The time period the memory_request was observed."""
+        return None if self.memory_request is None else self.capture_interval
 
-    gpu_time: Mapped[timedelta | None] = mapped_column("gpu_time", Interval(), nullable=True)
-    """The time period the gpu_request was observed."""
+    @memory_time.inplace.expression
+    @classmethod
+    def _memory_time(cls) -> ColumnElement[timedelta | None]:
+        return cast(
+            ColumnElement[timedelta | None],
+            case((cls.memory_request.is_(None), None), else_=cls.capture_interval),
+        )
+
+    @hybrid_property
+    def disk_time(self) -> timedelta | None:
+        """The time period the disk_request was observed."""
+        return None if self.disk_request is None else self.capture_interval
+
+    @disk_time.inplace.expression
+    @classmethod
+    def _disk_time(cls) -> ColumnElement[timedelta | None]:
+        return cast(
+            ColumnElement[timedelta | None],
+            case((cls.disk_request.is_(None), None), else_=cls.capture_interval),
+        )
+
+    @hybrid_property
+    def gpu_time(self) -> timedelta | None:
+        """The time period the gpu_request was observed."""
+        return None if self.gpu_request is None else self.capture_interval
+
+    @gpu_time.inplace.expression
+    @classmethod
+    def _gpu_time(cls) -> ColumnElement[timedelta | None]:
+        return cast(
+            ColumnElement[timedelta | None],
+            case((cls.gpu_request.is_(None), None), else_=cls.capture_interval),
+        )
 
 
 class ResourceRequestsLimitsORM(BaseORM):
