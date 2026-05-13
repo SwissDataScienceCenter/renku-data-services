@@ -819,7 +819,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/PoolMembers"
+                $ref: "#/components/schemas/PoolMembersResponse"
         "404":
           description: The resource pool or a member does not exist
           content:
@@ -851,7 +851,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/PoolMembers"
+                $ref: "#/components/schemas/PoolMembersResponse"
         "404":
           description: The resource pool or a member does not exist
           content:
