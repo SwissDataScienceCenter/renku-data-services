@@ -7,49 +7,49 @@ info:
 servers:
   - url: /api/data
 paths:
-  /projects/{project_id}/app:
+  /apps:
     post:
-      summary: Create an app
-      parameters:
-        - in: path
-          name: project_id
-          required: true
-          schema:
-            $ref: "#/components/schemas/Ulid"
-          description: The ID of the project to create the app for.
+      summary: Launch a new app
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AppPost"
+              $ref: "#/components/schemas/AppPostRequest"
       responses:
         "201":
-          description: App created successfully
+          description: The app was created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/App"
+                $ref: "#/components/schemas/AppResponse"
+        "200":
+          description: The app already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppResponse"
         default:
           $ref: "#/components/responses/Error"
       tags:
         - apps
+  /apps/{app_name}:
     get:
       summary: Retrieve an app
       parameters:
         - in: path
-          name: project_id
+          name: app_name
           required: true
           schema:
-            $ref: "#/components/schemas/Ulid"
-          description: The ID of the project to retrieve the app for.
+            $ref: "#/components/schemas/AppName"
+          description: The name of the app to retrieve
       responses:
         "200":
-          description: The app for the specified project.
+          description: The app for the given name
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/App"
+                $ref: "#/components/schemas/AppResponse"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -63,60 +63,54 @@ components:
       maxLength: 26
       pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
 
-    AppState:
+    AppStatus:
       type: string
       enum:
         - pending
         - ready
         - failed
 
-    App:
+    AppName:
+      type: string
+      minLength: 5
+      maxLength: 50
+      pattern: "^[a-z]([-a-z0-9]*[a-z0-9])?$"
+      example: d185e68d-d43-renku-2-b9ac279a4e8a85ac28d08
+
+    AppResponse:
       type: object
-      additionalProperties: false
       properties:
-        id:
+        name:
+          $ref: "#/components/schemas/AppName"
+        launcher_id:
           $ref: "#/components/schemas/Ulid"
-        project_id:
-          $ref: "#/components/schemas/Ulid"
-        image:
-          type: string
         status:
-          $ref: "#/components/schemas/AppState"
+          $ref: "#/components/schemas/AppStatus"
         url:
           type: string
-        created_at:
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        started:
           type: string
           format: date-time
-        updated_at:
+          nullable: true
+        image:
           type: string
-          format: date-time
-        created_by:
-          type: string
+          nullable: true
       required:
-        - id
-        - project_id
-        - image
+        - name
+        - launcher_id
         - status
         - url
-        - created_at
-        - updated_at
-        - created_by
+        - project_id
 
-    AppPost:
+    AppPostRequest:
       type: object
-      additionalProperties: false
       properties:
-        image:
-          type: string
+        launcher_id:
+          $ref: "#/components/schemas/Ulid"
       required:
-        - image
-
-    AppPatch:
-      type: object
-      additionalProperties: false
-      properties:
-        image:
-          type: string
+        - launcher_id
 
     ErrorResponse:
       type: object
