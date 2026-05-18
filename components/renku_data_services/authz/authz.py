@@ -716,9 +716,7 @@ class Authz:
         Returns a list of tuples: (subject_type, subject_id, relation).
         Skips public_viewer and resource_pool_platform relations.
         """
-        if isinstance(user, InternalServiceAdmin):
-            pass
-        elif not user.is_admin:
+        if not user.is_admin:
             return []
 
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
