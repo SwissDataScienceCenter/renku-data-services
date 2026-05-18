@@ -1254,7 +1254,7 @@ def _old_data_connector_slug_queries(
         It excludes the combination of new/new/new.
         """
         result = []
-        for i in range(**3 - 1):
+        for i in range(2**3 - 1):
             # NOTE: Changing the order of the statements here can lead to unexpected
             # consequences or cause combinations that we want to exclude to be added (i.e. new/new/new).
             stmt = select(schemas.DataConnectorORM)
