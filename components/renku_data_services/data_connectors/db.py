@@ -1177,7 +1177,7 @@ def _filter_by_namespace_slug(stmt: Select[tuple[_T]], namespace: ProjectPath | 
             # If this is removed we could match on a DCs that have the same slug in the user and project namspace.
             stmt = stmt.where(
                 schemas.DataConnectorORM.slug.has(
-                    ns_schemas.EntitySlugORM.project.is_(None),
+                    ns_schemas.EntitySlugORM.project_id.is_(None),
                 )
             )
         case ProjectPath():
