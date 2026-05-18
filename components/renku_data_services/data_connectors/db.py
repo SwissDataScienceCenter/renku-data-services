@@ -1163,6 +1163,7 @@ _T = TypeVar("_T", int, schemas.DataConnectorORM)
 
 def _filter_by_namespace_slug(stmt: Select[tuple[_T]], namespace: ProjectPath | NamespacePath) -> Select[tuple[_T]]:
     """Filters a select query on data connectors to a given namespace."""
+    # Regardless of where the DC is it will have a namespace slug.
     stmt = stmt.where(
         schemas.DataConnectorORM.slug.has(
             ns_schemas.EntitySlugORM.namespace.has(
@@ -1170,16 +1171,31 @@ def _filter_by_namespace_slug(stmt: Select[tuple[_T]], namespace: ProjectPath | 
             )
         )
     )
-    if isinstance(namespace, ProjectPath):
-        stmt = stmt.where(
-            schemas.DataConnectorORM.slug.has(
-                ns_schemas.EntitySlugORM.project.has(
-                    schemas.ProjectORM.slug.has(
-                        ns_schemas.EntitySlugORM.slug == namespace.second.value.lower(),
+    match namespace:
+        case NamespacePath():
+            # The DC is in a user namespace, the project has to be NULL in this case.
+            # If this is removed we could match on a DCs that have the same slug in the user and project namspace.
+            stmt = stmt.where(
+                schemas.DataConnectorORM.slug.has(
+                    ns_schemas.EntitySlugORM.project.is_(None),
+                )
+            )
+        case ProjectPath():
+            stmt = stmt.where(
+                schemas.DataConnectorORM.slug.has(
+                    ns_schemas.EntitySlugORM.project.has(
+                        schemas.ProjectORM.slug.has(
+                            ns_schemas.EntitySlugORM.slug == namespace.second.value.lower(),
+                        )
                     )
                 )
             )
-        )
+        case x:
+            raise errors.ProgrammingError(
+                message=f"Received unexpected namespace type {type(x)} "
+                "when adding namespace filters for finding data connectors."
+            )
+
     return stmt
 
 
@@ -1238,7 +1254,7 @@ def _old_data_connector_slug_queries(
         It excludes the combination of new/new/new.
         """
         result = []
-        for i in range(2**3 - 1):
+        for i in range(**3 - 1):
             # NOTE: Changing the order of the statements here can lead to unexpected
             # consequences or cause combinations that we want to exclude to be added (i.e. new/new/new).
             stmt = select(schemas.DataConnectorORM)
