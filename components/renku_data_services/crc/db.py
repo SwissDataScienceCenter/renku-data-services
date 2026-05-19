@@ -429,6 +429,17 @@ class ResourcePoolRepository(_Base):
         """Get the default resource class in the default resource pool."""
         return await self.__query_repository.get_default_resource_class()
 
+    async def filter_resource_pools(
+        self,
+        api_user: base_models.APIUser,
+        cpu: float = 0,
+        memory: int = 0,
+        max_storage: int = 0,
+        gpu: int = 0,
+    ) -> list[models.ResourcePool]:
+        """Get resource pools from database with indication of which resource class matches the specified criteria."""
+        return await self.__query_repository.filter_resource_pools(api_user, cpu, memory, max_storage, gpu)
+
     async def _get_connected_user_ids(self, provider_id: str) -> list[str]:
         """Query all users with a connected OAuth2 connection to the given provider."""
         async with self.session_maker() as session:
