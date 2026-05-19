@@ -7,7 +7,7 @@ from enum import StrEnum
 from ulid import ULID
 
 
-class AppState(StrEnum):
+class AppStatus(StrEnum):
     """The status of an app."""
 
     PENDING = "pending"
@@ -16,26 +16,13 @@ class AppState(StrEnum):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class UnsavedApp:
-    """An unsaved app."""
+class App:
+    """An App."""
 
+    name: str
+    launcher_id: ULID
     project_id: ULID
-    image: str
-    created_by: str
-    status: AppState = AppState.PENDING
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class App(UnsavedApp):
-    """An app stored in the database."""
-
-    id: ULID
-    created_at: datetime
-    updated_at: datetime
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class AppPatch:
-    """A patch for an existing app."""
-
+    status: AppStatus
+    url: str
+    started: datetime | None = None
     image: str | None = None
