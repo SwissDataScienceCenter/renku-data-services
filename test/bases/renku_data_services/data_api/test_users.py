@@ -131,7 +131,10 @@ async def test_logged_in_users_can_get_other_users(sanic_client, users) -> None:
     )
     assert res.status_code == 200
     other_user = dict(
-        id=other_user.id, first_name=other_user.first_name, last_name=other_user.last_name, email=other_user.email
+        id=other_user.id,
+        first_name=other_user.first_name,
+        last_name=other_user.last_name,
+        email=None,
     )
     retrieved_other_user = dict(
         id=res.json["id"],
@@ -148,7 +151,10 @@ async def test_anonymous_users_can_get_other_users(sanic_client, users) -> None:
     _, res = await sanic_client.get(f"/api/data/users/{other_user.id}")
     assert res.status_code == 200
     other_user = dict(
-        id=other_user.id, first_name=other_user.first_name, last_name=other_user.last_name, email=other_user.email
+        id=other_user.id,
+        first_name=other_user.first_name,
+        last_name=other_user.last_name,
+        email=None,
     )
     retrieved_other_user = dict(
         id=res.json["id"],

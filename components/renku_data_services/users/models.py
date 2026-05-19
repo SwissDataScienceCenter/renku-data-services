@@ -276,6 +276,18 @@ class UserInfo(UnsavedUserInfo):
         )
         return self_as_unsaved != current_user_info
 
+    def redact_email(self) -> UserInfo:
+        """Removes the email and sets it to None (if it is set)."""
+        if not self.email:
+            return self
+        return UserInfo(
+            id=self.id,
+            first_name=self.first_name,
+            last_name=self.last_name,
+            namespace=self.namespace,
+            email=None,
+        )
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UserPatch:

@@ -96,7 +96,10 @@ class KCUsersBP(CustomBlueprint):
         async def _get_one(_: Request, user: base_models.APIUser, user_id: str) -> JSONResponse:
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user_id)
             if not user_info:
-                raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
+                raise errors.MissingResourceError(
+                    message=f"The user with ID {user_id} cannot be found or you do not have permission "
+                    "to access this information."
+                )
             return validated_json(
                 apispec.UserWithId,
                 dict(
