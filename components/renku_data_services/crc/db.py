@@ -28,6 +28,8 @@ from renku_data_services.authz.authz import Authz, AuthzOperation
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope
 from renku_data_services.base_models import RESET
 from renku_data_services.base_models.core import ResetType, ResourceType
+from renku_data_services.connected_services.models import ConnectionStatus
+from renku_data_services.connected_services.orm import OAuth2ConnectionORM
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import (
@@ -52,11 +54,11 @@ from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
 
-logger = logging.getLogger(__name__)
-
 if TYPE_CHECKING:
     from renku_data_services.namespace.db import GroupRepository
     from renku_data_services.project.db import ProjectRepository
+
+logger = logging.getLogger(__name__)
 
 
 class _Base:
@@ -358,6 +360,7 @@ class ResourcePoolRepository(_Base):
         authz: Authz,
         resource_usage_service: ResourceUsageService | None = None,
         resource_requests_repo: ResourceRequestsRepo | None = None,
+        member_repo: MemberRepository | None = None,
     ):
         super().__init__(session_maker, quotas_repo, authz)
         self.__query_repository = ResourcePoolQueryRepository(
@@ -368,6 +371,7 @@ class ResourcePoolRepository(_Base):
             resource_requests_repo=resource_requests_repo,
         )
         self.__cluster_repo = ClusterRepository(session_maker=self.session_maker)
+        self.member_repo = member_repo
 
     async def initialize(self, async_connection_url: str, rp: models.UnsavedResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""

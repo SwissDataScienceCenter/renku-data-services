@@ -10,9 +10,17 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.models import Visibility
-from renku_data_services.base_models import APIUser
+from renku_data_services.base_models import APIUser, RESET
+from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.models import ConnectionStatus, ProviderKind, UnsavedOAuth2Client
+from renku_data_services.connected_services.orm import OAuth2ConnectionORM
 from renku_data_services.crc import models
-from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
+from renku_data_services.crc.models import (
+    MemberType,
+    RemoteConfigurationFirecrest,
+    RemoteConfigurationFirecrestPatch,
+    ResourcePoolMemberIdentifier,
+)
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace import models as namespace_models
@@ -116,6 +124,9 @@ async def test_resource_pool_update_quota(
         assert retrieved_rps[0] == updated_rp
     except (ValidationError, errors.ValidationError):
         pass
+    finally:
+        if inserted_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_rp.id)
 
 
 @given(rp=rp_strat(), data=st.data())
@@ -310,9 +321,9 @@ async def test_resource_class_create(
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
         assert len(retrieved_rp.classes) >= 1
-        assert (
-            sum([i == inserted_class for i in retrieved_rp.classes]) == 1
-        ), f"class {inserted_class} should be in {retrieved_rp.classes}"
+        assert sum([i == inserted_class for i in retrieved_rp.classes]) == 1, (
+            f"class {inserted_class} should be in {retrieved_rp.classes}"
+        )
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -348,9 +359,9 @@ async def test_resource_class_delete(
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
-        assert not any(
-            [i == removed_cls for i in retrieved_rp.classes]
-        ), f"class {removed_cls} should not be in {retrieved_rp.classes}"
+        assert not any([i == removed_cls for i in retrieved_rp.classes]), (
+            f"class {removed_cls} should not be in {retrieved_rp.classes}"
+        )
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -392,12 +403,12 @@ async def test_resource_class_update(
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
         assert updated_rc.id == rc_to_update.id
-        assert (
-            sum([i == updated_rc for i in retrieved_rp.classes]) == 1
-        ), f"class {updated_rc} should be in {retrieved_rp.classes}"
-        assert not any(
-            [i == rc_to_update for i in retrieved_rp.classes]
-        ), f"class {rc_to_update} should not be in {retrieved_rp.classes}"
+        assert sum([i == updated_rc for i in retrieved_rp.classes]) == 1, (
+            f"class {updated_rc} should be in {retrieved_rp.classes}"
+        )
+        assert not any([i == rc_to_update for i in retrieved_rp.classes]), (
+            f"class {rc_to_update} should not be in {retrieved_rp.classes}"
+        )
 
     except (ValidationError, errors.ValidationError):
         pass
@@ -785,3 +796,362 @@ async def test_member_repository_rejects_bad_project_id(
             inserted_rp.id,
             [ResourcePoolMemberIdentifier(member_type=MemberType.PROJECT, member_id="not-a-ulid")],
         )
+
+
+async def _insert_provider_and_connect(
+    connected_repo: ConnectedServicesRepository,
+    admin_user: base_models.APIUser,
+    user_api_users: list[base_models.APIUser],
+    provider_id: str,
+    session_maker: any,
+) -> any:
+    """Insert an OAuth2 provider and create connections for users."""
+    client = await connected_repo.insert_oauth2_client(
+        admin_user,
+        UnsavedOAuth2Client(
+            id=provider_id,
+            app_slug=f"{provider_id}-slug",
+            url="https://example.org",
+            kind=ProviderKind.gitlab,
+            client_id="cid",
+            client_secret="secret",
+            display_name="Test Provider",
+            scope="api",
+            use_pkce=False,
+        ),
+    )
+    for user in user_api_users:
+        async with session_maker() as session, session.begin():
+            conn = OAuth2ConnectionORM(
+                user_id=str(user.id),
+                client_id=client.id,
+                token={"access_token": "bla"},
+                status=ConnectionStatus.connected,
+                state=None,
+                code_verifier=None,
+                next_url=None,
+            )
+            session.add(conn)
+    return client
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_insert_with_remote_grants_connected_users(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+    await app_manager_instance.kc_user_repo.get_or_create_user(admin_user, str(admin_user.id))
+
+    user1 = base_models.APIUser(id="user1", full_name="User One")
+    user2 = base_models.APIUser(id="user2", full_name="User Two")
+    await app_manager_instance.kc_user_repo.get_or_create_user(user1, str(user1.id))
+    await app_manager_instance.kc_user_repo.get_or_create_user(user2, str(user2.id))
+
+    provider_id = "test-provider-insert"
+    await _insert_provider_and_connect(
+        app_manager_instance.connected_services_repo,
+        admin_user,
+        [user1, user2],
+        provider_id,
+        app_manager_instance.config.db.async_session_maker,
+    )
+
+    rp = models.UnsavedResourcePool(
+        name="test-insert-rp",
+        classes=[],
+        quota=models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+        remote=RemoteConfigurationFirecrest(
+            provider_id=provider_id,
+            api_url="https://example.org",
+            system_name="test-system",
+        ),
+    )
+
+    inserted_rp = None
+    try:
+        inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, admin_user)
+        members = await app_manager_instance.member_repo.get_resource_pool_members(admin_user, inserted_rp.id)
+        user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+        assert str(user1.id) in user_ids
+        assert str(user2.id) in user_ids
+    finally:
+        if inserted_rp is not None:
+            await app_manager_instance.rp_repo.delete_resource_pool(admin_user, inserted_rp.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_update_remote_to_new_provider_swaps_access(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+    await app_manager_instance.kc_user_repo.get_or_create_user(admin_user, str(admin_user.id))
+
+    user1 = base_models.APIUser(id="user1-update", full_name="User One")
+    user2 = base_models.APIUser(id="user2-update", full_name="User Two")
+    await app_manager_instance.kc_user_repo.get_or_create_user(user1, str(user1.id))
+    await app_manager_instance.kc_user_repo.get_or_create_user(user2, str(user2.id))
+
+    provider_id_1 = "test-provider-update-1"
+    provider_id_2 = "test-provider-update-2"
+
+    await _insert_provider_and_connect(
+        app_manager_instance.connected_services_repo,
+        admin_user,
+        [user1],
+        provider_id_1,
+        app_manager_instance.config.db.async_session_maker,
+    )
+    await _insert_provider_and_connect(
+        app_manager_instance.connected_services_repo,
+        admin_user,
+        [user2],
+        provider_id_2,
+        app_manager_instance.config.db.async_session_maker,
+    )
+
+    rp = models.UnsavedResourcePool(
+        name="test-update-rp",
+        classes=[],
+        quota=models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+        remote=RemoteConfigurationFirecrest(
+            provider_id=provider_id_1,
+            api_url="https://example.org",
+            system_name="test-system",
+        ),
+    )
+
+    inserted_rp = None
+    try:
+        inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, admin_user)
+
+        # Verify user1 has access
+        members = await app_manager_instance.member_repo.get_resource_pool_members(admin_user, inserted_rp.id)
+        user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+        assert str(user1.id) in user_ids
+
+        # Update to provider 2
+        updated_rp = await app_manager_instance.rp_repo.update_resource_pool(
+            api_user=admin_user,
+            resource_pool_id=inserted_rp.id,
+            update=models.ResourcePoolPatch(
+                remote=RemoteConfigurationFirecrestPatch(provider_id=provider_id_2),
+            ),
+        )
+
+        # Verify user1 lost access and user2 gained access
+        members = await app_manager_instance.member_repo.get_resource_pool_members(admin_user, updated_rp.id)
+        user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+        assert str(user1.id) not in user_ids
+        assert str(user2.id) in user_ids
+    finally:
+        if inserted_rp is not None:
+            await app_manager_instance.rp_repo.delete_resource_pool(admin_user, inserted_rp.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_update_remove_remote_revokes_access(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+    await app_manager_instance.kc_user_repo.get_or_create_user(admin_user, str(admin_user.id))
+
+    user1 = base_models.APIUser(id="user1-remove", full_name="User One")
+    await app_manager_instance.kc_user_repo.get_or_create_user(user1, str(user1.id))
+
+    provider_id = "test-provider-remove"
+    await _insert_provider_and_connect(
+        app_manager_instance.connected_services_repo,
+        admin_user,
+        [user1],
+        provider_id,
+        app_manager_instance.config.db.async_session_maker,
+    )
+
+    rp = models.UnsavedResourcePool(
+        name="test-remove-rp",
+        classes=[],
+        quota=models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+        remote=RemoteConfigurationFirecrest(
+            provider_id=provider_id,
+            api_url="https://example.org",
+            system_name="test-system",
+        ),
+    )
+
+    inserted_rp = None
+    try:
+        inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, admin_user)
+
+        # Verify user1 has access
+        members = await app_manager_instance.member_repo.get_resource_pool_members(admin_user, inserted_rp.id)
+        user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+        assert str(user1.id) in user_ids
+
+        # Remove remote provider
+        updated_rp = await app_manager_instance.rp_repo.update_resource_pool(
+            api_user=admin_user,
+            resource_pool_id=inserted_rp.id,
+            update=models.ResourcePoolPatch(remote=RESET),
+        )
+
+        # Verify user1 lost access
+        members = await app_manager_instance.member_repo.get_resource_pool_members(admin_user, updated_rp.id)
+        user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+        assert str(user1.id) not in user_ids
+    finally:
+        if inserted_rp is not None:
+            await app_manager_instance.rp_repo.delete_resource_pool(admin_user, inserted_rp.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_delete_cleans_authz(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+    await app_manager_instance.kc_user_repo.get_or_create_user(admin_user, str(admin_user.id))
+
+    user1 = base_models.APIUser(id="user1-delete", full_name="User One")
+    await app_manager_instance.kc_user_repo.get_or_create_user(user1, str(user1.id))
+
+    provider_id = "test-provider-delete"
+    await _insert_provider_and_connect(
+        app_manager_instance.connected_services_repo,
+        admin_user,
+        [user1],
+        provider_id,
+        app_manager_instance.config.db.async_session_maker,
+    )
+
+    rp = models.UnsavedResourcePool(
+        name="test-delete-rp",
+        classes=[],
+        quota=models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+        remote=RemoteConfigurationFirecrest(
+            provider_id=provider_id,
+            api_url="https://example.org",
+            system_name="test-system",
+        ),
+    )
+
+    inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, admin_user)
+    await app_manager_instance.rp_repo.delete_resource_pool(admin_user, inserted_rp.id)
+
+    # After deletion, querying members should return empty
+    members = await app_manager_instance.member_repo.get_resource_pool_members(admin_user, inserted_rp.id)
+    user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+    assert str(user1.id) not in user_ids
+    assert len(user_ids) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_insert_with_nonexistent_provider_id_fails(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+    await app_manager_instance.kc_user_repo.get_or_create_user(admin_user, str(admin_user.id))
+
+    rp = models.UnsavedResourcePool(
+        name="test-nonexistent-rp",
+        classes=[],
+        quota=models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+        remote=RemoteConfigurationFirecrest(
+            provider_id="does-not-exist",
+            api_url="https://example.org",
+            system_name="test-system",
+        ),
+    )
+
+    with pytest.raises(errors.MissingResourceError):
+        await app_manager_instance.rp_repo.insert_resource_pool(admin_user, rp)
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_get_connected_user_ids_returns_only_connected_users(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+    await app_manager_instance.kc_user_repo.get_or_create_user(admin_user, str(admin_user.id))
+
+    user1 = base_models.APIUser(id="user1-conn", full_name="User One")
+    user2 = base_models.APIUser(id="user2-conn", full_name="User Two")
+    await app_manager_instance.kc_user_repo.get_or_create_user(user1, str(user1.id))
+    await app_manager_instance.kc_user_repo.get_or_create_user(user2, str(user2.id))
+
+    provider_id = "test-provider-conn"
+
+    # Insert provider
+    client = await app_manager_instance.connected_services_repo.insert_oauth2_client(
+        admin_user,
+        UnsavedOAuth2Client(
+            id=provider_id,
+            app_slug=f"{provider_id}-slug",
+            url="https://example.org",
+            kind=ProviderKind.gitlab,
+            client_id="cid",
+            client_secret="secret",
+            display_name="Test Provider",
+            scope="api",
+            use_pkce=False,
+        ),
+    )
+
+    # Connect user1 as connected, user2 as pending
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        conn1 = OAuth2ConnectionORM(
+            user_id=str(user1.id),
+            client_id=client.id,
+            token={"access_token": "bla"},
+            status=ConnectionStatus.connected,
+            state=None,
+            code_verifier=None,
+            next_url=None,
+        )
+        conn2 = OAuth2ConnectionORM(
+            user_id=str(user2.id),
+            client_id=client.id,
+            token={"access_token": "bla"},
+            status=ConnectionStatus.pending,
+            state=None,
+            code_verifier=None,
+            next_url=None,
+        )
+        session.add(conn1)
+        session.add(conn2)
+
+    # Call the private helper
+    connected_ids = await app_manager_instance.rp_repo._get_connected_user_ids(provider_id)
+    assert str(user1.id) in connected_ids
+    assert str(user2.id) not in connected_ids
