@@ -321,9 +321,9 @@ async def test_resource_class_create(
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
         assert len(retrieved_rp.classes) >= 1
-        assert (
-            sum([i == inserted_class for i in retrieved_rp.classes]) == 1
-        ), f"class {inserted_class} should be in {retrieved_rp.classes}"
+        assert sum([i == inserted_class for i in retrieved_rp.classes]) == 1, (
+            f"class {inserted_class} should be in {retrieved_rp.classes}"
+        )
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -359,9 +359,9 @@ async def test_resource_class_delete(
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
-        assert not any(
-            [i == removed_cls for i in retrieved_rp.classes]
-        ), f"class {removed_cls} should not be in {retrieved_rp.classes}"
+        assert not any([i == removed_cls for i in retrieved_rp.classes]), (
+            f"class {removed_cls} should not be in {retrieved_rp.classes}"
+        )
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -403,12 +403,12 @@ async def test_resource_class_update(
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
         assert updated_rc.id == rc_to_update.id
-        assert (
-            sum([i == updated_rc for i in retrieved_rp.classes]) == 1
-        ), f"class {updated_rc} should be in {retrieved_rp.classes}"
-        assert not any(
-            [i == rc_to_update for i in retrieved_rp.classes]
-        ), f"class {rc_to_update} should not be in {retrieved_rp.classes}"
+        assert sum([i == updated_rc for i in retrieved_rp.classes]) == 1, (
+            f"class {updated_rc} should be in {retrieved_rp.classes}"
+        )
+        assert not any([i == rc_to_update for i in retrieved_rp.classes]), (
+            f"class {rc_to_update} should not be in {retrieved_rp.classes}"
+        )
 
     except (ValidationError, errors.ValidationError):
         pass
@@ -1157,3 +1157,229 @@ async def test_get_connected_user_ids_returns_only_connected_users(
     connected_ids = await app_manager_instance.rp_repo._get_connected_user_ids(provider_id)
     assert str(user1.id) in connected_ids
     assert str(user2.id) not in connected_ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_update_with_nonexistent_provider_id_fails(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+    await app_manager_instance.kc_user_repo.get_or_create_user(admin_user, str(admin_user.id))
+
+    rp = models.UnsavedResourcePool(
+        name="test-update-nonexistent-rp",
+        classes=[models.UnsavedResourceClass(name="default", cpu=1.0, memory=1, gpu=0, max_storage=1, default=True)],
+        quota=models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+    )
+
+    inserted_rp = None
+    try:
+        inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, admin_user)
+        with pytest.raises(errors.MissingResourceError):
+            await app_manager_instance.rp_repo.update_resource_pool(
+                api_user=admin_user,
+                resource_pool_id=inserted_rp.id,
+                update=models.ResourcePoolPatch(
+                    remote=RemoteConfigurationFirecrestPatch(
+                        provider_id="does-not-exist",
+                        api_url="https://example.org",
+                        system_name="test-system",
+                    ),
+                ),
+            )
+    finally:
+        if inserted_rp is not None:
+            await app_manager_instance.rp_repo.delete_resource_pool(admin_user, inserted_rp.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_insert_auto_grant_skips_missing_keycloak_users(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+    await app_manager_instance.kc_user_repo.get_or_create_user(admin_user, str(admin_user.id))
+
+    user1 = base_models.APIUser(id="user1-missing", full_name="User One")
+    user2 = base_models.APIUser(id="user2-missing", full_name="User Two")
+    # Only add user1 to Keycloak, not user2
+    await app_manager_instance.kc_user_repo.get_or_create_user(user1, str(user1.id))
+
+    provider_id = "test-provider-missing-insert"
+    await _insert_provider_and_connect(
+        app_manager_instance.connected_services_repo,
+        admin_user,
+        [user1, user2],
+        provider_id,
+        app_manager_instance.config.db.async_session_maker,
+    )
+
+    rp = models.UnsavedResourcePool(
+        name="test-insert-missing-rp",
+        classes=[],
+        quota=models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+        remote=RemoteConfigurationFirecrest(
+            provider_id=provider_id,
+            api_url="https://example.org",
+            system_name="test-system",
+        ),
+    )
+
+    inserted_rp = None
+    try:
+        inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, admin_user)
+        members = await app_manager_instance.member_repo.get_resource_pool_members(admin_user, inserted_rp.id)
+        user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+        assert str(user1.id) in user_ids
+        assert str(user2.id) not in user_ids
+    finally:
+        if inserted_rp is not None:
+            await app_manager_instance.rp_repo.delete_resource_pool(admin_user, inserted_rp.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_update_auto_grant_skips_missing_keycloak_users(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+    await app_manager_instance.kc_user_repo.get_or_create_user(admin_user, str(admin_user.id))
+
+    user1 = base_models.APIUser(id="user1-update-missing", full_name="User One")
+    user2 = base_models.APIUser(id="user2-update-missing", full_name="User Two")
+    # Only add user1 to Keycloak, not user2
+    await app_manager_instance.kc_user_repo.get_or_create_user(user1, str(user1.id))
+
+    provider_id = "test-provider-missing-update"
+    await _insert_provider_and_connect(
+        app_manager_instance.connected_services_repo,
+        admin_user,
+        [user1, user2],
+        provider_id,
+        app_manager_instance.config.db.async_session_maker,
+    )
+
+    rp = models.UnsavedResourcePool(
+        name="test-update-missing-rp",
+        classes=[models.UnsavedResourceClass(name="default", cpu=1.0, memory=1, gpu=0, max_storage=1, default=True)],
+        quota=models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+    )
+
+    inserted_rp = None
+    try:
+        inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, admin_user)
+
+        # Verify no members initially
+        members = await app_manager_instance.member_repo.get_resource_pool_members(admin_user, inserted_rp.id)
+        user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+        assert len(user_ids) == 0
+
+        # Update to add remote provider
+        updated_rp = await app_manager_instance.rp_repo.update_resource_pool(
+            api_user=admin_user,
+            resource_pool_id=inserted_rp.id,
+            update=models.ResourcePoolPatch(
+                remote=RemoteConfigurationFirecrestPatch(
+                    provider_id=provider_id,
+                    api_url="https://example.org",
+                    system_name="test-system",
+                ),
+            ),
+        )
+
+        # Verify user1 gets access, user2 does not
+        members = await app_manager_instance.member_repo.get_resource_pool_members(admin_user, updated_rp.id)
+        user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+        assert str(user1.id) in user_ids
+        assert str(user2.id) not in user_ids
+    finally:
+        if inserted_rp is not None:
+            await app_manager_instance.rp_repo.delete_resource_pool(admin_user, inserted_rp.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_update_remote_swap_skips_missing_keycloak_users(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+    await app_manager_instance.kc_user_repo.get_or_create_user(admin_user, str(admin_user.id))
+
+    user1 = base_models.APIUser(id="user1-swap-missing", full_name="User One")
+    user2 = base_models.APIUser(id="user2-swap-missing", full_name="User Two")
+    await app_manager_instance.kc_user_repo.get_or_create_user(user1, str(user1.id))
+
+    provider_id_1 = "test-provider-swap-1"
+    provider_id_2 = "test-provider-swap-2"
+
+    await _insert_provider_and_connect(
+        app_manager_instance.connected_services_repo,
+        admin_user,
+        [user1],
+        provider_id_1,
+        app_manager_instance.config.db.async_session_maker,
+    )
+    await _insert_provider_and_connect(
+        app_manager_instance.connected_services_repo,
+        admin_user,
+        [user1, user2],
+        provider_id_2,
+        app_manager_instance.config.db.async_session_maker,
+    )
+
+    rp = models.UnsavedResourcePool(
+        name="test-swap-missing-rp",
+        classes=[models.UnsavedResourceClass(name="default", cpu=1.0, memory=1, gpu=0, max_storage=1, default=True)],
+        quota=models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+        remote=RemoteConfigurationFirecrest(
+            provider_id=provider_id_1,
+            api_url="https://example.org",
+            system_name="test-system",
+        ),
+    )
+
+    inserted_rp = None
+    try:
+        inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, admin_user)
+        members = await app_manager_instance.member_repo.get_resource_pool_members(admin_user, inserted_rp.id)
+        user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+        assert str(user1.id) in user_ids
+
+        # Update to provider 2
+        updated_rp = await app_manager_instance.rp_repo.update_resource_pool(
+            api_user=admin_user,
+            resource_pool_id=inserted_rp.id,
+            update=models.ResourcePoolPatch(
+                remote=RemoteConfigurationFirecrestPatch(provider_id=provider_id_2),
+            ),
+        )
+
+        # Verify user1 still has access, user2 does not (because user2 missing from Keycloak)
+        members = await app_manager_instance.member_repo.get_resource_pool_members(admin_user, updated_rp.id)
+        user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+        assert str(user1.id) in user_ids
+        assert str(user2.id) not in user_ids
+    finally:
+        if inserted_rp is not None:
+            await app_manager_instance.rp_repo.delete_resource_pool(admin_user, inserted_rp.id)
