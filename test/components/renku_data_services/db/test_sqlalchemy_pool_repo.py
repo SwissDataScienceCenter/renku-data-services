@@ -1139,6 +1139,9 @@ async def test_get_connected_user_ids_returns_only_connected_users(
             code_verifier=None,
             next_url=None,
         )
+        session.add(conn1)
+
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         conn2 = OAuth2ConnectionORM(
             user_id=str(user2.id),
             client_id=client.id,
@@ -1148,7 +1151,6 @@ async def test_get_connected_user_ids_returns_only_connected_users(
             code_verifier=None,
             next_url=None,
         )
-        session.add(conn1)
         session.add(conn2)
 
     # Call the private helper
