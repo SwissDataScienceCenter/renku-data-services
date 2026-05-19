@@ -1,4 +1,4 @@
-"""Models for apps."""
+"""Models for Renku apps."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -23,6 +23,6 @@ class App:
     launcher_id: ULID
     project_id: ULID
     status: AppStatus
-    url: str
+    url: str | None = None
     started: datetime | None = None
     image: str | None = None
