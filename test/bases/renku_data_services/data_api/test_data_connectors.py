@@ -2566,3 +2566,97 @@ async def test_add_envidat_data_connector(
     assert res.json.get("publisher_name") is not None
     assert res.json.get("publisher_name").lower() == "envidat"
     assert res.json.get("publisher_url") is not None
+
+
+@pytest.mark.asyncio
+async def test_data_connectors_with_matching_slugs_different_namespaces(
+    sanic_client,
+    member_1_user: UserInfo,
+    member_1_headers,
+) -> None:
+    # Create a public project
+    project_slug = "prj1"
+    user_slug = member_1_user.namespace.path.serialize()
+    dc_slug = "dc1"
+    payload = {
+        "name": project_slug,
+        "namespace": user_slug,
+        "slug": project_slug,
+        "visibility": "public",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Create a group
+    group_slug = "test1"
+    payload = {
+        "name": group_slug,
+        "slug": group_slug,
+        "description": "Group 1 Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Create a public data connector in the project
+    storage_config = {
+        "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+        "source_path": "giab",
+        "target_path": "giab",
+    }
+    dc_in_prj_namespace = f"{member_1_user.namespace.path.serialize()}/{project_slug}"
+    payload = {
+        "name": dc_slug,
+        "namespace": dc_in_prj_namespace,
+        "slug": dc_slug,
+        "storage": storage_config,
+        "visibility": "public",
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == dc_in_prj_namespace
+    project_dc_id = response.json["id"]
+
+    # Create a public data connector in the owner user namespace
+    payload = {
+        "name": dc_slug,
+        "namespace": user_slug,
+        "slug": dc_slug,
+        "storage": storage_config,
+        "visibility": "public",
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == user_slug
+    user_dc_id = response.json["id"]
+
+    # Create a public data connector in the group namespace
+    payload = {
+        "name": dc_slug,
+        "namespace": group_slug,
+        "slug": dc_slug,
+        "storage": storage_config,
+        "visibility": "public",
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == group_slug
+    group_dc_id = response.json["id"]
+
+    # Get the user dc by its slug
+    _, response = await sanic_client.get(f"/api/data/namespaces/{user_slug}/data_connectors/{dc_slug}")
+    assert response.status_code == 200, response.text
+    assert response.json["id"] == user_dc_id
+    # Get the project dc by its slug
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{user_slug}/projects/{project_slug}/data_connectors/{dc_slug}"
+    )
+    assert response.status_code == 200, response.text
+    assert response.json["id"] == project_dc_id
+    # Get the group dc by its slug
+    _, response = await sanic_client.get(f"/api/data/namespaces/{group_slug}/data_connectors/{dc_slug}")
+    assert response.status_code == 200, response.text
+    assert response.json["id"] == group_dc_id
+    # Check we can see the 3 data connectors
+    _, response = await sanic_client.get("/api/data/data_connectors")
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 3
