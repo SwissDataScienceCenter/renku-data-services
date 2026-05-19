@@ -564,6 +564,14 @@ class ResourcePoolRepository(_Base):
         self, api_user: base_models.APIUser, resource_pool_id: int, update: models.ResourcePoolPatch
     ) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
+        old_provider_id: str | None = None
+        async with self.session_maker() as session:
+            rp_old = await session.scalar(
+                select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
+            )
+            if rp_old is not None:
+                old_provider_id = rp_old.remote_provider_id
+
         async with self.session_maker() as session, session.begin():
             stmt = (
                 select(schemas.ResourcePoolORM)
@@ -672,12 +680,46 @@ class ResourcePoolRepository(_Base):
             await session.refresh(rp)
             result = rp.dump(quota=quota)
             if update_authz:
-                return await self._update_resource_pool(
+                result = await self._update_resource_pool(
                     api_user=api_user,
                     rp=result,
                     session=session,
                 )
-            return result
+            transaction_result = result
+
+        # After transaction, sync memberships
+        new_provider_id = transaction_result.remote.provider_id if transaction_result.remote else None
+        if old_provider_id != new_provider_id and self.member_repo is not None:
+            # Revoke old
+            if old_provider_id is not None:
+                old_user_ids = await self._get_connected_user_ids(old_provider_id)
+                if old_user_ids:
+                    old_members = [
+                        ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid) for uid in old_user_ids
+                    ]
+                    try:
+                        await self.member_repo.revoke_resource_pool_members(api_user, resource_pool_id, old_members)
+                    except errors.BaseError as e:
+                        logger.warning(
+                            f"Failed to auto-revoke members from resource pool {resource_pool_id} "
+                            f"for provider {old_provider_id}: {e}"
+                        )
+            # Grant new
+            if new_provider_id is not None:
+                new_user_ids = await self._get_connected_user_ids(new_provider_id)
+                if new_user_ids:
+                    new_members = [
+                        ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid) for uid in new_user_ids
+                    ]
+                    try:
+                        await self.member_repo.grant_resource_pool_members(api_user, resource_pool_id, new_members)
+                    except errors.BaseError as e:
+                        logger.warning(
+                            f"Failed to auto-grant members to resource pool {resource_pool_id} "
+                            f"for provider {new_provider_id}: {e}"
+                        )
+
+        return transaction_result
 
     @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.update, resource=ResourceType.resource_pool)
