@@ -920,7 +920,7 @@ async def test_resource_pool_update_remote_to_new_provider_swaps_access(
 
     rp = models.UnsavedResourcePool(
         name="test-update-rp",
-        classes=[],
+        classes=[models.UnsavedResourceClass(name="default", cpu=1.0, memory=1, gpu=0, max_storage=1, default=True)],
         quota=models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
         public=False,
         default=False,
@@ -984,7 +984,7 @@ async def test_resource_pool_update_remove_remote_revokes_access(
 
     rp = models.UnsavedResourcePool(
         name="test-remove-rp",
-        classes=[],
+        classes=[models.UnsavedResourceClass(name="default", cpu=1.0, memory=1, gpu=0, max_storage=1, default=True)],
         quota=models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
         public=False,
         default=False,
