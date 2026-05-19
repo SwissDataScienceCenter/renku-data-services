@@ -23,7 +23,7 @@ from renku_data_services.crc.core import (
     validate_resource_pool_post,
     validate_resource_pool_put_or_patch,
 )
-from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
+from renku_data_services.crc.db import ClusterRepository, MemberRepository, ResourcePoolRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
 
@@ -33,7 +33,7 @@ class ResourcePoolsBP(CustomBlueprint):
     """Handlers for manipulating resource pools."""
 
     rp_repo: ResourcePoolRepository
-    user_repo: UserRepository
+    member_repo: MemberRepository
     cluster_repo: ClusterRepository
     authenticator: base_models.Authenticator
 
@@ -126,7 +126,7 @@ class ResourcePoolsBP(CustomBlueprint):
 class ResourcePoolUsersBP(CustomBlueprint):
     """Handlers for dealing with the users of individual resource pools."""
 
-    repo: UserRepository
+    repo: MemberRepository
     kc_user_repo: KcUserRepo
     authenticator: base_models.Authenticator
 
@@ -485,7 +485,7 @@ class QuotaBP(CustomBlueprint):
 class UserResourcePoolsBP(CustomBlueprint):
     """Handlers for dealing with the resource pools of a specific user."""
 
-    repo: UserRepository
+    repo: MemberRepository
     kc_user_repo: KcUserRepo
     authenticator: base_models.Authenticator
 
