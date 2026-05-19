@@ -1920,67 +1920,6 @@ async def test_resource_pool_members_add_group(
     assert member_1_user.id in user_ids
 
 
-
-async def test_resource_pool_members_add_group(
-    sanic_client: SanicASGITestClient,
-    admin_headers: dict[str, str],
-    valid_resource_pool_payload: dict[str, Any],
-    create_group,
-    member_1_headers,
-    member_1_user,
-    cluster: KindCluster,
-) -> None:
-    valid_resource_pool_payload["default"] = False
-    valid_resource_pool_payload["public"] = False
-    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
-    assert res.status_code == 201
-    rp = res.json
-
-    group = await create_group(
-        sanic_client, "test-pool-group", admin=True, members=[{"id": member_1_user.id, "role": "viewer"}]
-    )
-
-    # Add the group to the pool via /members
-    member_payload = [{"member_type": "group", "id": group["id"], "relation": "group_viewer"}]
-    _, res = await sanic_client.post(
-        f"/api/data/resource_pools/{rp['id']}/members",
-        headers=admin_headers,
-        json=member_payload,
-    )
-    assert res.status_code == 201
-    assert res.json[0]["slug"] == "test-pool-group"
-    assert res.json[0]["name"] == "test-pool-group"
-
-    # GET /members should return the group
-    _, res = await sanic_client.get(
-        f"/api/data/resource_pools/{rp['id']}/members",
-        headers=admin_headers,
-    )
-    assert res.status_code == 200
-    members = res.json
-    group_members = [m for m in members if m.get("member_type") == "group" and m.get("id") == group["id"]]
-    assert len(group_members) == 1
-    assert group_members[0]["slug"] == "test-pool-group"
-    assert group_members[0]["name"] == "test-pool-group"
-
-    # member_1 (in the group) should now be able to access the pool
-    _, res = await sanic_client.get(
-        f"/api/data/resource_pools/{rp['id']}",
-        headers=member_1_headers,
-    )
-    assert res.status_code == 200
-
-    # GET /users should resolve and include member_1
-    _, res = await sanic_client.get(
-        f"/api/data/resource_pools/{rp['id']}/users",
-        headers=admin_headers,
-    )
-    assert res.status_code == 200
-    users = res.json
-    user_ids = [u["id"] for u in users]
-    assert member_1_user.id in user_ids
-
-
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
 async def test_resource_pools_quota_exceeded(
@@ -2124,67 +2063,6 @@ async def test_resource_pool_members_add_project(
     assert member_1_user.id in user_ids
 
 
-
-async def test_resource_pool_members_add_project(
-    sanic_client: SanicASGITestClient,
-    admin_headers: dict[str, str],
-    valid_resource_pool_payload: dict[str, Any],
-    create_project,
-    member_1_headers,
-    member_1_user,
-    cluster: KindCluster,
-) -> None:
-    valid_resource_pool_payload["default"] = False
-    valid_resource_pool_payload["public"] = False
-    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
-    assert res.status_code == 201
-    rp = res.json
-
-    project = await create_project(
-        sanic_client, "test-pool-project", admin=True, members=[{"id": member_1_user.id, "role": "viewer"}]
-    )
-
-    # Add the project to the pool via /members
-    member_payload = [{"member_type": "project", "id": project["id"], "relation": "project_viewer"}]
-    _, res = await sanic_client.post(
-        f"/api/data/resource_pools/{rp['id']}/members",
-        headers=admin_headers,
-        json=member_payload,
-    )
-    assert res.status_code == 201
-    assert res.json[0]["namespace"] == "admin.doe/test-pool-project"
-    assert res.json[0]["name"] == "test-pool-project"
-
-    # GET /members should return the project
-    _, res = await sanic_client.get(
-        f"/api/data/resource_pools/{rp['id']}/members",
-        headers=admin_headers,
-    )
-    assert res.status_code == 200
-    members = res.json
-    project_members = [m for m in members if m.get("member_type") == "project" and m.get("id") == project["id"]]
-    assert len(project_members) == 1
-    assert project_members[0]["namespace"] == "admin.doe/test-pool-project"
-    assert project_members[0]["name"] == "test-pool-project"
-
-    # member_1 (in the project) should now be able to access the pool
-    _, res = await sanic_client.get(
-        f"/api/data/resource_pools/{rp['id']}",
-        headers=member_1_headers,
-    )
-    assert res.status_code == 200
-
-    # GET /users should resolve and include member_1
-    _, res = await sanic_client.get(
-        f"/api/data/resource_pools/{rp['id']}/users",
-        headers=admin_headers,
-    )
-    assert res.status_code == 200
-    users = res.json
-    user_ids = [u["id"] for u in users]
-    assert member_1_user.id in user_ids
-
-
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
 async def test_resource_pools_quota_with_no_limits(
@@ -2258,53 +2136,6 @@ async def test_resource_pools_quota_with_no_limits(
     assert "usage_hours_remaining" not in resource_class
     # usage_hours_total should not exist in the response since it's None
     assert "usage_hours_total" not in resource_class
-
-
-async def test_resource_pool_members_put_replaces(
-    sanic_client: SanicASGITestClient,
-    admin_headers: dict[str, str],
-    valid_resource_pool_payload: dict[str, Any],
-    create_group,
-    cluster: KindCluster,
-) -> None:
-    valid_resource_pool_payload["default"] = False
-    valid_resource_pool_payload["public"] = False
-    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
-    assert res.status_code == 201
-    rp = res.json
-
-    group1 = await create_group(sanic_client, "test-group-1", admin=True)
-    group2 = await create_group(sanic_client, "test-group-2", admin=True)
-
-    # Add group1
-    _, res = await sanic_client.post(
-        f"/api/data/resource_pools/{rp['id']}/members",
-        headers=admin_headers,
-        json=[{"member_type": "group", "id": group1["id"], "relation": "group_viewer"}],
-    )
-    assert res.status_code == 201
-
-    # PUT with only group2 should replace
-    _, res = await sanic_client.put(
-        f"/api/data/resource_pools/{rp['id']}/members",
-        headers=admin_headers,
-        json=[{"member_type": "group", "id": group2["id"], "relation": "group_viewer"}],
-    )
-    assert res.status_code == 200
-    assert res.json[0]["slug"] == "test-group-2"
-    assert res.json[0]["name"] == "test-group-2"
-
-    _, res = await sanic_client.get(
-        f"/api/data/resource_pools/{rp['id']}/members",
-        headers=admin_headers,
-    )
-    assert res.status_code == 200
-    members = res.json
-    assert len(members) == 1
-    assert members[0]["id"] == group2["id"]
-    assert members[0]["slug"] == "test-group-2"
-    assert members[0]["name"] == "test-group-2"
-
 
 
 async def test_resource_pool_members_put_replaces(
