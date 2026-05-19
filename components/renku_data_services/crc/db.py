@@ -429,28 +429,50 @@ class ResourcePoolRepository(_Base):
         """Get the default resource class in the default resource pool."""
         return await self.__query_repository.get_default_resource_class()
 
-    async def filter_resource_pools(
-        self,
-        api_user: base_models.APIUser,
-        cpu: float = 0,
-        memory: int = 0,
-        max_storage: int = 0,
-        gpu: int = 0,
-    ) -> list[models.ResourcePool]:
-        """Get resource pools from database with indication of which resource class matches the specified criteria."""
-        return await self.__query_repository.filter_resource_pools(api_user, cpu, memory, max_storage, gpu)
+    async def _get_connected_user_ids(self, provider_id: str) -> list[str]:
+        """Query all users with a connected OAuth2 connection to the given provider."""
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(OAuth2ConnectionORM.user_id)
+                .where(OAuth2ConnectionORM.client_id == provider_id)
+                .where(OAuth2ConnectionORM.status == ConnectionStatus.connected)
+            )
+            return list(result.all())
 
     @_only_admins
     async def insert_resource_pool(
         self, api_user: base_models.APIUser, new_resource_pool: models.UnsavedResourcePool
     ) -> models.ResourcePool:
         """Insert resource pool into database."""
+        provider_id = None
+        if new_resource_pool.remote and new_resource_pool.remote.provider_id:
+            provider_id = new_resource_pool.remote.provider_id
+            async with self.session_maker() as session:
+                from renku_data_services.connected_services.orm import OAuth2ClientORM
+
+                client = await session.scalar(select(OAuth2ClientORM).where(OAuth2ClientORM.id == provider_id))
+                if client is None:
+                    raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
+
         async with self.session_maker() as session, session.begin():
-            return await self._insert_resource_pool(
+            result = await self._insert_resource_pool(
                 api_user=api_user,
                 new_resource_pool=new_resource_pool,
                 session=session,
             )
+
+        if provider_id and self.member_repo is not None:
+            user_ids = await self._get_connected_user_ids(provider_id)
+            if user_ids:
+                members = [ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid) for uid in user_ids]
+                try:
+                    await self.member_repo.grant_resource_pool_members(api_user, result.id, members)
+                except errors.BaseError as e:
+                    logger.warning(
+                        f"Failed to auto-grant members to resource pool {result.id} for provider {provider_id}: {e}"
+                    )
+
+        return result
 
     @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
