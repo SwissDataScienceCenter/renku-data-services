@@ -23,7 +23,7 @@ def upgrade() -> None:
         "launchers",
         sa.Column(
             "launcher_type",
-            sa.Enum("interactive", "non_interactive", "app", name="launchertype", create_type=True),
+            sa.Enum("interactive", "non_interactive", "app", name="launchertype"),
             nullable=False,
             server_default="interactive",
         ),
