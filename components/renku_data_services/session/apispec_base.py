@@ -60,6 +60,6 @@ class BaseAPISpec(BaseModel):
     def convert_to_api_launcher_type(cls, lt: models.LauncherType) -> str:
         """Convert the model launcher type into a valid value when serializing."""
         if lt == models.LauncherType.non_interactive:
-            return "non-interactive"
+            return "non_interactive"
         else:
             return "interactive"

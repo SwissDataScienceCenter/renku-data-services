@@ -177,6 +177,7 @@ class SessionLauncherORM(BaseORM):
             resource_class_id=launcher.resource_class_id,
             disk_storage=launcher.disk_storage,
             env_variables=models.EnvVar.to_dict(launcher.env_variables) if launcher.env_variables else None,
+            launcher_type=launcher.launcher_type,
         )
 
     def dump(self) -> models.SessionLauncher:
