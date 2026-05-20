@@ -17,6 +17,9 @@ from sqlalchemy import (
     Table,
     literal,
 )
+from sqlalchemy import (
+    false as sql_false,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -294,6 +297,9 @@ class ResourcePoolORM(BaseORM):
         Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=literal("linux_amd64")
     )
 
+    skip_session_iframe: Mapped[bool] = mapped_column(default=False, server_default=sql_false())
+    """If set to true it will cause the UI to not open the session in an iframe."""
+
     @classmethod
     def from_unsaved_model(
         cls,
@@ -325,6 +331,7 @@ class ResourcePoolORM(BaseORM):
             remote_json=remote_json,
             cluster_id=cluster.id if cluster else None,
             platform=new_resource_pool.platform,
+            skip_session_iframe=new_resource_pool.skip_session_iframe,
         )
 
     def dump(
@@ -362,6 +369,7 @@ class ResourcePoolORM(BaseORM):
             cluster=cluster,
             platform=self.platform,
             credits_used=credits_used.value if credits_used else None,
+            skip_session_iframe=self.skip_session_iframe,
         )
 
     def _dump_remote(self) -> models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | None:
