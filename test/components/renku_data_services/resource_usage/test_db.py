@@ -241,7 +241,7 @@ async def test_record_resource_requests_grouping(app_manager_instance: Dependenc
     repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
     first_date = datetime(2026, 1, 22, 13, 26, 4, 0, tzinfo=UTC)
     interval = timedelta(minutes=10)
-    await repo.insert_many(
+    requests = (
         [
             # a pod is running
             make_resources_request(
@@ -292,6 +292,7 @@ async def test_record_resource_requests_grouping(app_manager_instance: Dependenc
             for i in range(16, 19)
         ]
     )
+    await repo.insert_many(requests)
 
     records = [e async for e in repo.find_view(first_date, first_date + timedelta(days=1))]
     records.sort(key=lambda e: e.capture_date)
@@ -302,56 +303,44 @@ async def test_record_resource_requests_grouping(app_manager_instance: Dependenc
                 "kind": "Pod",
                 "capture_date": first_date,
                 "cpu_request": ComputeCapacity.from_cores(0.5),
-                "cpu_time": interval,
+                "capture_interval": interval,
                 "memory_request": DataSize.from_mb(256),
-                "memory_time": interval,
-                "disk_time": None,
             },
             {
                 "kind": "Pod",
                 "capture_date": first_date + interval,
                 "cpu_request": ComputeCapacity.from_cores(0.5),
-                "cpu_time": interval,
+                "capture_interval": interval,
                 "memory_request": DataSize.from_mb(256),
-                "memory_time": interval,
-                "disk_time": None,
             },
             {
                 "kind": "Pod",
                 "capture_date": first_date + 2 * interval,
                 "cpu_request": ComputeCapacity.from_cores(0.5),
-                "cpu_time": interval,
+                "capture_interval": interval,
                 "memory_request": DataSize.from_mb(256),
-                "memory_time": interval,
-                "disk_time": None,
             },
             # stopped pods are filtered out, the capture_interval will be used
             {
                 "kind": "Pod",
                 "capture_date": first_date + 7 * interval,
+                "capture_interval": interval,
                 "cpu_request": ComputeCapacity.from_cores(0.5),
-                "cpu_time": interval,
                 "memory_request": DataSize.from_mb(256),
-                "memory_time": interval,
-                "disk_time": None,
             },
             {
                 "kind": "Pod",
                 "capture_date": first_date + 14 * interval,
                 "cpu_request": ComputeCapacity.from_cores(0.5),
-                "cpu_time": interval,
+                "capture_interval": interval,
                 "memory_request": DataSize.from_mb(256),
-                "memory_time": interval,
-                "disk_time": None,
             },
             {
                 "kind": "Pod",
                 "capture_date": first_date + 15 * interval,
                 "cpu_request": ComputeCapacity.from_cores(0.5),
-                "cpu_time": timedelta(minutes=5),
+                "capture_interval": timedelta(minutes=5),
                 "memory_request": DataSize.from_mb(256),
-                "memory_time": timedelta(minutes=5),
-                "disk_time": None,
             },
             # here the request data collection was restarted 5min into the 10min wait interval
             # so the previous value is observed 5min, because there is already a new record
@@ -359,28 +348,22 @@ async def test_record_resource_requests_grouping(app_manager_instance: Dependenc
                 "kind": "Pod",
                 "capture_date": first_date + 15.5 * interval,
                 "cpu_request": ComputeCapacity.from_cores(0.5),
-                "cpu_time": interval,
+                "capture_interval": interval,
                 "memory_request": DataSize.from_mb(256),
-                "memory_time": interval,
-                "disk_time": None,
             },
             {
                 "kind": "Pod",
                 "capture_date": first_date + 16.5 * interval,
                 "cpu_request": ComputeCapacity.from_cores(0.5),
-                "cpu_time": interval,
+                "capture_interval": interval,
                 "memory_request": DataSize.from_mb(256),
-                "memory_time": interval,
-                "disk_time": None,
             },
             {
                 "kind": "Pod",
                 "capture_date": first_date + 17.5 * interval,
                 "cpu_request": ComputeCapacity.from_cores(0.5),
-                "cpu_time": interval,
+                "capture_interval": interval,
                 "memory_request": DataSize.from_mb(256),
-                "memory_time": interval,
-                "disk_time": None,
             },
         ],
     )
