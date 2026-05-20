@@ -480,7 +480,8 @@ class ResourcePoolRepository(_Base):
                     await self.member_repo.grant_resource_pool_members(api_user, result.id, [member])
                 except errors.BaseError as e:
                     logger.warning(
-                        f"Failed to auto-grant member {uid} to resource pool {result.id} for provider {provider_id}: {e}"
+                        f"Failed to auto-grant member {uid} to resource pool {result.id} "
+                        f"for provider {provider_id}: {e}"
                     )
 
         return result
