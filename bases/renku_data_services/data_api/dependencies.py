@@ -248,6 +248,7 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
             encryption_key=config.secrets.encryption_key,
             oauth_client_factory=oauth_http_client_factory,
+            member_repo=member_repo,
         )
         k8s_db_cache = K8sDbCache(config.db.async_session_maker)
         default_kubeconfig = KubeConfigEnv()
