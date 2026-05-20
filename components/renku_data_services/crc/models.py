@@ -328,6 +328,7 @@ class UnsavedResourcePool:
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = None
     cluster_id: ClusterId | None = None
     platform: RuntimePlatform
+    skip_session_iframe: bool = False
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -347,6 +348,7 @@ class ResourcePool:
     cluster: SavedClusterSettings | None = None
     platform: RuntimePlatform
     credits_used: int | None = None
+    skip_session_iframe: bool = False
 
     def get_resource_class(self, resource_class_id: int) -> ResourceClass | None:
         """Find a specific resource class in the resource pool by the resource class id."""
@@ -384,6 +386,7 @@ class ResourcePoolPatch:
     remote: RemoteConfigurationPatch | None = None
     cluster_id: ClusterId | ResetType | None = None
     platform: RuntimePlatform | None = None
+    skip_session_iframe: bool | None = None
 
 
 class RemoteConfigurationKind(StrEnum):

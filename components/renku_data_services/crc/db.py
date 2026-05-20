@@ -559,6 +559,8 @@ class ResourcePoolRepository(_Base):
                 rp.hibernation_warning_period = update.hibernation_warning_period
             if update.platform is not None:
                 rp.platform = update.platform
+            if update.skip_session_iframe is not None:
+                rp.skip_session_iframe = update.skip_session_iframe
 
             match (update.cluster_id, rp.cluster_id):
                 case ResetType.Reset, x if x is not None:

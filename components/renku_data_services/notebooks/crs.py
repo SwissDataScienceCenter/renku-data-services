@@ -17,7 +17,11 @@ from ulid import ULID
 from renku_data_services.base_models.core import RESET, ResetType
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
-from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
+from renku_data_services.notebooks.constants import (
+    AMALTHEA_SESSION_GVK,
+    JUPYTER_SESSION_GVK,
+    SKIP_SESSION_IFRAME_ANNOTATION,
+)
 from renku_data_services.notebooks.cr_amalthea_session import Affinity as _Affinity
 from renku_data_services.notebooks.cr_amalthea_session import (
     Authentication,
@@ -364,6 +368,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             project_id=str(self.project_id),
             launcher_id=str(self.launcher_id),
             resource_class_id=self.resource_class_id(),
+            skip_iframe=self.metadata.annotations.get(SKIP_SESSION_IFRAME_ANNOTATION, False),
         )
 
     def base_url(self) -> str | None:

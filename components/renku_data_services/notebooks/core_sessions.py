@@ -14,6 +14,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
+from renku_data_services.notebooks.constants import SKIP_SESSION_IFRAME_ANNOTATION
 from sanic import Request
 from toml import dumps
 from ulid import ULID
@@ -962,6 +963,7 @@ async def start_session(
         "renku.io/launcher_id": str(launcher_id),
         "renku.io/resource_class_id": str(resource_class.id),
         "renku.io/resource_pool_id": str(resource_pool.id),
+        SKIP_SESSION_IFRAME_ANNOTATION: str(resource_pool.skip_session_iframe),
     }
 
     # Authentication
@@ -1240,6 +1242,7 @@ async def patch_session(
             annotations.update(session.spec.template.metadata.annotations)
         annotations["renku.io/resource_class_id"] = str(rc.id)
         annotations["renku.io/resource_pool_id"] = str(rp.id)
+        annotations[SKIP_SESSION_IFRAME_ANNOTATION] = rp.skip_session_iframe
         patch.spec.template = TemplatePatch(metadata=TemplateMetadataPatch(annotations=annotations))
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
