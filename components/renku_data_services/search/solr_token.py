@@ -1,6 +1,5 @@
 """Model for creating solr lucene queries."""
 
-import re
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import NewType
@@ -186,9 +185,8 @@ def public_only() -> SolrToken:
 
 
 def content_all(text: str) -> SolrToken:
-    """Search the content_all field with fuzzy searching each term."""
-    terms: list[SolrToken] = list(map(lambda s: SolrToken(__escape_query(s) + "~"), re.split("\\s+", text)))
-    terms_str = "(" + " ".join(terms) + ")"
+    """Search the content_all field."""
+    terms_str = "(" + __escape_query(text) + ")"
     return SolrToken(f"{Fields.content_all}:{terms_str}")
 
 
