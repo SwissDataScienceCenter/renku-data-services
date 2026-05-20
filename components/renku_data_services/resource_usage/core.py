@@ -73,7 +73,16 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
         return None
 
     async def get_resources_requests_iter(self, capture_interval: timedelta) -> AsyncIterator[ResourcesRequest]:
-        """Iterating through resource requests."""
+        """Iterating through resource requests.
+
+        NOTE: Users of the resource requests log populated by this method expect the following:
+        - One row (i.e. one item from the iterator) measures all resources that are available for a
+          specific timespan and a specific uid. For example, for a Pod, each row contains its cpu,
+          memory and gpu. If these were measured in separate rows for the exact same Pod calculating usage would break.
+        - When the resource requests change from a value to NULL or vice versa, then the uid changes.
+          This is unlikely to occur in Kubernetes but manipulating the data after it has been collected
+          could cause such a scenario to occur.
+        """
 
         logger.debug("Get pods and pvc from all clusters")
 
