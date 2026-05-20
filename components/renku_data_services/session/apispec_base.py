@@ -1,6 +1,5 @@
 """Base models for API specifications."""
 
-from enum import Enum
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -55,25 +54,3 @@ class BaseAPISpec(BaseModel):
         if isinstance(val, PurePosixPath):
             return val.as_posix()
         return val
-
-    @field_validator("launcher_type", mode="before", check_fields=False)
-    @classmethod
-    def convert_to_api_launcher_type(cls, lt: Any) -> Any:
-        """Convert the model launcher type into a valid value when serializing."""
-        from renku_data_services.session import apispec
-
-        return validate_enum_value(lt, "launcher_type", apispec.LauncherType)
-
-
-def validate_enum_value(lt: Any, field_name: str, enum_class: type[Enum]) -> Enum | str:
-    """Validate a enum value."""
-    all_values = [e.value for e in enum_class]
-    if isinstance(lt, enum_class):
-        return lt
-    if isinstance(lt, str):
-        try:
-            return enum_class(lt)
-        except ValueError as e:
-            raise ValueError(f"Invalid {field_name}: {lt}. Expect one of {all_values}") from e
-
-    raise ValueError(f"{field_name} must be one of: {all_values}")
