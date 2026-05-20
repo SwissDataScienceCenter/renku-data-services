@@ -154,6 +154,9 @@ class OAuth2ClientsBP(CustomBlueprint):
                     # TODO: redirect to a error page (that needs to be created)
                     raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
                 case _:
+                    user_id = client.connection.user_id
+                    provider_id = client.connection.client_id
+                    await self.connected_services_repo._on_oauth2_connected(user_id, provider_id)
                     next_url = client.connection.next_url
                     return redirect(to=next_url) if next_url else json({"status": "OK"})
 

@@ -251,6 +251,7 @@ class ConnectedServicesRepository:
             if conn is None:
                 return False
 
+            await self._on_oauth2_disconnected(conn.user_id, conn.client_id)
             await session.delete(conn)
             return True
 
