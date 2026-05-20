@@ -1511,15 +1511,16 @@ def anonymous_user_headers() -> dict[str, str]:
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_starting_session_anonymous(
+    app_manager: DependencyManager,
     sanic_client: SanicASGITestClient,
+    user_headers,
+    admin_headers,
     create_project,
     create_resource_pool,
     create_session_launcher,
-    user_headers,
-    app_manager: DependencyManager,
-    admin_headers,
     launch_session,
     anonymous_user_headers,
+    amalthea_installation,
 ) -> None:
     project: dict[str, Any] = await create_project(
         sanic_client,
