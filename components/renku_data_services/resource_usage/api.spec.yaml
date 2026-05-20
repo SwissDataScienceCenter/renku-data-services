@@ -11,7 +11,14 @@ servers:
 paths:
   /resource_pools/{resource_pool_id}/usage:
     get:
-      summary: "Get usage and limits of the supplied pool. If a `start_date` is not given, the usage of the current week is returned."
+      summary: |
+        Get usage and limits of the supplied pool. If a `start_date`
+        is not given, the usage of the current week is returned.
+
+        A query parameter `user_id` can be specified and the current
+        user is used if this is not present. This endpoint requires
+        admin privileges, if the `user_id` query parameter is not the
+        current user.
       parameters:
         - in: path
           name: resource_pool_id
@@ -30,6 +37,11 @@ paths:
           schema:
             type: string
             format: date
+        - in: query
+          name: user_id
+          required: false
+          schema:
+            type: string
       responses:
         "200":
           description: "Return the pool limits and current usage."
