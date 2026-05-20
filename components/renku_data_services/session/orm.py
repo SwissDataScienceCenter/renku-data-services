@@ -161,7 +161,11 @@ class SessionLauncherORM(BaseORM):
     """Environment variables to set in the session."""
 
     launcher_type: Mapped[models.LauncherType] = mapped_column(
-        "launcher_type", default=models.LauncherType.interactive, nullable=False, index=True
+        "launcher_type",
+        default=models.LauncherType.interactive,
+        server_default=models.LauncherType.interactive.value,
+        nullable=False,
+        index=True,
     )
 
     @classmethod
