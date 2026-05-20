@@ -156,7 +156,8 @@ class OAuth2ClientsBP(CustomBlueprint):
                 case _:
                     user_id = client.connection.user_id
                     provider_id = client.connection.client_id
-                    await self.connected_services_repo._on_oauth2_connected(user_id, provider_id)
+                    if user_id is not None and provider_id is not None:
+                        await self.connected_services_repo._on_oauth2_connected(user_id, provider_id)
                     next_url = client.connection.next_url
                     return redirect(to=next_url) if next_url else json({"status": "OK"})
 

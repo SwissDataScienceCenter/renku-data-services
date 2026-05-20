@@ -5,8 +5,6 @@ from typing import cast
 
 import pytest
 
-from test.utils import create_rp
-
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services.db import ConnectedServicesRepository, Image
 from renku_data_services.connected_services.models import (
@@ -20,13 +18,13 @@ from renku_data_services.crc import models as crc_models
 from renku_data_services.crc.models import (
     MemberType,
     RemoteConfigurationFirecrest,
-    ResourcePoolMemberIdentifier,
     RuntimePlatform,
 )
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.users.db import UserRepo
 from renku_data_services.users.models import UserInfo
+from test.utils import create_rp
 
 github_image = Image.from_path("ghcr.io/sdsc/test")
 gitlab_image = Image.from_path("registry.gitlab.com/sdsc/test")

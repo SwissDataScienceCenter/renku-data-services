@@ -50,9 +50,9 @@ class ConnectedServicesRepository:
         """Grant user viewer access to all RPs linked to the provider."""
         if self.member_repo is None:
             return
+        from renku_data_services.base_models.core import InternalServiceAdmin
         from renku_data_services.crc import orm as crc_schemas
         from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
-        from renku_data_services.base_models.core import InternalServiceAdmin
 
         admin = InternalServiceAdmin()
         async with self.session_maker() as session:
@@ -81,9 +81,9 @@ class ConnectedServicesRepository:
         """Revoke user viewer access from all RPs linked to the provider."""
         if self.member_repo is None:
             return
+        from renku_data_services.base_models.core import InternalServiceAdmin
         from renku_data_services.crc import orm as crc_schemas
         from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
-        from renku_data_services.base_models.core import InternalServiceAdmin
 
         admin = InternalServiceAdmin()
         async with self.session_maker() as session:
