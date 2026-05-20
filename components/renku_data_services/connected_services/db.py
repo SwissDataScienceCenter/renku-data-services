@@ -68,14 +68,6 @@ class ConnectedServicesRepository:
                     logger.warning(
                         f"Failed to auto-grant member {user_id} to resource pool {rp.id} for provider {client_id}: {e}"
                     )
-            member = ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=user_id)
-            for rp in rps:
-                try:
-                    await self.member_repo.grant_resource_pool_members(admin, rp.id, [member])
-                except errors.BaseError as e:
-                    logger.warning(
-                        f"Failed to auto-grant member {user_id} to resource pool {rp.id} for provider {client_id}: {e}"
-                    )
 
     async def _on_oauth2_disconnected(self, user_id: str, client_id: str) -> None:
         """Revoke user viewer access from all RPs linked to the provider."""
@@ -253,6 +245,18 @@ class ConnectedServicesRepository:
 
             await self._on_oauth2_disconnected(conn.user_id, conn.client_id)
             await session.delete(conn)
+            await session.flush()
+
+            # Ensure session is closed before calling _on_oauth2_disconnected
+            # so that the connection is deleted even if revoke fails.
+            try:
+                await self._on_oauth2_disconnected(conn.user_id, conn.client_id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to sync resource pool memberships after OAuth2 disconnection for user "
+                    f"{conn.user_id} and provider {conn.client_id}: {e}"
+                )
+
             return True
 
     async def get_oauth2_connections(
