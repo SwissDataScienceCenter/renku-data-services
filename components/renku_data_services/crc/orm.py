@@ -15,6 +15,7 @@ from sqlalchemy import (
     MetaData,
     String,
     Table,
+    false,
     literal,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -97,7 +98,7 @@ class ResourceClassORM(BaseORM):
     default_storage: Mapped[int] = mapped_column(BigInteger)
     default: Mapped[bool] = mapped_column(default=False)
     gpu: Mapped[int] = mapped_column(BigInteger, default=0)
-    quota_enforced: Mapped[bool] = mapped_column(default=True)
+    quota_enforced: Mapped[bool] = mapped_column(default=False, server_default=false())
     resource_pool_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
     )

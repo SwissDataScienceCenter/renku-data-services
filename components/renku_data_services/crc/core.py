@@ -9,7 +9,7 @@ from renku_data_services.base_models import RESET, ResetType
 from renku_data_services.crc import apispec, models
 from renku_data_services.errors import errors
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
-from renku_data_services.utils.core import get_nonzero_minimum
+from renku_data_services.utils.core import get_effective_quota
 
 
 def validate_quota(body: apispec.QuotaWithOptionalId) -> models.UnsavedQuota:
@@ -648,7 +648,7 @@ async def calculate_usage_hours(
 
     # NOTE: Calculate quota based on the minimum of user and total limits that is set. User and total limits can be set
     # independent of each other.
-    total_quota = get_nonzero_minimum(limits.user_limit.value, limits.total_limit.value)
+    total_quota = get_effective_quota(limits.user_limit.value, limits.total_limit.value)
     # NOTE: A value of 0 for the limit means that there is no limit, so we return None (instead of 0) to inform the
     # caller that there is no limit.
     if total_quota <= 0:

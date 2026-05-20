@@ -32,7 +32,7 @@ from renku_data_services.namespace.models import NamespaceKind
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.notifications.models import UnsavedAlert
 from renku_data_services.solr.solr_client import DefaultSolrClient
-from renku_data_services.utils.core import get_nonzero_minimum
+from renku_data_services.utils.core import get_effective_quota
 
 logger = logging.getLogger(__name__)
 
@@ -488,7 +488,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
             if not usage:
                 continue
 
-            total_quota = get_nonzero_minimum(usage.pool_limits.user_limit.value, usage.pool_limits.total_limit.value)
+            total_quota = get_effective_quota(usage.pool_limits.user_limit.value, usage.pool_limits.total_limit.value)
             if total_quota <= 0:
                 continue
 

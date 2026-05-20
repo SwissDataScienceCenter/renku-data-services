@@ -1138,7 +1138,7 @@ components:
         quota_enforced:
           allOf:
             - $ref: "#/components/schemas/QuotaEnforced"
-          default: true
+          default: false
       required:
         - name
         - default
@@ -1201,7 +1201,7 @@ components:
         quota_enforced:
           allOf:
             - $ref: "#/components/schemas/QuotaEnforced"
-          default: true
+          default: false
       required:
         - name
         - default

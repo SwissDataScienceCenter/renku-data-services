@@ -106,7 +106,7 @@ async def _get_openbis_session_token(openbis_host: str, login: dict[str, Any], t
             ) from err
         if json.get("result") is None:
             raise errors.ThirdPartyAPIError(
-                detail="The response from OpenBIS was parsed but it does not contain the exepected field(s) "
+                detail="The response from OpenBIS was parsed, but it does not contain the expected field(s) "
                 "when attempting to get a session token."
             )
         return json["result"]
@@ -150,7 +150,7 @@ async def get_openbis_pat(
         if response.status_code != 200:
             logger.error(
                 f"Received a non-200 response, {response.status_code} from OpenBIS "
-                f"for performing 'getServerInformation'. Reponse content: {response.text}"
+                f"for performing 'getServerInformation'. Response content: {response.text}"
             )
             raise errors.ThirdPartyAPIError(
                 detail="OpenBIS responded with a non-200 status code when performing 'getServerInformation'."
@@ -238,6 +238,6 @@ async def get_openbis_pat(
         return json2["result"][0]["permId"], valid_to
 
 
-def get_nonzero_minimum(a: int, b: int) -> int:
-    """Return the minimum nonzero value, where both inputs are non-negative."""
+def get_effective_quota(a: int, b: int) -> int:
+    """Return the minimum nonzero value; return zero only if both values are zero."""
     return a if b == 0 else b if a == 0 else min(a, b)

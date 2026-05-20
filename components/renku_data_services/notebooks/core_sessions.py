@@ -117,7 +117,7 @@ from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
-from renku_data_services.utils.core import get_nonzero_minimum
+from renku_data_services.utils.core import get_effective_quota
 
 logger = logging.getLogger(__name__)
 
@@ -799,7 +799,7 @@ async def _check_quota(resource_usage_service: ResourceUsageService, resource_po
     if usage is None:
         return
 
-    total_quota = get_nonzero_minimum(usage.pool_limits.user_limit.value, usage.pool_limits.total_limit.value)
+    total_quota = get_effective_quota(usage.pool_limits.user_limit.value, usage.pool_limits.total_limit.value)
     if total_quota <= 0:
         return
 
