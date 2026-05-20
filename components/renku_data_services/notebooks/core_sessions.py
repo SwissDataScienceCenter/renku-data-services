@@ -46,7 +46,6 @@ from renku_data_services.notebooks.api.amalthea_patches.init_containers import u
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
-from renku_data_services.notebooks.cr_amalthea_session import ReadinessProbe2, Type3
 from renku_data_services.notebooks.crs import (
     AmaltheaMetadata,
     AmaltheaSessionSpec,
@@ -69,6 +68,7 @@ from renku_data_services.notebooks.crs import (
     Limits,
     LimitsStr,
     Metadata,
+    ReadinessProbe,
     ReconcileStrategy,
     Requests,
     RequestsStr,
@@ -87,6 +87,7 @@ from renku_data_services.notebooks.crs import (
     TemplateMetadataPatch,
     TemplatePatch,
     TlsSecret,
+    Type,
 )
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
@@ -1100,9 +1101,7 @@ async def start_session(
                 stripURLPath=environment.strip_path_prefix,
                 env=env,
                 remoteSecretRef=remote_secret.ref() if remote_secret else None,
-                readinessProbe=ReadinessProbe2(type=Type3.none)
-                if session_type.is_non_interactive
-                else ReadinessProbe2(),
+                readinessProbe=ReadinessProbe(type=Type.none) if session_type.is_non_interactive else ReadinessProbe(),
             ),
             ingress=ingress_config.get_k8s_ingress() if session_type.is_interactive else None,
             extraContainers=session_extras.containers,

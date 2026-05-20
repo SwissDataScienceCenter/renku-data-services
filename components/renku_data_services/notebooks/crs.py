@@ -67,6 +67,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
 from renku_data_services.notebooks.cr_amalthea_session import (
     PreferredDuringSchedulingIgnoredDuringExecutionItem2 as PreferredPodAntiAffinityItem,
 )
+from renku_data_services.notebooks.cr_amalthea_session import ReadinessProbe2 as ReadinessProbe
 from renku_data_services.notebooks.cr_amalthea_session import Requests6 as _Requests
 from renku_data_services.notebooks.cr_amalthea_session import Requests7 as RequestsStr
 from renku_data_services.notebooks.cr_amalthea_session import (
@@ -81,6 +82,7 @@ from renku_data_services.notebooks.cr_amalthea_session import Size1 as SizeStr
 from renku_data_services.notebooks.cr_amalthea_session import Spec as _ASSpec
 from renku_data_services.notebooks.cr_amalthea_session import Type as AuthenticationType
 from renku_data_services.notebooks.cr_amalthea_session import Type1 as CodeRepositoryType
+from renku_data_services.notebooks.cr_amalthea_session import Type3 as Type
 from renku_data_services.notebooks.cr_base import BaseCRD
 
 
