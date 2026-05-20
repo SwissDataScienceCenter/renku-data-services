@@ -487,7 +487,93 @@ async def test_post_session_launcher(
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert res.json.get("disk_storage") == 2
     assert res.json.get("env_variables") == [{"name": "KEY_NUMBER_1", "value": "a value"}]
+    assert res.json.get("launcher_type") == "interactive"
     app_manager.metrics.session_launcher_created.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_post_job_launcher(
+    sanic_client,
+    admin_headers,
+    create_project,
+    create_resource_pool,
+    app_manager,
+    cluster: KindCluster,
+) -> None:
+    project = await create_project(sanic_client, "Some project")
+
+    resource_pool = await create_resource_pool(admin=True)
+
+    payload = {
+        "name": "Launcher 2",
+        "project_id": project["id"],
+        "description": "A job launcher.",
+        "resource_class_id": resource_pool["classes"][0]["id"],
+        "disk_storage": 2,
+        "env_variables": [{"name": "KEY_NUMBER_1", "value": "a value"}],
+        "launcher_type": "non_interactive",
+        "environment": {
+            "container_image": "some_image:some_tag",
+            "name": "custom_name",
+            "environment_kind": "CUSTOM",
+            "environment_image_source": "image",
+        },
+    }
+
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=admin_headers, json=payload)
+
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    assert res.json.get("name") == "Launcher 2"
+    assert res.json.get("project_id") == project["id"]
+    assert res.json.get("description") == "A job launcher."
+    environment = res.json.get("environment", {})
+    assert environment.get("name") == "custom_name"
+    assert environment.get("environment_kind") == "CUSTOM"
+    assert environment.get("environment_image_source") == "image"
+    assert environment.get("container_image") == "some_image:some_tag"
+    assert environment.get("id") is not None
+    assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
+    assert res.json.get("disk_storage") == 2
+    assert res.json.get("env_variables") == [{"name": "KEY_NUMBER_1", "value": "a value"}]
+    assert res.json.get("launcher_type") == "non_interactive"
+    app_manager.metrics.session_launcher_created.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_post_launcher_invalid_launcher_type(
+    sanic_client,
+    admin_headers,
+    create_project,
+    create_resource_pool,
+    app_manager,
+    cluster: KindCluster,
+) -> None:
+    project = await create_project(sanic_client, "Some project")
+
+    resource_pool = await create_resource_pool(admin=True)
+
+    payload = {
+        "name": "Launcher 3",
+        "project_id": project["id"],
+        "description": "A launcher.",
+        "resource_class_id": resource_pool["classes"][0]["id"],
+        "disk_storage": 2,
+        "env_variables": [{"name": "KEY_NUMBER_1", "value": "a value"}],
+        "launcher_type": "blablabla",
+        "environment": {
+            "container_image": "some_image:some_tag",
+            "name": "custom_name",
+            "environment_kind": "CUSTOM",
+            "environment_image_source": "image",
+        },
+    }
+
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=admin_headers, json=payload)
+
+    assert res.status_code == 422, res.text
 
 
 @pytest.mark.parametrize(
