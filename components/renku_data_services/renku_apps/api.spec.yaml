@@ -88,6 +88,7 @@ components:
           $ref: "#/components/schemas/AppStatus"
         url:
           type: string
+          nullable: true
         project_id:
           $ref: "#/components/schemas/Ulid"
         started:
@@ -101,7 +102,6 @@ components:
         - name
         - launcher_id
         - status
-        - url
         - project_id
 
     AppPostRequest:
