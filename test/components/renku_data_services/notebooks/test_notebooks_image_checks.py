@@ -169,6 +169,22 @@ from renku_data_services.notebooks.api.classes.image import Image
             "us.gcr.io/proj/image/subimage",
             {"hostname": "us.gcr.io", "name": "proj/image/subimage", "tag": "latest"},
         ),
+        (
+            "image-registry.openshift-image-registry.svc:5000/namespace/image",
+            {
+                "hostname": "image-registry.openshift-image-registry.svc:5000",
+                "name": "namespace/image",
+                "tag": "latest",
+            },
+        ),
+        (
+            "image-registry.openshift-image-registry.svc:5000/namespace/image:0.0.1",
+            {
+                "hostname": "image-registry.openshift-image-registry.svc:5000",
+                "name": "namespace/image",
+                "tag": "0.0.1",
+            },
+        ),
     ],
 )
 def test_public_image_name_parsing(name: str, expected: dict[str, str]) -> None:
