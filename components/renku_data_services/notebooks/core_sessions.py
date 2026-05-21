@@ -1256,6 +1256,32 @@ async def patch_session(
                 rp.cluster.service_account_name if rp.cluster.service_account_name is not None else RESET
             )
 
+    # Patch the labels
+    labels: dict[str, str | ResetType] = dict()
+    labels.update(session.metadata.labels)
+    labels["renku.io/safe-username"] = user.id
+    if user.is_anonymous:
+        labels["renku.io/anonymous-session"] = "true"
+    if not labels.get("renku.io/session-type"):
+        labels["renku.io/session-type"] = SessionType.interactive.value
+    if not patch.metadata:
+        patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
+    patch.metadata.labels = labels
+    # Patch the template labels
+    labels: dict[str, str | ResetType] = dict()
+    if session.spec.template and session.spec.template.metadata and session.spec.template.metadata.labels:
+        labels.update(session.spec.template.metadata.labels)
+    labels["renku.io/safe-username"] = user.id
+    if user.is_anonymous:
+        labels["renku.io/anonymous-session"] = "true"
+    if not labels.get("renku.io/session-type"):
+        labels["renku.io/session-type"] = SessionType.interactive.value
+    if not isinstance(patch.spec.template, TemplatePatch):
+        patch.spec.template = TemplatePatch(metadata=TemplateMetadataPatch())
+    if not isinstance(patch.spec.template.metadata, TemplateMetadataPatch):
+        patch.spec.template.metadata = TemplateMetadataPatch()
+    patch.spec.template.metadata.labels = labels
+
     patch.spec.culling = get_culling_patch(
         user, rp, nb_config, body.lastInteraction, SessionType.from_amalthea(session.spec.sessionType)
     )

@@ -406,6 +406,7 @@ class AmaltheaSessionV1Alpha1MetadataPatch(BaseCRD):
     """Patch for the metadata of an amalthea session."""
 
     annotations: dict[str, str | ResetType] | ResetType | None = None
+    labels: dict[str, str | ResetType] | ResetType | None = None
 
 
 class NodeAffinityPatch(BaseCRD):
