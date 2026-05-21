@@ -26,10 +26,15 @@ from typing import Any, TypeAlias
 from box.box import Box
 
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser, Slug
+from renku_data_services.notebooks.models import SubmissionId
 
 
 def renku_2_make_server_name(
-    user: AuthenticatedAPIUser | AnonymousAPIUser, project_id: str, launcher_id: str, cluster_id: str
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    project_id: str,
+    launcher_id: str,
+    cluster_id: str,
+    submission_id: SubmissionId | None,
 ) -> str:
     """Form a unique server name for Renku 2.0 sessions.
 
@@ -38,8 +43,10 @@ def renku_2_make_server_name(
     safe_username = Slug.from_user(user.email, user.first_name, user.last_name, user.id).value
     safe_username = safe_username.lower()
     safe_username = re.sub(r"[^a-z0-9-]", "-", safe_username)
-    prefix = _make_server_name_prefix(safe_username)
+    prefix = _make_server_name_prefix(safe_username, submission_id)
     server_string_for_hashing = f"{user.id}-{project_id}-{launcher_id}-{cluster_id}"
+    if submission_id:
+        server_string_for_hashing = f"{server_string_for_hashing}-{submission_id}"
     server_hash = md5(server_string_for_hashing.encode(), usedforsecurity=False).hexdigest().lower()
     # NOTE: A K8s object name can only contain lowercase alphanumeric characters, hyphens, or dots.
     # Must be no more than 63 characters because the name is used to create a k8s Service and Services
@@ -56,7 +63,7 @@ def find_env_var(env_vars: list[Box], env_name: str) -> tuple[int, Box] | None:
     return next(filtered, None)
 
 
-def _make_server_name_prefix(safe_username: str) -> str:
+def _make_server_name_prefix(safe_username: str, submission_id: SubmissionId | None) -> str:
     prefix = ""
     if not safe_username[0].isalpha() or not safe_username[0].isascii():
         # NOTE: Username starts with an invalid character. This has to be modified because a
@@ -68,6 +75,8 @@ def _make_server_name_prefix(safe_username: str) -> str:
         prefix = "n"
 
     prefix = f"{prefix}{safe_username}"
+    if submission_id:
+        prefix = f"{prefix}_{submission_id}"
     return prefix
 
 

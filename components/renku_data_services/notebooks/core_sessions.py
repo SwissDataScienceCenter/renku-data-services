@@ -98,6 +98,7 @@ from renku_data_services.notebooks.models import (
     SessionExtraResources,
     SessionLaunchRequest,
     SessionType,
+    SubmissionId,
 )
 from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
@@ -859,13 +860,20 @@ async def start_session(
     project = await project_repo.get_project(user=user, project_id=launcher.project_id)
     session_type = SessionType.from_launcher_type(launcher.launcher_type)
 
+    if session_type.is_non_interactive and launch_request.submission_id is None:
+        raise errors.ValidationError(message="Job submissions require a submission_id.")
+
     # Determine resource_class_id: the class can be overwritten at the user's request
     resource_class_id = launch_request.resource_class_id or launcher.resource_class_id
 
     cluster = await nb_config.k8s_v2_client.cluster_by_class_id(resource_class_id, user)
 
     server_name = renku_2_make_server_name(
-        user=user, project_id=str(launcher.project_id), launcher_id=str(launcher_id), cluster_id=str(cluster.id)
+        user=user,
+        project_id=str(launcher.project_id),
+        launcher_id=str(launcher_id),
+        cluster_id=str(cluster.id),
+        submission_id=launch_request.submission_id,
     )
     existing_session = await nb_config.k8s_v2_client.get_session(name=server_name, safe_username=user.id)
     if existing_session is not None:
@@ -990,6 +998,8 @@ async def start_session(
         "renku.io/resource_class_id": str(resource_class.id),
         "renku.io/resource_pool_id": str(resource_pool.id),
     }
+    if launch_request.submission_id:
+        annotations.update({"renku.io/submission_id": str(launch_request.submission_id)})
 
     # Authentication
     if isinstance(user, AuthenticatedAPIUser):
@@ -1523,12 +1533,17 @@ def validate_session_post_request(body: apispec.SessionPostRequest) -> SessionLa
         if body.env_variable_overrides
         else None
     )
+    submission_id: SubmissionId | None = None
+    if body.submission_id:
+        submission_id = SubmissionId(body.submission_id)
+
     return SessionLaunchRequest(
         launcher_id=ULID.from_str(body.launcher_id),
         disk_storage=body.disk_storage,
         resource_class_id=body.resource_class_id,
         data_connectors_overrides=data_connectors_overrides,
         env_variable_overrides=env_variable_overrides,
+        submission_id=submission_id,
     )
 
 

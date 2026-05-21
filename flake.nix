@@ -282,6 +282,9 @@
             AMALTHEA_SESSIONS_VERSION = "refs/heads/eikek/non-interactive-session";
             RENKU_ENV = "renku-ci-ds-1246";
             K8S_NAMESPACE = "default";
+            KUBERNETES_NAMESPACE = "default";
+            SOLR_MAJOR_VERSION = "10";
+            DEBUG_LOGGING = "renku_data_services";
           });
 
         cnt = let
