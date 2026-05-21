@@ -190,7 +190,9 @@ class NotebookK8sClient(SecretClient):
         session_filter = {self.__username_label: safe_username}
         match session_type:
             case SessionType.non_interactive:
-               session_filter.update({"renku.io/session-type": SessionType.non_interactive.value}) 
+                session_filter.update({"renku.io/session-type": SessionType.non_interactive.value})
+            case _:
+                pass
         sessions = [
             self.__session_type.model_validate(s.manifest)
             async for s in self.__client.list(
@@ -201,10 +203,13 @@ class NotebookK8sClient(SecretClient):
                 )
             )
         ]
-        def _filter_by_label(s: AmaltheaSessionV1Alpha1) -> bool:
-            session_type_label : str= s.metadata.labels.get("renku.io/session-type")
-            return not session_type_label or session_type_label.lower() == session_type.value.lower()
-        sessions = filter(_filter_by_label, sessions)
+        if session_type:
+
+            def _filter_by_label(s: AmaltheaSessionV1Alpha1) -> bool:
+                session_type_label: str | None = s.metadata.labels.get("renku.io/session-type")
+                return not session_type_label or session_type_label.lower() == session_type.value.lower()
+
+            sessions = list(filter(_filter_by_label, sessions))
         return sorted(sessions, key=lambda sess: sess.metadata.name)
 
     async def get_session(self, name: str, safe_username: str) -> AmaltheaSessionV1Alpha1 | None:
