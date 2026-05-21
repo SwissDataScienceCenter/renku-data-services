@@ -28,6 +28,37 @@ from renku_data_services.notebooks.crs import (
 from renku_data_services.session.models import LauncherType
 
 
+class SubmissionId:
+    """Type for a submission id used to start jobs."""
+
+    def __init__(self, value):
+        msg = self.validate(value)
+        if msg is None:
+            self.value = value
+        else:
+            raise ValueError(msg)
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __repr__(self) -> str:
+        return self.value
+
+    @classmethod
+    def from_str(cls, v: str) -> SubmissionId | None:
+        """Create a submission id from a str if it validates."""
+        if not cls.validate(v):
+            return SubmissionId(v.strip())
+
+    @classmethod
+    def validate(cls, v: Any) -> str | None:
+        """Validate a string for a submission id."""
+        if not isinstance(v, str):
+            return f"Invalid submission id: {v}"
+        if len(v.strip()) < 4:
+            return f"Invalid submission id (requires at least 4 characters): {v}"
+
+
 @dataclass
 class SessionEnvVar:
     """Environment variables for an amalthea session."""
@@ -261,3 +292,4 @@ class SessionLaunchRequest:
     resource_class_id: int | None
     data_connectors_overrides: list[SessionDataConnectorOverride] | None
     env_variable_overrides: list[SessionEnvVar] | None
+    submission_id: SubmissionId | None

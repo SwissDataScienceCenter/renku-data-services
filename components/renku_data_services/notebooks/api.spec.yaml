@@ -233,6 +233,14 @@ components:
         resource_class_id:
           nullable: true
           type: integer
+        submission_id:
+          nullable: true
+          type: string
+          pattern: "^[0-9A-Za-z]{4,}$"
+          description: |
+            When submitting a job, i.e. the launcher used is a job
+            launcher, the submission id is required to deduplicate
+            same job submissions and allows retries.
         data_connectors_overrides:
           $ref: "#/components/schemas/SessionDataConnectorsOverrideList"
         env_variable_overrides:
