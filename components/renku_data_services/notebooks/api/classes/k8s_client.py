@@ -188,11 +188,12 @@ class NotebookK8sClient(SecretClient):
     ) -> list[AmaltheaSessionV1Alpha1]:
         """Get a list of sessions that belong to a user."""
         session_filter = {self.__username_label: safe_username}
+        # NOTE: "interactive" sessions may exist without the "renku.io/session-type" label.
         match session_type:
-            case SessionType.non_interactive:
-                session_filter.update({"renku.io/session-type": SessionType.non_interactive.value})
-            case _:
+            case SessionType.interactive | None:
                 pass
+            case _:
+                session_filter.update({"renku.io/session-type": session_type.value})
         sessions = [
             self.__session_type.model_validate(s.manifest)
             async for s in self.__client.list(
@@ -203,13 +204,16 @@ class NotebookK8sClient(SecretClient):
                 )
             )
         ]
-        if session_type:
-
-            def _filter_by_label(s: AmaltheaSessionV1Alpha1) -> bool:
-                session_type_label: str | None = s.metadata.labels.get("renku.io/session-type")
-                return not session_type_label or session_type_label.lower() == session_type.value.lower()
-
-            sessions = list(filter(_filter_by_label, sessions))
+        # NOTE: because "interactive" sessions may exist without the "renku.io/session-type" label,
+        # we need to filter results in this case.
+        if session_type == SessionType.interactive:
+            sessions = list(
+                filter(
+                    lambda s: s.metadata.labels.get("renku.io/session-type", SessionType.interactive.value).lower()
+                    == SessionType.interactive.value.lower(),
+                    sessions,
+                )
+            )
         return sorted(sessions, key=lambda sess: sess.metadata.name)
 
     async def get_session(self, name: str, safe_username: str) -> AmaltheaSessionV1Alpha1 | None:

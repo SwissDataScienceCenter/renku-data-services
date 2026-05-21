@@ -1241,6 +1241,28 @@ async def patch_session(
         annotations["renku.io/resource_class_id"] = str(rc.id)
         annotations["renku.io/resource_pool_id"] = str(rp.id)
         patch.spec.template = TemplatePatch(metadata=TemplateMetadataPatch(annotations=annotations))
+        assert isinstance(
+            patch.spec.template.metadata, TemplateMetadataPatch
+        )  # We just assigned with TemplateMetadataPatch
+        # Patch the labels
+        labels: dict[str, str | ResetType] = dict()
+        labels.update(session.metadata.labels)
+        labels["renku.io/safe-username"] = user.id
+        if user.is_anonymous:
+            labels["renku.io/anonymous-session"] = "true"
+        if not labels.get("renku.io/session-type"):
+            labels["renku.io/session-type"] = SessionType.interactive.value
+        patch.metadata.labels = labels
+        # Patch the template labels
+        labels: dict[str, str | ResetType] = dict()
+        if session.spec.template and session.spec.template.metadata and session.spec.template.metadata.labels:
+            labels.update(session.spec.template.metadata.labels)
+        labels["renku.io/safe-username"] = user.id
+        if user.is_anonymous:
+            labels["renku.io/anonymous-session"] = "true"
+        if not labels.get("renku.io/session-type"):
+            labels["renku.io/session-type"] = SessionType.interactive.value
+        patch.spec.template.metadata.labels = labels
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
         patch.spec.session.resources = resources_patch_from_resource_class(rc)
