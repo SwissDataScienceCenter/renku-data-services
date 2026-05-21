@@ -1,7 +1,7 @@
 """add quota_enforced flag to resource_classes
 
 Revision ID: a8f0e7b3c2d1
-Revises: c29f65247e88
+Revises: e3cade8bf1a8
 Create Date: 2026-05-04 17:05:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "a8f0e7b3c2d1"
-down_revision = "c29f65247e88"
+down_revision = "e3cade8bf1a8"
 branch_labels: Sequence[str] | None = None
 depends_on: Sequence[str] | str | None = None
 
