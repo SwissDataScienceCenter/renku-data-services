@@ -235,6 +235,14 @@ class EnvVar:
             raise errors.ValidationError(message="\n".join(error_msgs))
 
 
+class LauncherType(StrEnum):
+    """The launcher type."""
+
+    interactive = "interactive"
+    non_interactive = "non_interactive"
+    app = "app"
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedSessionLauncher:
     """Session launcher model that has not been persisted in the DB."""
@@ -247,6 +255,7 @@ class UnsavedSessionLauncher:
     env_variables: list[EnvVar] | None
     environment: str | UnsavedEnvironment | UnsavedBuildParameters
     """When a string is passed for the environment it should be the ID of an existing environment."""
+    launcher_type: LauncherType
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

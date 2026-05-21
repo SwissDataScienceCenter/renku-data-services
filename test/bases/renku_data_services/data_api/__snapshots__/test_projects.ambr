@@ -61,6 +61,7 @@
   dict({
     'description': 'A session launcher.',
     'disk_storage': 42,
+    'launcher_type': 'interactive',
     'name': 'Launcher',
     'resource_class_id': 1,
   })

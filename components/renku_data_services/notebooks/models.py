@@ -25,6 +25,7 @@ from renku_data_services.notebooks.crs import (
     InitContainer,
     SecretRef,
 )
+from renku_data_services.session.models import LauncherType
 
 
 @dataclass
@@ -242,6 +243,14 @@ class SessionType(StrEnum):
         else:
             return SessionType.interactive
 
+    @classmethod
+    def from_launcher_type(cls, lt: LauncherType) -> SessionType:
+        """Return a session type given a launcher type. Unsupported values are mapped to an interactive session."""
+        if lt == LauncherType.non_interactive:
+            return SessionType.non_interactive
+        else:
+            return SessionType.interactive
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SessionLaunchRequest:
@@ -252,9 +261,3 @@ class SessionLaunchRequest:
     resource_class_id: int | None
     data_connectors_overrides: list[SessionDataConnectorOverride] | None
     env_variable_overrides: list[SessionEnvVar] | None
-    session_type: SessionType
-
-    @property
-    def is_non_interactive(self) -> bool:
-        """Whether this is a request to a non-interactive session."""
-        return self.session_type.is_non_interactive

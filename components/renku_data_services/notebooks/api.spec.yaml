@@ -237,8 +237,6 @@ components:
           $ref: "#/components/schemas/SessionDataConnectorsOverrideList"
         env_variable_overrides:
           $ref: "#/components/schemas/EnvVariableOverrides"
-        session_type:
-          $ref: "#/components/schemas/SessionType"
       required:
         - launcher_id
       type: object

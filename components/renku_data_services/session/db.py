@@ -542,6 +542,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 env_variables=models.EnvVar.to_dict(launcher.env_variables) if launcher.env_variables else None,
                 created_by_id=user.id,
                 creation_date=datetime.now(UTC).replace(microsecond=0),
+                launcher_type=launcher.launcher_type,
             )
             session.add(launcher_orm)
             await session.flush()

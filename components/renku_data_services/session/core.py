@@ -200,6 +200,13 @@ def validate_unsaved_session_launcher(
     else:
         raise errors.ValidationError(message=f"Unexpected environment type: {type(launcher.environment)}")
 
+    launcher_type = models.LauncherType.interactive
+    match launcher.launcher_type:
+        case apispec.LauncherType.non_interactive:
+            launcher_type = models.LauncherType.non_interactive
+        # case apispec.LauncherType.app:   # not yet supported
+        #     launcher_type = models.LauncherType.app
+
     return models.UnsavedSessionLauncher(
         project_id=ULID.from_str(launcher.project_id),
         name=launcher.name,
@@ -209,6 +216,7 @@ def validate_unsaved_session_launcher(
         env_variables=models.EnvVar.from_apispec(launcher.env_variables) if launcher.env_variables else None,
         # NOTE: When you create an environment with a launcher the environment can only be custom
         environment=environment,
+        launcher_type=launcher_type,
     )
 
 

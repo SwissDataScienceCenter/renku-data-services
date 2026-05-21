@@ -160,6 +160,14 @@ class SessionLauncherORM(BaseORM):
     )
     """Environment variables to set in the session."""
 
+    launcher_type: Mapped[models.LauncherType] = mapped_column(
+        "launcher_type",
+        default=models.LauncherType.interactive,
+        server_default=models.LauncherType.interactive.value,
+        nullable=False,
+        index=True,
+    )
+
     @classmethod
     def load(cls, launcher: models.SessionLauncher) -> "SessionLauncherORM":
         """Create SessionLauncherORM from the session launcher model."""
@@ -173,6 +181,7 @@ class SessionLauncherORM(BaseORM):
             resource_class_id=launcher.resource_class_id,
             disk_storage=launcher.disk_storage,
             env_variables=models.EnvVar.to_dict(launcher.env_variables) if launcher.env_variables else None,
+            launcher_type=launcher.launcher_type,
         )
 
     def dump(self) -> models.SessionLauncher:
@@ -188,6 +197,7 @@ class SessionLauncherORM(BaseORM):
             disk_storage=self.disk_storage,
             env_variables=models.EnvVar.from_dict(self.env_variables) if self.env_variables else None,
             environment=self.environment.dump(),
+            launcher_type=self.launcher_type,
         )
 
 
