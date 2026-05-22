@@ -2,8 +2,12 @@
 
 from collections.abc import Mapping
 from datetime import datetime
+from typing import cast
 
 from pydantic import BaseModel, ConfigDict, Field
+from ulid import ULID
+
+from renku_data_services.errors import errors
 from renku_data_services.renku_apps.cr_knative_service import Limits as _Limits
 from renku_data_services.renku_apps.cr_knative_service import Limits1 as LimitsStr
 from renku_data_services.renku_apps.cr_knative_service import Model as _KnativeService
@@ -62,3 +66,21 @@ class KnativeService(_KnativeService):
     kind: str = "Service"
     apiVersion: str = "serving.knative.dev/v1"
     metadata: Metadata  # type: ignore[assignment]
+
+    @property
+    def launcher_id(self) -> ULID:
+        """Get the session launcher ID from the annotations."""
+        if "renku.io/launcher_id" not in self.metadata.annotations:
+            raise errors.ProgrammingError(
+                message=f"The app with name {self.metadata.name} is missing its launcher_id annotation"
+            )
+        return cast(ULID, ULID.from_str(self.metadata.annotations["renku.io/launcher_id"]))
+
+    @property
+    def project_id(self) -> ULID:
+        """Get the project ID from the annotations."""
+        if "renku.io/project_id" not in self.metadata.annotations:
+            raise errors.ProgrammingError(
+                message=f"The app with name {self.metadata.name} is missing its project_id annotation"
+            )
+        return cast(ULID, ULID.from_str(self.metadata.annotations["renku.io/project_id"]))
