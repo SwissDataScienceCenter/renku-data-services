@@ -351,9 +351,15 @@ class ResourcePoolMembersBP(CustomBlueprint):
         async def _delete(
             _: Request, user: base_models.APIUser, resource_pool_id: int, member_type: str, member_id: str
         ) -> HTTPResponse:
+            try:
+                mt = MemberType(member_type)
+            except ValueError as e:
+                raise errors.ValidationError(
+                    message=f"Invalid member_type {member_type!r}; expected one of {[m.value for m in MemberType]}"
+                ) from e
             identifier = ResourcePoolMemberIdentifier(
                 member_id=member_id,
-                member_type=MemberType(member_type),
+                member_type=mt,
             )
             with suppress(errors.MissingResourceError):
                 await self.repo.revoke_resource_pool_members(
