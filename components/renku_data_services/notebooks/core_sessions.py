@@ -721,6 +721,7 @@ async def get_image_pull_secret(
         builds_config.enabled
         and builds_config.build_output_private_image_prefix is not None
         and image.startswith(builds_config.build_output_private_image_prefix)
+        and not user.is_anonymous
     ):
         return ExtraSecret(
             V1Secret(
