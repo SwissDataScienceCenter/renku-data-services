@@ -17,6 +17,7 @@ import renku_data_services.crc
 import renku_data_services.data_connectors
 import renku_data_services.notifications
 import renku_data_services.platform
+import renku_data_services.renku_apps
 import renku_data_services.repositories
 import renku_data_services.search
 import renku_data_services.storage
@@ -67,6 +68,8 @@ from renku_data_services.project.db import (
     ProjectRepository,
     ProjectSessionSecretRepository,
 )
+from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
+from renku_data_services.renku_apps.repository import RenkuAppsRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
@@ -145,6 +148,8 @@ class DependencyManager:
     search_updates_repo: SearchUpdatesRepo
     search_reprovisioning: SearchReprovision
     session_repo: SessionRepository
+    apps_k8s_client: RenkuAppsK8sClient
+    apps_repo: RenkuAppsRepository
     user_preferences_repo: UserPreferencesRepository
     kc_user_repo: KcUserRepo
     low_level_user_secrets_repo: LowLevelUserSecretsRepo
@@ -196,6 +201,7 @@ class DependencyManager:
             renku_data_services.project.__file__,
             renku_data_services.namespace.__file__,
             renku_data_services.session.__file__,
+            renku_data_services.renku_apps.__file__,
             renku_data_services.connected_services.__file__,
             renku_data_services.repositories.__file__,
             renku_data_services.notebooks.__file__,
@@ -381,6 +387,12 @@ class DependencyManager:
             builds_config=config.builds,
             git_repositories_repo=git_repositories_repo,
         )
+        apps_k8s_client = RenkuAppsK8sClient(client=client, cluster_repo=cluster_repo)
+        apps_repo = RenkuAppsRepository(
+            authz=authz,
+            session_repo=session_repo,
+            k8s_client=apps_k8s_client,
+        )
         project_migration_repo = ProjectMigrationRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
@@ -481,6 +493,8 @@ class DependencyManager:
             project_session_secret_repo=project_session_secret_repo,
             group_repo=group_repo,
             session_repo=session_repo,
+            apps_k8s_client=apps_k8s_client,
+            apps_repo=apps_repo,
             user_preferences_repo=user_preferences_repo,
             kc_user_repo=kc_user_repo,
             user_secrets_repo=user_secrets_repo,

@@ -34,7 +34,7 @@ class App:
         return apispec.AppResponse(
             name=self.name,
             launcher_id=str(self.launcher_id),
-            status=self.status,
+            status=apispec.AppStatus(self.status.value),
             url=self.url,
             project_id=str(self.project_id),
             started=self.started,

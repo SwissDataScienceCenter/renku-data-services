@@ -58,9 +58,7 @@ class ValueFrom(BaseCRD):
     model_config = ConfigDict(
         extra="allow",
     )
-    configMapKeyRef: Optional[ConfigMapKeyRef] = Field(
-        default=None, description="Selects a key of a ConfigMap."
-    )
+    configMapKeyRef: Optional[ConfigMapKeyRef] = Field(default=None, description="Selects a key of a ConfigMap.")
     fieldRef: Optional[Mapping[str, Any]] = Field(
         default=None,
         description="This is accessible behind a feature flag - kubernetes.podspec-fieldref",
@@ -100,9 +98,7 @@ class ConfigMapRef(BaseCRD):
         default="",
         description="Name of the referent.\nThis field is effectively required, but due to backwards compatibility is\nallowed to be empty. Instances of this type with an empty value here are\nalmost certainly wrong.\nMore info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
     )
-    optional: Optional[bool] = Field(
-        default=None, description="Specify whether the ConfigMap must be defined"
-    )
+    optional: Optional[bool] = Field(default=None, description="Specify whether the ConfigMap must be defined")
 
 
 class SecretRef(BaseCRD):
@@ -113,25 +109,19 @@ class SecretRef(BaseCRD):
         default="",
         description="Name of the referent.\nThis field is effectively required, but due to backwards compatibility is\nallowed to be empty. Instances of this type with an empty value here are\nalmost certainly wrong.\nMore info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
     )
-    optional: Optional[bool] = Field(
-        default=None, description="Specify whether the Secret must be defined"
-    )
+    optional: Optional[bool] = Field(default=None, description="Specify whether the Secret must be defined")
 
 
 class EnvFromItem(BaseCRD):
     model_config = ConfigDict(
         extra="allow",
     )
-    configMapRef: Optional[ConfigMapRef] = Field(
-        default=None, description="The ConfigMap to select from"
-    )
+    configMapRef: Optional[ConfigMapRef] = Field(default=None, description="The ConfigMap to select from")
     prefix: Optional[str] = Field(
         default=None,
         description="Optional text to prepend to the name of each environment variable.\nMay consist of any printable ASCII characters except '='.",
     )
-    secretRef: Optional[SecretRef] = Field(
-        default=None, description="The Secret to select from"
-    )
+    secretRef: Optional[SecretRef] = Field(default=None, description="The Secret to select from")
 
 
 class Exec(BaseCRD):
@@ -181,9 +171,7 @@ class HttpGet(BaseCRD):
         default=None,
         description="Custom headers to set in the request. HTTP allows repeated headers.",
     )
-    path: Optional[str] = Field(
-        default=None, description="Path to access on the HTTP server."
-    )
+    path: Optional[str] = Field(default=None, description="Path to access on the HTTP server.")
     port: Optional[Union[int, str]] = Field(
         default=None,
         description="Name or number of the port to access on the container.\nNumber must be in the range 1 to 65535.\nName must be an IANA_SVC_NAME.",
@@ -220,26 +208,18 @@ class LivenessProbe(BaseCRD):
         default=None,
         description="Minimum consecutive failures for the probe to be considered failed after having succeeded.\nDefaults to 3. Minimum value is 1.",
     )
-    grpc: Optional[Grpc] = Field(
-        default=None, description="GRPC specifies a GRPC HealthCheckRequest."
-    )
-    httpGet: Optional[HttpGet] = Field(
-        default=None, description="HTTPGet specifies an HTTP GET request to perform."
-    )
+    grpc: Optional[Grpc] = Field(default=None, description="GRPC specifies a GRPC HealthCheckRequest.")
+    httpGet: Optional[HttpGet] = Field(default=None, description="HTTPGet specifies an HTTP GET request to perform.")
     initialDelaySeconds: Optional[int] = Field(
         default=None,
         description="Number of seconds after the container has started before liveness probes are initiated.\nMore info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
     )
-    periodSeconds: Optional[int] = Field(
-        default=None, description="How often (in seconds) to perform the probe."
-    )
+    periodSeconds: Optional[int] = Field(default=None, description="How often (in seconds) to perform the probe.")
     successThreshold: Optional[int] = Field(
         default=None,
         description="Minimum consecutive successes for the probe to be considered successful after having failed.\nDefaults to 1. Must be 1 for liveness and startup. Minimum value is 1.",
     )
-    tcpSocket: Optional[TcpSocket] = Field(
-        default=None, description="TCPSocket specifies a connection to a TCP port."
-    )
+    tcpSocket: Optional[TcpSocket] = Field(default=None, description="TCPSocket specifies a connection to a TCP port.")
     timeoutSeconds: Optional[int] = Field(
         default=None,
         description="Number of seconds after which the probe times out.\nDefaults to 1 second. Minimum value is 1.\nMore info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
@@ -276,9 +256,7 @@ class HttpGet1(BaseCRD):
         default=None,
         description="Custom headers to set in the request. HTTP allows repeated headers.",
     )
-    path: Optional[str] = Field(
-        default=None, description="Path to access on the HTTP server."
-    )
+    path: Optional[str] = Field(default=None, description="Path to access on the HTTP server.")
     port: Optional[Union[int, str]] = Field(
         default=None,
         description="Name or number of the port to access on the container.\nNumber must be in the range 1 to 65535.\nName must be an IANA_SVC_NAME.",
@@ -301,26 +279,18 @@ class ReadinessProbe(BaseCRD):
         default=None,
         description="Minimum consecutive failures for the probe to be considered failed after having succeeded.\nDefaults to 3. Minimum value is 1.",
     )
-    grpc: Optional[Grpc] = Field(
-        default=None, description="GRPC specifies a GRPC HealthCheckRequest."
-    )
-    httpGet: Optional[HttpGet1] = Field(
-        default=None, description="HTTPGet specifies an HTTP GET request to perform."
-    )
+    grpc: Optional[Grpc] = Field(default=None, description="GRPC specifies a GRPC HealthCheckRequest.")
+    httpGet: Optional[HttpGet1] = Field(default=None, description="HTTPGet specifies an HTTP GET request to perform.")
     initialDelaySeconds: Optional[int] = Field(
         default=None,
         description="Number of seconds after the container has started before liveness probes are initiated.\nMore info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
     )
-    periodSeconds: Optional[int] = Field(
-        default=None, description="How often (in seconds) to perform the probe."
-    )
+    periodSeconds: Optional[int] = Field(default=None, description="How often (in seconds) to perform the probe.")
     successThreshold: Optional[int] = Field(
         default=None,
         description="Minimum consecutive successes for the probe to be considered successful after having failed.\nDefaults to 1. Must be 1 for liveness and startup. Minimum value is 1.",
     )
-    tcpSocket: Optional[TcpSocket] = Field(
-        default=None, description="TCPSocket specifies a connection to a TCP port."
-    )
+    tcpSocket: Optional[TcpSocket] = Field(default=None, description="TCPSocket specifies a connection to a TCP port.")
     timeoutSeconds: Optional[int] = Field(
         default=None,
         description="Number of seconds after which the probe times out.\nDefaults to 1 second. Minimum value is 1.\nMore info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
@@ -377,9 +347,7 @@ class Capabilities(BaseCRD):
         default=None,
         description="This is accessible behind a feature flag - kubernetes.containerspec-addcapabilities",
     )
-    drop: Optional[Sequence[str]] = Field(
-        default=None, description="Removed capabilities"
-    )
+    drop: Optional[Sequence[str]] = Field(default=None, description="Removed capabilities")
 
 
 class SeccompProfile(BaseCRD):
@@ -446,9 +414,7 @@ class HttpGet2(BaseCRD):
         default=None,
         description="Custom headers to set in the request. HTTP allows repeated headers.",
     )
-    path: Optional[str] = Field(
-        default=None, description="Path to access on the HTTP server."
-    )
+    path: Optional[str] = Field(default=None, description="Path to access on the HTTP server.")
     port: Optional[Union[int, str]] = Field(
         default=None,
         description="Name or number of the port to access on the container.\nNumber must be in the range 1 to 65535.\nName must be an IANA_SVC_NAME.",
@@ -471,26 +437,18 @@ class StartupProbe(BaseCRD):
         default=None,
         description="Minimum consecutive failures for the probe to be considered failed after having succeeded.\nDefaults to 3. Minimum value is 1.",
     )
-    grpc: Optional[Grpc] = Field(
-        default=None, description="GRPC specifies a GRPC HealthCheckRequest."
-    )
-    httpGet: Optional[HttpGet2] = Field(
-        default=None, description="HTTPGet specifies an HTTP GET request to perform."
-    )
+    grpc: Optional[Grpc] = Field(default=None, description="GRPC specifies a GRPC HealthCheckRequest.")
+    httpGet: Optional[HttpGet2] = Field(default=None, description="HTTPGet specifies an HTTP GET request to perform.")
     initialDelaySeconds: Optional[int] = Field(
         default=None,
         description="Number of seconds after the container has started before liveness probes are initiated.\nMore info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
     )
-    periodSeconds: Optional[int] = Field(
-        default=None, description="How often (in seconds) to perform the probe."
-    )
+    periodSeconds: Optional[int] = Field(default=None, description="How often (in seconds) to perform the probe.")
     successThreshold: Optional[int] = Field(
         default=None,
         description="Minimum consecutive successes for the probe to be considered successful after having failed.\nDefaults to 1. Must be 1 for liveness and startup. Minimum value is 1.",
     )
-    tcpSocket: Optional[TcpSocket] = Field(
-        default=None, description="TCPSocket specifies a connection to a TCP port."
-    )
+    tcpSocket: Optional[TcpSocket] = Field(default=None, description="TCPSocket specifies a connection to a TCP port.")
     timeoutSeconds: Optional[int] = Field(
         default=None,
         description="Number of seconds after which the probe times out.\nDefaults to 1 second. Minimum value is 1.\nMore info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
@@ -667,9 +625,7 @@ class FieldRef(BaseCRD):
         default=None,
         description='Version of the schema the FieldPath is written in terms of, defaults to "v1".',
     )
-    fieldPath: str = Field(
-        ..., description="Path of the field to select in the specified API version."
-    )
+    fieldPath: str = Field(..., description="Path of the field to select in the specified API version.")
 
 
 class Divisor(RootModel[int]):
@@ -729,9 +685,7 @@ class DownwardAPI(BaseCRD):
     model_config = ConfigDict(
         extra="allow",
     )
-    items: Optional[Sequence[Item2]] = Field(
-        default=None, description="Items is a list of DownwardAPIVolume file"
-    )
+    items: Optional[Sequence[Item2]] = Field(default=None, description="Items is a list of DownwardAPIVolume file")
 
 
 class Item3(BaseCRD):
@@ -797,9 +751,7 @@ class Source(BaseCRD):
         default=None,
         description="downwardAPI information about the downwardAPI data to project",
     )
-    secret: Optional[Secret] = Field(
-        default=None, description="secret information about the secret data to project"
-    )
+    secret: Optional[Secret] = Field(default=None, description="secret information about the secret data to project")
     serviceAccountToken: Optional[ServiceAccountToken] = Field(
         default=None,
         description="serviceAccountToken is information about the serviceAccountToken data to project",
@@ -1057,12 +1009,8 @@ class Address(BaseCRD):
         default=None,
         description="CACerts is the Certification Authority (CA) certificates in PEM format\naccording to https://www.rfc-editor.org/rfc/rfc7468.",
     )
-    audience: Optional[str] = Field(
-        default=None, description="Audience is the OIDC audience for this address."
-    )
-    name: Optional[str] = Field(
-        default=None, description="Name is the name of the address."
-    )
+    audience: Optional[str] = Field(default=None, description="Audience is the OIDC audience for this address.")
+    name: Optional[str] = Field(default=None, description="Name is the name of the address.")
     url: Optional[str] = None
 
 
@@ -1078,16 +1026,12 @@ class Condition(BaseCRD):
         default=None,
         description="A human readable message indicating details about the transition.",
     )
-    reason: Optional[str] = Field(
-        default=None, description="The reason for the condition's last transition."
-    )
+    reason: Optional[str] = Field(default=None, description="The reason for the condition's last transition.")
     severity: Optional[str] = Field(
         default=None,
         description="Severity with which to treat failures of this type of condition.\nWhen this is not specified, it defaults to Error.",
     )
-    status: str = Field(
-        ..., description="Status of the condition, one of True, False, Unknown."
-    )
+    status: str = Field(..., description="Status of the condition, one of True, False, Unknown.")
     type: str = Field(..., description="Type of condition.")
 
 
