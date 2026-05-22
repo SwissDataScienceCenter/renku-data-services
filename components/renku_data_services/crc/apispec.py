@@ -710,6 +710,11 @@ class ResourceClassProperties(BaseAPISpec):
         examples=[[{"key": "test-label-1", "required_during_scheduling": False}]],
         min_length=0,
     )
+    quota_enforced: Optional[bool] = Field(
+        None,
+        description="Whether sessions in this resource class should be hibernated when quota is exhausted",
+        examples=[True],
+    )
 
 
 class ResourceClass(BaseAPISpec):
@@ -763,6 +768,11 @@ class ResourceClass(BaseAPISpec):
         description="A list of k8s labels used for tolerations and/or node affinity",
         examples=[[{"key": "test-label-1", "required_during_scheduling": False}]],
         min_length=0,
+    )
+    quota_enforced: bool = Field(
+        False,
+        description="Whether sessions in this resource class should be hibernated when quota is exhausted",
+        examples=[True],
     )
 
 
@@ -837,6 +847,11 @@ class ResourceClassWithId(BaseAPISpec):
         examples=[1],
         ge=0,
     )
+    quota_enforced: bool = Field(
+        False,
+        description="Whether sessions in this resource class should be hibernated when quota is exhausted",
+        examples=[True],
+    )
 
 
 class ResourceClassWithIdFiltered(ResourceClassWithId):
@@ -868,6 +883,7 @@ class ResourceClassesWithIdResponse(RootModel[list[ResourceClassWithId]]):
                     "gpu": 0,
                     "max_storage": 100,
                     "default_storage": 10,
+                    "quota_enforced": True,
                     "id": 1,
                 },
                 {
@@ -878,6 +894,7 @@ class ResourceClassesWithIdResponse(RootModel[list[ResourceClassWithId]]):
                     "gpu": 2,
                     "max_storage": 10000,
                     "default_storage": 10,
+                    "quota_enforced": True,
                     "id": 2,
                 },
             ]
@@ -1024,6 +1041,7 @@ class ResourcePoolPut(BaseAPISpec):
                     "gpu": 0,
                     "max_storage": 100,
                     "default_storage": 10,
+                    "quota_enforced": True,
                     "id": 1,
                 },
                 {
@@ -1034,6 +1052,7 @@ class ResourcePoolPut(BaseAPISpec):
                     "gpu": 2,
                     "max_storage": 10000,
                     "default_storage": 10,
+                    "quota_enforced": True,
                     "id": 2,
                 },
             ]

@@ -111,10 +111,13 @@ from renku_data_services.project.db import ProjectRepository, ProjectSessionSecr
 from renku_data_services.project.models import Project, SessionSecret
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata as RepoMetadata
+from renku_data_services.resource_usage.core import ResourceUsageService
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
+from renku_data_services.utils.core import get_effective_quota
 
 logger = logging.getLogger(__name__)
 
@@ -790,6 +793,22 @@ def get_remote_env(
     return env
 
 
+async def _check_quota(resource_usage_service: ResourceUsageService, resource_pool_id: int, user_id: str) -> None:
+    """Raise a ValidationError if the user has exhausted their quota, do nothing otherwise."""
+    usage = await resource_usage_service.get_running_week(resource_pool_id=resource_pool_id, user_id=user_id)
+    if usage is None:
+        return
+
+    total_quota = get_effective_quota(usage.pool_limits.user_limit.value, usage.pool_limits.total_limit.value)
+    if total_quota <= 0:
+        return
+
+    if usage.user_usage.cost.value >= total_quota:
+        raise errors.ValidationError(
+            message="Cannot start the session because your quota in the selected resource pool is exhausted."
+        )
+
+
 async def start_session(
     request: Request,
     launch_request: SessionLaunchRequest,
@@ -810,6 +829,7 @@ async def start_session(
     git_repositories_repo: GitRepositoriesRepository,
     builds_config: BuildsConfig,
     internal_token_mint: RenkuSelfTokenMint,
+    resource_usage_service: ResourceUsageService,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -847,7 +867,6 @@ async def start_session(
             resource_class = resource_pool.classes[0]
         if not resource_class or not resource_class.id:
             raise errors.ProgrammingError(message="Cannot find any resource classes in the default pool.")
-        resource_class_id = resource_class.id
     else:
         resource_pool = await rp_repo.get_resource_pool_from_class(user, resource_class_id)
         resource_class = resource_pool.get_resource_class(resource_class_id)
@@ -855,6 +874,10 @@ async def start_session(
             raise errors.MissingResourceError(message=f"The resource class with ID {resource_class_id} does not exist.")
     await nb_config.crc_validator.validate_class_storage(user, resource_class.id, launch_request.disk_storage)
     disk_storage = launch_request.disk_storage or resource_class.default_storage
+
+    # NOTE: Refuse to start if the user is over quota and the resource class enforces it
+    if user.id and resource_pool.id and resource_class.quota_enforced:
+        await _check_quota(resource_usage_service, resource_pool.id, user.id)
 
     # Determine session location
     session_location = SessionLocation.remote if resource_pool.remote else SessionLocation.local
@@ -1179,6 +1202,8 @@ async def patch_session(
     metrics: MetricsService,
     builds_config: BuildsConfig,
     internal_token_mint: RenkuSelfTokenMint,
+    resource_usage_service: ResourceUsageService,
+    resource_requests_repo: ResourceRequestsRepo,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -1188,6 +1213,7 @@ async def patch_session(
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())
     is_getting_hibernated: bool = False
+    is_being_resumed: bool = False
     session_type = SessionType.from_amalthea(session.spec.sessionType)
 
     # Hibernation
@@ -1206,11 +1232,11 @@ async def patch_session(
         and body.state.value.lower() == State.Running.value.lower()
         and session.status.state.value.lower() != body.state.value.lower()
     ):
-        # Session is being resumed
-        patch.spec.hibernated = False
-        await metrics.user_requested_session_resume(user, metadata={"session_id": session_id})
+        # Session is being resumed - quota check happens below after the resource class is resolved
+        is_being_resumed = True
 
     rp: ResourcePool | None = None
+    rc: ResourceClass | None = None
     # Resource class
     if body.resource_class_id is not None:
         new_cluster = await nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
@@ -1282,6 +1308,23 @@ async def patch_session(
     if not isinstance(patch.spec.template.metadata, TemplateMetadataPatch):
         patch.spec.template.metadata = TemplateMetadataPatch()
     patch.spec.template.metadata.labels = labels
+
+    # NOTE: Refuse to resume if quota is exhausted and the resource class enforces it
+    if is_being_resumed:
+        rp_id: int | None
+        quota_enforced: bool | None
+        if rp and rc:
+            rp_id = rp.id
+            quota_enforced = rc.quota_enforced
+        else:
+            raw_pool_id = session.metadata.annotations.get("renku.io/resource_pool_id")
+            rp_id = int(raw_pool_id) if raw_pool_id else None
+            quota_enforced = await resource_requests_repo.get_quota_enforced(session.resource_class_id())
+        if user.id and rp_id and quota_enforced:
+            await _check_quota(resource_usage_service, rp_id, user.id)
+
+        patch.spec.hibernated = False
+        await metrics.user_requested_session_resume(user, metadata={"session_id": session_id})
 
     patch.spec.culling = get_culling_patch(
         user, rp, nb_config, body.lastInteraction, SessionType.from_amalthea(session.spec.sessionType)

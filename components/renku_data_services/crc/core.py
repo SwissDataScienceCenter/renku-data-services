@@ -9,6 +9,7 @@ from renku_data_services.base_models import RESET, ResetType
 from renku_data_services.crc import apispec, models
 from renku_data_services.errors import errors
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.utils.core import get_effective_quota
 
 
 def validate_quota(body: apispec.QuotaWithOptionalId) -> models.UnsavedQuota:
@@ -63,6 +64,7 @@ def validate_resource_class(body: apispec.ResourceClass) -> models.UnsavedResour
         default_storage=body.default_storage,
         node_affinities=node_affinities,
         tolerations=tolerations,
+        quota_enforced=body.quota_enforced,
     )
 
 
@@ -111,6 +113,7 @@ def validate_resource_class_patch_or_put(
             default_storage=body.default_storage,
             node_affinities=node_affinities,
             tolerations=tolerations,
+            quota_enforced=body.quota_enforced,
         )
     return models.ResourceClassPatch(
         name=body.name,
@@ -122,6 +125,7 @@ def validate_resource_class_patch_or_put(
         default_storage=body.default_storage,
         node_affinities=node_affinities,
         tolerations=tolerations,
+        quota_enforced=body.quota_enforced,
     )
 
 
@@ -644,11 +648,7 @@ async def calculate_usage_hours(
 
     # NOTE: Calculate quota based on the minimum of user and total limits that is set. User and total limits can be set
     # independent of each other.
-    total_quota = (
-        min(limits.user_limit.value, limits.total_limit.value)
-        if limits.user_limit.value and limits.total_limit.value
-        else max(limits.user_limit.value, limits.total_limit.value)
-    )
+    total_quota = get_effective_quota(limits.user_limit.value, limits.total_limit.value)
     # NOTE: A value of 0 for the limit means that there is no limit, so we return None (instead of 0) to inform the
     # caller that there is no limit.
     if total_quota <= 0:

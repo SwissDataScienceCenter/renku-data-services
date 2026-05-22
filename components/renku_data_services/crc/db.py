@@ -751,6 +751,8 @@ class ResourcePoolRepository(_Base):
                 cls.gpu = update.gpu
             if update.default_storage is not None:
                 cls.default_storage = update.default_storage
+            if update.quota_enforced is not None:
+                cls.quota_enforced = update.quota_enforced
 
             if update.node_affinities is not None:
                 existing_affinities: dict[str, schemas.NodeAffinityORM] = {i.key: i for i in cls.node_affinities}
