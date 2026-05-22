@@ -249,6 +249,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       responses:
         "200":
           description: The resource pool definition
@@ -274,6 +276,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       requestBody:
         required: true
         content:
@@ -305,6 +309,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       requestBody:
         required: true
         content:
@@ -336,6 +342,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       responses:
         "204":
           description: The resource pool was removed or did not exist in the first place
@@ -352,6 +360,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: query
           description: Filter for resource classes based on the provided name as a prefix. Omitting this parameter returns all classes.
           name: resource_class_params
@@ -388,6 +398,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       requestBody:
         required: true
         content:
@@ -420,6 +432,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: path
           name: class_id
           required: true
@@ -450,6 +464,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: path
           name: class_id
           required: true
@@ -486,6 +502,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: path
           name: class_id
           required: true
@@ -522,6 +540,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: path
           name: class_id
           required: true
@@ -543,6 +563,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: path
           name: class_id
           required: true
@@ -567,6 +589,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: path
           name: class_id
           required: true
@@ -588,6 +612,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: path
           name: class_id
           required: true
@@ -612,6 +638,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: path
           name: class_id
           required: true
@@ -633,6 +661,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       responses:
         "200":
           description: The list of users
@@ -658,6 +688,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       requestBody:
         description: List of user Ids
         required: true
@@ -697,6 +729,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       requestBody:
         description: List of user Ids
         required: true
@@ -730,6 +764,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: path
           name: user_id
           required: true
@@ -760,6 +796,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: path
           name: user_id
           required: true
@@ -781,6 +819,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       responses:
         "200":
           description: The list of members
@@ -806,6 +846,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       requestBody:
         description: List of members
         required: true
@@ -838,6 +880,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       requestBody:
         description: List of members
         required: true
@@ -871,6 +915,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: path
           name: member_type
           required: true
@@ -907,6 +953,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
         - in: path
           name: member_type
           required: true
@@ -934,6 +982,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       responses:
         "200":
           description: The resource quota for the resource pool
@@ -959,6 +1009,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       requestBody:
         required: true
         content:
@@ -990,6 +1042,8 @@ paths:
           required: true
           schema:
             type: integer
+            minimum: 1
+            maximum: 2147483647
       requestBody:
         required: true
         content:
