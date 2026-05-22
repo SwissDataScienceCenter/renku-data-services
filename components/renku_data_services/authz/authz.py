@@ -317,7 +317,9 @@ def _is_allowed_on_resource(
         async def decorated_function(
             self: "Authz", user: base_models.APIUser, *args: _P.args, **kwargs: _P.kwargs
         ) -> _T:
-            if isinstance(user, base_models.InternalServiceAdmin):
+            if isinstance(user, base_models.InternalServiceAdmin) or (
+                isinstance(user, base_models.APIUser) and user.is_admin
+            ):
                 return await f(self, user, *args, **kwargs)
             if not isinstance(user, base_models.APIUser):
                 raise errors.ProgrammingError(
@@ -394,7 +396,9 @@ def _is_allowed(
             *args: _P.args,
             **kwargs: _P.kwargs,
         ) -> _T:
-            if isinstance(user, base_models.InternalServiceAdmin):
+            if isinstance(user, base_models.InternalServiceAdmin) or (
+                isinstance(user, base_models.APIUser) and user.is_admin
+            ):
                 return await f(self, user, resource_type, resource_id, *args, **kwargs)
             allowed, zed_token = await self._has_permission(user, resource_type, resource_id, operation)
             if not allowed:
