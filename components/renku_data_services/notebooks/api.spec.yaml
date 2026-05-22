@@ -274,6 +274,11 @@ components:
           $ref: "#/components/schemas/Ulid"
         resource_class_id:
           type: integer
+        session_type:
+          $ref: "#/components/schemas/SessionType"
+        submission_id:
+          type: string
+          nullable: true
       required:
         - image
         - name
@@ -284,6 +289,7 @@ components:
         - project_id
         - launcher_id
         - resource_class_id
+        - session_type
       type: object
     SessionListResponse:
       items:

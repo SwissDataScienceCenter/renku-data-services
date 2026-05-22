@@ -31,10 +31,10 @@ from renku_data_services.session.models import LauncherType
 class SubmissionId:
     """Type for a submission id used to start jobs."""
 
-    def __init__(self, value):
+    def __init__(self, value: Any) -> None:
         msg = self.validate(value)
         if msg is None:
-            self.value = value
+            self.value: str = value
         else:
             raise ValueError(msg)
 
@@ -49,6 +49,7 @@ class SubmissionId:
         """Create a submission id from a str if it validates."""
         if not cls.validate(v):
             return SubmissionId(v.strip())
+        return None
 
     @classmethod
     def validate(cls, v: Any) -> str | None:
@@ -57,6 +58,7 @@ class SubmissionId:
             return f"Invalid submission id: {v}"
         if len(v.strip()) < 4:
             return f"Invalid submission id (requires at least 4 characters): {v}"
+        return None
 
 
 @dataclass
