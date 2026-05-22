@@ -1111,6 +1111,8 @@ components:
           $ref: "#/components/schemas/K8sLabelList"
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
+        quota_enforced:
+          $ref: "#/components/schemas/QuotaEnforced"
     ResourceClass:
       type: object
       additionalProperties: false
@@ -1133,6 +1135,10 @@ components:
           $ref: "#/components/schemas/K8sLabelList"
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
+        quota_enforced:
+          allOf:
+            - $ref: "#/components/schemas/QuotaEnforced"
+          default: false
       required:
         - name
         - default
@@ -1149,6 +1155,7 @@ components:
         gpu: 0
         max_storage: 100
         default_storage: 10
+        quota_enforced: false
     ResourceClassPatch:
       allOf:
         - $ref: "#/components/schemas/ResourceClassProperties"
@@ -1191,6 +1198,10 @@ components:
           $ref: "#/components/schemas/NodeAffinityList"
         id:
           $ref: "#/components/schemas/IntegerId"
+        quota_enforced:
+          allOf:
+            - $ref: "#/components/schemas/QuotaEnforced"
+          default: false
       required:
         - name
         - default
@@ -1208,6 +1219,7 @@ components:
         gpu: 0
         max_storage: 100
         default_storage: 10
+        quota_enforced: false
         id: 1
     ResourceClassWithIdFiltered:
       allOf:
@@ -1247,6 +1259,7 @@ components:
           gpu: 0
           max_storage: 100
           default_storage: 10
+          quota_enforced: true
           id: 1
         - name: "resource class 2"
           default: false
@@ -1255,6 +1268,7 @@ components:
           gpu: 2
           max_storage: 10000
           default_storage: 10
+          quota_enforced: true
           id: 2
     ResourceClassesWithIdResponse:
       # Note: this needs to be separate from ResourceClassesWithId, or it doesn't get generated
@@ -1270,6 +1284,7 @@ components:
           gpu: 0
           max_storage: 100
           default_storage: 10
+          quota_enforced: true
           id: 1
         - name: "resource class 2"
           default: false
@@ -1278,6 +1293,7 @@ components:
           gpu: 2
           max_storage: 10000
           default_storage: 10
+          quota_enforced: true
           id: 2
     ResourceClassesPatchWithId:
       type: array
@@ -1734,6 +1750,10 @@ components:
       type: boolean
       description: A default selection for resource classes or resource pools
       example: false
+    QuotaEnforced:
+      type: boolean
+      description: Whether sessions in this resource class should be hibernated when quota is exhausted
+      example: true
     PublicFlag:
       type: boolean
       description: A resource pool whose classes can be accessed by anyone

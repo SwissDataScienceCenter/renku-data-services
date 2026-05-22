@@ -32,7 +32,7 @@ from renku_data_services.namespace.models import NamespaceKind
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.notifications.models import UnsavedAlert
 from renku_data_services.solr.solr_client import DefaultSolrClient
-from renku_data_services.utils.core import get_nonzero_minimum
+from renku_data_services.utils.core import get_effective_quota
 
 logger = logging.getLogger(__name__)
 
@@ -488,7 +488,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
             if not usage:
                 continue
 
-            total_quota = get_nonzero_minimum(usage.pool_limits.user_limit.value, usage.pool_limits.total_limit.value)
+            total_quota = get_effective_quota(usage.pool_limits.user_limit.value, usage.pool_limits.total_limit.value)
             if total_quota <= 0:
                 continue
 
@@ -497,7 +497,8 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
             if usage_p <= usage_threshold_p:
                 continue
 
-            # NOTE: Without the resource_class_id, we cannot calculate the remaining time
+            # NOTE: Without the resource_class_id, we cannot calculate the remaining time or know if quota is enforced
+            # on the resource class
             if resource_class_id:
                 if usage.user_usage.cost.value >= total_quota:
                     message = f"Your session {session_name} in resource pool {resource_pool_id} has exhausted its quota"
@@ -505,11 +506,21 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
                         f"Session {session_name} for user {user_id} has exhausted its quota in resource pool "
                         f"{resource_pool_id}"
                     )
+                    title = "Quota exhausted"
+
+                    # NOTE: Only hibernate the session if quota_enforced is set on the resource class
+                    quota_enforced = await dm.resource_requests_repo.get_quota_enforced(resource_class_id)
+                    if quota_enforced:
+                        message = f"{message} and has been paused"
+                        log_message = f"{log_message} and has been paused"
+                        title = "Session paused due to quota exhaustion"
+                        await dm.k8s_client.patch(session, {"spec": {"hibernated": True}})
+
                     hibernation_alert = UnsavedAlert(
                         user_id=user_id,
                         event_type="session_quota_exhausted",
                         session_name=session_name,
-                        title="Session paused due to quota exhaustion",
+                        title=title,
                         message=message,
                     )
                     await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=hibernation_alert)
@@ -546,7 +557,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
             await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=alert)
             logger.info(f"Created quota alert for user {user_id}, session {session_name}")
         except Exception as e:
-            logger.warning(f"Failed to check quota for pod: {e}")
+            logger.warning(f"Failed to check quota for pod: {e}", exc_info=True)
             continue
 
 

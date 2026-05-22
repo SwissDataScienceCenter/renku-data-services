@@ -35,6 +35,8 @@ from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.notebooks.models import SessionType
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.resource_usage.core import ResourceUsageService
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
@@ -67,6 +69,8 @@ class NotebooksNewBP(CustomBlueprint):
     metrics: MetricsService
     git_repositories_repo: GitRepositoriesRepository
     builds_config: BuildsConfig
+    resource_usage_service: ResourceUsageService
+    resource_requests_repo: ResourceRequestsRepo
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -100,6 +104,7 @@ class NotebooksNewBP(CustomBlueprint):
                 git_repositories_repo=self.git_repositories_repo,
                 builds_config=self.builds_config,
                 internal_token_mint=self.internal_token_mint,
+                resource_usage_service=self.resource_usage_service,
             )
             status = 201 if created else 200
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"), status)
@@ -182,6 +187,8 @@ class NotebooksNewBP(CustomBlueprint):
                 data_source_repo=self.data_source_repo,
                 builds_config=self.builds_config,
                 internal_token_mint=self.internal_token_mint,
+                resource_usage_service=self.resource_usage_service,
+                resource_requests_repo=self.resource_requests_repo,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
