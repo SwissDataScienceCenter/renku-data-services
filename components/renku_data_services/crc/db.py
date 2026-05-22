@@ -313,6 +313,14 @@ class ResourcePoolQueryRepository:
     ) -> list[models.ResourceClass]:
         """Get classes from the database."""
         async with self.session_maker() as session:
+            if resource_pool_id is not None:
+                rp = await session.scalar(
+                    select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
+                )
+                if rp is None:
+                    raise errors.MissingResourceError(
+                        message=f"The resource pool with id {resource_pool_id} cannot be found."
+                    )
             stmt = select(schemas.ResourceClassORM).join(
                 schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool, isouter=True
             )
@@ -1375,6 +1383,12 @@ class MemberRepository(_Base):
         resource_pool_id: int,
     ) -> list[ResourcePoolMemberResult]:
         """Get all members of a resource pool from Authzed, resolving IDs to human-readable identifiers."""
+        async with self.session_maker() as session:
+            rp = await session.scalar(
+                select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
+            )
+            if rp is None:
+                raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} does not exist")
         raw_members = await self.authz.get_resource_pool_members(api_user, resource_pool_id)
         results: list[ResourcePoolMemberResult] = []
         for subject_type, subject_id, relation in raw_members:
