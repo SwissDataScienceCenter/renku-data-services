@@ -370,7 +370,7 @@ class ResourcePoolRepository(_Base):
             expire_on_commit=True,
         )
         async with session_maker() as session, session.begin():
-            stmt = select(schemas.ResourcePoolORM.default == true())
+            stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
             res = await session.execute(stmt)
             default_rp = res.scalars().first()
             if default_rp is None:
