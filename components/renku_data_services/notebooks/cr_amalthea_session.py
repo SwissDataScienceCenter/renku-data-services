@@ -3720,6 +3720,23 @@ class SessionType(Enum):
     Interactive = "Interactive"
     NonInteractive = "NonInteractive"
 
+    @classmethod
+    def from_str(cls, v: str) -> SessionType | None:
+        """Create a SessionType from a string."""
+        if v.lower() == "interactive":
+            return SessionType.Interactive
+        elif v.lower() in ["non_interactive", "noninteractive"]:
+            return SessionType.NonInteractive
+        else:
+            return None
+
+    @classmethod
+    def from_str_or_none(cls, v: str | None) -> SessionType | None:
+        """Create a SessionType from a string or None."""
+        if v is None:
+            return None
+        else:
+            return cls.from_str(v)
 
 class Metadata(BaseCRD):
     model_config = ConfigDict(
