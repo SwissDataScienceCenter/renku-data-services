@@ -37,6 +37,7 @@ from renku_data_services.crc.db import ClusterRepository, QuotaRepository, Resou
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
+from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
@@ -517,6 +518,7 @@ class TestDependencyManager(DependencyManager):
             resource_requests_repo=resource_requests_repo,
             resource_usage_service=resource_usage_service,
             zenodo_client=ZenodoAPIClient(),
+            envidat_client=EnvidatClient(),
             job_client=job_client,
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,

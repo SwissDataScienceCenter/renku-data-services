@@ -268,6 +268,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         metrics=dm.metrics,
         zenodo_client=dm.zenodo_client,
+        envidat_client=dm.envidat_client,
         connected_services_repo=dm.connected_services_repo,
         job_client=dm.job_client,
         secret_client=dm.secret_client,
