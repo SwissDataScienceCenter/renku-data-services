@@ -141,6 +141,7 @@ class InaccessibleDataConnectorLinks(BaseAPISpec):
 
 class DepositProvider(StrEnum):
     zenodo = "zenodo"
+    envidat = "envidat"
 
 
 class DepositStatus(StrEnum):
