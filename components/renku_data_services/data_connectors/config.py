@@ -24,6 +24,12 @@ class DepositConfig:
     namespace: str
     renku_url: str
     zenodo_url: str
+    envidat_url: str
+    envidat_rclone_image: str
+    envidat_s3_endpoint: str
+    envidat_s3_bucket: str
+    envidat_s3_access_key_id: str
+    envidat_s3_secret_access_key: str
     node_selector: dict[str, str] | None = None
     tolerations: list[V1Toleration] | None = None
     cluster_id: Final[ClusterId] = DEFAULT_K8S_CLUSTER
@@ -64,4 +70,10 @@ class DepositConfig:
             namespace=os.environ["KUBERNETES_NAMESPACE"],
             cluster_id=DEFAULT_K8S_CLUSTER,
             zenodo_url=os.environ.get("ZENODO_URL", "https://zenodo.org").rstrip("/"),
+            envidat_url=os.environ.get("ENVIDAT_URL", "https://www.envidat.ch").rstrip("/"),
+            envidat_rclone_image=os.environ.get("ENVIDAT_RCLONE_IMAGE", "rclone/rclone:1"),
+            envidat_s3_endpoint=os.environ.get("ENVIDAT_S3_ENDPOINT", ""),
+            envidat_s3_bucket=os.environ.get("ENVIDAT_S3_BUCKET", ""),
+            envidat_s3_access_key_id=os.environ.get("ENVIDAT_S3_ACCESS_KEY_ID", ""),
+            envidat_s3_secret_access_key=os.environ.get("ENVIDAT_S3_SECRET_ACCESS_KEY", ""),
         )
