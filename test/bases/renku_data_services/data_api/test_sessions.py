@@ -512,7 +512,7 @@ async def test_post_job_launcher(
         "resource_class_id": resource_pool["classes"][0]["id"],
         "disk_storage": 2,
         "env_variables": [{"name": "KEY_NUMBER_1", "value": "a value"}],
-        "launcher_type": "non_interactive",
+        "launcher_type": "non-interactive",
         "environment": {
             "container_image": "some_image:some_tag",
             "name": "custom_name",
@@ -537,7 +537,7 @@ async def test_post_job_launcher(
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert res.json.get("disk_storage") == 2
     assert res.json.get("env_variables") == [{"name": "KEY_NUMBER_1", "value": "a value"}]
-    assert res.json.get("launcher_type") == "non_interactive"
+    assert res.json.get("launcher_type") == "non-interactive"
     app_manager.metrics.session_launcher_created.assert_called_once()
 
 
