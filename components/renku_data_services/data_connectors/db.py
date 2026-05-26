@@ -164,12 +164,7 @@ class DataConnectorRepository:
 
         async with self.session_maker() as session:
             stmt = select(schemas.DataConnectorORM)
-            stmt = _filter_by_namespace_slug(stmt, path.parent())
-            stmt = stmt.where(
-                schemas.DataConnectorORM.slug.has(
-                    ns_schemas.EntitySlugORM.slug == path.last().value.lower(),
-                )
-            )
+            stmt = _filter_by_namespace_slug(stmt, path.parent(), path.last())
             result = await session.scalars(stmt)
             data_connector = result.one_or_none()
 
@@ -1161,8 +1156,16 @@ class DataConnectorSecretRepository:
 _T = TypeVar("_T", int, schemas.DataConnectorORM)
 
 
-def _filter_by_namespace_slug(stmt: Select[tuple[_T]], namespace: ProjectPath | NamespacePath) -> Select[tuple[_T]]:
-    """Filters a select query on data connectors to a given namespace."""
+def _filter_by_namespace_slug(
+    stmt: Select[tuple[_T]], namespace: ProjectPath | NamespacePath, slug: DataConnectorSlug | None = None
+) -> Select[tuple[_T]]:
+    """Filters a select query on data connectors to a given namespace.
+
+    If the data connector slug is given we try to match 1 single data connector.
+    If the data connector slug is omitted we match all possible data connectors at the defined namespace.
+    So if you provide a user or group namespace and no DC slug we filter for all data connectos in the user
+    and in all projects in the user namepace.
+    """
     # Regardless of where the DC is it will have a namespace slug.
     stmt = stmt.where(
         schemas.DataConnectorORM.slug.has(
@@ -1171,16 +1174,40 @@ def _filter_by_namespace_slug(stmt: Select[tuple[_T]], namespace: ProjectPath | 
             )
         )
     )
-    match namespace:
-        case NamespacePath():
+    match (namespace, slug):
+        case (NamespacePath(), DataConnectorSlug()):
+            # Match an exact data connector for the slug in the namespace
             # The DC is in a user namespace, the project has to be NULL in this case.
             # If this is removed we could match on a DCs that have the same slug in the user and project namspace.
             stmt = stmt.where(
                 schemas.DataConnectorORM.slug.has(
+                    ns_schemas.EntitySlugORM.slug == slug.value.lower(),
+                )
+            ).where(
+                schemas.DataConnectorORM.slug.has(
                     ns_schemas.EntitySlugORM.project_id.is_(None),
                 )
             )
-        case ProjectPath():
+        case (NamespacePath(), None):
+            # Match all data connectors in the namespace or in projects in the namespace
+            pass
+        case (ProjectPath(), DataConnectorSlug()):
+            # Match an exact data connector in the project
+            stmt = stmt.where(
+                schemas.DataConnectorORM.slug.has(
+                    ns_schemas.EntitySlugORM.slug == slug.value.lower(),
+                )
+            ).where(
+                schemas.DataConnectorORM.slug.has(
+                    ns_schemas.EntitySlugORM.project.has(
+                        schemas.ProjectORM.slug.has(
+                            ns_schemas.EntitySlugORM.slug == namespace.second.value.lower(),
+                        )
+                    )
+                )
+            )
+        case (ProjectPath(), None):
+            # Match all data connectors in the project
             stmt = stmt.where(
                 schemas.DataConnectorORM.slug.has(
                     ns_schemas.EntitySlugORM.project.has(
