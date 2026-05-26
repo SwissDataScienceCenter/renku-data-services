@@ -747,9 +747,10 @@ components:
         documentation:
           $ref: "#/components/schemas/ProjectDocumentation"
         template_id:
-          description: template_id is set when copying a project from a template project and it cannot be modified.
-                       This field can be either null or an empty string; a null value won't change it while an empty
-                       string value will delete it, meaning that the project is unlinked from its template
+          description:
+            template_id is set when copying a project from a template project and it cannot be modified.
+            This field can be either null or an empty string; a null value won't change it while an empty
+            string value will delete it, meaning that the project is unlinked from its template
           type: string
           # TODO: Once https://github.com/koxudaxi/datamodel-code-generator/issues/2191 is addressed use `enum: [""]`
           # here and add `--enum-field-as-literal=one` flag to `codegen_params` in the `Makefile`
@@ -801,9 +802,7 @@ components:
       description: A container image
       type: string
       maxLength: 500
-      # NOTE: regex for an image name, optionally with a tag or sha256 specified
-      # based on https://github.com/opencontainers/distribution-spec/blob/main/spec.md
-      pattern: "^[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*(\\/[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*)*(:[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}|@sha256:[a-fA-F0-9]{64}){0,1}$"
+      minLength: 3
       example: renku/renkulab-py:3.10-0.18.1
     DefaultUrl:
       description: The default path to open in a session
@@ -1021,16 +1020,16 @@ components:
     ProjectGetQuery:
       description: Query params for project get request
       allOf:
-      - $ref: "#/components/schemas/PaginationRequest"
-      - properties:
-          namespace:
-            description: A namespace, used as a filter.
-            type: string
-            default: ""
-          direct_member:
-            description: A flag to filter projects where the user is a direct member.
-            type: boolean
-            default: false
+        - $ref: "#/components/schemas/PaginationRequest"
+        - properties:
+            namespace:
+              description: A namespace, used as a filter.
+              type: string
+              default: ""
+            direct_member:
+              description: A flag to filter projects where the user is a direct member.
+              type: boolean
+              default: false
     ProjectMigrationList:
       description: A list of project migrations
       type: array
