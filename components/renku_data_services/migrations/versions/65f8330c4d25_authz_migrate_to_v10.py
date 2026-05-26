@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # revision identifiers, used by Alembic.
 revision = "65f8330c4d25"
-down_revision = "e3cade8bf1a8"
+down_revision = "a8f0e7b3c2d1"
 branch_labels = None
 depends_on = None
 
