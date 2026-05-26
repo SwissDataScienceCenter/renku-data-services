@@ -94,3 +94,11 @@ def validate_url_redirect_post(post: apispec.UrlRedirectPlanPost) -> models.Unsa
         source_url=validate_source_url(post.source_url),
         target_url=validate_target_url(post.target_url),
     )
+
+
+def validate_authz_config_patch(patch: apispec.AuthzConfigPatch) -> models.AuthorizationConfigPatch:
+    """Validate the update to the platform configuration."""
+    return models.AuthorizationConfigPatch(
+        only_admins_can_create_projects=patch.only_admins_can_create_projects,
+        only_admins_can_create_groups=patch.only_admins_can_create_groups,
+    )

@@ -41,6 +41,7 @@ from renku_data_services.authz.models import (
     CheckPermissionItem,
     Member,
     MembershipChange,
+    PlatformRole,
     Role,
     Scope,
     Visibility,
@@ -2396,3 +2397,85 @@ class Authz:
             updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
         )
         return _AuthzChange(apply=apply, undo=undo)
+
+    async def _relationship_exists(
+        self,
+        resource_type: str,
+        id: ULID | int | str,
+        relation: str,
+        subject: SubjectFilter,
+        zed_token: ZedToken | None = None,
+    ) -> tuple[bool, ZedToken | None]:
+        """If the filter conditions match multiple relationships then True is returned."""
+
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        req = ReadRelationshipsRequest(
+            consistency=consistency,
+            relationship_filter=RelationshipFilter(
+                resource_type=resource_type,
+                optional_relation=relation,
+                optional_resource_id=str(id),
+                optional_subject_filter=subject,
+            ),
+            optional_limit=1,
+        )
+
+        async for res in self.client.ReadRelationships(req):
+            return True, res.read_at
+        return False, zed_token
+
+    async def group_creation_allowed(self, zed_token: ZedToken | None = None) -> tuple[bool, ZedToken | None]:
+        """Indicates whether users are allowed to create groups."""
+        platform = _AuthzConverter.platform()
+        all_users = _AuthzConverter.all_users()
+        groups_allowed, new_zed_token = await self._relationship_exists(
+            resource_type=platform.object_type,
+            id=platform.object_id,
+            relation=PlatformRole.group_creator.value,
+            subject=SubjectFilter(subject_type=all_users.resource_type, optional_subject_id=all_users.object_id),
+            zed_token=zed_token,
+        )
+        return groups_allowed, new_zed_token
+
+    async def project_creation_allowed(self, zed_token: ZedToken | None = None) -> tuple[bool, ZedToken | None]:
+        """Indicates whether users are allowed to create projects."""
+        platform = _AuthzConverter.platform()
+        all_users = _AuthzConverter.all_users()
+        projects_allowed, new_zed_token = await self._relationship_exists(
+            resource_type=platform.object_type,
+            id=platform.object_id,
+            relation=PlatformRole.project_creator.value,
+            subject=SubjectFilter(subject_type=all_users.resource_type, optional_subject_id=all_users.object_id),
+            zed_token=zed_token,
+        )
+        return projects_allowed, new_zed_token
+
+    async def set_project_creation_permission(self, admin_only: bool) -> ZedToken:
+        """Controls whether any user or only admins are able to create projects."""
+        platform = _AuthzConverter.platform()
+        all_users = _AuthzConverter.all_users()
+        update = RelationshipUpdate(
+            operation=RelationshipUpdate.OPERATION_DELETE if admin_only else RelationshipUpdate.OPERATION_TOUCH,
+            relationship=Relationship(
+                resource=platform,
+                relation=PlatformRole.project_creator.value,
+                subject=SubjectReference(object=all_users),
+            ),
+        )
+        res = await self.client.WriteRelationships(WriteRelationshipsRequest(updates=[update]))
+        return cast(ZedToken, res.written_at)
+
+    async def set_group_creation_permission(self, admin_only: bool) -> ZedToken:
+        """Controls whether any user or only admins are able to create groups."""
+        platform = _AuthzConverter.platform()
+        all_users = _AuthzConverter.all_users()
+        update = RelationshipUpdate(
+            operation=RelationshipUpdate.OPERATION_DELETE if admin_only else RelationshipUpdate.OPERATION_TOUCH,
+            relationship=Relationship(
+                resource=platform,
+                relation=PlatformRole.group_creator.value,
+                subject=SubjectReference(object=all_users),
+            ),
+        )
+        res = await self.client.WriteRelationships(WriteRelationshipsRequest(updates=[update]))
+        return cast(ZedToken, res.written_at)

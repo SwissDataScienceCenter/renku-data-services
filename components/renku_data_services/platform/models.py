@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
+from hashlib import md5
 
 from ulid import ULID
 
@@ -65,3 +66,32 @@ class UrlRedirectConfig(UnsavedUrlRedirectConfig):
     def etag(self) -> str:
         """Entity tag value for this redirect object."""
         return compute_etag_from_timestamp(self.updated_at)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class AuthorizationConfig:
+    """Model representing high level authorization configuration."""
+
+    only_admins_can_create_projects: bool
+    only_admins_can_create_groups: bool
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this authorization config object."""
+        etag = (
+            md5(
+                f"{self.only_admins_can_create_projects},{self.only_admins_can_create_groups}".encode(),
+                usedforsecurity=False,
+            )
+            .hexdigest()
+            .upper()
+        )
+        return f'"{etag}"'
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class AuthorizationConfigPatch:
+    """Represents a patch for the authorization configuration patch."""
+
+    only_admins_can_create_projects: bool | None = None
+    only_admins_can_create_groups: bool | None = None

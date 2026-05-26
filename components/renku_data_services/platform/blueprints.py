@@ -4,11 +4,13 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Any
 
+from authzed.api.v1 import ZedToken
 from sanic import Request, empty
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
+from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
@@ -17,12 +19,13 @@ from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.platform import apispec
 from renku_data_services.platform.core import (
+    validate_authz_config_patch,
     validate_platform_config_patch,
     validate_url_redirect_patch,
     validate_url_redirect_post,
 )
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
-from renku_data_services.platform.models import UrlRedirectConfig
+from renku_data_services.platform.models import AuthorizationConfig, UrlRedirectConfig
 
 
 @dataclass(kw_only=True)
@@ -31,6 +34,7 @@ class PlatformConfigBP(CustomBlueprint):
 
     platform_repo: PlatformRepository
     authenticator: base_models.Authenticator
+    authz: Authz
 
     def get_singleton_configuration(self) -> BlueprintFactoryResponse:
         """Get the platform configuration."""
@@ -77,6 +81,73 @@ class PlatformConfigBP(CustomBlueprint):
             )
 
         return "/platform/config", ["PATCH"], _patch_singleton_configuration
+
+    def get_authz_configuration(self) -> BlueprintFactoryResponse:
+        """Get the platform authorization configuration."""
+
+        @extract_if_none_match
+        async def _get_authz_configuration(_: Request, etag: str | None) -> HTTPResponse:
+            projects_allowed, zed_token = await self.authz.project_creation_allowed()
+            groups_allowed, __ = await self.authz.group_creation_allowed(zed_token)
+            config = AuthorizationConfig(
+                only_admins_can_create_groups=not groups_allowed,
+                only_admins_can_create_projects=not projects_allowed,
+            )
+
+            if config.etag == etag:
+                return empty(status=304)
+
+            headers = {"ETag": config.etag}
+            return validated_json(
+                apispec.AuthzConfig,
+                dict(
+                    etag=config.etag,
+                    only_admins_can_create_groups=config.only_admins_can_create_groups,
+                    only_admins_can_create_projects=config.only_admins_can_create_projects,
+                ),
+                headers=headers,
+            )
+
+        return "/platform/config/authorization", ["GET"], _get_authz_configuration
+
+    def patch_authz_configuration(self) -> BlueprintFactoryResponse:
+        """Update the platform authorization configuration."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @if_match_required
+        @validate(json=apispec.AuthzConfigPatch)
+        async def _patch_authz_configuration(
+            _: Request, user: base_models.APIUser, body: apispec.AuthzConfigPatch, etag: str
+        ) -> JSONResponse:
+            patch = validate_authz_config_patch(body)
+            zed_token: ZedToken | None = None
+            if patch.only_admins_can_create_groups is not None:
+                zed_token = await self.authz.set_group_creation_permission(patch.only_admins_can_create_groups)
+                groups_allowed = not patch.only_admins_can_create_groups
+            else:
+                groups_allowed, zed_token = await self.authz.group_creation_allowed(zed_token)
+            if patch.only_admins_can_create_projects:
+                zed_token = await self.authz.set_project_creation_permission(patch.only_admins_can_create_projects)
+                projects_allowed = not patch.only_admins_can_create_projects
+            else:
+                projects_allowed, __ = await self.authz.project_creation_allowed(zed_token)
+
+            config = AuthorizationConfig(
+                only_admins_can_create_groups=not groups_allowed, only_admins_can_create_projects=not projects_allowed
+            )
+            headers = {"ETag": config.etag}
+            return validated_json(
+                apispec.PlatformConfig,
+                dict(
+                    etag=config.etag,
+                    only_admins_can_create_groups=config.only_admins_can_create_groups,
+                    only_admins_can_create_projects=config.only_admins_can_create_projects,
+                ),
+                headers=headers,
+            )
+
+        return "/platform/config/authorization", ["PATCH"], _patch_authz_configuration
 
 
 @dataclass(kw_only=True)
