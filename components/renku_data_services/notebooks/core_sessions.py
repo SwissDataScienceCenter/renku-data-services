@@ -857,6 +857,7 @@ async def start_session(
     """
     launcher = await session_repo.get_launcher(user=user, launcher_id=launch_request.launcher_id)
     launcher_id = launcher.id
+
     project = await project_repo.get_project(user=user, project_id=launcher.project_id)
     session_type = SessionType.from_launcher_type(launcher.launcher_type)
 
@@ -1107,6 +1108,13 @@ async def start_session(
     if session_type.is_non_interactive:
         session_extras = session_extras.extra_container_as_sidecars()
 
+    command = environment.command
+    args = environment.args
+    # if non-interactive and built-from-code, we need to wrap the "real" command in a launcher script
+    if session_type.is_non_interactive and launcher.environment.build_parameters_id is not None:
+        command = ["/cnb/lifecycle/launcher", "--"]
+        args = (environment.command or []) + (environment.args or [])
+
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations, labels=labels),
         spec=AmaltheaSessionSpec(
@@ -1134,8 +1142,8 @@ async def start_session(
                 runAsGroup=environment.gid,
                 resources=resources_from_resource_class(resource_class),
                 extraVolumeMounts=session_extras.volume_mounts,
-                command=environment.command,
-                args=environment.args,
+                command=command,
+                args=args,
                 shmSize=ShmSizeStr("1G"),
                 stripURLPath=environment.strip_path_prefix,
                 env=env,

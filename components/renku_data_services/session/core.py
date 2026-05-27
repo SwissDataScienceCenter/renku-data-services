@@ -11,6 +11,18 @@ from renku_data_services.session import apispec, models
 from renku_data_services.session.config import BuildsConfig
 
 
+def _convert_launcher_type(lt: models.LauncherType) -> apispec.LauncherType:
+    match lt:
+        case models.LauncherType.interactive:
+            return apispec.LauncherType.interactive
+        case models.LauncherType.non_interactive:
+            return apispec.LauncherType.non_interactive
+        case models.LauncherType.app:
+            raise errors.ValidationError(
+                message="Cannot convert an app launcher to a response as 'app' value is not yet implemented."
+            )
+
+
 def validate_unsaved_environment(
     environment: apispec.EnvironmentPost, environment_kind: models.EnvironmentKind
 ) -> models.UnsavedEnvironment:
@@ -35,6 +47,7 @@ def validate_unsaved_environment(
 
 
 def validate_unsaved_build_parameters(
+    launcher_type: apispec.LauncherType,
     environment: apispec.BuildParameters | apispec.BuildParametersPatch,
     builds_config: "BuildsConfig",
 ) -> models.UnsavedBuildParameters:
@@ -70,6 +83,11 @@ def validate_unsaved_build_parameters(
         environment.builder_variant, environment.frontend_variant
     )
 
+    if launcher_type == apispec.LauncherType.non_interactive and (
+        not environment.job_command or environment.job_command == ""
+    ):
+        raise errors.ValidationError(message="A job launcher is required to specify a 'job_command'.")
+
     return models.UnsavedBuildParameters(
         repository=environment.repository,
         platforms=platforms,
@@ -77,6 +95,7 @@ def validate_unsaved_build_parameters(
         frontend_variant=frontend_variant,
         repository_revision=environment.repository_revision if environment.repository_revision else None,
         context_dir=environment.context_dir if environment.context_dir else None,
+        job_command=environment.job_command,
     )
 
 
@@ -193,7 +212,9 @@ def validate_unsaved_session_launcher(
     if isinstance(launcher.environment, apispec.EnvironmentIdOnlyPost):
         environment = launcher.environment.id
     elif isinstance(launcher.environment, apispec.BuildParametersPost):
-        environment = validate_unsaved_build_parameters(launcher.environment, builds_config=builds_config)
+        environment = validate_unsaved_build_parameters(
+            launcher.launcher_type, launcher.environment, builds_config=builds_config
+        )
     elif isinstance(launcher.environment, apispec.EnvironmentPostInLauncherHelper):
         environment_helper: apispec.EnvironmentPost = launcher.environment
         environment = validate_unsaved_environment(environment_helper, models.EnvironmentKind.CUSTOM)
@@ -264,7 +285,9 @@ def validate_session_launcher_patch(
                         data_dict.get("environment", {}).get("build_parameters", {})
                     )
                     environment = validate_unsaved_build_parameters(
-                        validated_build_parameters, builds_config=builds_config
+                        _convert_launcher_type(current_launcher.launcher_type),
+                        validated_build_parameters,
+                        builds_config=builds_config,
                     )
             case models.EnvironmentKind.GLOBAL, None:
                 # Trying to patch a global environment with a custom environment patch.
@@ -308,7 +331,11 @@ def validate_session_launcher_patch(
                     build_parameters = cast(apispec.BuildParametersPost, patch.environment.build_parameters)
                     # NOTE: The environment type is changed to be built, so, all required fields should be passed (as in
                     # a POST request). No need to get values from the current env, since they will be set by the build.
-                    environment = validate_unsaved_build_parameters(build_parameters, builds_config=builds_config)
+                    environment = validate_unsaved_build_parameters(
+                        _convert_launcher_type(current_launcher.launcher_type),
+                        build_parameters,
+                        builds_config=builds_config,
+                    )
                 elif current == "build" and new == "image":
                     environment = data_dict["environment"]
                     assert isinstance(environment, dict)
