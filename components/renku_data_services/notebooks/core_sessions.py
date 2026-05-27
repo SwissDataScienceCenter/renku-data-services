@@ -1117,6 +1117,8 @@ async def start_session(
     if session_type.is_non_interactive and launcher.environment.build_parameters_id is not None:
         command = ["/cnb/lifecycle/launcher", "--"]
         args = (environment.command or []) + (launch_request.job_args_overrides or environment.args or [])
+    elif session_type.is_non_interactive:
+        args = launch_request.job_args_overrides or environment.args or []
 
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations, labels=labels),
