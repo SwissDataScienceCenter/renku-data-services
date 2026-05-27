@@ -1,8 +1,10 @@
 """K8s client wrapper for Renku apps."""
 
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from renku_data_services.crc.db import ClusterRepository
+from renku_data_services.crc.models import ResourceClass
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObjectMeta
@@ -10,6 +12,12 @@ from renku_data_services.renku_apps.crs import KnativeService
 from renku_data_services.session.models import SessionLauncher
 
 KNATIVE_SERVICE_GVK = GVK(kind="Service", group="serving.knative.dev", version="v1")
+
+_APP_AUTOSCALING_ANNOTATIONS = {
+    "autoscaling.knative.dev/min-scale": "0",
+    "autoscaling.knative.dev/max-scale": "3",
+    "autoscaling.knative.dev/scale-to-zero-pod-retention-period": "2m",
+}
 
 
 def _generate_app_name(session_launcher: SessionLauncher) -> str:
@@ -24,12 +32,14 @@ class RenkuAppsK8sClient:
         self.__client = client
         self.__cluster_repo = cluster_repo
 
-    async def create_app_deployment(self, session_launcher: SessionLauncher) -> KnativeService:
+    async def create_app_deployment(
+        self, session_launcher: SessionLauncher, resource_class: ResourceClass | None
+    ) -> KnativeService:
         """Create a deployment for the given app and return the created Knative Service."""
         cluster_id: ClusterId = DEFAULT_K8S_CLUSTER
         cluster = await self.__client.cluster_by_id(cluster_id)
         app_name = _generate_app_name(session_launcher)
-        manifest = _build_app_deployment_manifest(session_launcher, app_name)
+        manifest = _build_app_deployment_manifest(session_launcher, app_name, resource_class)
         meta = K8sObjectMeta(name=app_name, namespace=cluster.namespace, cluster=cluster.id, gvk=KNATIVE_SERVICE_GVK)
         created = await self.__client.create(
             meta.with_manifest(manifest.model_dump(exclude_none=True, mode="json")), refresh=True
@@ -59,8 +69,42 @@ class RenkuAppsK8sClient:
         raise NotImplementedError("Updating app deployment is not implemented yet")
 
 
-def _build_app_deployment_manifest(session_launcher: SessionLauncher, app_name: str) -> KnativeService:
-    """Build an app deployment manifest for the given app and session launcher."""
+def _resources_from_resource_class(resource_class: ResourceClass) -> dict[str, Any]:
+    """Build a k8s container resources block from a resource class."""
+    return {
+        "requests": {
+            "cpu": f"{round(resource_class.cpu * 1000)}m",
+            "memory": f"{resource_class.memory}Gi",
+        },
+        "limits": {"memory": f"{resource_class.memory}Gi"},
+    }
+
+
+def _build_app_deployment_manifest(
+    session_launcher: SessionLauncher, app_name: str, resource_class: ResourceClass | None
+) -> KnativeService:
+    """Build a Knative Service manifest derived from the session launcher."""
+    environment = session_launcher.environment
+
+    container: dict[str, Any] = {
+        "image": environment.container_image,
+        "ports": [{"containerPort": environment.port}],
+        "securityContext": {
+            "runAsUser": environment.uid,
+            "runAsGroup": environment.gid,
+        },
+    }
+    if resource_class is not None:
+        container["resources"] = _resources_from_resource_class(resource_class)
+    if session_launcher.env_variables:
+        container["env"] = [{"name": var.name, "value": var.value} for var in session_launcher.env_variables]
+    if environment.command:
+        container["command"] = environment.command
+    if environment.args:
+        container["args"] = environment.args
+    if environment.working_directory is not None:
+        container["workingDir"] = str(environment.working_directory)
+
     return KnativeService.model_validate(
         {
             "apiVersion": "serving.knative.dev/v1",
@@ -74,15 +118,9 @@ def _build_app_deployment_manifest(session_launcher: SessionLauncher, app_name: 
             },
             "spec": {
                 "template": {
-                    "spec": {
-                        "containers": [
-                            {
-                                "image": "docker.io/library/nginx:latest",
-                                "ports": [{"containerPort": 80}],
-                            }
-                        ]
-                    }
-                }
+                    "metadata": {"annotations": _APP_AUTOSCALING_ANNOTATIONS},
+                    "spec": {"containers": [container]},
+                },
             },
         }
     )

@@ -6,6 +6,8 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
+from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.models import ResourceClass
 from renku_data_services.renku_apps.core import knative_service_to_app
 from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
 from renku_data_services.renku_apps.models import App
@@ -19,10 +21,12 @@ class RenkuAppsRepository:
         self,
         authz: Authz,
         session_repo: SessionRepository,
+        rp_repo: ResourcePoolRepository,
         k8s_client: RenkuAppsK8sClient,
     ) -> None:
         self.authz = authz
         self.session_repo = session_repo
+        self.rp_repo = rp_repo
         self.k8s_client = k8s_client
 
     async def create_app(self, user: base_models.APIUser, launcher_id: ULID) -> App:
@@ -38,7 +42,11 @@ class RenkuAppsRepository:
                 message=f"Project with id '{launcher.project_id}' does not exist or you do not have access to it."
             )
 
-        service = await self.k8s_client.create_app_deployment(launcher)
+        resource_class: ResourceClass | None = None
+        if launcher.resource_class_id is not None:
+            resource_class = await self.rp_repo.get_resource_class(user, launcher.resource_class_id)
+
+        service = await self.k8s_client.create_app_deployment(launcher, resource_class)
         return knative_service_to_app(launcher, service)
 
     async def get_app(self, user: base_models.APIUser, app_name: str) -> App:
