@@ -391,6 +391,7 @@ class DependencyManager:
         apps_repo = RenkuAppsRepository(
             authz=authz,
             session_repo=session_repo,
+            rp_repo=rp_repo,
             k8s_client=apps_k8s_client,
         )
         project_migration_repo = ProjectMigrationRepository(
