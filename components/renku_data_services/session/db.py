@@ -1237,13 +1237,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         self, launcher_type: models.LauncherType, env: models.UnsavedBuildParameters
     ) -> tuple[list[str], list[str]] | None:
         if launcher_type == models.LauncherType.non_interactive:
-            if not env.job_command or env.job_command == "":
+            if not env.job_command or len(env.job_command) == 0:
                 raise errors.ValidationError(message="A job launcher requires the 'job_command' field.")
 
-            # TODO: we should make the client specify cmd + args
-            parts = env.job_command.split(" ")
-            cmd = list(parts[0])
-            args = parts[1:]
+            cmd = env.job_command
+            args = env.job_args or []
             return (cmd, args)
         else:
             return None
