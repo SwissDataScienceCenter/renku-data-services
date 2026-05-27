@@ -916,7 +916,9 @@ async def start_session(
         if repo_data.is_error:
             raise errors.ValidationError(message=str(repo_data.error))
         if isinstance(repo_data.metadata, RepoMetadata) and not repo_data.metadata.pull_permission:
-            raise errors.ForbiddenError(message="You do not have pull access to the code repository used for this session.")
+            raise errors.ForbiddenError(
+                message="You do not have pull access to the code repository used for this session."
+            )
 
     # User secrets
     session_extras = SessionExtraResources()
