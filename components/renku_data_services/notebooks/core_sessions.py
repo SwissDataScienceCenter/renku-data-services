@@ -905,7 +905,17 @@ async def start_session(
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
-    if environment.build_parameters is not None:
+    # image can be "image:unknown-at-the-moment" which is returned until the first
+    # successful build however users can force a session start although it will fail
+
+    if (
+        builds_config.build_output_private_image_prefix
+        and image.startswith(builds_config.build_output_private_image_prefix)
+        or image == "image:unknown-at-the-moment"
+    ):
+        if environment.build_parameters is None:
+            raise errors.ValidationError(message="Image was built but build parameters are missing")
+
         build_repository = environment.build_parameters.repository
         if build_repository not in [repository.url for repository in repositories]:
             raise errors.ValidationError(message="Image was not built from a repository in this project")
