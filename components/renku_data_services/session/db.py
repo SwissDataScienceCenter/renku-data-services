@@ -471,6 +471,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                         message=f"Frontend variant {launcher.environment.frontend_variant} is not valid or "
                         "cannot be found."
                     )
+
+                cmd_args = self.__make_cmd_and_args(launcher.launcher_type, launcher.environment)
+                cmd = cmd_args[0] if cmd_args else None
+                args = cmd_args[1] if cmd_args else None
+
                 environment_orm = schemas.EnvironmentORM(
                     name=launcher.name,
                     created_by_id=user.id,
@@ -483,8 +488,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     uid=env.uid,
                     gid=env.gid,
                     environment_kind=env.environment_kind,
-                    command=env.command,
-                    args=env.args,
+                    command=cmd or env.command,
+                    args=args or env.args,
                     creation_date=datetime.now(UTC).replace(microsecond=0),
                     environment_image_source=env.environment_image_source,
                     build_parameters_id=build_parameters_orm.id,
@@ -780,6 +785,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     raise errors.ValidationError(
                         message=f"Frontend variant {frontend_variant} is not valid or cannot be found."
                     )
+
+                cmd_args = self.__make_cmd_and_args(launcher.launcher_type, new_custom_built_environment)
+                cmd = cmd_args[0] if cmd_args else None
+                args = cmd_args[1] if cmd_args else None
+
                 launcher.environment.container_image = build_env.container_image
                 launcher.environment.default_url = build_env.default_url
                 launcher.environment.port = build_env.port
@@ -788,8 +798,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 launcher.environment.uid = build_env.uid
                 launcher.environment.gid = build_env.gid
                 launcher.environment.environment_kind = build_env.environment_kind
-                launcher.environment.command = build_env.command
-                launcher.environment.args = build_env.args
+                launcher.environment.command = cmd or build_env.command
+                launcher.environment.args = args or build_env.args
                 launcher.environment.environment_image_source = build_env.environment_image_source
                 launcher.environment.build_parameters_id = build_parameters_orm.id
                 launcher.environment.build_parameters = build_parameters_orm
@@ -1227,6 +1237,21 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         if launcher:
             authorized = await self.project_authz.has_permission(user, ResourceType.project, launcher.project_id, scope)
         return authorized
+
+    def __make_cmd_and_args(
+        self, launcher_type: models.LauncherType, env: models.UnsavedBuildParameters
+    ) -> tuple[list[str], list[str]] | None:
+        if launcher_type == models.LauncherType.non_interactive:
+            if not env.job_command or env.job_command == "":
+                raise errors.ValidationError(message="A job launcher requires the 'job_command' field.")
+
+            # TODO: we should make the client specify cmd + args
+            parts = env.job_command.split(" ")
+            cmd = list(parts[0])
+            args = parts[1:]
+            return (cmd, args)
+        else:
+            return None
 
     @classmethod
     def make_session_environment_repo(

@@ -694,6 +694,10 @@ components:
       type: string
       minLength: 1
       maxLength: 500
+    JobCommand:
+      description: The command used to start a job. It is required for a job launcher.
+      type: string
+      minLength: 1
     BuildContextDirPatch:
       description: The relative path to a folder
       type: string
@@ -760,6 +764,8 @@ components:
           $ref: "#/components/schemas/RepositoryRevision"
         context_dir:
           $ref: "#/components/schemas/BuildContextDir"
+        job_command:
+          $ref: "#/components/schemas/JobCommand"
       required:
         - repository
         - builder_variant
@@ -789,6 +795,8 @@ components:
           $ref: "#/components/schemas/RepositoryRevisionPatch"
         context_dir:
           $ref: "#/components/schemas/BuildContextDirPatch"
+        job_command:
+          $ref: "#/components/schemas/JobCommand"
     ContainerImage:
       description: A container image
       type: string

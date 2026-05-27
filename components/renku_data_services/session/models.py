@@ -91,6 +91,7 @@ class UnsavedBuildParameters:
     frontend_variant: str
     repository_revision: str | None = None
     context_dir: str | None = None
+    job_command: str | None = None
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
@@ -163,6 +164,7 @@ class BuildParametersPatch:
     frontend_variant: str | None = None
     repository_revision: str | None = None
     context_dir: str | None = None
+    job_command: str | None = None
 
 
 @dataclass(eq=True, kw_only=True)
