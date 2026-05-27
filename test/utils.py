@@ -228,7 +228,7 @@ class FakeGitRepositoriesRepository(GitRepositoriesRepository):
                 result = result.with_metadata(
                     repositories_models.Metadata(
                         git_url=valid_url.render(),
-                        pull_permission=True,
+                        pull_permission=not user.is_anonymous,
                         visibility=repositories_models.RepositoryVisibility.private,
                     )
                 )
