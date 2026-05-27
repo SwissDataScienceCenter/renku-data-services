@@ -1610,6 +1610,134 @@ async def test_starting_session(
         assert res.status_code == 200, res.text
         assert len(res.json) > 0
         assert session_res.json["name"] in [i["name"] for i in res.json]
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+@pytest.mark.parametrize(
+    "actual_user_headers",
+    ["anonymous", "user"],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "launcher_conf,repositories,expected_status_code,expected_error_message",
+    [
+        (
+            {
+                "name": "Valid custom image",
+                "description": "A session launcher",
+                "environment": {
+                    "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
+                    "environment_kind": "CUSTOM",
+                    "name": "test",
+                    "port": 8888,
+                    "environment_image_source": "image",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/renku-data-services"],
+            201,
+            None,
+        ),
+        (
+            {
+                "name": "Private build image with wrong environment",
+                "description": "A session launcher",
+                "environment": {
+                    "container_image": f"{BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX}some-environment",
+                    "environment_kind": "CUSTOM",
+                    "name": "test",
+                    "port": 8888,
+                    "environment_image_source": "image",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/renku-data-services"],
+            422,
+            "Image was built but build parameters are missing",
+        ),
+        (
+            {
+                "name": "Private build image with accessible repository",
+                "description": "A session launcher",
+                "environment": {
+                    "environment_image_source": "build",
+                    "repository": "https://github.com/SwissDataScienceCenter/private",
+                    "builder_variant": "python",
+                    "frontend_variant": "vscodium",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/private"],
+            201,
+            None,
+        ),
+        (
+            {
+                "name": "Private build image with inaccessible repository",
+                "description": "A session launcher",
+                "environment": {
+                    "environment_image_source": "build",
+                    "repository": "https://github.com/SwissDataScienceCenter/other-private",
+                    "builder_variant": "python",
+                    "frontend_variant": "vscodium",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/other-private"],
+            403,
+            "You do not have pull access to the code repository used for this session.",
+        ),
+        (
+            {
+                "name": "Private build image with a repository not in the list",
+                "description": "A session launcher",
+                "environment": {
+                    "environment_image_source": "build",
+                    "repository": "https://github.com/SwissDataScienceCenter/renku",
+                    "builder_variant": "python",
+                    "frontend_variant": "vscodium",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/private"],
+            422,
+            "Image was not built from a repository in this project",
+        ),
+    ],
+    ids=id_from_launcher,
+)
+@pytest.mark.skipif(
+    "not config.getoption('--enable-builds')",
+    reason="Only run when --enable-builds is given",
+)
+async def test_starting_session_with_builds_enabled(
+    app_manager: DependencyManager,
+    sanic_client: SanicASGITestClient,
+    admin_headers,
+    create_project,
+    create_resource_pool,
+    create_session_launcher,
+    launch_session,
+    amalthea_installation,
+    launcher_conf,
+    expected_status_code,
+    expected_error_message,
+    repositories,
+    actual_user_headers,
+) -> None:
+    project: dict[str, Any] = await create_project(
+        sanic_client,
+        "Some project",
+        visibility="public",
+        repositories=repositories,
+    )
+    resource_pool = await create_resource_pool(admin=True)
+
+    launcher_conf.update(
+        dict(
+            project_id=project["id"],
+            resource_class_id=resource_pool["classes"][0]["id"],
+            disk_storage=42,
+        )
+    )
+
+    app_manager.config.builds.enabled = True  # This is the default for testing but ensures
     launcher: dict[str, Any] = await create_session_launcher(**launcher_conf)
 
     launcher_id = launcher["id"]
@@ -1617,18 +1745,30 @@ async def test_starting_session(
     payload = {"project_id": project_id, "launcher_id": launcher_id}
     cookies = {"_renku_session": "some content"}
 
-    session_res = await launch_session(payload, headers=actual_user_headers, cookies=cookies)
+    if (
+        "Renku-Auth-Anon-Id" in actual_user_headers
+        and launcher_conf["environment"].get("repository") == "https://github.com/SwissDataScienceCenter/private"
+    ):
+        expected_status_code = 403
+        expected_error_message = "You do not have pull access to the code repository used for this session."
 
-    _, res = await sanic_client.get(
-        f"/api/data/sessions/{session_res.json['name']}", headers=actual_user_headers, cookies=cookies
+    _, session_res = await sanic_client.post(
+        "/api/data/sessions", headers=actual_user_headers, json=payload, cookies=cookies
     )
+    assert session_res.status_code == expected_status_code
 
-    assert res.status_code == 200, res.text
-    assert res.json["name"] == session_res.json["name"]
-    _, res = await sanic_client.get("/api/data/sessions", headers=actual_user_headers, cookies=cookies)
-    assert res.status_code == 200, res.text
-    assert len(res.json) > 0
-    assert session_res.json["name"] in [i["name"] for i in res.json]
+    if expected_status_code == 201:
+        _, res = await sanic_client.get(
+            f"/api/data/sessions/{session_res.json['name']}", headers=actual_user_headers, cookies=cookies
+        )
+        assert res.status_code == 200, res.text
+        assert res.json["name"] == session_res.json["name"]
+        _, res = await sanic_client.get("/api/data/sessions", headers=actual_user_headers, cookies=cookies)
+        assert res.status_code == 200, res.text
+        assert len(res.json) > 0
+        assert session_res.json["name"] in [i["name"] for i in res.json]
+    else:
+        assert session_res.json["error"]["message"] == expected_error_message
 
 
 @pytest.mark.parametrize(
