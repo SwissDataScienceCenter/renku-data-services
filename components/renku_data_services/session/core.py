@@ -23,6 +23,18 @@ def _convert_launcher_type(lt: models.LauncherType) -> apispec.LauncherType:
             )
 
 
+def validate_job_command(jc: list[str] | None) -> list[str]:
+    """Validate a job command."""
+    if jc is None or len(jc) == 0:
+        raise errors.ValidationError(message="A job command is required for a job launcher.")
+
+    jcc = [e.strip() for e in jc if len(e.strip()) > 0]
+    if len(jcc) == 0:
+        raise errors.ValidationError(message="A job command must have at least one non-empty item.")
+
+    return jcc
+
+
 def validate_unsaved_environment(
     environment: apispec.EnvironmentPost, environment_kind: models.EnvironmentKind
 ) -> models.UnsavedEnvironment:
@@ -83,10 +95,11 @@ def validate_unsaved_build_parameters(
         environment.builder_variant, environment.frontend_variant
     )
 
-    if launcher_type == apispec.LauncherType.non_interactive and (
-        not environment.job_command or environment.job_command == ""
-    ):
-        raise errors.ValidationError(message="A job launcher is required to specify a 'job_command'.")
+    job_cmd: list[str] | None = None
+    job_args: list[str] | None = None
+    if launcher_type == apispec.LauncherType.non_interactive:
+        job_cmd = validate_job_command(environment.job_command)
+        job_args = environment.job_args or []
 
     return models.UnsavedBuildParameters(
         repository=environment.repository,
@@ -95,11 +108,14 @@ def validate_unsaved_build_parameters(
         frontend_variant=frontend_variant,
         repository_revision=environment.repository_revision if environment.repository_revision else None,
         context_dir=environment.context_dir if environment.context_dir else None,
-        job_command=environment.job_command,
+        job_command=job_cmd,
+        job_args=job_args,
     )
 
 
-def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -> models.BuildParametersPatch:
+def validate_build_parameters_patch(
+    launcher_type: apispec.LauncherType, environment: apispec.BuildParametersPatch
+) -> models.BuildParametersPatch:
     """Validate an unsaved build parameters object."""
     if environment.builder_variant is not None and environment.builder_variant not in models.BuilderVariant:
         raise errors.ValidationError(
@@ -129,6 +145,12 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
     else:
         builder_variant, frontend_variant = environment.builder_variant, environment.frontend_variant
 
+    job_cmd: list[str] | None = None
+    job_args: list[str] | None = None
+    if launcher_type == apispec.LauncherType.non_interactive:
+        job_cmd = validate_job_command(environment.job_command)
+        job_args = environment.job_args or []
+
     return models.BuildParametersPatch(
         repository=environment.repository,
         platforms=platforms,
@@ -136,6 +158,8 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
         frontend_variant=frontend_variant,
         repository_revision=environment.repository_revision,
         context_dir=environment.context_dir,
+        job_command=job_cmd,
+        job_args=job_args,
     )
 
 
@@ -189,7 +213,9 @@ def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.Enviro
     )
 
 
-def validate_environment_patch_in_launcher(patch: apispec.EnvironmentPatchInLauncher) -> models.EnvironmentPatch:
+def validate_environment_patch_in_launcher(
+    launcher_type: apispec.LauncherType, patch: apispec.EnvironmentPatchInLauncher
+) -> models.EnvironmentPatch:
     """Validate the update to a session environment inside a session launcher."""
     environment_patch = validate_environment_patch(patch)
     environment_patch.environment_image_source = (
@@ -198,7 +224,9 @@ def validate_environment_patch_in_launcher(patch: apispec.EnvironmentPatchInLaun
         else models.EnvironmentImageSource(patch.environment_image_source.value)
     )
     environment_patch.build_parameters = (
-        None if patch.build_parameters is None else validate_build_parameters_patch(patch.build_parameters)
+        None
+        if patch.build_parameters is None
+        else validate_build_parameters_patch(launcher_type, patch.build_parameters)
     )
     return environment_patch
 
@@ -363,7 +391,9 @@ def validate_session_launcher_patch(
                         strip_path_prefix=validated_env.strip_path_prefix or False,
                     )
                 else:
-                    environment = validate_environment_patch_in_launcher(patch.environment)
+                    environment = validate_environment_patch_in_launcher(
+                        _convert_launcher_type(current_launcher.launcher_type), patch.environment
+                    )
     elif isinstance(patch.environment, apispec.EnvironmentIdOnlyPatch):
         environment = patch.environment.id
     resource_class_id: int | None | ResetType
