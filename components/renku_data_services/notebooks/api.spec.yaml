@@ -245,6 +245,11 @@ components:
           $ref: "#/components/schemas/SessionDataConnectorsOverrideList"
         env_variable_overrides:
           $ref: "#/components/schemas/EnvVariableOverrides"
+        job_args_override:
+          nullable: true
+          type: array
+          items:
+            type: string
       required:
         - launcher_id
       type: object
