@@ -2,22 +2,26 @@
 
 from datetime import datetime
 
+from renku_data_services.project.models import Project
 from renku_data_services.renku_apps import models
 from renku_data_services.renku_apps.cr_knative_service import Condition
 from renku_data_services.renku_apps.crs import KnativeService
 from renku_data_services.session.models import SessionLauncher
 
 
-def knative_service_to_app(session_launcher: SessionLauncher, knative_service: KnativeService) -> models.App:
-    """Convert a Knative service to an app."""
-    app_service_url = knative_service.status.url if knative_service.status else None
+def app_url(project: Project, base_domain: str) -> str:
+    """Build the public URL for an app from its project path and the configured base domain."""
+    return f"https://{project.slug}.{project.namespace.path.serialize()}.{base_domain}"
 
+
+def knative_service_to_app(session_launcher: SessionLauncher, knative_service: KnativeService, url: str) -> models.App:
+    """Convert a Knative service to an app."""
     return models.App(
         name=knative_service.metadata.name,
         launcher_id=session_launcher.id,
         project_id=session_launcher.project_id,
         status=_project_app_status(knative_service),
-        url=app_service_url,
+        url=url,
         started=_started_at(knative_service),
         image=session_launcher.environment.container_image,
     )
