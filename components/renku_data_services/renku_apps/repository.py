@@ -8,7 +8,8 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass
-from renku_data_services.renku_apps.core import knative_service_to_app
+from renku_data_services.project.db import ProjectRepository
+from renku_data_services.renku_apps.core import app_url, knative_service_to_app
 from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
 from renku_data_services.renku_apps.models import App
 from renku_data_services.session.db import SessionRepository
@@ -22,12 +23,16 @@ class RenkuAppsRepository:
         authz: Authz,
         session_repo: SessionRepository,
         rp_repo: ResourcePoolRepository,
+        project_repo: ProjectRepository,
         k8s_client: RenkuAppsK8sClient,
+        apps_base_domain: str,
     ) -> None:
         self.authz = authz
         self.session_repo = session_repo
         self.rp_repo = rp_repo
+        self.project_repo = project_repo
         self.k8s_client = k8s_client
+        self.apps_base_domain = apps_base_domain
 
     async def create_app(self, user: base_models.APIUser, launcher_id: ULID) -> App:
         """Launch a new app from a session launcher."""
@@ -46,8 +51,9 @@ class RenkuAppsRepository:
         if launcher.resource_class_id is not None:
             resource_class = await self.rp_repo.get_resource_class(user, launcher.resource_class_id)
 
+        project = await self.project_repo.get_project(user, launcher.project_id)
         service = await self.k8s_client.create_app_deployment(launcher, resource_class)
-        return knative_service_to_app(launcher, service)
+        return knative_service_to_app(launcher, service, app_url(project, self.apps_base_domain))
 
     async def get_app(self, user: base_models.APIUser, app_name: str) -> App:
         """Retrieve an app by its name."""
@@ -58,4 +64,5 @@ class RenkuAppsRepository:
             )
 
         launcher = await self.session_repo.get_launcher(user, service.launcher_id)
-        return knative_service_to_app(launcher, service)
+        project = await self.project_repo.get_project(user, launcher.project_id)
+        return knative_service_to_app(launcher, service, app_url(project, self.apps_base_domain))

@@ -44,6 +44,7 @@ class Config:
     user_preferences: UserPreferencesConfig
     internal_authn_config: InternalAuthenticationConfig
     gitlab_url: str | None
+    apps_base_domain: str
     log_cfg: LoggingConfig
     version: str
     alertmanager_webhook_role: str
@@ -92,6 +93,7 @@ class Config:
             user_preferences=UserPreferencesConfig.from_env(),
             internal_authn_config=InternalAuthenticationConfig.from_env(),
             gitlab_url=gitlab_url,
+            apps_base_domain=os.environ.get("RENKU_APPS__BASE_DOMAIN", "apps.renku.local"),
             log_cfg=LoggingConfig.from_env(),
             alertmanager_webhook_role=os.environ.get("ALERTMANAGER_WEBHOOK_ROLE", "alertmanager-webhook"),
             deposit_config=DepositConfig.from_env(nb_config.sessions.renku_url),
