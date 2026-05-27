@@ -14,10 +14,10 @@ from syrupy.filters import props
 from renku_data_services import errors
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.session.config import BuildsConfig
-from renku_data_services.session.constants import BUILD_RUN_GVK
+from renku_data_services.session.constants import BUILD_RUN_GVK, BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
 from renku_data_services.session.models import EnvVar
 from renku_data_services.users.models import UserInfo
-from test.utils import KindCluster
+from test.utils import KindCluster, MemberContext
 
 BuildRun = new_class(
     kind=BUILD_RUN_GVK.kind,
@@ -1508,19 +1508,71 @@ def anonymous_user_headers() -> dict[str, str]:
     return {"Renku-Auth-Anon-Id": "some-random-value-1234"}
 
 
+def id_from_launcher(val: Any) -> str | None:
+    if isinstance(val, dict):
+        return val["name"].replace(" ", "-")
+    return ""
+
+
+@pytest.fixture
+def actual_user_headers(request, regular_user_access_token) -> dict[str, str]:
+    if request.param == "anonymous":
+        return {"Renku-Auth-Anon-Id": "some-random-value-1234"}
+    else:
+        return {"Authorization": f"Bearer {regular_user_access_token}"}
+
+
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
-async def test_starting_session_anonymous(
+@pytest.mark.parametrize(
+    "actual_user_headers",
+    ["anonymous", "user"],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "with_builds",
+    [True, False],
+)
+@pytest.mark.parametrize(
+    "launcher_conf",
+    [
+        {
+            "name": "Valid custom image",
+            "description": "A session launcher",
+            "environment": {
+                "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
+                "environment_kind": "CUSTOM",
+                "name": "test",
+                "port": 8888,
+                "environment_image_source": "image",
+            },
+        },
+        {
+            "name": "Private build image",
+            "description": "A session launcher",
+            "environment": {
+                "container_image": f"{BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX}some-environment",
+                "environment_kind": "CUSTOM",
+                "name": "test",
+                "port": 8888,
+                "environment_image_source": "image",
+            },
+        },
+    ],
+    ids=id_from_launcher,
+)
+async def test_starting_session(
     app_manager: DependencyManager,
     sanic_client: SanicASGITestClient,
-    user_headers,
     admin_headers,
     create_project,
     create_resource_pool,
     create_session_launcher,
     launch_session,
-    anonymous_user_headers,
     amalthea_installation,
+    actual_user_headers,
+    launcher_conf,
+    with_builds,
 ) -> None:
     project: dict[str, Any] = await create_project(
         sanic_client,
@@ -1529,35 +1581,51 @@ async def test_starting_session_anonymous(
         repositories=["https://github.com/SwissDataScienceCenter/renku-data-services"],
     )
     resource_pool = await create_resource_pool(admin=True)
-    launcher: dict[str, Any] = await create_session_launcher(
-        name="Launcher 1",
-        project_id=project["id"],
-        description="A session launcher",
-        resource_class_id=resource_pool["classes"][0]["id"],
-        disk_storage=42,
-        environment={
-            "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
-            "environment_kind": "CUSTOM",
-            "name": "test",
-            "port": 8888,
-            "environment_image_source": "image",
-        },
-        env_variables=[
-            {"name": "TEST_ENV_VAR", "value": "some-random-value-1234"},
-        ],
+
+    launcher_conf.update(
+        dict(
+            project_id=project["id"],
+            resource_class_id=resource_pool["classes"][0]["id"],
+            disk_storage=42,
+        )
     )
+
+    with MemberContext(app_manager.config.builds, "enabled", with_builds):
+        launcher: dict[str, Any] = await create_session_launcher(**launcher_conf)
+
+        launcher_id = launcher["id"]
+        project_id = project["id"]
+        payload = {"project_id": project_id, "launcher_id": launcher_id}
+        cookies = {"_renku_session": "some content"}
+
+        session_res = await launch_session(payload, headers=actual_user_headers, cookies=cookies)
+
+        _, res = await sanic_client.get(
+            f"/api/data/sessions/{session_res.json['name']}", headers=actual_user_headers, cookies=cookies
+        )
+
+        assert res.status_code == 200, res.text
+        assert res.json["name"] == session_res.json["name"]
+        _, res = await sanic_client.get("/api/data/sessions", headers=actual_user_headers, cookies=cookies)
+        assert res.status_code == 200, res.text
+        assert len(res.json) > 0
+        assert session_res.json["name"] in [i["name"] for i in res.json]
+    launcher: dict[str, Any] = await create_session_launcher(**launcher_conf)
 
     launcher_id = launcher["id"]
     project_id = project["id"]
     payload = {"project_id": project_id, "launcher_id": launcher_id}
     cookies = {"_renku_session": "some content"}
-    session_res = await launch_session(payload, headers=anonymous_user_headers, cookies=cookies)
+
+    session_res = await launch_session(payload, headers=actual_user_headers, cookies=cookies)
+
     _, res = await sanic_client.get(
-        f"/api/data/sessions/{session_res.json['name']}", headers=anonymous_user_headers, cookies=cookies
+        f"/api/data/sessions/{session_res.json['name']}", headers=actual_user_headers, cookies=cookies
     )
+
     assert res.status_code == 200, res.text
     assert res.json["name"] == session_res.json["name"]
-    _, res = await sanic_client.get("/api/data/sessions", headers=anonymous_user_headers, cookies=cookies)
+    _, res = await sanic_client.get("/api/data/sessions", headers=actual_user_headers, cookies=cookies)
     assert res.status_code == 200, res.text
     assert len(res.json) > 0
     assert session_res.json["name"] in [i["name"] for i in res.json]

@@ -841,3 +841,26 @@ class KindCluster(AbstractContextManager):
     def config_yaml(self):
         with open(self.kubeconfig) as f:
             return f.read()
+
+
+class MemberContext(AbstractContextManager):
+    """Simple context manager to temporarily set a value on an object
+
+    Useful for long lived objects
+    """
+
+    def __init__(self, var, member, value):
+        self.var = var
+        self.member = member
+        self.value = value
+        self.orginal = getattr(var, member)
+
+    def __enter__(self):
+        """Set the member value"""
+        setattr(self.var, self.member, self.value)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Set the member to it's original value"""
+        setattr(self.var, self.member, self.orginal)
+        return False
