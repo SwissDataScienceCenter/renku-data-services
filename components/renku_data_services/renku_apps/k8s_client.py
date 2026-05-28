@@ -8,6 +8,7 @@ from renku_data_services.crc.models import ResourceClass
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObjectMeta
+from renku_data_services.project.models import Project
 from renku_data_services.renku_apps.crs import KnativeService
 from renku_data_services.session.models import SessionLauncher
 
@@ -20,9 +21,10 @@ _APP_AUTOSCALING_ANNOTATIONS = {
 }
 
 
-def _generate_app_name(session_launcher: SessionLauncher) -> str:
-    """Generate a name for an app."""
-    return f"app-{session_launcher.id}".lower()[:63]
+def _generate_app_name(project: Project) -> str:
+    """Generate a DNS-1035 label name for an app from its project path."""
+    namespace = project.namespace.path.serialize().replace("/", "-")
+    return f"{project.slug}-{namespace}".lower()[:63]
 
 
 class RenkuAppsK8sClient:
@@ -33,12 +35,12 @@ class RenkuAppsK8sClient:
         self.__cluster_repo = cluster_repo
 
     async def create_app_deployment(
-        self, session_launcher: SessionLauncher, resource_class: ResourceClass | None
+        self, session_launcher: SessionLauncher, resource_class: ResourceClass | None, project: Project
     ) -> KnativeService:
         """Create a deployment for the given app and return the created Knative Service."""
         cluster_id: ClusterId = DEFAULT_K8S_CLUSTER
         cluster = await self.__client.cluster_by_id(cluster_id)
-        app_name = _generate_app_name(session_launcher)
+        app_name = _generate_app_name(project)
         manifest = _build_app_deployment_manifest(session_launcher, app_name, resource_class)
         meta = K8sObjectMeta(name=app_name, namespace=cluster.namespace, cluster=cluster.id, gvk=KNATIVE_SERVICE_GVK)
         created = await self.__client.create(
@@ -55,6 +57,10 @@ class RenkuAppsK8sClient:
         if obj is None:
             return None
         return KnativeService.model_validate(obj.manifest)
+
+    async def get_app_deployment_for_project(self, project: Project) -> KnativeService | None:
+        """Get the app deployment for the given project, or None if it does not exist."""
+        return await self.get_app_deployment(_generate_app_name(project))
 
     async def delete_app_deployment(self, app_name: str) -> None:
         """Delete the deployment for the given app name. NOT IMPLEMENTED."""
