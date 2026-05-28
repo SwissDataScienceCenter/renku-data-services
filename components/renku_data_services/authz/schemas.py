@@ -967,7 +967,16 @@ v10 = AuthzSchemaMigration(
     up=[WriteSchemaRequest(schema=_v10)],
     down=[
         DeleteRelationshipsRequest(
-            relationship_filter=RelationshipFilter(resource_type=ResourceType.resource_pool.value)
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.resource_pool.value,
+                optional_relation=_Relation.group_viewer.value,
+            )
+        ),
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.resource_pool.value,
+                optional_relation=_Relation.project_viewer.value,
+            )
         ),
         WriteSchemaRequest(schema=_v9),
     ],
