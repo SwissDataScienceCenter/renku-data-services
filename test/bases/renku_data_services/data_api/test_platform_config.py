@@ -1,11 +1,13 @@
 """Tests for platform config blueprints."""
 
+import asyncio
 import urllib.parse
 
 import pytest
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.data_api.dependencies import DependencyManager
+from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import merge_headers
 
 DUMMY_ULID = "01FZ8RSZ9KAKYQZ1ZZZZZZZZZZ"
@@ -336,3 +338,91 @@ async def test_post_redirect_unauthorized(sanic_client: SanicASGITestClient, use
     _, res = await sanic_client.post("/api/data/platform/redirects", headers=headers, json=payload)
 
     assert res.status_code == 403, res.status_code
+
+
+@pytest.mark.asyncio
+async def test_patch_authz_config(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    admin_user: UserInfo,
+    regular_user: UserInfo,
+) -> None:
+    # Check default config
+    _, res = await sanic_client.get("/api/data/platform/config/authorization", headers=admin_headers)
+    assert res.status_code == 200, (res.status_code, res.text)
+    assert not res.json["only_admins_can_create_groups"], res.text
+    assert not res.json["only_admins_can_create_groups"], res.text
+
+    # Disable project and group creation
+    etag = res.json["etag"]
+    headers = merge_headers(admin_headers, {"If-Match": etag})
+    _, res = await sanic_client.patch(
+        "/api/data/platform/config/authorization",
+        headers=headers,
+        json={"only_admins_can_create_projects": True, "only_admins_can_create_groups": True},
+    )
+    assert res.status_code == 200, (res.status_code, res.text)
+    assert res.json["only_admins_can_create_groups"], res.text
+    assert res.json["only_admins_can_create_groups"], res.text
+    etag = res.json["etag"]
+
+    # Check that groups cannot be created by regular users
+    _, res = await sanic_client.post(
+        "/api/data/groups",
+        headers=user_headers,
+        json=dict(name="test-user-group-1", slug="test-user-group-1"),
+    )
+    assert res.status_code == 401, (res.status_code, res.text)
+
+    # Check that groups can be created by the admin
+    _, res = await sanic_client.post(
+        "/api/data/groups",
+        headers=admin_headers,
+        json=dict(name="test-group", slug="test-group"),
+    )
+    assert res.status_code == 201, (res.status_code, res.text)
+
+    # Check that projects cannot be created by regular users
+    _, res = await sanic_client.post(
+        "/api/data/projects",
+        headers=user_headers,
+        json=dict(name="test-project", namespace=regular_user.namespace.path.serialize()),
+    )
+    assert res.status_code == 401, (res.status_code, res.text)
+
+    # Check that projects can be created by the admin
+    _, res = await sanic_client.post(
+        "/api/data/projects",
+        headers=admin_headers,
+        json=dict(name="test-project", namespace=admin_user.namespace.path.serialize()),
+    )
+    assert res.status_code == 201, (res.status_code, res.text)
+
+    # Re-enable project creation
+    headers = merge_headers(admin_headers, {"If-Match": etag})
+    _, res = await sanic_client.patch(
+        "/api/data/platform/config/authorization",
+        headers=headers,
+        json={"only_admins_can_create_projects": False, "only_admins_can_create_groups": False},
+    )
+    assert res.status_code == 200, (res.status_code, res.text)
+    assert not res.json["only_admins_can_create_groups"], res.text
+    assert not res.json["only_admins_can_create_groups"], res.text
+    await asyncio.sleep(5)
+
+    # Check that groups can be created by regular users once the config changed
+    _, res = await sanic_client.post(
+        "/api/data/groups",
+        headers=user_headers,
+        json=dict(name="test-user-group-2", slug="test-user-group-2"),
+    )
+    assert res.status_code == 201, (res.status_code, res.text)
+
+    # Check that projects can be created by regular users once the config changed
+    _, res = await sanic_client.post(
+        "/api/data/projects",
+        headers=user_headers,
+        json=dict(name="test-project", namespace=regular_user.namespace.path.serialize()),
+    )
+    assert res.status_code == 201, (res.status_code, res.text)

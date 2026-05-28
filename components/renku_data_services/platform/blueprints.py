@@ -127,7 +127,7 @@ class PlatformConfigBP(CustomBlueprint):
                 groups_allowed = not patch.only_admins_can_create_groups
             else:
                 groups_allowed, zed_token = await self.authz.group_creation_allowed(zed_token)
-            if patch.only_admins_can_create_projects:
+            if patch.only_admins_can_create_projects is not None:
                 zed_token = await self.authz.set_project_creation_permission(patch.only_admins_can_create_projects)
                 projects_allowed = not patch.only_admins_can_create_projects
             else:
