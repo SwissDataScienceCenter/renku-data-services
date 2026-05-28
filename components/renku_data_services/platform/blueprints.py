@@ -138,7 +138,7 @@ class PlatformConfigBP(CustomBlueprint):
             )
             headers = {"ETag": config.etag}
             return validated_json(
-                apispec.PlatformConfig,
+                apispec.AuthzConfig,
                 dict(
                     etag=config.etag,
                     only_admins_can_create_groups=config.only_admins_can_create_groups,
