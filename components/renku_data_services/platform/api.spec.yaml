@@ -338,7 +338,6 @@ components:
           $ref: "#/components/schemas/AuthzFlag"
       required:
         - etag
-        - incident_banner
         - only_admins_can_create_projects
         - only_admins_can_create_groups
       additionalProperties: false
