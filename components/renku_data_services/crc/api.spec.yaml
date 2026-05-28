@@ -1806,64 +1806,60 @@ components:
       required:
         - member_type
         - id
-        - relation
+        - role
       properties:
         member_type:
           type: string
           enum: [user]
         id:
           $ref: "#/components/schemas/UserId"
-        relation:
+        role:
           type: string
           enum: [viewer, prohibited]
       example:
         member_type: user
         id: "some-random-keycloak-id"
-        relation: viewer
+        role: viewer
     PoolMemberGroup:
       type: object
       additionalProperties: false
       required:
         - member_type
         - id
-        - relation
+        - role
       properties:
         member_type:
           type: string
           enum: [group]
         id:
-          type: string
-          description: Group id (ULID)
-          example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-        relation:
+          $ref: "#/components/schemas/Ulid"
+        role:
           type: string
           enum: [group_viewer]
       example:
         member_type: group
         id: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-        relation: group_viewer
+        role: group_viewer
     PoolMemberProject:
       type: object
       additionalProperties: false
       required:
         - member_type
         - id
-        - relation
+        - role
       properties:
         member_type:
           type: string
           enum: [project]
         id:
-          type: string
-          description: Project id (ULID)
-          example: "01ARZ3NDEKTSV4RRFFQ69G5FAW"
-        relation:
+          $ref: "#/components/schemas/Ulid"
+        role:
           type: string
           enum: [project_viewer]
       example:
         member_type: project
         id: "01ARZ3NDEKTSV4RRFFQ69G5FAW"
-        relation: project_viewer
+        role: project_viewer
     PoolMember:
       oneOf:
         - $ref: "#/components/schemas/PoolMemberUser"
@@ -1886,7 +1882,7 @@ components:
       required:
         - member_type
         - id
-        - relation
+        - role
         - email
       properties:
         member_type:
@@ -1894,7 +1890,7 @@ components:
           enum: [user]
         id:
           $ref: "#/components/schemas/UserId"
-        relation:
+        role:
           type: string
           enum: [viewer, prohibited]
         email:
@@ -1902,7 +1898,7 @@ components:
       example:
         member_type: user
         id: "some-random-keycloak-id"
-        relation: viewer
+        role: viewer
         email: "user@example.com"
     PoolMemberGroupResponse:
       type: object
@@ -1910,7 +1906,7 @@ components:
       required:
         - member_type
         - id
-        - relation
+        - role
         - slug
         - name
       properties:
@@ -1918,10 +1914,8 @@ components:
           type: string
           enum: [group]
         id:
-          type: string
-          description: Group id (ULID)
-          example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-        relation:
+          $ref: "#/components/schemas/Ulid"
+        role:
           type: string
           enum: [group_viewer]
         slug:
@@ -1931,7 +1925,7 @@ components:
       example:
         member_type: group
         id: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-        relation: group_viewer
+        role: group_viewer
         slug: "my-group"
         name: "My Group"
     PoolMemberProjectResponse:
@@ -1940,7 +1934,7 @@ components:
       required:
         - member_type
         - id
-        - relation
+        - role
         - namespace
         - name
       properties:
@@ -1948,10 +1942,8 @@ components:
           type: string
           enum: [project]
         id:
-          type: string
-          description: Project id (ULID)
-          example: "01ARZ3NDEKTSV4RRFFQ69G5FAW"
-        relation:
+          $ref: "#/components/schemas/Ulid"
+        role:
           type: string
           enum: [project_viewer]
         namespace:
@@ -1962,7 +1954,7 @@ components:
       example:
         member_type: project
         id: "01ARZ3NDEKTSV4RRFFQ69G5FAW"
-        relation: project_viewer
+        role: project_viewer
         namespace: "user.doe/my-project"
         name: "My Project"
     PoolMemberResponse:

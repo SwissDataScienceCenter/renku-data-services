@@ -381,7 +381,7 @@ class ResourcePoolMembersBP(CustomBlueprint):
                         ResourcePoolMemberIdentifier(
                             member_id=item.id,
                             member_type=MemberType.USER,
-                            relation=item.relation.value,
+                            role=item.role.value,
                         )
                     )
                 case apispec.PoolMemberGroup():
@@ -389,7 +389,7 @@ class ResourcePoolMembersBP(CustomBlueprint):
                         ResourcePoolMemberIdentifier(
                             member_id=item.id,
                             member_type=MemberType.GROUP,
-                            relation=item.relation.value,
+                            role=item.role.value,
                         )
                     )
                 case apispec.PoolMemberProject():
@@ -397,7 +397,7 @@ class ResourcePoolMembersBP(CustomBlueprint):
                         ResourcePoolMemberIdentifier(
                             member_id=item.id,
                             member_type=MemberType.PROJECT,
-                            relation=item.relation.value,
+                            role=item.role.value,
                         )
                     )
         return identifiers
@@ -408,7 +408,7 @@ class ResourcePoolMembersBP(CustomBlueprint):
         result: dict[str, Any] = {
             "member_type": m.member_type.value,
             "id": m.member_id,
-            "relation": m.relation,
+            "role": m.role,
         }
         match m.member_type:
             case MemberType.USER:

@@ -517,7 +517,7 @@ class ResourcePoolMemberIdentifier:
 
     member_id: str
     member_type: MemberType
-    relation: str = ""
+    role: str = ""
 
     def __post_init__(self) -> None:
         if not self.member_id or not self.member_id.strip():
@@ -532,11 +532,11 @@ class ResourcePoolMemberIdentifier:
                     ) from e
             case MemberType.USER:
                 pass
-        # Apply defaults if relation is empty
+        # Apply defaults if role is empty
         object.__setattr__(
             self,
-            "relation",
-            self.relation
+            "role",
+            self.role
             or {
                 MemberType.USER: "viewer",
                 MemberType.GROUP: "group_viewer",

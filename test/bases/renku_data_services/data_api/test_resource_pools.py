@@ -1887,7 +1887,7 @@ async def test_resource_pool_members_add_group(
     )
 
     # Add the group to the pool via /members
-    member_payload = [{"member_type": "group", "id": group["id"], "relation": "group_viewer"}]
+    member_payload = [{"member_type": "group", "id": group["id"], "role": "group_viewer"}]
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
@@ -2030,7 +2030,7 @@ async def test_resource_pool_members_add_project(
     )
 
     # Add the project to the pool via /members
-    member_payload = [{"member_type": "project", "id": project["id"], "relation": "project_viewer"}]
+    member_payload = [{"member_type": "project", "id": project["id"], "role": "project_viewer"}]
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
@@ -2165,7 +2165,7 @@ async def test_resource_pool_members_put_replaces(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "group", "id": group1["id"], "relation": "group_viewer"}],
+        json=[{"member_type": "group", "id": group1["id"], "role": "group_viewer"}],
     )
     assert res.status_code == 201
 
@@ -2173,7 +2173,7 @@ async def test_resource_pool_members_put_replaces(
     _, res = await sanic_client.put(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "group", "id": group2["id"], "relation": "group_viewer"}],
+        json=[{"member_type": "group", "id": group2["id"], "role": "group_viewer"}],
     )
     assert res.status_code == 200
     assert res.json[0]["slug"] == "test-group-2"
@@ -2295,7 +2295,7 @@ async def test_resource_pool_members_delete(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "group", "id": group["id"], "relation": "group_viewer"}],
+        json=[{"member_type": "group", "id": group["id"], "role": "group_viewer"}],
     )
     assert res.status_code == 201
 
@@ -2323,7 +2323,7 @@ async def test_resource_pool_members_delete(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
-async def test_resource_pool_members_get_includes_relation(
+async def test_resource_pool_members_get_includes_role(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
     valid_resource_pool_payload: dict[str, Any],
@@ -2342,7 +2342,7 @@ async def test_resource_pool_members_get_includes_relation(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "user", "id": user["id"], "relation": "viewer"}],
+        json=[{"member_type": "user", "id": user["id"], "role": "viewer"}],
     )
     assert res.status_code == 201
     assert "email" in res.json[0]
@@ -2356,7 +2356,7 @@ async def test_resource_pool_members_get_includes_relation(
     assert len(members) == 1
     assert members[0]["member_type"] == "user"
     assert members[0]["id"] == user["id"]
-    assert members[0]["relation"] == "viewer"
+    assert members[0]["role"] == "viewer"
     assert "email" in members[0]
 
 
@@ -2500,7 +2500,7 @@ async def test_resource_pool_members_put_replaces_prohibited(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "user", "id": member_1_user.id, "relation": "viewer"}],
+        json=[{"member_type": "user", "id": member_1_user.id, "role": "viewer"}],
     )
     assert res.status_code == 201
 
@@ -2515,7 +2515,7 @@ async def test_resource_pool_members_put_replaces_prohibited(
     _, res = await sanic_client.put(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "user", "id": member_1_user.id, "relation": "prohibited"}],
+        json=[{"member_type": "user", "id": member_1_user.id, "role": "prohibited"}],
     )
     assert res.status_code == 200
     assert "email" in res.json[0]
@@ -2528,7 +2528,7 @@ async def test_resource_pool_members_put_replaces_prohibited(
     assert res.status_code == 200
     members = res.json
     assert len(members) == 1
-    assert members[0]["relation"] == "prohibited"
+    assert members[0]["role"] == "prohibited"
     assert "email" in members[0]
 
     # Verify user1 can NO LONGER access
@@ -2542,7 +2542,7 @@ async def test_resource_pool_members_put_replaces_prohibited(
     _, res = await sanic_client.put(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "user", "id": member_1_user.id, "relation": "viewer"}],
+        json=[{"member_type": "user", "id": member_1_user.id, "role": "viewer"}],
     )
     assert res.status_code == 200
 
@@ -2579,9 +2579,9 @@ async def test_resource_pool_members_put_mixed_types(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
         json=[
-            {"member_type": "user", "id": member_1_user.id, "relation": "viewer"},
-            {"member_type": "group", "id": group["id"], "relation": "group_viewer"},
-            {"member_type": "project", "id": project["id"], "relation": "project_viewer"},
+            {"member_type": "user", "id": member_1_user.id, "role": "viewer"},
+            {"member_type": "group", "id": group["id"], "role": "group_viewer"},
+            {"member_type": "project", "id": project["id"], "role": "project_viewer"},
         ],
     )
     assert res.status_code == 200
@@ -2620,7 +2620,7 @@ async def test_resource_pool_members_add_user_via_members(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "user", "id": member_1_user.id, "relation": "viewer"}],
+        json=[{"member_type": "user", "id": member_1_user.id, "role": "viewer"}],
     )
     assert res.status_code == 201
     assert "email" in res.json[0]
@@ -2653,7 +2653,7 @@ async def test_resource_pool_members_get_single_member(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "group", "id": group["id"], "relation": "group_viewer"}],
+        json=[{"member_type": "group", "id": group["id"], "role": "group_viewer"}],
     )
     assert res.status_code == 201
     assert res.json[0]["slug"] == "test-single-group"
@@ -2696,7 +2696,7 @@ async def test_resource_pool_members_add_nonexistent_group(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "group", "id": fake_group_id, "relation": "group_viewer"}],
+        json=[{"member_type": "group", "id": fake_group_id, "role": "group_viewer"}],
     )
     assert res.status_code == 404
 
@@ -2719,7 +2719,7 @@ async def test_resource_pool_members_add_nonexistent_project(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "project", "id": fake_project_id, "relation": "project_viewer"}],
+        json=[{"member_type": "project", "id": fake_project_id, "role": "project_viewer"}],
     )
     assert res.status_code == 404
 
@@ -2744,7 +2744,7 @@ async def test_resource_pool_members_add_prohibited_group(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "group", "id": group["id"], "relation": "prohibited"}],
+        json=[{"member_type": "group", "id": group["id"], "role": "prohibited"}],
     )
     assert res.status_code == 422
 
@@ -2777,7 +2777,7 @@ async def test_resource_pool_members_delete_user_inherited_access(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "group", "id": group["id"], "relation": "group_viewer"}],
+        json=[{"member_type": "group", "id": group["id"], "role": "group_viewer"}],
     )
     assert res.status_code == 201
 
@@ -2827,7 +2827,7 @@ async def test_resource_pool_members_put_preserves_admin(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "user", "id": member_1_user.id, "relation": "viewer"}],
+        json=[{"member_type": "user", "id": member_1_user.id, "role": "viewer"}],
     )
     assert res.status_code == 201
 
@@ -2849,7 +2849,7 @@ async def test_resource_pool_members_put_preserves_admin(
     _, res = await sanic_client.put(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "group", "id": group["id"], "relation": "group_viewer"}],
+        json=[{"member_type": "group", "id": group["id"], "role": "group_viewer"}],
     )
     assert res.status_code == 200
 
@@ -2886,7 +2886,7 @@ async def test_resource_pool_members_malformed_discriminator(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"id": "some-id", "relation": "viewer"}],
+        json=[{"id": "some-id", "role": "viewer"}],
     )
     assert res.status_code == 422
 
@@ -2894,14 +2894,14 @@ async def test_resource_pool_members_malformed_discriminator(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "invalid", "id": "some-id", "relation": "viewer"}],
+        json=[{"member_type": "invalid", "id": "some-id", "role": "viewer"}],
     )
     assert res.status_code == 422
 
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
-async def test_resource_pool_members_unknown_relation(
+async def test_resource_pool_members_unknown_role(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
     valid_resource_pool_payload: dict[str, Any],
@@ -2914,11 +2914,11 @@ async def test_resource_pool_members_unknown_relation(
     assert res.status_code == 201
     rp = res.json
 
-    # Unknown relation "view" (typo) should be rejected
+    # Unknown role "view" (typo) should be rejected
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp['id']}/members",
         headers=admin_headers,
-        json=[{"member_type": "user", "id": member_1_user.id, "relation": "view"}],
+        json=[{"member_type": "user", "id": member_1_user.id, "role": "view"}],
     )
     assert res.status_code == 422
 

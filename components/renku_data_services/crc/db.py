@@ -934,7 +934,7 @@ class ResourcePoolMemberResult:
 
     member_type: MemberType
     member_id: str
-    relation: str
+    role: str
     slug: str | None = None
     name: str | None = None
     email: str | None = None
@@ -1226,17 +1226,17 @@ class MemberRepository(_Base):
             return [usr.dump() for usr in rp.users]
 
     @staticmethod
-    def _relation_to_role(relation: str, member_type: MemberType) -> Role:
-        """Map an API relation string to an authorization Role."""
+    def _api_role_to_authz_role(role: str, member_type: MemberType) -> Role:
+        """Map an API role string to an authorization Role."""
         match member_type:
             case MemberType.USER:
-                if relation == "prohibited":
+                if role == "prohibited":
                     return Role.PROHIBITED
                 return Role.VIEWER
             case MemberType.GROUP | MemberType.PROJECT:
-                if relation == "prohibited":
+                if role == "prohibited":
                     raise errors.ValidationError(
-                        message=f"Member type {member_type.value} cannot have a prohibited relation"
+                        message=f"Member type {member_type.value} cannot have a prohibited role"
                     )
                 return Role.VIEWER
 
@@ -1267,7 +1267,7 @@ class MemberRepository(_Base):
         api_user: base_models.APIUser,
         members: Collection[ResourcePoolMemberIdentifier],
     ) -> list[tuple[str, ResourceType, str]]:
-        """Resolve ResourcePoolMemberIdentifiers to (internal_id, subject_type, relation) tuples."""
+        """Resolve ResourcePoolMemberIdentifiers to (internal_id, subject_type, role) tuples."""
         resolved: list[tuple[str, ResourceType, str]] = []
         for member in members:
             match member.member_type:
@@ -1275,21 +1275,21 @@ class MemberRepository(_Base):
                     kc_user = await self.kc_user_repo.get_user(id=member.member_id)
                     if kc_user is None:
                         raise errors.MissingResourceError(message=f"User with ID {member.member_id} does not exist")
-                    resolved.append((kc_user.id, ResourceType.user, member.relation))
+                    resolved.append((kc_user.id, ResourceType.user, member.role))
 
                 case MemberType.GROUP:
                     group_id = ULID.from_str(member.member_id)
                     group = await self.group_repo.get_group_by_id(api_user, group_id)
                     if group is None:
                         raise errors.MissingResourceError(message=f"Group with id {member.member_id!r} does not exist")
-                    resolved.append((str(group.id), ResourceType.group, member.relation))
+                    resolved.append((str(group.id), ResourceType.group, member.role))
 
                 case MemberType.PROJECT:
                     project_id = ULID.from_str(member.member_id)
                     project = await self.project_repo.get_project_by_id(api_user, project_id)
                     if project is None:
                         raise errors.MissingResourceError(message=f"Project {member.member_id!r} does not exist")
-                    resolved.append((str(project.id), ResourceType.project, member.relation))
+                    resolved.append((str(project.id), ResourceType.project, member.role))
 
         return resolved
 
@@ -1330,8 +1330,8 @@ class MemberRepository(_Base):
         return self._build_pool_membership_changes(
             resource_pool_id,
             [
-                (member_id, subject_type, self._relation_to_role(relation, member.member_type))
-                for (member_id, subject_type, relation), member in zip(specs, members, strict=True)
+                (member_id, subject_type, self._api_role_to_authz_role(role, member.member_type))
+                for (member_id, subject_type, role), member in zip(specs, members, strict=True)
             ],
             Change.ADD,
         )
@@ -1349,8 +1349,8 @@ class MemberRepository(_Base):
         return self._build_pool_membership_changes(
             resource_pool_id,
             [
-                (member_id, subject_type, self._relation_to_role(relation, member.member_type))
-                for (member_id, subject_type, relation), member in zip(specs, members, strict=True)
+                (member_id, subject_type, self._api_role_to_authz_role(role, member.member_type))
+                for (member_id, subject_type, role), member in zip(specs, members, strict=True)
             ],
             Change.REMOVE,
         )
@@ -1393,7 +1393,7 @@ class MemberRepository(_Base):
                 raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} does not exist")
         raw_members = await self.authz.get_resource_pool_members(api_user, resource_pool_id)
         results: list[ResourcePoolMemberResult] = []
-        for subject_type, subject_id, relation in raw_members:
+        for subject_type, subject_id, authz_role in raw_members:
             match subject_type:
                 case ResourceType.user.value:
                     user_info = await self.kc_user_repo.get_user(id=subject_id)
@@ -1401,7 +1401,7 @@ class MemberRepository(_Base):
                         ResourcePoolMemberResult(
                             member_type=MemberType.USER,
                             member_id=subject_id,
-                            relation=relation,
+                            role=authz_role,
                             email=user_info.email or "" if user_info else "",
                         )
                     )
@@ -1412,7 +1412,7 @@ class MemberRepository(_Base):
                             ResourcePoolMemberResult(
                                 member_type=MemberType.GROUP,
                                 member_id=subject_id,
-                                relation=relation,
+                                role=authz_role,
                                 slug=group.slug,
                                 name=group.name,
                             )
@@ -1428,7 +1428,7 @@ class MemberRepository(_Base):
                             ResourcePoolMemberResult(
                                 member_type=MemberType.PROJECT,
                                 member_id=subject_id,
-                                relation=relation,
+                                role=authz_role,
                                 namespace=project.path.serialize(),
                                 name=project.name,
                             )
@@ -1462,15 +1462,15 @@ class MemberRepository(_Base):
 
             if not append:
                 current_members = await self.get_resource_pool_members(api_user, resource_pool_id)
-                current_set = {(m.member_type, m.member_id, m.relation) for m in current_members}
-                desired_set = {(m.member_type, m.member_id, m.relation) for m in members}
+                current_set = {(m.member_type, m.member_id, m.role) for m in current_members}
+                desired_set = {(m.member_type, m.member_id, m.role) for m in members}
 
                 to_remove = [
-                    ResourcePoolMemberIdentifier(member_id=m.member_id, member_type=m.member_type, relation=m.relation)
+                    ResourcePoolMemberIdentifier(member_id=m.member_id, member_type=m.member_type, role=m.role)
                     for m in current_members
-                    if (m.member_type, m.member_id, m.relation) not in desired_set
+                    if (m.member_type, m.member_id, m.role) not in desired_set
                 ]
-                to_add = [m for m in members if (m.member_type, m.member_id, m.relation) not in current_set]
+                to_add = [m for m in members if (m.member_type, m.member_id, m.role) not in current_set]
 
                 if to_remove:
                     await self._revoke_resource_pool_members(api_user, resource_pool_id, to_remove)
