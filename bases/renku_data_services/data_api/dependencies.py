@@ -394,7 +394,6 @@ class DependencyManager:
             rp_repo=rp_repo,
             project_repo=project_repo,
             k8s_client=apps_k8s_client,
-            apps_base_domain=config.apps_base_domain,
         )
         project_migration_repo = ProjectMigrationRepository(
             session_maker=config.db.async_session_maker,
