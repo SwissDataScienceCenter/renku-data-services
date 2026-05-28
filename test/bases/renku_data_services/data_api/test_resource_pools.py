@@ -729,8 +729,6 @@ async def test_remove_resource_pool_users(
     assert res.status_code == 200
     assert len(existing_users) >= 3
     # Give another user access to the private pool
-    admin = existing_users[0]
-    admin_id = admin["id"]
     allowed_user = existing_users[1]
     allowed_user2 = existing_users[2]
     allowed_user_id = allowed_user["id"]
@@ -755,9 +753,8 @@ async def test_remove_resource_pool_users(
         headers=admin_headers,
     )
     assert res.status_code == 200
-    # Authzed resolves ALL users with read permission (including inherited access i.e. in this case "admin"),
-    assert len(res.json) == 3
-    assert set([u["id"] for u in res.json]) == {admin_id, allowed_user_id, allowed_user2_id}
+    assert len(res.json) == 2
+    assert set([u["id"] for u in res.json]) == {allowed_user_id, allowed_user2_id}
     # Remove the user from the private pool
     _, res = await sanic_client.delete(
         f"/api/data/resource_pools/{rp_private['id']}/users/{allowed_user_id}",
@@ -775,8 +772,7 @@ async def test_remove_resource_pool_users(
         headers=admin_headers,
     )
     assert res.status_code == 200
-    # Authzed resolves ALL users with read permission (including inherited access i.e. in this case "admin"),
-    assert len(res.json) == 2
+    assert len(res.json) == 1
     assert len([user for user in res.json if user.get("id") == allowed_user_id]) == 0
     # The remaining user can see the pool
     user2_access_token = json.dumps({"id": allowed_user2_id})

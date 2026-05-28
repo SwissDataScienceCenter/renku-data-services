@@ -1005,6 +1005,11 @@ class MemberRepository(_Base):
                 api_user, ResourceType.resource_pool, resource_pool_id, Scope.READ
             )
 
+            # Filter out platform admins; they have access via resource_pool_platform->is_admin
+            # but should not appear in the user list.
+            admin_ids = set(await self.authz._get_admin_user_ids())
+            user_ids = [uid for uid in user_ids if uid not in admin_ids]
+
             if keycloak_id:
                 if keycloak_id not in user_ids:
                     return Repository2Users(resource_pool_id, allowed=[], disallowed=[])

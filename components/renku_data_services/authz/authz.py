@@ -721,7 +721,7 @@ class Authz:
         Skips public_viewer and resource_pool_platform relations.
         """
         if not user.is_admin:
-            return []
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         rel_filter = RelationshipFilter(

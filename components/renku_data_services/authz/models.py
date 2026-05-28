@@ -81,7 +81,7 @@ class UnsavedMember:
     def with_resource_pool(
         self, resource_id: ULID | int, resource_type: ResourceType, subject_type: ResourceType
     ) -> "Member":
-        """Turn to member with group."""
+        """Turn to member with resource pool."""
         return Member(
             role=self.role,
             user_id=self.user_id,
