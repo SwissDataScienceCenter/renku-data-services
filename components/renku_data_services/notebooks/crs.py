@@ -377,6 +377,8 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             resource_class_id=self.resource_class_id(),
             session_type=session_type,
             submission_id=submission_id,
+            command=list(self.spec.session.command) if self.spec.session.command else None,
+            args=list(self.spec.session.args) if self.spec.session.args else None,
         )
 
     def base_url(self) -> str | None:
