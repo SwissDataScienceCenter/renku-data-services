@@ -2432,7 +2432,7 @@ class Authz:
             resource_type=platform.object_type,
             id=platform.object_id,
             relation=PlatformRole.group_creator.value,
-            subject=SubjectFilter(subject_type=all_users.resource_type, optional_subject_id=all_users.object_id),
+            subject=SubjectFilter(subject_type=ResourceType.user.value, optional_subject_id=all_users.object_id),
             zed_token=zed_token,
         )
         return groups_allowed, new_zed_token
@@ -2445,7 +2445,7 @@ class Authz:
             resource_type=platform.object_type,
             id=platform.object_id,
             relation=PlatformRole.project_creator.value,
-            subject=SubjectFilter(subject_type=all_users.resource_type, optional_subject_id=all_users.object_id),
+            subject=SubjectFilter(subject_type=ResourceType.user.value, optional_subject_id=all_users.object_id),
             zed_token=zed_token,
         )
         return projects_allowed, new_zed_token
