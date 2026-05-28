@@ -23,12 +23,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AppResponse"
-        "200":
-          description: The app already exists
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppResponse"
         default:
           $ref: "#/components/responses/Error"
       tags:

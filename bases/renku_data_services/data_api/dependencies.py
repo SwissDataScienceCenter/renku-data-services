@@ -68,7 +68,7 @@ from renku_data_services.project.db import (
     ProjectRepository,
     ProjectSessionSecretRepository,
 )
-from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
+from renku_data_services.renku_apps.k8s_client import KNATIVE_SERVICE_GVK, RenkuAppsK8sClient
 from renku_data_services.renku_apps.repository import RenkuAppsRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.resource_usage.core import ResourceUsageService
@@ -263,7 +263,7 @@ class DependencyManager:
                 default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_repo,
                 cache=k8s_db_cache,
-                kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK, KNATIVE_SERVICE_GVK],
             ),
         )
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
@@ -310,7 +310,7 @@ class DependencyManager:
                             default_kubeconfig=default_kubeconfig,
                             cluster_repo=cluster_repo,
                             cache=k8s_db_cache,
-                            kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                            kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK, KNATIVE_SERVICE_GVK],
                         ),
                     ),
                     namespace=config.k8s_namespace,
