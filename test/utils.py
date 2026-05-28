@@ -455,14 +455,18 @@ class TestDependencyManager(DependencyManager):
             user_repo=kc_user_repo,
             internal_token_mint=internal_token_mint,
         )
+        git_provider_helper = GitProviderHelper(connected_services_repo, "", "", "", config.enable_internal_gitlab)
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
+            builds_config=config.builds,
+            git_provider_helper=git_provider_helper,
+            project_repo=project_repo,
+            git_repositories_repo=git_repositories_repo,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_client_factory,
         )
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         notifications_repo = NotificationsRepository(session_maker=config.db.async_session_maker)
-        git_provider_helper = GitProviderHelper(connected_services_repo, "", "", "", config.enable_internal_gitlab)
         capacity_reservation_repo = CapacityReservationRepository(
             session_maker=config.db.async_session_maker, cluster_repo=cluster_repo
         )

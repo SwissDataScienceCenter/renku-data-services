@@ -105,10 +105,11 @@ from renku_data_services.notebooks.util.kubernetes_ import (
 from renku_data_services.notebooks.utils import (
     node_affinity_from_resource_class,
     node_affinity_patch_from_resource_class,
+    repositories_from_project,
     tolerations_from_resource_class,
 )
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
-from renku_data_services.project.models import Project, SessionSecret
+from renku_data_services.project.models import SessionSecret
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata as RepoMetadata
 from renku_data_services.resource_usage.core import ResourceUsageService
@@ -511,19 +512,6 @@ def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
     return Resources(requests=requests, limits=limits if len(limits) > 0 else None)
 
 
-def repositories_from_project(project: Project, git_providers: list[GitProvider]) -> list[Repository]:
-    """Get the list of git repositories from a project."""
-    repositories: list[Repository] = []
-    for repo in project.repositories:
-        found_provider_id: str | None = None
-        for provider in git_providers:
-            if urlparse(provider.url).netloc == urlparse(repo).netloc:
-                found_provider_id = provider.id
-                break
-        repositories.append(Repository(url=repo, provider=found_provider_id))
-    return repositories
-
-
 async def repositories_from_session(
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     session: AmaltheaSessionV1Alpha1,
@@ -681,12 +669,16 @@ def __format_image_pull_secret(secret_name: str, access_token: str, registry_dom
 
 
 async def __get_connected_services_image_pull_secret(
-    secret_name: str, image_check_repo: ImageCheckRepository, image: str, user: APIUser
+    secret_name: str,
+    image_check_repo: ImageCheckRepository,
+    launcher: SessionLauncher,
+    user: APIUser,
 ) -> ExtraSecret | None:
     """Return a secret for accessing the image if one is available for the given user."""
-    image_parsed = Image.from_path(image)
-    image_check_result = await image_check_repo.check_image(user=user, gitlab_user=None, image=image_parsed)
-    logger.debug(f"Set pull secret for {image} to connection {image_check_result.image_provider}")
+    image_check_result = await image_check_repo.check_image(user=user, gitlab_user=None, image_src=launcher)
+    logger.debug(
+        f"Set pull secret for {launcher.environment.container_image} to connection {image_check_result.image_provider}"
+    )
     if not image_check_result.token:
         return None
 
@@ -701,7 +693,7 @@ async def __get_connected_services_image_pull_secret(
 
 
 async def get_image_pull_secret(
-    image: str,
+    launcher: SessionLauncher,
     server_name: str,
     nb_config: NotebooksConfig,
     user: APIUser,
@@ -712,7 +704,7 @@ async def get_image_pull_secret(
     """Get an image pull secret."""
 
     v2_secret = await __get_connected_services_image_pull_secret(
-        f"{server_name}-image-secret", image_check_repo, image, user
+        f"{server_name}-image-secret", image_check_repo, launcher, user
     )
     if v2_secret:
         return v2_secret
@@ -720,7 +712,7 @@ async def get_image_pull_secret(
     if (
         builds_config.enabled
         and builds_config.build_output_private_image_prefix is not None
-        and image.startswith(builds_config.build_output_private_image_prefix)
+        and launcher.environment.container_image.startswith(builds_config.build_output_private_image_prefix)
         and not user.is_anonymous
     ):
         return ExtraSecret(
@@ -735,7 +727,9 @@ async def get_image_pull_secret(
         and isinstance(user, AuthenticatedAPIUser)
         and internal_gitlab_user.access_token is not None
     ):
-        needs_pull_secret = await __requires_image_pull_secret(nb_config, image, internal_gitlab_user)
+        needs_pull_secret = await __requires_image_pull_secret(
+            nb_config, launcher.environment.container_image, internal_gitlab_user
+        )
         if needs_pull_secret:
             v1_secret = await __get_gitlab_image_pull_secret(
                 nb_config, user, f"{server_name}-image-secret-v1", internal_gitlab_user.access_token
@@ -905,31 +899,6 @@ async def start_session(
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
-    # image can be "image:unknown-at-the-moment" which is returned until the first
-    # successful build however users can force a session start although it will fail
-
-    if (
-        builds_config.build_output_private_image_prefix
-        and image.startswith(builds_config.build_output_private_image_prefix)
-        or image == "image:unknown-at-the-moment"
-    ):
-        if environment.build_parameters is None:
-            raise errors.ValidationError(message="Image was built but build parameters are missing")
-
-        build_repository = environment.build_parameters.repository
-        if build_repository not in [repository.url for repository in repositories]:
-            raise errors.ValidationError(message="Image was not built from a repository in this project")
-
-        repo_data = await git_repositories_repo.get_repository(
-            repository_url=build_repository, user=user, etag=None, internal_gitlab_user=internal_gitlab_user
-        )
-        if repo_data.is_error:
-            raise errors.ValidationError(message=str(repo_data.error))
-        if isinstance(repo_data.metadata, RepoMetadata) and not repo_data.metadata.pull_permission:
-            raise errors.ForbiddenError(
-                message="You do not have pull access to the code repository used for this session."
-            )
-
     # User secrets
     session_extras = SessionExtraResources()
     session_extras = session_extras.concat(
@@ -1021,7 +990,7 @@ async def start_session(
         authn_extra_volume_mounts.extend(cert_vol_mounts)
 
     image_secret = await get_image_pull_secret(
-        image=image,
+        launcher=launcher,
         server_name=server_name,
         nb_config=nb_config,
         user=user,
@@ -1416,9 +1385,8 @@ async def patch_session(
         )
 
     # Patching the image pull secret
-    image = session.spec.session.image
     image_pull_secret = await get_image_pull_secret(
-        image=image,
+        launcher=launcher,
         server_name=server_name,
         nb_config=nb_config,
         image_check_repo=image_check_repo,

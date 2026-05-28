@@ -14,7 +14,7 @@ from syrupy.filters import props
 from renku_data_services import errors
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.session.config import BuildsConfig
-from renku_data_services.session.constants import BUILD_RUN_GVK, BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
+from renku_data_services.session.constants import BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX, BUILD_RUN_GVK
 from renku_data_services.session.models import EnvVar
 from renku_data_services.users.models import UserInfo
 from test.utils import KindCluster, MemberContext
@@ -1534,30 +1534,38 @@ def actual_user_headers(request, regular_user_access_token) -> dict[str, str]:
     [True, False],
 )
 @pytest.mark.parametrize(
-    "launcher_conf",
+    "launcher_conf,expected_status_code,expected_error_message",
     [
-        {
-            "name": "Valid custom image",
-            "description": "A session launcher",
-            "environment": {
-                "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
-                "environment_kind": "CUSTOM",
-                "name": "test",
-                "port": 8888,
-                "environment_image_source": "image",
+        (
+            {
+                "name": "Valid custom image",
+                "description": "A session launcher",
+                "environment": {
+                    "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
+                    "environment_kind": "CUSTOM",
+                    "name": "test",
+                    "port": 8888,
+                    "environment_image_source": "image",
+                },
             },
-        },
-        {
-            "name": "Private build image",
-            "description": "A session launcher",
-            "environment": {
-                "container_image": f"{BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX}some-environment",
-                "environment_kind": "CUSTOM",
-                "name": "test",
-                "port": 8888,
-                "environment_image_source": "image",
+            201,
+            None,
+        ),
+        (
+            {
+                "name": "Private build image",
+                "description": "A session launcher",
+                "environment": {
+                    "container_image": f"{BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX}some-environment",
+                    "environment_kind": "CUSTOM",
+                    "name": "test",
+                    "port": 8888,
+                    "environment_image_source": "image",
+                },
             },
-        },
+            422,
+            "Image was built but build parameters are missing",
+        ),
     ],
     ids=id_from_launcher,
 )
@@ -1572,6 +1580,8 @@ async def test_starting_session(
     amalthea_installation,
     actual_user_headers,
     launcher_conf,
+    expected_status_code,
+    expected_error_message,
     with_builds,
 ) -> None:
     project: dict[str, Any] = await create_project(
@@ -1598,18 +1608,23 @@ async def test_starting_session(
         payload = {"project_id": project_id, "launcher_id": launcher_id}
         cookies = {"_renku_session": "some content"}
 
-        session_res = await launch_session(payload, headers=actual_user_headers, cookies=cookies)
-
-        _, res = await sanic_client.get(
-            f"/api/data/sessions/{session_res.json['name']}", headers=actual_user_headers, cookies=cookies
+        _, session_res = await sanic_client.post(
+            "/api/data/sessions", headers=actual_user_headers, json=payload, cookies=cookies
         )
+        assert session_res.status_code == expected_status_code
 
-        assert res.status_code == 200, res.text
-        assert res.json["name"] == session_res.json["name"]
-        _, res = await sanic_client.get("/api/data/sessions", headers=actual_user_headers, cookies=cookies)
-        assert res.status_code == 200, res.text
-        assert len(res.json) > 0
-        assert session_res.json["name"] in [i["name"] for i in res.json]
+        if expected_status_code == 201:
+            _, res = await sanic_client.get(
+                f"/api/data/sessions/{session_res.json['name']}", headers=actual_user_headers, cookies=cookies
+            )
+            assert res.status_code == 200, res.text
+            assert res.json["name"] == session_res.json["name"]
+            _, res = await sanic_client.get("/api/data/sessions", headers=actual_user_headers, cookies=cookies)
+            assert res.status_code == 200, res.text
+            assert len(res.json) > 0
+            assert session_res.json["name"] in [i["name"] for i in res.json]
+        else:
+            assert session_res.json["error"]["message"] == expected_error_message
 
 
 @pytest.mark.asyncio
@@ -1793,7 +1808,7 @@ async def test_starting_session_with_builds_enabled(
             False,
         ),
         (
-            422,
+            403,
             "https://github.com/SwissDataScienceCenter/other-private",
             "https://github.com/SwissDataScienceCenter/other-private",
             True,
