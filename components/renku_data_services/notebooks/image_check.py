@@ -112,7 +112,9 @@ class ImageCheckRepository:
         self.connected_services_repo = connected_services_repo
         self.oauth_client_factory = oauth_client_factory
 
-    async def __check_built_image_accessibility(self, user: APIUser, gitlab_user: APIUser, launcher: SessionLauncher):
+    async def __check_built_image_accessibility(
+        self, user: APIUser, gitlab_user: APIUser | None, launcher: SessionLauncher
+    ) -> None:
         # image can be "image:unknown-at-the-moment" which is returned until the first
         # successful build however users can force a session start although it will fail
         environment = launcher.environment
@@ -135,7 +137,10 @@ class ImageCheckRepository:
                 raise errors.ValidationError(message="Image was not built from a repository in this project")
 
             repo_data = await self.git_repositories_repo.get_repository(
-                repository_url=build_repository, user=user, etag=None, internal_gitlab_user=gitlab_user
+                repository_url=build_repository,
+                user=user,
+                etag=None,
+                internal_gitlab_user=gitlab_user if gitlab_user else APIUser(),
             )
             if repo_data.is_error:
                 raise errors.ValidationError(message=str(repo_data.error))
