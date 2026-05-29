@@ -6,7 +6,7 @@ from typing import Any
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.k8s.clients import K8sClusterClientsPool
-from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, DUMMY_RENKU_APP_USER_ID, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObjectMeta
 from renku_data_services.project.models import Project
 from renku_data_services.renku_apps.crs import KnativeService
@@ -42,7 +42,13 @@ class RenkuAppsK8sClient:
         cluster = await self.__client.cluster_by_id(cluster_id)
         app_name = _generate_app_name(project)
         manifest = _build_app_deployment_manifest(session_launcher, app_name, resource_class)
-        meta = K8sObjectMeta(name=app_name, namespace=cluster.namespace, cluster=cluster.id, gvk=KNATIVE_SERVICE_GVK)
+        meta = K8sObjectMeta(
+            name=app_name,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            gvk=KNATIVE_SERVICE_GVK,
+            user_id=DUMMY_RENKU_APP_USER_ID,
+        )
         created = await self.__client.create(
             meta.with_manifest(manifest.model_dump(exclude_none=True, mode="json")), refresh=True
         )
@@ -52,7 +58,13 @@ class RenkuAppsK8sClient:
         """Get the deployment for the given app name, or None if it does not exist."""
         cluster_id: ClusterId = DEFAULT_K8S_CLUSTER
         cluster = await self.__client.cluster_by_id(cluster_id)
-        meta = K8sObjectMeta(name=app_name, namespace=cluster.namespace, cluster=cluster.id, gvk=KNATIVE_SERVICE_GVK)
+        meta = K8sObjectMeta(
+            name=app_name,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            gvk=KNATIVE_SERVICE_GVK,
+            user_id=DUMMY_RENKU_APP_USER_ID,
+        )
         obj = await self.__client.get(meta)
         if obj is None:
             return None
