@@ -351,7 +351,7 @@ async def test_patch_authz_config(
     # Check default config
     _, res = await sanic_client.get("/api/data/platform/config/authorization", headers=admin_headers)
     assert res.status_code == 200, (res.status_code, res.text)
-    assert not res.json["only_admins_can_create_groups"], res.text
+    assert not res.json["only_admins_can_create_projects"], res.text
     assert not res.json["only_admins_can_create_groups"], res.text
 
     # Disable project and group creation
@@ -363,7 +363,7 @@ async def test_patch_authz_config(
         json={"only_admins_can_create_projects": True, "only_admins_can_create_groups": True},
     )
     assert res.status_code == 200, (res.status_code, res.text)
-    assert res.json["only_admins_can_create_groups"], res.text
+    assert res.json["only_admins_can_create_projects"], res.text
     assert res.json["only_admins_can_create_groups"], res.text
     etag = res.json["etag"]
 
@@ -407,7 +407,7 @@ async def test_patch_authz_config(
         json={"only_admins_can_create_projects": False, "only_admins_can_create_groups": False},
     )
     assert res.status_code == 200, (res.status_code, res.text)
-    assert not res.json["only_admins_can_create_groups"], res.text
+    assert not res.json["only_admins_can_create_projects"], res.text
     assert not res.json["only_admins_can_create_groups"], res.text
     await asyncio.sleep(5)
 
