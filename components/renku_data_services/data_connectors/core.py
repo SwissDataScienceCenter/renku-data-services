@@ -92,7 +92,7 @@ def dump_storage_with_sensitive_fields(
 def validate_unsaved_storage_url(
     storage: apispec.CloudStorageUrlV2, validator: RCloneValidator
 ) -> models.CloudStorageCore:
-    """Validate the unsaved storage when its configuration is specificed as a URL."""
+    """Validate the unsaved storage when its configuration is specified as a URL."""
     cloud_storage = storage_models.UnsavedCloudStorage.from_url(
         project_id="FAKEPROJECTID",
         name="fake-storage-name",
@@ -115,7 +115,7 @@ def validate_unsaved_storage_url(
 def validate_unsaved_storage_generic(
     storage: apispec.CloudStorageCorePost, validator: RCloneValidator
 ) -> models.CloudStorageCore:
-    """Validate the unsaved storage when its configuration is specificed as a URL."""
+    """Validate the unsaved storage when its configuration is specified as a URL."""
     configuration = storage.configuration
     validator.validate(configuration)
     storage_type = configuration.get("type")
@@ -595,6 +595,13 @@ def validate_deposit_patch(body: apispec.DepositPatch) -> models.DepositPatch:
 
 def serialize_deposit(deposit: models.DepositJob) -> dict[str, Any]:
     """Create an apispec Deposit from the internal model."""
+    match deposit.deposit.source:
+        case models.DepositSource.zenodo:
+            external_url = f"https://zenodo.org/uploads/{deposit.deposit.original_id}"
+        case models.DepositSource.envidat:
+            external_url = f"envidat.ch/upload/{deposit.deposit.original_id}"
+        case _:
+            external_url = ""
     return dict(
         name=deposit.deposit.name,
         provider=deposit.deposit.source.value,
@@ -602,7 +609,7 @@ def serialize_deposit(deposit: models.DepositJob) -> dict[str, Any]:
         path=deposit.deposit.path.as_posix() if deposit.deposit.path else "/",
         id=str(deposit.deposit.id),
         status=deposit.deposit.status.value,
-        external_url=f"https://zenodo.org/uploads/{deposit.deposit.original_id}",
+        external_url=external_url,
         creation_date=deposit.deposit.creation_date,
         updated_at=deposit.deposit.updated_at,
         etag=deposit.etag,
@@ -618,10 +625,10 @@ async def create_deposit_upload(
     data_service_base_url: str,
     deposit_job: models.DepositJob,
     job_client: DepositUploadJobClient,
-    deposit_api_key: str,
     data_source_repo: DataSourceRepository,
     data_connector_repo: DataConnectorRepository,
     data_connector_secret_repo: DataConnectorSecretRepository,
+    deposit_api_key: str | None = None,
 ) -> None:
     """Create the resources required to upload data to a deposit."""
 
@@ -639,7 +646,7 @@ async def create_deposit_upload(
                 gvk = GVK(kind="PersistentVolumeClaim", version="v1")
             case x:
                 raise errors.ProgrammingError(
-                    message=f"Unexpected reosurce type {x.api_version}-{x.kind} when creating converting k8s object"
+                    message=f"Unexpected resource type {x.api_version}-{x.kind} when creating converting k8s object"
                 )
 
         return K8sObject(
@@ -686,6 +693,21 @@ async def create_deposit_upload(
                 if deposit_job.deposit.path.is_absolute()
                 else deposit_job.deposit.path
             )
+
+        match deposit_job.deposit.source:
+            case models.DepositSource.envidat:
+                # TODO: Support CLI upload for Envidat or implement the job here
+                provider_env = [
+                    V1EnvVar(name="ENVIDAT_S3_TYPE", value="s3"),
+                    V1EnvVar(name="ENVIDAT_S3_PROVIDER", value="Other"),
+                    V1EnvVar(name="ENVIDAT_S3_ENDPOINT", value=deposit_config.envidat_s3_endpoint),
+                    V1EnvVar(name="ENVIDAT_S3_BUCKET", value=deposit_config.envidat_s3_bucket),
+                ]
+                extra_args = ["--provider", "envidat"]
+            case _:
+                provider_env = [V1EnvVar(name="ZENODO_URL", value=deposit_config.zenodo_url)]
+                extra_args = []
+
         return V1Job(
             metadata=V1ObjectMeta(
                 name=deposit_job.name,
@@ -693,7 +715,7 @@ async def create_deposit_upload(
                 labels=labels,
             ),
             spec=V1JobSpec(
-                backoff_limit=0,  # create only 1 pod, dont keep creating new pods on failure
+                backoff_limit=0,  # create only 1 pod, don't keep creating new pods on failure
                 ttl_seconds_after_finished=3600 * 6,  # will clean itself up after 6 hrs, also will cleanup all children
                 suspend=suspended,
                 template=V1PodTemplateSpec(
@@ -717,7 +739,7 @@ async def create_deposit_upload(
                                 env=[
                                     V1EnvVar(name="RUST_LOG", value="info"),
                                     V1EnvVar(name="RENKU_CLI_RENKU_URL", value=deposit_config.renku_url),
-                                    V1EnvVar(name="ZENODO_URL", value=deposit_config.zenodo_url),
+                                    *provider_env,
                                 ],
                                 args=[
                                     "dataset",
@@ -725,6 +747,7 @@ async def create_deposit_upload(
                                     "cp",
                                     copy_source.as_posix(),
                                     deposit_job.deposit.original_id,
+                                    *extra_args,
                                 ],
                                 working_dir=work_dir.as_posix(),
                                 volume_mounts=[
@@ -909,10 +932,20 @@ async def create_deposit_upload(
         _convert_to_k8s_object(created_job, cluster_id=deposit_config.cluster_id, user_id=user.id)
     ]
 
+    match deposit_job.deposit.source:
+        case models.DepositSource.envidat:
+            job_secret_data = {
+                "ENVIDAT_S3_ACCESS_KEY_ID": deposit_config.envidat_s3_access_key_id,
+                "ENVIDAT_S3_SECRET_ACCESS_KEY": deposit_config.envidat_s3_secret_access_key,
+            }
+        case _:
+            if deposit_api_key is None:
+                raise errors.ProgrammingError(message="A Zenodo deposit requires an API key.")
+            job_secret_data = {"ZENODO_API_KEY": deposit_api_key}
     job_secret = _create_secret_manifest(
         name=base_name,
         namespace=deposit_config.namespace,
-        data={"ZENODO_API_KEY": deposit_api_key},
+        data=job_secret_data,
         labels=labels,
         owner_ref=owner_reference,
     )
