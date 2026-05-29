@@ -409,7 +409,6 @@ async def test_patch_authz_config(
     assert res.status_code == 200, (res.status_code, res.text)
     assert not res.json["only_admins_can_create_projects"], res.text
     assert not res.json["only_admins_can_create_groups"], res.text
-    await asyncio.sleep(5)
 
     # Check that groups can be created by regular users once the config changed
     _, res = await sanic_client.post(
