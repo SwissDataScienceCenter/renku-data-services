@@ -1,6 +1,9 @@
 """Adapters for connected services database classes."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from sqlalchemy import and_, select
@@ -21,6 +24,9 @@ from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDock
 from renku_data_services.users.db import APIUser
 from renku_data_services.utils.cryptography import encrypt_string
 
+if TYPE_CHECKING:
+    from renku_data_services.crc.db import MemberRepository
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,11 +38,59 @@ class ConnectedServicesRepository:
         session_maker: Callable[..., AsyncSession],
         oauth_client_factory: OAuthHttpClientFactory,
         encryption_key: bytes,
+        member_repo: MemberRepository | None = None,
     ):
         self.session_maker = session_maker
         self.encryption_key = encryption_key
         self.oauth_client_factory = oauth_client_factory
         self.supported_image_registry_providers = {models.ProviderKind.gitlab, models.ProviderKind.github}
+        self.member_repo = member_repo
+
+    async def _on_oauth2_connected(self, user_id: str, client_id: str) -> None:
+        """Grant user viewer access to all RPs linked to the provider."""
+        if self.member_repo is None:
+            return
+        from renku_data_services.base_models.core import InternalServiceAdmin
+        from renku_data_services.crc import orm as crc_schemas
+        from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
+
+        admin = InternalServiceAdmin()
+        async with self.session_maker() as session:
+            rps = await session.scalars(
+                select(crc_schemas.ResourcePoolORM).where(crc_schemas.ResourcePoolORM.remote_provider_id == client_id)
+            )
+            rps_list = list(rps)
+            member = ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=user_id)
+            for rp in rps_list:
+                try:
+                    await self.member_repo.grant_resource_pool_members(admin, rp.id, [member])
+                except errors.BaseError as e:
+                    logger.warning(
+                        f"Failed to auto-grant member {user_id} to resource pool {rp.id} for provider {client_id}: {e}"
+                    )
+
+    async def _on_oauth2_disconnected(self, user_id: str, client_id: str) -> None:
+        """Revoke user viewer access from all RPs linked to the provider."""
+        if self.member_repo is None:
+            return
+        from renku_data_services.base_models.core import InternalServiceAdmin
+        from renku_data_services.crc import orm as crc_schemas
+        from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
+
+        admin = InternalServiceAdmin()
+        async with self.session_maker() as session:
+            rps = await session.scalars(
+                select(crc_schemas.ResourcePoolORM).where(crc_schemas.ResourcePoolORM.remote_provider_id == client_id)
+            )
+            member = ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=user_id)
+            for rp in rps:
+                try:
+                    await self.member_repo.revoke_resource_pool_members(admin, rp.id, [member])
+                except errors.BaseError as e:
+                    logger.warning(
+                        f"Failed to auto-revoke member {user_id} from resource pool {rp.id} "
+                        f"for provider {client_id}: {e}"
+                    )
 
     async def get_oauth2_clients(
         self,
@@ -189,7 +243,20 @@ class ConnectedServicesRepository:
             if conn is None:
                 return False
 
+            await self._on_oauth2_disconnected(conn.user_id, conn.client_id)
             await session.delete(conn)
+            await session.flush()
+
+            # Ensure session is closed before calling _on_oauth2_disconnected
+            # so that the connection is deleted even if revoke fails.
+            try:
+                await self._on_oauth2_disconnected(conn.user_id, conn.client_id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to sync resource pool memberships after OAuth2 disconnection for user "
+                    f"{conn.user_id} and provider {conn.client_id}: {e}"
+                )
+
             return True
 
     async def get_oauth2_connections(
