@@ -70,6 +70,7 @@ from renku_data_services.namespace.models import (
     ProjectNamespace,
     UserNamespace,
 )
+from renku_data_services.platform.models import AuthzFlag
 from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
 from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpdate
 
@@ -2425,7 +2426,7 @@ class Authz:
             return True, res.read_at
         return False, zed_token
 
-    async def group_creation_allowed(self, zed_token: ZedToken | None = None) -> tuple[bool, ZedToken | None]:
+    async def group_creation_allowed(self, zed_token: ZedToken | None = None) -> tuple[AuthzFlag, ZedToken | None]:
         """Indicates whether users are allowed to create groups."""
         platform = _AuthzConverter.platform()
         all_users = _AuthzConverter.all_users()
@@ -2436,9 +2437,9 @@ class Authz:
             subject=SubjectFilter(subject_type=ResourceType.user.value, optional_subject_id=all_users.object_id),
             zed_token=zed_token,
         )
-        return groups_allowed, new_zed_token
+        return AuthzFlag.registered_users if groups_allowed else AuthzFlag.only_admins, new_zed_token
 
-    async def project_creation_allowed(self, zed_token: ZedToken | None = None) -> tuple[bool, ZedToken | None]:
+    async def project_creation_allowed(self, zed_token: ZedToken | None = None) -> tuple[AuthzFlag, ZedToken | None]:
         """Indicates whether users are allowed to create projects."""
         platform = _AuthzConverter.platform()
         all_users = _AuthzConverter.all_users()
@@ -2449,14 +2450,16 @@ class Authz:
             subject=SubjectFilter(subject_type=ResourceType.user.value, optional_subject_id=all_users.object_id),
             zed_token=zed_token,
         )
-        return projects_allowed, new_zed_token
+        return AuthzFlag.registered_users if projects_allowed else AuthzFlag.only_admins, new_zed_token
 
-    async def set_project_creation_permission(self, admin_only: bool) -> ZedToken:
+    async def set_project_creation_permission(self, allowed: AuthzFlag) -> ZedToken:
         """Controls whether any user or only admins are able to create projects."""
         platform = _AuthzConverter.platform()
         all_users = _AuthzConverter.all_users()
         update = RelationshipUpdate(
-            operation=RelationshipUpdate.OPERATION_DELETE if admin_only else RelationshipUpdate.OPERATION_TOUCH,
+            operation=RelationshipUpdate.OPERATION_DELETE
+            if allowed == AuthzFlag.only_admins
+            else RelationshipUpdate.OPERATION_TOUCH,
             relationship=Relationship(
                 resource=platform,
                 relation=PlatformRole.project_creator.value,
@@ -2466,12 +2469,14 @@ class Authz:
         res = await self.client.WriteRelationships(WriteRelationshipsRequest(updates=[update]))
         return cast(ZedToken, res.written_at)
 
-    async def set_group_creation_permission(self, admin_only: bool) -> ZedToken:
+    async def set_group_creation_permission(self, allowed: AuthzFlag) -> ZedToken:
         """Controls whether any user or only admins are able to create groups."""
         platform = _AuthzConverter.platform()
         all_users = _AuthzConverter.all_users()
         update = RelationshipUpdate(
-            operation=RelationshipUpdate.OPERATION_DELETE if admin_only else RelationshipUpdate.OPERATION_TOUCH,
+            operation=RelationshipUpdate.OPERATION_DELETE
+            if allowed == AuthzFlag.only_admins
+            else RelationshipUpdate.OPERATION_TOUCH,
             relationship=Relationship(
                 resource=platform,
                 relation=PlatformRole.group_creator.value,

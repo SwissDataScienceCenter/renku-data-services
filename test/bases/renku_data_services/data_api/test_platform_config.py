@@ -1,6 +1,5 @@
 """Tests for platform config blueprints."""
 
-import asyncio
 import urllib.parse
 
 import pytest
@@ -351,8 +350,8 @@ async def test_patch_authz_config(
     # Check default config
     _, res = await sanic_client.get("/api/data/platform/config/authorization", headers=admin_headers)
     assert res.status_code == 200, (res.status_code, res.text)
-    assert not res.json["only_admins_can_create_projects"], res.text
-    assert not res.json["only_admins_can_create_groups"], res.text
+    assert res.json["create_projects"] == "registered_users", res.text
+    assert res.json["create_groups"] == "registered_users", res.text
 
     # Disable project and group creation
     etag = res.json["etag"]
@@ -360,11 +359,11 @@ async def test_patch_authz_config(
     _, res = await sanic_client.patch(
         "/api/data/platform/config/authorization",
         headers=headers,
-        json={"only_admins_can_create_projects": True, "only_admins_can_create_groups": True},
+        json={"create_projects": "admins_only", "create_groups": "admins_only"},
     )
     assert res.status_code == 200, (res.status_code, res.text)
-    assert res.json["only_admins_can_create_projects"], res.text
-    assert res.json["only_admins_can_create_groups"], res.text
+    assert res.json["create_projects"] == "admins_only", res.text
+    assert res.json["create_groups"] == "admins_only", res.text
     etag = res.json["etag"]
 
     # Check that groups cannot be created by regular users
@@ -404,11 +403,11 @@ async def test_patch_authz_config(
     _, res = await sanic_client.patch(
         "/api/data/platform/config/authorization",
         headers=headers,
-        json={"only_admins_can_create_projects": False, "only_admins_can_create_groups": False},
+        json={"create_projects": "registered_users", "create_groups": "registered_users"},
     )
     assert res.status_code == 200, (res.status_code, res.text)
-    assert not res.json["only_admins_can_create_projects"], res.text
-    assert not res.json["only_admins_can_create_groups"], res.text
+    assert res.json["create_projects"] == "registered_users", res.text
+    assert res.json["create_groups"] == "registered_users", res.text
 
     # Check that groups can be created by regular users once the config changed
     _, res = await sanic_client.post(

@@ -322,31 +322,32 @@ components:
       required:
         - "error"
     AuthzFlag:
-      type: boolean
+      type: string
+      enum: ["admins_only", "registered_users"]
       description: |
-        Controls whether only admins or every user can perform a specific action.
+        Controls whether only admins or every registered user can perform a specific action.
     AuthzConfig:
       description: The authorization configuration for the whole platform.
       type: object
       properties:
         etag:
           $ref: "#/components/schemas/ETag"
-        only_admins_can_create_projects:
+        create_projects:
           $ref: "#/components/schemas/AuthzFlag"
-        only_admins_can_create_groups:
+        create_groups:
           $ref: "#/components/schemas/AuthzFlag"
       required:
         - etag
-        - only_admins_can_create_projects
-        - only_admins_can_create_groups
+        - create_projects
+        - create_groups
       additionalProperties: false
     AuthzConfigPatch:
       description: Patch of the configuration of RenkuLab
       type: object
       properties:
-        only_admins_can_create_projects:
+        create_projects:
           $ref: "#/components/schemas/AuthzFlag"
-        only_admins_can_create_groups:
+        create_groups:
           $ref: "#/components/schemas/AuthzFlag"
       additionalProperties: false
   responses:

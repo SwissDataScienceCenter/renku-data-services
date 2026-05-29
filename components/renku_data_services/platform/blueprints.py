@@ -98,8 +98,8 @@ class PlatformConfigBP(CustomBlueprint):
                 apispec.AuthzConfig,
                 dict(
                     etag=config.etag,
-                    only_admins_can_create_groups=config.only_admins_can_create_groups,
-                    only_admins_can_create_projects=config.only_admins_can_create_projects,
+                    create_groups=config.create_groups,
+                    create_projects=config.create_projects,
                 ),
                 headers=headers,
             )
@@ -123,8 +123,8 @@ class PlatformConfigBP(CustomBlueprint):
                 apispec.AuthzConfig,
                 dict(
                     etag=config.etag,
-                    only_admins_can_create_groups=config.only_admins_can_create_groups,
-                    only_admins_can_create_projects=config.only_admins_can_create_projects,
+                    create_groups=config.create_groups,
+                    create_projects=config.create_projects,
                 ),
                 headers=headers,
             )
