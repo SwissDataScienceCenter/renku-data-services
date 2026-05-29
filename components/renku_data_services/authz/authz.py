@@ -1478,7 +1478,7 @@ class Authz:
             resource_type=platform.object_type,
             optional_resource_id=platform.object_id,
             optional_subject_filter=sub_filter,
-            optional_relation="admin",
+            optional_relation=_Relation.admin.value,
         )
         existing_admins: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(
