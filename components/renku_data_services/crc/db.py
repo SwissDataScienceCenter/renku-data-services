@@ -28,6 +28,8 @@ from renku_data_services.authz.authz import Authz, AuthzOperation
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope
 from renku_data_services.base_models import RESET
 from renku_data_services.base_models.core import ResetType, ResourceType
+from renku_data_services.connected_services.models import ConnectionStatus
+from renku_data_services.connected_services.orm import OAuth2ConnectionORM
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import (
@@ -52,11 +54,11 @@ from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
 
-logger = logging.getLogger(__name__)
-
 if TYPE_CHECKING:
     from renku_data_services.namespace.db import GroupRepository
     from renku_data_services.project.db import ProjectRepository
+
+logger = logging.getLogger(__name__)
 
 
 class _Base:
@@ -358,6 +360,7 @@ class ResourcePoolRepository(_Base):
         authz: Authz,
         resource_usage_service: ResourceUsageService | None = None,
         resource_requests_repo: ResourceRequestsRepo | None = None,
+        member_repo: MemberRepository | None = None,
     ):
         super().__init__(session_maker, quotas_repo, authz)
         self.__query_repository = ResourcePoolQueryRepository(
@@ -368,6 +371,7 @@ class ResourcePoolRepository(_Base):
             resource_requests_repo=resource_requests_repo,
         )
         self.__cluster_repo = ClusterRepository(session_maker=self.session_maker)
+        self.member_repo = member_repo
 
     async def initialize(self, async_connection_url: str, rp: models.UnsavedResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""
@@ -436,17 +440,51 @@ class ResourcePoolRepository(_Base):
         """Get resource pools from database with indication of which resource class matches the specified criteria."""
         return await self.__query_repository.filter_resource_pools(api_user, cpu, memory, max_storage, gpu)
 
+    async def _get_connected_user_ids(self, provider_id: str) -> list[str]:
+        """Query all users with a connected OAuth2 connection to the given provider."""
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(OAuth2ConnectionORM.user_id)
+                .where(OAuth2ConnectionORM.client_id == provider_id)
+                .where(OAuth2ConnectionORM.status == ConnectionStatus.connected)
+            )
+            return list(result.all())
+
     @_only_admins
     async def insert_resource_pool(
         self, api_user: base_models.APIUser, new_resource_pool: models.UnsavedResourcePool
     ) -> models.ResourcePool:
         """Insert resource pool into database."""
+        provider_id = None
+        if new_resource_pool.remote and new_resource_pool.remote.provider_id:
+            provider_id = new_resource_pool.remote.provider_id
+            async with self.session_maker() as session:
+                from renku_data_services.connected_services.orm import OAuth2ClientORM
+
+                client = await session.scalar(select(OAuth2ClientORM).where(OAuth2ClientORM.id == provider_id))
+                if client is None:
+                    raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
+
         async with self.session_maker() as session, session.begin():
-            return await self._insert_resource_pool(
+            result = await self._insert_resource_pool(
                 api_user=api_user,
                 new_resource_pool=new_resource_pool,
                 session=session,
             )
+
+        if provider_id and self.member_repo is not None:
+            user_ids = await self._get_connected_user_ids(provider_id)
+            for uid in user_ids:
+                member = ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid)
+                try:
+                    await self.member_repo.grant_resource_pool_members(api_user, result.id, [member])
+                except errors.BaseError as e:
+                    logger.warning(
+                        f"Failed to auto-grant member {uid} to resource pool {result.id} "
+                        f"for provider {provider_id}: {e}"
+                    )
+
+        return result
 
     @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
@@ -548,6 +586,7 @@ class ResourcePoolRepository(_Base):
             rp = res.one_or_none()
             if rp is None:
                 raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} cannot be found")
+            old_provider_id = rp.remote_provider_id
             quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
 
             validate_resource_pool_update(existing=rp.dump(quota=quota), update=update)
@@ -633,9 +672,18 @@ class ResourcePoolRepository(_Base):
                 rp.remote_provider_id = None
                 rp.remote_json = None
             elif update.remote is not None:
-                rp.remote_provider_id = (
+                new_provider_id = (
                     update.remote.provider_id if update.remote.provider_id is not None else rp.remote_provider_id
                 )
+                if new_provider_id is not None and new_provider_id != rp.remote_provider_id:
+                    from renku_data_services.connected_services.orm import OAuth2ClientORM
+
+                    client = await session.scalar(select(OAuth2ClientORM).where(OAuth2ClientORM.id == new_provider_id))
+                    if client is None:
+                        raise errors.MissingResourceError(
+                            message=f"OAuth2 Client with id '{new_provider_id}' does not exist."
+                        )
+                rp.remote_provider_id = new_provider_id
                 remote_json = rp.remote_json if rp.remote_json is not None else dict()
                 remote_json.update(update.remote.to_dict())
                 del remote_json["provider_id"]
@@ -646,12 +694,42 @@ class ResourcePoolRepository(_Base):
             await session.refresh(rp)
             result = rp.dump(quota=quota)
             if update_authz:
-                return await self._update_resource_pool(
+                result = await self._update_resource_pool(
                     api_user=api_user,
                     rp=result,
                     session=session,
                 )
-            return result
+            transaction_result = result
+
+        # After transaction, sync memberships
+        new_provider_id = transaction_result.remote.provider_id if transaction_result.remote else None
+        if old_provider_id != new_provider_id and self.member_repo is not None:
+            # Revoke old
+            if old_provider_id is not None:
+                old_user_ids = await self._get_connected_user_ids(old_provider_id)
+                for uid in old_user_ids:
+                    member = ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid)
+                    try:
+                        await self.member_repo.revoke_resource_pool_members(api_user, resource_pool_id, [member])
+                    except errors.BaseError as e:
+                        logger.warning(
+                            f"Failed to auto-revoke member {uid} from resource pool {resource_pool_id} "
+                            f"for provider {old_provider_id}: {e}"
+                        )
+            # Grant new
+            if new_provider_id is not None:
+                new_user_ids = await self._get_connected_user_ids(new_provider_id)
+                for uid in new_user_ids:
+                    member = ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid)
+                    try:
+                        await self.member_repo.grant_resource_pool_members(api_user, resource_pool_id, [member])
+                    except errors.BaseError as e:
+                        logger.warning(
+                            f"Failed to auto-grant member {uid} to resource pool {resource_pool_id} "
+                            f"for provider {new_provider_id}: {e}"
+                        )
+
+        return transaction_result
 
     @with_db_transaction
     @Authz.authz_change(op=AuthzOperation.update, resource=ResourceType.resource_pool)
