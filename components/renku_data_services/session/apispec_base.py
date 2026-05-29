@@ -58,7 +58,7 @@ class BaseAPISpec(BaseModel):
     @field_validator("launcher_type", mode="before", check_fields=False)
     @classmethod
     def serialize_launcher_type(cls, launcher_type: models.LauncherType | str) -> str:
-        """Custom serializer that can handle ULIDs."""
+        """Custom serializer that can handle launcher types."""
         if launcher_type == models.LauncherType.non_interactive:
             return "non-interactive"
         elif isinstance(launcher_type, models.LauncherType):
