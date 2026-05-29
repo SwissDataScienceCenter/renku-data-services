@@ -17,7 +17,6 @@ from renku_data_services import base_models
 from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
-from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.base_models.metrics import MetricsService, UserIdentity
 from renku_data_services.base_models.nel import Nel
 from renku_data_services.errors import errors
@@ -419,27 +418,28 @@ class UsersSync:
             )
             logger.info(f"The previous sync latest event is {previous_sync_latest_utc_timestamp} UTC")
             now_utc = datetime.now(tz=UTC)
-            start_date = now_utc.date() - timedelta(days=1)
+            # start_date = now_utc.date() - timedelta(days=1)
+            start_date = now_utc.date() - timedelta(minutes=1)
             logger.info(f"Pulling events with a start date of {start_date} UTC")
             user_events = kc_api.get_user_events(start_date=start_date)
             update_admin_events = kc_api.get_admin_events(
                 start_date=start_date, event_types=[KeycloakAdminEvent.CREATE, KeycloakAdminEvent.UPDATE]
             )
-            delete_admin_events = kc_api.get_admin_events(
-                start_date=start_date, event_types=[KeycloakAdminEvent.DELETE]
-            )
+            # delete_admin_events = kc_api.get_admin_events(
+            #     start_date=start_date, event_types=[KeycloakAdminEvent.DELETE]
+            # )
             parsed_updates = UserInfoFieldUpdate.from_json_admin_events(update_admin_events)
             parsed_updates.extend(UserInfoFieldUpdate.from_json_user_events(user_events))
-            parsed_deletions = UserInfoFieldUpdate.from_json_admin_events(delete_admin_events)
+            # parsed_deletions = UserInfoFieldUpdate.from_json_admin_events(delete_admin_events)
             parsed_updates = sorted(parsed_updates, key=lambda x: x.timestamp_utc)
-            parsed_deletions = sorted(parsed_deletions, key=lambda x: x.timestamp_utc)
+            # parsed_deletions = sorted(parsed_deletions, key=lambda x: x.timestamp_utc)
             if previous_sync_latest_utc_timestamp is not None:
                 # Some events have already been processed - filter out old events we have seen
                 logger.info(f"Filtering events older than {previous_sync_latest_utc_timestamp}")
                 parsed_updates = [u for u in parsed_updates if u.timestamp_utc > previous_sync_latest_utc_timestamp]
-                parsed_deletions = [u for u in parsed_deletions if u.timestamp_utc > previous_sync_latest_utc_timestamp]
+                # parsed_deletions = [u for u in parsed_deletions if u.timestamp_utc > previous_sync_latest_utc_timestamp] # noqa: E501
             latest_update_timestamp = None
-            latest_delete_timestamp = None
+            # latest_delete_timestamp = None
             for update in parsed_updates:
                 logger.info(f"Processing update event {update}")
                 # TODO: add typing to `update.field_name` for safer updates
@@ -447,18 +447,18 @@ class UsersSync:
                     user=UnsavedUserInfo(id=update.user_id, **{update.field_name: update.new_value})
                 )
                 latest_update_timestamp = update.timestamp_utc
-            for deletion in parsed_deletions:
-                logger.info(f"Processing deletion event {deletion}")
-                await self.user_repo.remove_user(
-                    requested_by=InternalServiceAdmin(id=ServiceAdminId.migrations), user_id=deletion.user_id
-                )
-                latest_delete_timestamp = deletion.timestamp_utc
+            # for deletion in parsed_deletions:
+            #     logger.info(f"Processing deletion event {deletion}")
+            #     await self.user_repo.remove_user(
+            #         requested_by=InternalServiceAdmin(id=ServiceAdminId.migrations), user_id=deletion.user_id
+            #     )
+            #     latest_delete_timestamp = deletion.timestamp_utc
             # Update the latest processed event timestamp
             current_sync_latest_utc_timestamp = latest_update_timestamp
-            if latest_delete_timestamp is not None and (
-                current_sync_latest_utc_timestamp is None or current_sync_latest_utc_timestamp < latest_delete_timestamp
-            ):
-                current_sync_latest_utc_timestamp = latest_delete_timestamp
+            # if latest_delete_timestamp is not None and (
+            #     current_sync_latest_utc_timestamp is None or current_sync_latest_utc_timestamp < latest_delete_timestamp # noqa: E501
+            # ):
+            #     current_sync_latest_utc_timestamp = latest_delete_timestamp
             if current_sync_latest_utc_timestamp is not None:
                 if latest_utc_timestamp_orm is None:
                     session.add(LastKeycloakEventTimestamp(current_sync_latest_utc_timestamp))

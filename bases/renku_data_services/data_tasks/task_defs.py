@@ -375,6 +375,16 @@ async def migrate_user_namespaces_make_all_public(dm: DependencyManager) -> None
             await asyncio.sleep(dm.config.short_task_period_s)
 
 
+async def events_sync_from_keycloak(dm: DependencyManager) -> None:
+    """Sync all users from keycloak."""
+    while True:
+        try:
+            await dm.syncer.events_sync(dm.kc_api)
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
+        await asyncio.sleep(10)
+
+
 async def users_sync(dm: DependencyManager) -> None:
     """Sync all users from keycloak."""
     while True:
@@ -590,6 +600,7 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
             "fix_mismatched_project_namespace_ids": lambda: fix_mismatched_project_namespace_ids(dm),
             "migrate_groups_make_all_public": lambda: migrate_groups_make_all_public(dm),
             "migrate_user_namespaces_make_all_public": lambda: migrate_user_namespaces_make_all_public(dm),
+            "events_sync_from_keycloak": lambda: events_sync_from_keycloak(dm),
             "users_sync": lambda: users_sync(dm),
             "sync_admins_from_keycloak": lambda: sync_admins_from_keycloak(dm),
             "initialize_session_environments": lambda: initialize_session_environments(dm),
