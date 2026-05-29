@@ -111,7 +111,6 @@ from renku_data_services.notebooks.utils import (
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.project.models import SessionSecret
 from renku_data_services.repositories.db import GitRepositoriesRepository
-from renku_data_services.repositories.models import Metadata as RepoMetadata
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
