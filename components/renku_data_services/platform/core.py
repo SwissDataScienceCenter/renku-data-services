@@ -5,6 +5,7 @@ import re
 from urllib.parse import ParseResult, urlparse
 
 from renku_data_services import errors
+from renku_data_services.authz.authz import Authz
 from renku_data_services.platform import apispec, models
 
 v2_project_pattern = re.compile(r"^/p/[0-7][0-9A-HJKMNP-TV-Z]{25}$")
@@ -101,4 +102,37 @@ def validate_authz_config_patch(patch: apispec.AuthzConfigPatch) -> models.Autho
     return models.AuthorizationConfigPatch(
         only_admins_can_create_projects=patch.only_admins_can_create_projects,
         only_admins_can_create_groups=patch.only_admins_can_create_groups,
+    )
+
+
+async def get_authz_config(authz: Authz) -> models.AuthorizationConfig:
+    """Get the current platform-wide authorization configuration."""
+    projects_allowed, zed_token = await authz.project_creation_allowed()
+    groups_allowed, _ = await authz.group_creation_allowed(zed_token)
+    return models.AuthorizationConfig(
+        only_admins_can_create_groups=not groups_allowed,
+        only_admins_can_create_projects=not projects_allowed,
+    )
+
+
+async def update_authz_config(
+    authz: Authz, etag: str, patch: models.AuthorizationConfigPatch
+) -> models.AuthorizationConfig:
+    """Update the authorization configuration."""
+    current_config = await get_authz_config(authz)
+    if current_config.etag != etag:
+        raise errors.ConflictError(message="The authorization config you are trying to patch is out of date.")
+    if patch.only_admins_can_create_groups is not None:
+        await authz.set_group_creation_permission(patch.only_admins_can_create_groups)
+        groups_allowed = not patch.only_admins_can_create_groups
+    else:
+        groups_allowed = not current_config.only_admins_can_create_groups
+    if patch.only_admins_can_create_projects is not None:
+        await authz.set_project_creation_permission(patch.only_admins_can_create_projects)
+        projects_allowed = not patch.only_admins_can_create_projects
+    else:
+        projects_allowed = not current_config.only_admins_can_create_projects
+
+    return models.AuthorizationConfig(
+        only_admins_can_create_groups=not groups_allowed, only_admins_can_create_projects=not projects_allowed
     )

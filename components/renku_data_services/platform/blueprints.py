@@ -4,7 +4,6 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Any
 
-from authzed.api.v1 import ZedToken
 from sanic import Request, empty
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
@@ -19,13 +18,15 @@ from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.platform import apispec
 from renku_data_services.platform.core import (
+    get_authz_config,
+    update_authz_config,
     validate_authz_config_patch,
     validate_platform_config_patch,
     validate_url_redirect_patch,
     validate_url_redirect_post,
 )
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
-from renku_data_services.platform.models import AuthorizationConfig, UrlRedirectConfig
+from renku_data_services.platform.models import UrlRedirectConfig
 
 
 @dataclass(kw_only=True)
@@ -87,12 +88,7 @@ class PlatformConfigBP(CustomBlueprint):
 
         @extract_if_none_match
         async def _get_authz_configuration(_: Request, etag: str | None) -> HTTPResponse:
-            projects_allowed, zed_token = await self.authz.project_creation_allowed()
-            groups_allowed, __ = await self.authz.group_creation_allowed(zed_token)
-            config = AuthorizationConfig(
-                only_admins_can_create_groups=not groups_allowed,
-                only_admins_can_create_projects=not projects_allowed,
-            )
+            config = await get_authz_config(self.authz)
 
             if config.etag == etag:
                 return empty(status=304)
@@ -121,21 +117,7 @@ class PlatformConfigBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, body: apispec.AuthzConfigPatch, etag: str
         ) -> JSONResponse:
             patch = validate_authz_config_patch(body)
-            zed_token: ZedToken | None = None
-            if patch.only_admins_can_create_groups is not None:
-                zed_token = await self.authz.set_group_creation_permission(patch.only_admins_can_create_groups)
-                groups_allowed = not patch.only_admins_can_create_groups
-            else:
-                groups_allowed, zed_token = await self.authz.group_creation_allowed(zed_token)
-            if patch.only_admins_can_create_projects is not None:
-                zed_token = await self.authz.set_project_creation_permission(patch.only_admins_can_create_projects)
-                projects_allowed = not patch.only_admins_can_create_projects
-            else:
-                projects_allowed, __ = await self.authz.project_creation_allowed(zed_token)
-
-            config = AuthorizationConfig(
-                only_admins_can_create_groups=not groups_allowed, only_admins_can_create_projects=not projects_allowed
-            )
+            config = await update_authz_config(self.authz, etag, patch)
             headers = {"ETag": config.etag}
             return validated_json(
                 apispec.AuthzConfig,
