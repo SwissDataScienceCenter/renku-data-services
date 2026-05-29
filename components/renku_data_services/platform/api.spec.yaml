@@ -324,7 +324,7 @@ components:
     AuthzFlag:
       type: boolean
       description: |
-        Controlls whether only admins or every user can perform a specific action.
+        Controls whether only admins or every user can perform a specific action.
     AuthzConfig:
       description: The authorization configuration for the whole platform.
       type: object
