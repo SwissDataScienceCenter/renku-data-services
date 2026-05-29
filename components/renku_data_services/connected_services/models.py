@@ -85,6 +85,8 @@ class OAuth2Connection:
     provider_id: str
     status: ConnectionStatus
     next_url: str | None
+    user_id: str | None = None
+    client_id: str | None = None
 
     def is_connected(self) -> bool:
         """Returns whether this connection is in status 'connected'."""

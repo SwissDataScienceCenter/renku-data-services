@@ -154,6 +154,16 @@ class OAuth2ClientsBP(CustomBlueprint):
                     # TODO: redirect to a error page (that needs to be created)
                     raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
                 case _:
+                    user_id = client.connection.user_id
+                    provider_id = client.connection.client_id
+                    if user_id is not None and provider_id is not None:
+                        try:
+                            await self.connected_services_repo._on_oauth2_connected(user_id, provider_id)
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to sync resource pool memberships after OAuth2 connection for user "
+                                f"{user_id} and provider {provider_id}: {e}"
+                            )
                     next_url = client.connection.next_url
                     return redirect(to=next_url) if next_url else json({"status": "OK"})
 
