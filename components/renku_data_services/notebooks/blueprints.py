@@ -225,7 +225,7 @@ class NotebooksNewBP(CustomBlueprint):
             result = await self.image_check_repo.check_image(
                 user=user,
                 gitlab_user=internal_gitlab_user,
-                image=image,
+                image_src=image,
             )
             logger.info(f"Checked image {query.image_url}: {result}")
             conn = None
