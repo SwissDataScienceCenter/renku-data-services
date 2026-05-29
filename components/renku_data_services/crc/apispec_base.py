@@ -1,8 +1,9 @@
 """Base models for API specifications."""
 
 from pathlib import PurePosixPath
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from ulid import ULID
 
 from renku_data_services.session import models
@@ -15,6 +16,22 @@ class BaseAPISpec(BaseModel):
     model_config = ConfigDict(
         from_attributes=True,
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def serialize_ulid(cls, value: Any) -> Any:
+        """Recursively convert ULID instances to strings in raw input."""
+
+        def _convert(v: Any) -> Any:
+            if isinstance(v, ULID):
+                return str(v)
+            if isinstance(v, dict):
+                return {k: _convert(val) for k, val in v.items()}
+            if isinstance(v, list):
+                return [_convert(item) for item in v]
+            return v
+
+        return _convert(value)
 
     @field_validator("id", mode="before", check_fields=False)
     @classmethod
