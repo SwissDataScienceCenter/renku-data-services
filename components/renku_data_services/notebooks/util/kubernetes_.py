@@ -76,7 +76,7 @@ def _make_server_name_prefix(safe_username: str, submission_id: SubmissionId | N
 
     prefix = f"{prefix}{safe_username}"
     if submission_id:
-        prefix = f"{prefix}_{submission_id}"
+        prefix = f"j-{prefix}-{submission_id}"
     return prefix
 
 
