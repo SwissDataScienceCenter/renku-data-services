@@ -325,7 +325,6 @@ components:
       type: boolean
       description: |
         Controlls whether only admins or every user can perform a specific action.
-      default: false
     AuthzConfig:
       description: The authorization configuration for the whole platform.
       type: object
