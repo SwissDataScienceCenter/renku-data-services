@@ -20,6 +20,7 @@ from renku_data_services.crc.blueprints import (
     ClassesBP,
     ClustersBP,
     QuotaBP,
+    ResourcePoolMembersBP,
     ResourcePoolsBP,
     ResourcePoolUsersBP,
     UserResourcePoolsBP,
@@ -80,7 +81,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         rp_repo=dm.rp_repo,
         authenticator=dm.authenticator,
-        user_repo=dm.user_repo,
+        member_repo=dm.member_repo,
         cluster_repo=dm.cluster_repo,
     )
     classes = ClassesBP(name="classes", url_prefix=url_prefix, repo=dm.rp_repo, authenticator=dm.authenticator)
@@ -100,14 +101,20 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     resource_pools_users = ResourcePoolUsersBP(
         name="resource_pool_users",
         url_prefix=url_prefix,
-        repo=dm.user_repo,
+        repo=dm.member_repo,
         authenticator=dm.authenticator,
         kc_user_repo=dm.kc_user_repo,
+    )
+    resource_pools_members = ResourcePoolMembersBP(
+        name="resource_pool_members",
+        url_prefix=url_prefix,
+        repo=dm.member_repo,
+        authenticator=dm.authenticator,
     )
     user_resource_pools = UserResourcePoolsBP(
         name="user_resource_pools",
         url_prefix=url_prefix,
-        repo=dm.user_repo,
+        repo=dm.member_repo,
         authenticator=dm.authenticator,
         kc_user_repo=dm.kc_user_repo,
     )
@@ -311,6 +318,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             classes.blueprint(),
             quota.blueprint(),
             resource_pools_users.blueprint(),
+            resource_pools_members.blueprint(),
             users.blueprint(),
             user_secrets.blueprint(),
             user_resource_pools.blueprint(),
