@@ -15,7 +15,7 @@ For the latter case, try to find out as much as possible:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import final
+from typing import final, overload
 
 import httpx
 from authlib.integrations.httpx_client import OAuthError
@@ -31,9 +31,15 @@ from renku_data_services.connected_services.oauth_http import (
 )
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.oci.models import Platform
 from renku_data_services.notebooks.oci.utils import get_image_platforms
+from renku_data_services.notebooks.utils import repositories_from_project
+from renku_data_services.project.db import ProjectRepository
+from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.repositories.models import Metadata as RepoMetadata
+from renku_data_services.session.config import BuildsConfig
+from renku_data_services.session.models import SessionLauncher
 
 logger = logging.getLogger(__name__)
 
@@ -91,15 +97,78 @@ class ImageCheckRepository:
     def __init__(
         self,
         nb_config: NotebooksConfig,
+        builds_config: BuildsConfig,
+        git_provider_helper: GitProviderHelperProto,
+        project_repo: ProjectRepository,
+        git_repositories_repo: GitRepositoriesRepository,
         connected_services_repo: ConnectedServicesRepository,
         oauth_client_factory: OAuthHttpClientFactory,
     ) -> None:
         self.nb_config = nb_config
+        self.builds_config = builds_config
+        self.git_provider_helper = git_provider_helper
+        self.project_repo = project_repo
+        self.git_repositories_repo = git_repositories_repo
         self.connected_services_repo = connected_services_repo
         self.oauth_client_factory = oauth_client_factory
 
-    async def check_image(self, user: APIUser, gitlab_user: APIUser | None, image: Image) -> CheckResult:
-        """Check access to the given image and provide image and access details."""
+    async def __check_built_image_accessibility(
+        self, user: APIUser, gitlab_user: APIUser | None, launcher: SessionLauncher
+    ) -> None:
+        # image can be "image:unknown-at-the-moment" which is returned until the first
+        # successful build however users can force a session start although it will fail
+        environment = launcher.environment
+        image = launcher.environment.container_image
+
+        if (
+            self.builds_config.build_output_private_image_prefix
+            and image.startswith(self.builds_config.build_output_private_image_prefix)
+            or image == "image:unknown-at-the-moment"
+        ):
+            if environment.build_parameters is None:
+                raise errors.ValidationError(message="Image was built but build parameters are missing")
+
+            project = await self.project_repo.get_project(user=user, project_id=launcher.project_id)
+            git_providers = await self.git_provider_helper.get_providers(user=user)
+            repositories = repositories_from_project(project, git_providers)
+
+            build_repository = environment.build_parameters.repository
+            if build_repository not in [repository.url for repository in repositories]:
+                raise errors.ValidationError(message="Image was not built from a repository in this project")
+
+            repo_data = await self.git_repositories_repo.get_repository(
+                repository_url=build_repository,
+                user=user,
+                etag=None,
+                internal_gitlab_user=gitlab_user if gitlab_user else APIUser(),
+            )
+            if repo_data.is_error:
+                raise errors.ValidationError(message=str(repo_data.error))
+            if isinstance(repo_data.metadata, RepoMetadata) and not repo_data.metadata.pull_permission:
+                raise errors.ForbiddenError(
+                    message="You do not have pull access to the code repository used for this session."
+                )
+
+    @overload
+    async def check_image(
+        self, user: APIUser, gitlab_user: APIUser | None, image_src: SessionLauncher
+    ) -> CheckResult: ...
+
+    @overload
+    async def check_image(self, user: APIUser, gitlab_user: APIUser | None, image_src: Image) -> CheckResult: ...
+
+    async def check_image(
+        self, user: APIUser, gitlab_user: APIUser | None, image_src: SessionLauncher | Image
+    ) -> CheckResult:
+        """Check access to the image from the given launcher or image and provide image and access details."""
+
+        if isinstance(image_src, SessionLauncher):
+            await self.__check_built_image_accessibility(user, gitlab_user, image_src)
+
+            image = Image.from_path(image_src.environment.container_image)
+        else:
+            image = image_src
+
         reg_api: ImageRepoDockerAPI = image.repo_api()  # public images
         unauth_error: errors.UnauthorizedError | None = None
         image_provider = await self.connected_services_repo.get_provider_for_image(user, image)

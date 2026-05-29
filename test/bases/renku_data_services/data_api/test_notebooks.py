@@ -154,7 +154,7 @@ async def wait_for(sanic_client: SanicASGITestClient, user_headers, server_name:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("image,exists", [("python:3.12", True), ("shouldnotexist:0.42", False)])
-async def test_check_docker_image(sanic_client: SanicASGITestClient, user_headers, image, exists):
+async def test_check_docker_image_url(sanic_client: SanicASGITestClient, user_headers, image, exists):
     """Validate that the images endpoint answers correctly.
 
     Needs the responses package in case docker queries must be mocked
@@ -164,6 +164,240 @@ async def test_check_docker_image(sanic_client: SanicASGITestClient, user_header
 
     assert res.status_code == 200, res.text
     assert res.json["accessible"] == exists
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "launcher_conf,repositories,exists,expected_status_code,expected_error_message",
+    [
+        (
+            {
+                "name": "Valid custom image",
+                "description": "A session launcher",
+                "environment": {
+                    "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
+                    "environment_kind": "CUSTOM",
+                    "name": "test",
+                    "port": 8888,
+                    "environment_image_source": "image",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/renku-data-services"],
+            True,
+            200,
+            None,
+        ),
+        (
+            {
+                "name": "Build image with public repo",
+                "description": "A session launcher",
+                "environment": {
+                    "environment_image_source": "build",
+                    "repository": "https://github.com/SwissDataScienceCenter/renku",
+                    "builder_variant": "python",
+                    "frontend_variant": "vscodium",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/renku"],
+            False,  # The image does not exist yet
+            200,
+            None,
+        ),
+        (
+            {
+                "name": "Build with non-existing repo",
+                "description": "A session launcher",
+                "environment": {
+                    "environment_image_source": "build",
+                    "repository": "https://github.com/SwissDataScienceCenter/other-private",
+                    "builder_variant": "python",
+                    "frontend_variant": "vscodium",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/other-private"],
+            False,  # Does not matter, repo does not exist
+            422,
+            "no_git_repo",  # Default GitRepositoriesRepository is use
+        ),
+        (
+            {
+                "name": "Non existing image",
+                "description": "A session launcher",
+                "environment": {
+                    "container_image": "shouldnotexist:0.42",
+                    "environment_kind": "CUSTOM",
+                    "name": "test",
+                    "port": 8888,
+                    "environment_image_source": "image",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/renku-data-services"],
+            False,
+            200,
+            None,
+        ),
+    ],
+)
+@pytest.mark.skipif(
+    "config.getoption('--enable-builds')",
+    reason="Only run when --enable-builds is not given",
+)
+async def test_check_docker_image_launcher(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_session_launcher,
+    launcher_conf,
+    repositories,
+    expected_status_code,
+    expected_error_message,
+    exists,
+):
+    """Validate that the images endpoint answers correctly.
+
+    Needs the responses package in case docker queries must be mocked
+    """
+
+    project = await create_project(sanic_client, "proj1", repositories=repositories)
+    launcher_conf.update(
+        dict(
+            project_id=project["id"],
+        )
+    )
+    launcher = await create_session_launcher(**launcher_conf)
+
+    _, res = await sanic_client.get(f"/api/data/sessions/images/?launcher_id={launcher['id']}", headers=user_headers)
+
+    assert res.status_code == expected_status_code, res.text
+    if res.status_code == 200:
+        assert res.json["accessible"] == exists
+    else:
+        assert res.json["error"]["message"] == expected_error_message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "launcher_conf,repositories,exists,expected_status_code,expected_error_message",
+    [
+        (
+            {
+                "name": "Valid custom image",
+                "description": "A session launcher",
+                "environment": {
+                    "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
+                    "environment_kind": "CUSTOM",
+                    "name": "test",
+                    "port": 8888,
+                    "environment_image_source": "image",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/renku-data-services"],
+            True,
+            200,
+            None,
+        ),
+        (
+            {
+                "name": "Build image with public repo",
+                "description": "A session launcher",
+                "environment": {
+                    "environment_image_source": "build",
+                    "repository": "https://github.com/SwissDataScienceCenter/renku",
+                    "builder_variant": "python",
+                    "frontend_variant": "vscodium",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/renku"],
+            False,  # The image does not exist yet
+            200,
+            None,
+        ),
+        (
+            {
+                "name": "Build with private repo",
+                "description": "A session launcher",
+                "environment": {
+                    "environment_image_source": "build",
+                    "repository": "https://github.com/SwissDataScienceCenter/private",
+                    "builder_variant": "python",
+                    "frontend_variant": "vscodium",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/private"],
+            False,  # The image does not exist yet
+            200,
+            None,
+        ),
+        (
+            {
+                "name": "Build with inaccessible repo",
+                "description": "A session launcher",
+                "environment": {
+                    "environment_image_source": "build",
+                    "repository": "https://github.com/SwissDataScienceCenter/other-private",
+                    "builder_variant": "python",
+                    "frontend_variant": "vscodium",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/other-private"],
+            False,  # Does not matter, the user does not have access
+            403,
+            "You do not have pull access to the code repository used for this session.",
+        ),
+        (
+            {
+                "name": "Non existing image",
+                "description": "A session launcher",
+                "environment": {
+                    "container_image": "shouldnotexist:0.42",
+                    "environment_kind": "CUSTOM",
+                    "name": "test",
+                    "port": 8888,
+                    "environment_image_source": "image",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/renku-data-services"],
+            False,
+            200,
+            None,
+        ),
+    ],
+)
+@pytest.mark.skipif(
+    "not config.getoption('--enable-builds')",
+    reason="Only run when --enable-builds is given",
+)
+async def test_check_docker_image_launcher_with_builds(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_session_launcher,
+    launcher_conf,
+    repositories,
+    expected_status_code,
+    expected_error_message,
+    exists,
+):
+    """Validate that the images endpoint answers correctly.
+
+    Needs the responses package in case docker queries must be mocked
+    """
+
+    project = await create_project(sanic_client, "proj1", repositories=repositories)
+    launcher_conf.update(
+        dict(
+            project_id=project["id"],
+        )
+    )
+    launcher = await create_session_launcher(**launcher_conf)
+
+    _, res = await sanic_client.get(f"/api/data/sessions/images/?launcher_id={launcher['id']}", headers=user_headers)
+
+    assert res.status_code == expected_status_code, res.text
+    if res.status_code == 200:
+        assert res.json["accessible"] == exists
+    else:
+        assert res.json["error"]["message"] == expected_error_message
 
 
 @pytest.fixture

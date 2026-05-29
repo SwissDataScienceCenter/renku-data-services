@@ -1,10 +1,12 @@
 """Notebooks service API."""
 
 from dataclasses import dataclass
+from typing import cast
 
 from sanic import Request, empty, json
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
+from ulid import ULID
 
 from renku_data_services import base_models
 from renku_data_services.app_config import logging
@@ -221,13 +223,28 @@ class NotebooksNewBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             query: apispec.SessionsImagesGetParametersQuery,
         ) -> JSONResponse:
-            image = Image.from_path(query.image_url)
-            result = await self.image_check_repo.check_image(
-                user=user,
-                gitlab_user=internal_gitlab_user,
-                image=image,
-            )
-            logger.info(f"Checked image {query.image_url}: {result}")
+            if query.image_url and query.launcher_id:
+                raise errors.ValidationError(message="Only one of image_url or launcher_id must be defined")
+            elif query.image_url:
+                image = Image.from_path(query.image_url)
+                result = await self.image_check_repo.check_image(
+                    user=user,
+                    gitlab_user=internal_gitlab_user,
+                    image_src=image,
+                )
+                logger.info(f"Checked image {query.image_url}: {result}")
+            elif query.launcher_id:
+                launcher_id = cast(ULID, ULID.from_str(query.launcher_id))
+                launcher = await self.session_repo.get_launcher(user=user, launcher_id=launcher_id)
+                result = await self.image_check_repo.check_image(
+                    user=user,
+                    gitlab_user=internal_gitlab_user,
+                    image_src=launcher,
+                )
+                logger.info(f"Checked image {launcher.environment.container_image}: {result}")
+            else:
+                raise errors.ValidationError(message="One of image_url or launcher_id must be defined")
+
             conn = None
             if result.connection:
                 match result.connection.status:
