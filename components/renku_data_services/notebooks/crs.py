@@ -342,6 +342,25 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             ) if hibernated_since and max_hibernated:
                 will_delete_at = hibernated_since + max_hibernated
 
+        session_type_str = self.metadata.labels.get("renku.io/session-type")
+        match SessionType.from_str_or_none(session_type_str):
+            case SessionType.NonInteractive:
+                session_type = apispec.SessionType.non_interactive
+            case _:
+                session_type = apispec.SessionType.interactive
+
+        submission_id = self.metadata.annotations.get("renku.io/submission_id")
+
+        command_args = (list(self.spec.session.command) if self.spec.session.command else []) + (
+            list(self.spec.session.args) if self.spec.session.args else []
+        )
+        if (
+            session_type == apispec.SessionType.non_interactive
+            and len(command_args) > 0
+            and command_args[0] == "/cnb/lifecycle/launcher"
+        ):
+            command_args = list(self.spec.session.args) if self.spec.session.args else []
+
         return apispec.SessionResponse(
             image=self.spec.session.image,
             name=self.metadata.name,
@@ -366,6 +385,9 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             project_id=str(self.project_id),
             launcher_id=str(self.launcher_id),
             resource_class_id=self.resource_class_id(),
+            session_type=session_type,
+            submission_id=submission_id,
+            command_args=command_args,
         )
 
     def base_url(self) -> str | None:

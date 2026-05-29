@@ -512,7 +512,7 @@ async def test_post_job_launcher(
         "resource_class_id": resource_pool["classes"][0]["id"],
         "disk_storage": 2,
         "env_variables": [{"name": "KEY_NUMBER_1", "value": "a value"}],
-        "launcher_type": "non_interactive",
+        "launcher_type": "non-interactive",
         "environment": {
             "container_image": "some_image:some_tag",
             "name": "custom_name",
@@ -537,7 +537,7 @@ async def test_post_job_launcher(
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert res.json.get("disk_storage") == 2
     assert res.json.get("env_variables") == [{"name": "KEY_NUMBER_1", "value": "a value"}]
-    assert res.json.get("launcher_type") == "non_interactive"
+    assert res.json.get("launcher_type") == "non-interactive"
     app_manager.metrics.session_launcher_created.assert_called_once()
 
 
@@ -643,6 +643,108 @@ async def test_post_session_launcher_with_environment_build(
         }
         assert environment.get("environment_image_source") == "build"
         assert environment.get("container_image") == "image:unknown-at-the-moment"
+
+        if builds_enabled:
+            _, response = await sanic_client.get(
+                f"/api/data/environments/{environment_id}/builds",
+                headers=user_headers,
+            )
+            assert response.status_code == 200, response.text
+            build = response.json[0]
+            build_id = build["id"]
+
+            api = kr8s.api(kubeconfig=cluster.kubeconfig)
+            build_run = BuildRun.get(name=f"renku-{build_id.lower()}", api=api)
+
+            build_spec = build_run.spec.build.spec
+            if is_private:
+                assert build_spec.source.git.get("cloneSecret") is not None
+                assert build_spec.output.image.startswith(app_manager.config.builds.build_output_private_image_prefix)
+                assert build_spec.output.pushSecret == app_manager.config.builds.push_private_secret_name
+            else:
+                assert build_spec.source.git.get("cloneSecret") is None
+                assert build_spec.output.image.startswith(app_manager.config.builds.build_output_image_prefix)
+                assert build_spec.output.pushSecret == app_manager.config.builds.push_secret_name
+
+    elif expected_status_code == 500:
+        assert response.json is not None
+        error = response.json.get("error")
+        assert error.get("message") == "no_git_repo"
+
+
+@pytest.mark.parametrize(
+    "expected_status_code,git_repo,is_private",
+    [
+        (
+            201,
+            "https://github.com/SwissDataScienceCenter/renku",
+            False,
+        ),
+        (
+            201,
+            "https://github.com/SwissDataScienceCenter/private",
+            True,
+        ),
+        (500, "https://github.com/some/repo", False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_post_job_launcher_with_environment_build(
+    app_manager: DependencyManager,
+    sanic_client,
+    user_headers,
+    create_project,
+    create_resource_pool,
+    expected_status_code,
+    git_repo,
+    is_private,
+    builds_enabled,
+    cluster,
+) -> None:
+    project = await create_project(sanic_client, "Some project")
+
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A job launcher.",
+        "launcher_type": "non-interactive",
+        "environment": {
+            "repository": git_repo,
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+            "job_command": ["python"],
+            "job_args": ["$RENKU_WORK/myscript.py"],
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+
+    if not builds_enabled:
+        expected_status_code = 201
+
+    assert response.status_code == expected_status_code, response.text
+    if expected_status_code == 201:
+        assert response.json is not None
+        assert response.json.get("name") == "Launcher 1"
+        assert response.json.get("project_id") == project["id"]
+        assert response.json.get("description") == "A job launcher."
+        assert response.json.get("launcher_type") == "non-interactive"
+        environment = response.json.get("environment", {})
+        environment_id = environment.get("id")
+        assert environment_id is not None
+        assert environment.get("name") == "Launcher 1"
+        assert environment.get("environment_kind") == "CUSTOM"
+        assert environment.get("build_parameters") == {
+            "repository": git_repo,
+            "platforms": ["linux/amd64"],
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+        }
+        assert environment.get("environment_image_source") == "build"
+        assert environment.get("container_image") == "image:unknown-at-the-moment"
+        assert environment.get("command") == ["python"]
+        assert environment.get("args") == ["$RENKU_WORK/myscript.py"]
 
         if builds_enabled:
             _, response = await sanic_client.get(

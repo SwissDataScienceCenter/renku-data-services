@@ -556,7 +556,7 @@ components:
       type: string
       enum:
         - interactive
-        - non_interactive
+        - non-interactive
         #- app  #not yet supported
     SessionLaunchersList:
       description: A list of Renku session launchers
@@ -760,6 +760,10 @@ components:
           $ref: "#/components/schemas/RepositoryRevision"
         context_dir:
           $ref: "#/components/schemas/BuildContextDir"
+        job_command:
+          $ref: "#/components/schemas/EnvironmentCommand"
+        job_args:
+          $ref: "#/components/schemas/EnvironmentArgs"
       required:
         - repository
         - builder_variant
@@ -789,6 +793,10 @@ components:
           $ref: "#/components/schemas/RepositoryRevisionPatch"
         context_dir:
           $ref: "#/components/schemas/BuildContextDirPatch"
+        job_command:
+          $ref: "#/components/schemas/EnvironmentCommand"
+        job_args:
+          $ref: "#/components/schemas/EnvironmentArgs"
     ContainerImage:
       description: A container image
       type: string

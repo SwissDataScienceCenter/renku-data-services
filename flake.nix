@@ -120,6 +120,7 @@
           ZED_TOKEN = "dev";
 
           SOLR_BIN_PATH = "${devshellToolsPkgs.solr}/bin/solr";
+          SOLR_MAJOR_VERSION = "10";
           TEST_RUN_SOLR_LOCALLY = "true";
 
           shellHook = ''
@@ -279,9 +280,11 @@
             SOLR_URL = "http://localhost:18983";
             SOLR_CORE = "renku-search-dev";
 
-            AMALTHEA_SESSIONS_VERSION = "refs/heads/eikek/non-interactive-session";
-            RENKU_ENV = "renku-ci-ds-1246";
+            #AMALTHEA_SESSIONS_VERSION = "refs/heads/eikek/non-interactive-session";
+            RENKU_ENV = "renku-ci-ds-1328";
             K8S_NAMESPACE = "default";
+            KUBERNETES_NAMESPACE = "default";
+            DEBUG_LOGGING = "renku_data_services";
           });
 
         cnt = let

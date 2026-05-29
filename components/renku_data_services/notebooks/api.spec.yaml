@@ -233,10 +233,17 @@ components:
         resource_class_id:
           nullable: true
           type: integer
+        submission_id:
+          $ref: "#/components/schemas/SubmissionId"
         data_connectors_overrides:
           $ref: "#/components/schemas/SessionDataConnectorsOverrideList"
         env_variable_overrides:
           $ref: "#/components/schemas/EnvVariableOverrides"
+        job_args_override:
+          nullable: true
+          type: array
+          items:
+            type: string
       required:
         - launcher_id
       type: object
@@ -266,6 +273,16 @@ components:
           $ref: "#/components/schemas/Ulid"
         resource_class_id:
           type: integer
+        session_type:
+          $ref: "#/components/schemas/SessionType"
+        submission_id:
+          $ref: "#/components/schemas/SubmissionId"
+          nullable: true
+        command_args:
+          type: array
+          items:
+            type: string
+          nullable: true
       required:
         - image
         - name
@@ -276,6 +293,7 @@ components:
         - project_id
         - launcher_id
         - resource_class_id
+        - session_type
       type: object
     SessionListResponse:
       items:
@@ -424,6 +442,13 @@ components:
       maxLength: 50
       pattern: '^[a-z]([-a-z0-9]*[a-z0-9])?$'
       example: d185e68d-d43-renku-2-b9ac279a4e8a85ac28d08
+    SubmissionId:
+      type: string
+      pattern: "^[a-z][-0-9a-z]{3,19}$"
+      description: |
+        When submitting a job, i.e. the launcher used is a job
+        launcher, the submission id is required to deduplicate
+        same job submissions and allows retries.
     ImageCheckResponse:
       type: object
       properties:
