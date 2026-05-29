@@ -375,6 +375,16 @@ async def migrate_user_namespaces_make_all_public(dm: DependencyManager) -> None
             await asyncio.sleep(dm.config.short_task_period_s)
 
 
+async def events_sync_from_keycloak(dm: DependencyManager) -> None:
+    """Sync all users from keycloak."""
+    while True:
+        try:
+            pass
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
+        await asyncio.sleep(10)
+
+
 async def users_sync(dm: DependencyManager) -> None:
     """Sync all users from keycloak."""
     while True:
