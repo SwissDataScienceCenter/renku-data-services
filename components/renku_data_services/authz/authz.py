@@ -259,11 +259,11 @@ class _AuthzConverter:
 
     @overload
     @staticmethod
-    def to_object(resource_type: Literal[ResourceType.user], resource_id: str | None) -> ObjectReference: ...
+    def to_object(resource_type: Literal[ResourceType.user], resource_id: str) -> ObjectReference: ...
 
     @overload
     @staticmethod
-    def to_object(resource_type: Literal[ResourceType.anonymous_user], resource_id: Any) -> ObjectReference: ...
+    def to_object(resource_type: Literal[ResourceType.anonymous_user], resource_id: str) -> ObjectReference: ...
 
     @overload
     @staticmethod
@@ -271,14 +271,14 @@ class _AuthzConverter:
 
     @overload
     @staticmethod
-    def to_object(resource_type: Literal[ResourceType.platform], resource_id: Any) -> ObjectReference: ...
+    def to_object(resource_type: Literal[ResourceType.platform], resource_id: str) -> ObjectReference: ...
 
     @overload
     @staticmethod
-    def to_object(resource_type: ResourceType, resource_id: _ID | None) -> ObjectReference: ...
+    def to_object(resource_type: ResourceType, resource_id: _ID) -> ObjectReference: ...
 
     @staticmethod
-    def to_object(resource_type: ResourceType, resource_id: _ID | None) -> ObjectReference:
+    def to_object(resource_type: ResourceType, resource_id: _ID) -> ObjectReference:
         """Convert a resource type and ID to an Authzed ObjectReference."""
         match (resource_type, resource_id):
             case (ResourceType.project, sid) if isinstance(sid, ULID):
@@ -489,7 +489,7 @@ class Authz:
 
     @overload
     async def _has_permission(
-        self, user: base_models.APIUser, resource_type: Literal[ResourceType.platform], resource_id: Any, scope: Scope
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.platform], resource_id: str, scope: Scope
     ) -> tuple[bool, ZedToken | None]: ...
 
     @overload
@@ -573,7 +573,7 @@ class Authz:
 
     @overload
     async def has_permission(
-        self, user: base_models.APIUser, resource_type: Literal[ResourceType.platform], resource_id: Any, scope: Scope
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.platform], resource_id: str, scope: Scope
     ) -> bool: ...
 
     @overload
