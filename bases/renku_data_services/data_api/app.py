@@ -242,6 +242,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         platform_repo=dm.platform_repo,
         authenticator=dm.authenticator,
+        authz=dm.authz,
     )
     platform_redirects = PlatformUrlRedirectBP(
         name="platform_redirects",

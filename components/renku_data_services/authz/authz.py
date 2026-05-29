@@ -41,6 +41,7 @@ from renku_data_services.authz.models import (
     CheckPermissionItem,
     Member,
     MembershipChange,
+    PlatformRole,
     Role,
     Scope,
     Visibility,
@@ -69,6 +70,7 @@ from renku_data_services.namespace.models import (
     ProjectNamespace,
     UserNamespace,
 )
+from renku_data_services.platform.models import AuthzFlag
 from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
 from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpdate
 
@@ -1477,6 +1479,7 @@ class Authz:
             resource_type=platform.object_type,
             optional_resource_id=platform.object_id,
             optional_subject_filter=sub_filter,
+            optional_relation=_Relation.admin.value,
         )
         existing_admins: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(
@@ -2396,3 +2399,89 @@ class Authz:
             updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
         )
         return _AuthzChange(apply=apply, undo=undo)
+
+    async def _relationship_exists(
+        self,
+        resource_type: str,
+        id: ULID | int | str,
+        relation: str,
+        subject: SubjectFilter,
+        zed_token: ZedToken | None = None,
+    ) -> tuple[bool, ZedToken | None]:
+        """If the filter conditions match multiple relationships then True is returned."""
+
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        req = ReadRelationshipsRequest(
+            consistency=consistency,
+            relationship_filter=RelationshipFilter(
+                resource_type=resource_type,
+                optional_relation=relation,
+                optional_resource_id=str(id),
+                optional_subject_filter=subject,
+            ),
+            optional_limit=1,
+        )
+
+        async for res in self.client.ReadRelationships(req):
+            return True, res.read_at
+        return False, zed_token
+
+    async def group_creation_allowed(self, zed_token: ZedToken | None = None) -> tuple[AuthzFlag, ZedToken | None]:
+        """Indicates whether users are allowed to create groups."""
+        platform = _AuthzConverter.platform()
+        all_users = _AuthzConverter.all_users()
+        groups_allowed, new_zed_token = await self._relationship_exists(
+            resource_type=platform.object_type,
+            id=platform.object_id,
+            relation=PlatformRole.group_creator.value,
+            subject=SubjectFilter(subject_type=ResourceType.user.value, optional_subject_id=all_users.object_id),
+            zed_token=zed_token,
+        )
+        return AuthzFlag.registered_users if groups_allowed else AuthzFlag.only_admins, new_zed_token
+
+    async def project_creation_allowed(self, zed_token: ZedToken | None = None) -> tuple[AuthzFlag, ZedToken | None]:
+        """Indicates whether users are allowed to create projects."""
+        platform = _AuthzConverter.platform()
+        all_users = _AuthzConverter.all_users()
+        projects_allowed, new_zed_token = await self._relationship_exists(
+            resource_type=platform.object_type,
+            id=platform.object_id,
+            relation=PlatformRole.project_creator.value,
+            subject=SubjectFilter(subject_type=ResourceType.user.value, optional_subject_id=all_users.object_id),
+            zed_token=zed_token,
+        )
+        return AuthzFlag.registered_users if projects_allowed else AuthzFlag.only_admins, new_zed_token
+
+    async def set_project_creation_permission(self, allowed: AuthzFlag) -> ZedToken:
+        """Controls whether any user or only admins are able to create projects."""
+        platform = _AuthzConverter.platform()
+        all_users = _AuthzConverter.all_users()
+        update = RelationshipUpdate(
+            operation=RelationshipUpdate.OPERATION_DELETE
+            if allowed == AuthzFlag.only_admins
+            else RelationshipUpdate.OPERATION_TOUCH,
+            relationship=Relationship(
+                resource=platform,
+                relation=PlatformRole.project_creator.value,
+                subject=SubjectReference(object=all_users),
+            ),
+        )
+        res = await self.client.WriteRelationships(WriteRelationshipsRequest(updates=[update]))
+        return cast(ZedToken, res.written_at)
+
+    async def set_group_creation_permission(self, allowed: AuthzFlag) -> ZedToken:
+        """Controls whether any user or only admins are able to create groups."""
+        platform = _AuthzConverter.platform()
+        all_users = _AuthzConverter.all_users()
+        update = RelationshipUpdate(
+            operation=RelationshipUpdate.OPERATION_DELETE
+            if allowed == AuthzFlag.only_admins
+            else RelationshipUpdate.OPERATION_TOUCH,
+            relationship=Relationship(
+                resource=platform,
+                relation=PlatformRole.group_creator.value,
+                subject=SubjectReference(object=all_users),
+            ),
+        )
+        res = await self.client.WriteRelationships(WriteRelationshipsRequest(updates=[update]))
+        return cast(ZedToken, res.written_at)

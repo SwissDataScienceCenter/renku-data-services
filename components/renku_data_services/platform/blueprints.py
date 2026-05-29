@@ -9,6 +9,7 @@ from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
+from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
@@ -17,6 +18,9 @@ from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.platform import apispec
 from renku_data_services.platform.core import (
+    get_authz_config,
+    update_authz_config,
+    validate_authz_config_patch,
     validate_platform_config_patch,
     validate_url_redirect_patch,
     validate_url_redirect_post,
@@ -31,6 +35,7 @@ class PlatformConfigBP(CustomBlueprint):
 
     platform_repo: PlatformRepository
     authenticator: base_models.Authenticator
+    authz: Authz
 
     def get_singleton_configuration(self) -> BlueprintFactoryResponse:
         """Get the platform configuration."""
@@ -77,6 +82,54 @@ class PlatformConfigBP(CustomBlueprint):
             )
 
         return "/platform/config", ["PATCH"], _patch_singleton_configuration
+
+    def get_authz_configuration(self) -> BlueprintFactoryResponse:
+        """Get the platform authorization configuration."""
+
+        @extract_if_none_match
+        async def _get_authz_configuration(_: Request, etag: str | None) -> HTTPResponse:
+            config = await get_authz_config(self.authz)
+
+            if config.etag == etag:
+                return empty(status=304)
+
+            headers = {"ETag": config.etag}
+            return validated_json(
+                apispec.AuthzConfig,
+                dict(
+                    etag=config.etag,
+                    create_groups=config.create_groups,
+                    create_projects=config.create_projects,
+                ),
+                headers=headers,
+            )
+
+        return "/platform/config/authorization", ["GET"], _get_authz_configuration
+
+    def patch_authz_configuration(self) -> BlueprintFactoryResponse:
+        """Update the platform authorization configuration."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @if_match_required
+        @validate(json=apispec.AuthzConfigPatch)
+        async def _patch_authz_configuration(
+            _: Request, user: base_models.APIUser, body: apispec.AuthzConfigPatch, etag: str
+        ) -> JSONResponse:
+            patch = validate_authz_config_patch(body)
+            config = await update_authz_config(self.authz, etag, patch)
+            headers = {"ETag": config.etag}
+            return validated_json(
+                apispec.AuthzConfig,
+                dict(
+                    etag=config.etag,
+                    create_groups=config.create_groups,
+                    create_projects=config.create_projects,
+                ),
+                headers=headers,
+            )
+
+        return "/platform/config/authorization", ["PATCH"], _patch_authz_configuration
 
 
 @dataclass(kw_only=True)

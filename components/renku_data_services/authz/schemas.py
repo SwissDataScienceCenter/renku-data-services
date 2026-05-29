@@ -981,3 +981,149 @@ v10 = AuthzSchemaMigration(
         WriteSchemaRequest(schema=_v9),
     ],
 )
+
+_v11 = """\
+definition user {}
+
+definition group {
+    relation group_platform: platform
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = viewer + write
+    permission write = editor + delete
+    permission change_membership = delete
+    permission delete = owner + group_platform->is_admin
+    permission non_public_read = owner + editor + viewer - public_viewer
+    permission exclusive_owner = owner
+    permission exclusive_editor = editor
+    permission exclusive_member = viewer + editor + owner
+    permission direct_member = owner + editor + viewer
+}
+
+definition user_namespace {
+    relation user_namespace_platform: platform
+    relation owner: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = delete
+    permission write = delete
+    permission delete = owner + user_namespace_platform->is_admin
+    permission non_public_read = owner - public_viewer
+    permission exclusive_owner = owner
+    permission exclusive_member = owner
+    permission direct_member = owner
+}
+
+definition anonymous_user {}
+
+definition platform {
+    relation admin: user
+    relation project_creator: user:*
+    relation group_creator: user:*
+    permission is_admin = admin
+    permission create_projects = is_admin + project_creator
+    permission create_groups = is_admin + group_creator
+}
+
+definition project {
+    relation project_platform: platform
+    relation project_namespace: user_namespace | group
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = viewer + write + project_namespace->read_children
+    permission write = editor + delete
+    permission change_membership = delete
+    permission delete = owner + project_platform->is_admin + project_namespace->delete
+    permission non_public_read = owner + editor + viewer + project_namespace->read_children - public_viewer
+    permission exclusive_owner = owner + project_namespace->exclusive_owner
+    permission exclusive_editor = editor
+    permission exclusive_member = owner + editor + viewer + project_namespace->exclusive_member
+    permission direct_member = owner + editor + viewer
+}
+
+definition data_connector {
+    relation data_connector_platform: platform
+    relation data_connector_namespace: user_namespace | group | project
+    relation linked_to: project
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + viewer + write + data_connector_namespace->read_children
+    permission write = editor + delete
+    permission change_membership = delete
+    permission delete = owner + data_connector_platform->is_admin + data_connector_namespace->delete
+    permission non_public_read = owner + editor + viewer + data_connector_namespace->read_children - public_viewer
+    permission exclusive_owner = owner + data_connector_namespace->exclusive_owner
+    permission exclusive_editor = editor
+    permission exclusive_member = owner + editor + viewer + data_connector_namespace->exclusive_member
+    permission direct_member = owner + editor + viewer
+}
+
+definition resource_pool {
+    relation resource_pool_platform: platform
+    relation viewer: user
+    relation group_viewer: group
+    relation project_viewer: project
+    relation prohibited: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = ( \
+            viewer \
+            + group_viewer->direct_member\
+            + project_viewer->direct_member \
+            + public_viewer \
+            - prohibited \
+            ) \
+            + resource_pool_platform->is_admin
+    permission write = resource_pool_platform->is_admin
+}"""
+"""Adds the resource_pool definition for Authzed authorization."""
+
+v11 = AuthzSchemaMigration(
+    up=[
+        WriteSchemaRequest(schema=_v11),
+        WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(
+                    operation=RelationshipUpdate.OPERATION_TOUCH,
+                    relationship=Relationship(
+                        resource=_AuthzConverter.platform(),
+                        relation="project_creator",
+                        subject=SubjectReference(object=_AuthzConverter.all_users()),
+                    ),
+                ),
+                RelationshipUpdate(
+                    operation=RelationshipUpdate.OPERATION_TOUCH,
+                    relationship=Relationship(
+                        resource=_AuthzConverter.platform(),
+                        relation="group_creator",
+                        subject=SubjectReference(object=_AuthzConverter.all_users()),
+                    ),
+                ),
+            ]
+        ),
+    ],
+    down=[
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=_AuthzConverter.platform().object_type,
+                optional_resource_id=_AuthzConverter.platform().object_id,
+                optional_relation="project_creator",
+            ),
+        ),
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=_AuthzConverter.platform().object_type,
+                optional_resource_id=_AuthzConverter.platform().object_id,
+                optional_relation="group_creator",
+            ),
+        ),
+        WriteSchemaRequest(schema=_v10),
+    ],
+)

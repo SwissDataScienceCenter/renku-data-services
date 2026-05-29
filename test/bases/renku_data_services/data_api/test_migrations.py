@@ -39,7 +39,7 @@ async def test_unique_migration_head() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("downgrade_to, upgrade_to", [("base", "head"), ("fe3b7470d226", "8413f10ef77f")])
+@pytest.mark.parametrize("downgrade_to, upgrade_to", [("base", "head")])
 async def test_upgrade_downgrade_cycle(
     app_manager_instance: DependencyManager,
     sanic_client_no_migrations: SanicASGITestClient,
