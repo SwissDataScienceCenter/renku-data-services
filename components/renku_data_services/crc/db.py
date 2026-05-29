@@ -1291,9 +1291,7 @@ class MemberRepository(_Base):
 
                 case MemberType.PROJECT:
                     project_id = ULID.from_str(member.member_id)
-                    project = await self.project_repo.get_project_by_id(api_user, project_id)
-                    if project is None:
-                        raise errors.MissingResourceError(message=f"Project {member.member_id!r} does not exist")
+                    project = await self.project_repo.get_project(api_user, project_id)
                     resolved.append((str(project.id), ResourceType.project, member.role))
 
         return resolved
@@ -1428,7 +1426,7 @@ class MemberRepository(_Base):
                         )
                 case ResourceType.project.value:
                     try:
-                        project = await self.project_repo.get_project_by_id(api_user, ULID.from_str(subject_id))
+                        project = await self.project_repo.get_project(api_user, ULID.from_str(subject_id))
                         results.append(
                             ResourcePoolMemberResult(
                                 member_type=MemberType.PROJECT,

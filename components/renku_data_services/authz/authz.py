@@ -317,9 +317,7 @@ def _is_allowed_on_resource(
         async def decorated_function(
             self: "Authz", user: base_models.APIUser, *args: _P.args, **kwargs: _P.kwargs
         ) -> _T:
-            if isinstance(user, base_models.InternalServiceAdmin) or (
-                isinstance(user, base_models.APIUser) and user.is_admin
-            ):
+            if isinstance(user, base_models.InternalServiceAdmin):
                 return await f(self, user, *args, **kwargs)
             if not isinstance(user, base_models.APIUser):
                 raise errors.ProgrammingError(
@@ -396,9 +394,7 @@ def _is_allowed(
             *args: _P.args,
             **kwargs: _P.kwargs,
         ) -> _T:
-            if isinstance(user, base_models.InternalServiceAdmin) or (
-                isinstance(user, base_models.APIUser) and user.is_admin
-            ):
+            if isinstance(user, base_models.InternalServiceAdmin):
                 return await f(self, user, resource_type, resource_id, *args, **kwargs)
             allowed, zed_token = await self._has_permission(user, resource_type, resource_id, operation)
             if not allowed:
@@ -633,7 +629,10 @@ class Authz:
         The person requesting the information can be the user or someone else. I.e. the admin can request
         what are the resources that a user has access to.
         """
-        if not requested_by.is_admin and requested_by.id != user_id:
+        is_platform_admin = await self.has_permission(
+            requested_by, ResourceType.platform, self._platform.object_id, Scope.IS_ADMIN
+        )
+        if not is_platform_admin and requested_by.id != user_id:
             raise errors.ForbiddenError(
                 message=f"User with ID {requested_by.id} cannot check the permissions of another user with ID {user_id}"
             )
@@ -720,7 +719,10 @@ class Authz:
         Returns a list of tuples: (subject_type, subject_id, relation).
         Skips public_viewer and resource_pool_platform relations.
         """
-        if not user.is_admin:
+        is_platform_admin = await self.has_permission(
+            user, ResourceType.platform, self._platform.object_id, Scope.IS_ADMIN
+        )
+        if not is_platform_admin:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
