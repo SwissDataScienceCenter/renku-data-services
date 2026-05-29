@@ -1002,8 +1002,6 @@ async def start_session(
         "renku.io/resource_class_id": str(resource_class.id),
         "renku.io/resource_pool_id": str(resource_pool.id),
     }
-    if launch_request.submission_id:
-        annotations.update({"renku.io/submission_id": str(launch_request.submission_id)})
 
     # Authentication
     if isinstance(user, AuthenticatedAPIUser):
@@ -1101,6 +1099,8 @@ async def start_session(
         "renku.io/safe-username": user.id,
         "renku.io/session-type": str(session_type),
     }
+    if launch_request.submission_id:
+        labels.update({"renku.io/submission_id": str(launch_request.submission_id)})
 
     if session_location == SessionLocation.remote:
         labels["renku.io/remote-tunnel"] = "allow"
