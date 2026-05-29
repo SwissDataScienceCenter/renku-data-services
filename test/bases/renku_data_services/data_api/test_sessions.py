@@ -1530,8 +1530,14 @@ def actual_user_headers(request, regular_user_access_token) -> dict[str, str]:
     indirect=True,
 )
 @pytest.mark.parametrize(
-    "with_builds",
-    [True, False],
+    "builds_config",
+    [
+        pytest.param(
+            {"enabled": True, "build_output_private_image_prefix": BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX},
+            id="enabled",
+        ),
+        pytest.param({"enabled": False, "build_output_private_image_prefix": None}, id="disabled"),
+    ],
 )
 @pytest.mark.parametrize(
     "launcher_conf,expected_status_code,expected_error_message",
@@ -1582,7 +1588,7 @@ async def test_starting_session(
     launcher_conf,
     expected_status_code,
     expected_error_message,
-    with_builds,
+    builds_config,
 ) -> None:
     project: dict[str, Any] = await create_project(
         sanic_client,
@@ -1600,7 +1606,10 @@ async def test_starting_session(
         )
     )
 
-    with MemberContext(app_manager.config.builds, "enabled", with_builds):
+    if not builds_config["enabled"]:
+        expected_status_code = 201
+
+    with MemberContext(app_manager.config.builds, builds_config):
         launcher: dict[str, Any] = await create_session_launcher(**launcher_conf)
 
         launcher_id = launcher["id"]

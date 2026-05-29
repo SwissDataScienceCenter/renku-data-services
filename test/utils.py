@@ -853,18 +853,20 @@ class MemberContext(AbstractContextManager):
     Useful for long lived objects
     """
 
-    def __init__(self, var, member, value):
+    def __init__(self, var: Any, context: dict[str, Any]) -> None:
         self.var = var
-        self.member = member
-        self.value = value
-        self.orginal = getattr(var, member)
+        self.context = context
 
-    def __enter__(self):
+        self.orginal = {attr: getattr(var, attr) for attr in context}
+
+    def __enter__(self) -> MemberContext:
         """Set the member value"""
-        setattr(self.var, self.member, self.value)
+        for attr, value in self.context.items():
+            setattr(self.var, attr, value)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
         """Set the member to it's original value"""
-        setattr(self.var, self.member, self.orginal)
+        for attr, value in self.orginal.items():
+            setattr(self.var, attr, value)
         return False
