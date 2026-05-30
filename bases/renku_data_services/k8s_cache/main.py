@@ -13,6 +13,7 @@ from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.k8s_cache.dependencies import DependencyManager
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
+from renku_data_services.renku_apps.k8s_client import KNATIVE_SERVICE_GVK
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ async def main() -> None:
     ):
         clusters[client.get_cluster().id] = client
 
-    kinds = [AMALTHEA_SESSION_GVK]
+    kinds = [AMALTHEA_SESSION_GVK, KNATIVE_SERVICE_GVK]
     if dm.config.v1_services.enabled:
         kinds.append(JUPYTER_SESSION_GVK)
     if dm.config.image_builders.enabled:
