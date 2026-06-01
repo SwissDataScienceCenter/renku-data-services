@@ -158,7 +158,7 @@ class OAuth2ClientsBP(CustomBlueprint):
                     provider_id = client.connection.client_id
                     if user_id is not None and provider_id is not None:
                         try:
-                            await self.connected_services_repo._on_oauth2_connected(user_id, provider_id)
+                            await self.connected_services_repo.on_oauth2_connected(user_id, provider_id)
                         except Exception as e:
                             logger.warning(
                                 f"Failed to sync resource pool memberships after OAuth2 connection for user "

@@ -46,7 +46,7 @@ class ConnectedServicesRepository:
         self.supported_image_registry_providers = {models.ProviderKind.gitlab, models.ProviderKind.github}
         self.member_repo = member_repo
 
-    async def _on_oauth2_connected(self, user_id: str, client_id: str) -> None:
+    async def on_oauth2_connected(self, user_id: str, client_id: str) -> None:
         """Grant user viewer access to all RPs linked to the provider."""
         if self.member_repo is None:
             return
@@ -69,7 +69,7 @@ class ConnectedServicesRepository:
                         f"Failed to auto-grant member {user_id} to resource pool {rp.id} for provider {client_id}: {e}"
                     )
 
-    async def _on_oauth2_disconnected(self, user_id: str, client_id: str) -> None:
+    async def on_oauth2_disconnected(self, user_id: str, client_id: str) -> None:
         """Revoke user viewer access from all RPs linked to the provider."""
         if self.member_repo is None:
             return
@@ -243,14 +243,14 @@ class ConnectedServicesRepository:
             if conn is None:
                 return False
 
-            await self._on_oauth2_disconnected(conn.user_id, conn.client_id)
+            await self.on_oauth2_disconnected(conn.user_id, conn.client_id)
             await session.delete(conn)
             await session.flush()
 
-            # Ensure session is closed before calling _on_oauth2_disconnected
+            # Ensure session is closed before calling on_oauth2_disconnected
             # so that the connection is deleted even if revoke fails.
             try:
-                await self._on_oauth2_disconnected(conn.user_id, conn.client_id)
+                await self.on_oauth2_disconnected(conn.user_id, conn.client_id)
             except Exception as e:
                 logger.warning(
                     f"Failed to sync resource pool memberships after OAuth2 disconnection for user "

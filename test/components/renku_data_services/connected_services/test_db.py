@@ -262,8 +262,8 @@ async def test_oauth_connect_adds_user_to_rp(
         )
         session.add(conn)
 
-    # Call _on_oauth2_connected directly
-    await app_manager_instance.connected_services_repo._on_oauth2_connected(setup.user1.id, client.id)
+    # Call on_oauth2_connected directly
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user1.id, client.id)
 
     # Assert user1 is a viewer member of the RP
     members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
@@ -313,7 +313,7 @@ async def test_oauth_disconnect_removes_user_from_rp(
         )
         session.add(conn)
 
-    await app_manager_instance.connected_services_repo._on_oauth2_connected(setup.user1.id, client.id)
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user1.id, client.id)
 
     # Verify user1 has access
     members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
@@ -321,7 +321,7 @@ async def test_oauth_disconnect_removes_user_from_rp(
     assert setup.user1.id in user_ids
 
     # Disconnect user1
-    await app_manager_instance.connected_services_repo._on_oauth2_disconnected(setup.user1.id, client.id)
+    await app_manager_instance.connected_services_repo.on_oauth2_disconnected(setup.user1.id, client.id)
 
     # Assert user1 is no longer a member
     members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
@@ -356,7 +356,7 @@ async def test_oauth_connect_with_no_matching_rp_does_nothing(
         session.add(conn)
 
     # This should not crash
-    await app_manager_instance.connected_services_repo._on_oauth2_connected(setup.user1.id, client.id)
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user1.id, client.id)
 
     # No RPs exist anyway so nothing to assert, just no crash
 
@@ -402,8 +402,8 @@ async def test_two_users_connect_same_integration_both_get_access(
             session.add(conn)
 
     # Connect both users
-    await app_manager_instance.connected_services_repo._on_oauth2_connected(setup.user1.id, client.id)
-    await app_manager_instance.connected_services_repo._on_oauth2_connected(setup.user2.id, client.id)
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user1.id, client.id)
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user2.id, client.id)
 
     # Both should have access
     members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
@@ -456,11 +456,11 @@ async def test_user_disconnect_only_affects_their_rp_access(
             session.add(conn)
 
     # Grant both users
-    await app_manager_instance.connected_services_repo._on_oauth2_connected(setup.user1.id, client.id)
-    await app_manager_instance.connected_services_repo._on_oauth2_connected(setup.user2.id, client.id)
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user1.id, client.id)
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user2.id, client.id)
 
     # Disconnect user1 only
-    await app_manager_instance.connected_services_repo._on_oauth2_disconnected(setup.user1.id, client.id)
+    await app_manager_instance.connected_services_repo.on_oauth2_disconnected(setup.user1.id, client.id)
 
     # user1 revoked, user2 still has access
     members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
@@ -512,14 +512,14 @@ async def test_delete_connection_revokes_rp_access(
         session.add(conn)
 
     # Grant user1 access
-    await app_manager_instance.connected_services_repo._on_oauth2_connected(setup.user1.id, client.id)
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user1.id, client.id)
 
     # Verify user1 has access
     members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
     user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
     assert setup.user1.id in user_ids
 
-    # Delete the connection (this should trigger _on_oauth2_disconnected)
+    # Delete the connection (this should trigger on_oauth2_disconnected)
     await app_manager_instance.connected_services_repo.delete_oauth2_connection(setup.user1, conn.id)
 
     # Verify user1 no longer has access
