@@ -1,11 +1,11 @@
 """Repository implementation."""
 
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Generator, Iterable, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from itertools import islice
 
 import sqlalchemy.sql as sa
-from sqlalchemy import bindparam
+from sqlalchemy import bindparam, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -233,44 +233,59 @@ class ResourceRequestsRepo:
     async def find_usage(self, rq: ResourceUsageQuery, chunk_size: int = 500) -> AsyncGenerator[ResourceUsage]:
         """Find resource usage."""
         # TODO: Include or handle PVCs more gracefully rather than just filtering them out
-        by_user = " and user_id = :user_id " if rq.user_id is not None else ""
-        by_rp = " and resource_pool_id = :resource_pool_id " if rq.resource_pool_id is not None else ""
-        stmt = f"""
-          select
-            cluster_id,
-            user_id,
-            resource_pool_id,
-            resource_class_id,
-            coalesce(resource_class_cost, 0) as resource_class_cost,
-            -- NOTE: runtime_hour is logical only if you filter for pods
-            -- When PVCs are included then the runtime doubles or is increased by a factor
-            -- equal to the number of PVCs, and we have 1 pvc for the session and 1 for each data connector.
-            sum(greatest(corrected_interval, '0 second'::interval)) as runtime_hour,
-            capture_date::date,
-            gpu_slice,
-            sum(cpu_request * (extract(epoch from corrected_interval) / 3600)) as cpu_hours,
-            sum(memory_request * (extract(epoch from corrected_interval) / 3600)) as mem_hours,
-            sum(disk_request * (extract(epoch from corrected_interval) / 3600)) as disk_hours,
-            sum(gpu_request * (extract(epoch from corrected_interval) / 3600)) as gpu_hours
-          from "resource_pools"."resource_requests_view_v2"
-          where capture_date::date >= :from and capture_date::date <= :until
-              and phase = ANY(:active_phases) and kind = 'Pod'
-              {by_user} {by_rp}
-          group by cluster_id, resource_class_id, resource_pool_id,
-            coalesce(resource_class_cost, 0),
-            user_id, capture_date::date, gpu_slice
-        """  # nosec: B608
-        params = {
-            "from": rq.since,
-            "until": rq.until,
-            "user_id": rq.user_id,
-            "resource_pool_id": rq.resource_pool_id,
-            "active_phases": tuple(ACTIVE_PHASES),
-        }
+        q = (
+            select(
+                ResourceRequestsViewORM.cluster_id,
+                ResourceRequestsViewORM.user_id,
+                ResourceRequestsViewORM.resource_pool_id,
+                ResourceRequestsViewORM.resource_class_id,
+                func.coalesce(ResourceRequestsViewORM.resource_class_cost, 0).label("resource_class_cost"),
+                # NOTE: runtime_hour is logical only if you filter for pods
+                # When PVCs are included then the runtime doubles or is increased by a factor
+                # equal to the number of PVCs, and we have 1 pvc for the session and 1 for each data connector.
+                func.sum(func.greatest(ResourceRequestsViewORM.capture_interval, timedelta(seconds=0))).label(
+                    "runtime_hour"
+                ),
+                ResourceRequestsViewORM.capture_date,
+                ResourceRequestsViewORM.gpu_slice,
+                func.sum(
+                    ResourceRequestsViewORM.cpu_request
+                    * (func.extract("epoch", ResourceRequestsViewORM.capture_interval) / 3600)
+                ).label("cpu_hours"),
+                func.sum(
+                    ResourceRequestsViewORM.memory_request
+                    * (func.extract("epoch", ResourceRequestsViewORM.capture_interval) / 3600)
+                ).label("mem_hours"),
+                func.sum(
+                    ResourceRequestsViewORM.disk_request
+                    * (func.extract("epoch", ResourceRequestsViewORM.capture_interval) / 3600)
+                ).label("disk_hours"),
+                func.sum(
+                    ResourceRequestsViewORM.gpu_request
+                    * (func.extract("epoch", ResourceRequestsViewORM.capture_interval) / 3600)
+                ).label("gpu_hours"),
+            )
+            .where(ResourceRequestsViewORM.capture_date >= rq.since)
+            .where(ResourceRequestsViewORM.capture_date <= rq.until)
+            .where(ResourceRequestsViewORM.phase.in_(ACTIVE_PHASES))
+            .where(ResourceRequestsViewORM.kind == "Pod")
+            .group_by(
+                ResourceRequestsViewORM.cluster_id,
+                ResourceRequestsViewORM.resource_class_id,
+                ResourceRequestsViewORM.resource_pool_id,
+                func.coalesce(ResourceRequestsViewORM.resource_class_cost, 0),
+                ResourceRequestsViewORM.user_id,
+                ResourceRequestsViewORM.capture_date,
+                ResourceRequestsViewORM.gpu_slice,
+            )
+        )
+        if rq.user_id is not None:
+            q = q.where(ResourceRequestsViewORM.user_id == rq.user_id)
+        if rq.resource_pool_id is not None:
+            q = q.where(ResourceRequestsViewORM.resource_pool_id == rq.resource_pool_id)
 
         async with self.session_maker() as session:
-            query = sa.text(stmt).execution_options(yield_per=chunk_size)
-            result = await session.stream(query, params)
+            result = await session.stream(q.execution_options(yield_per=chunk_size))
 
             async for row in result:
                 mapping = dict(row._mapping)
