@@ -46,7 +46,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - platform
-  /platform/config/authorization:
+  /platform/authorization_config:
     get:
       summary: Get the current authorization configuration for Renku
       responses:

@@ -348,7 +348,7 @@ async def test_patch_authz_config(
     regular_user: UserInfo,
 ) -> None:
     # Check default config
-    _, res = await sanic_client.get("/api/data/platform/config/authorization", headers=admin_headers)
+    _, res = await sanic_client.get("/api/data/platform/authorization_config", headers=admin_headers)
     assert res.status_code == 200, (res.status_code, res.text)
     assert res.json["create_projects"] == "registered_users", res.text
     assert res.json["create_groups"] == "registered_users", res.text
@@ -357,7 +357,7 @@ async def test_patch_authz_config(
     etag = res.json["etag"]
     headers = merge_headers(admin_headers, {"If-Match": etag})
     _, res = await sanic_client.patch(
-        "/api/data/platform/config/authorization",
+        "/api/data/platform/authorization_config",
         headers=headers,
         json={"create_projects": "admins_only", "create_groups": "admins_only"},
     )
@@ -401,7 +401,7 @@ async def test_patch_authz_config(
     # Re-enable project creation
     headers = merge_headers(admin_headers, {"If-Match": etag})
     _, res = await sanic_client.patch(
-        "/api/data/platform/config/authorization",
+        "/api/data/platform/authorization_config",
         headers=headers,
         json={"create_projects": "registered_users", "create_groups": "registered_users"},
     )

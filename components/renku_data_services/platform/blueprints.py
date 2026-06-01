@@ -104,7 +104,7 @@ class PlatformConfigBP(CustomBlueprint):
                 headers=headers,
             )
 
-        return "/platform/config/authorization", ["GET"], _get_authz_configuration
+        return "/platform/authorization_config", ["GET"], _get_authz_configuration
 
     def patch_authz_configuration(self) -> BlueprintFactoryResponse:
         """Update the platform authorization configuration."""
@@ -129,7 +129,7 @@ class PlatformConfigBP(CustomBlueprint):
                 headers=headers,
             )
 
-        return "/platform/config/authorization", ["PATCH"], _patch_authz_configuration
+        return "/platform/authorization_config", ["PATCH"], _patch_authz_configuration
 
 
 @dataclass(kw_only=True)
