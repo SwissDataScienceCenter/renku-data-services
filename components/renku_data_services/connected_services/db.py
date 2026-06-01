@@ -14,12 +14,15 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
+from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.connected_services import models
 from renku_data_services.connected_services import orm as schemas
 from renku_data_services.connected_services.oauth_http import (
     OAuthHttpClientFactory,
     OAuthHttpFactoryError,
 )
+from renku_data_services.crc import orm as crc_schemas
+from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.users.db import APIUser
 from renku_data_services.utils.cryptography import encrypt_string
@@ -38,7 +41,7 @@ class ConnectedServicesRepository:
         session_maker: Callable[..., AsyncSession],
         oauth_client_factory: OAuthHttpClientFactory,
         encryption_key: bytes,
-        member_repo: MemberRepository | None = None,
+        member_repo: MemberRepository,
     ):
         self.session_maker = session_maker
         self.encryption_key = encryption_key
@@ -48,12 +51,6 @@ class ConnectedServicesRepository:
 
     async def on_oauth2_connected(self, user_id: str, client_id: str) -> None:
         """Grant user viewer access to all RPs linked to the provider."""
-        if self.member_repo is None:
-            return
-        from renku_data_services.base_models.core import InternalServiceAdmin
-        from renku_data_services.crc import orm as crc_schemas
-        from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
-
         admin = InternalServiceAdmin()
         async with self.session_maker() as session:
             rps = await session.scalars(
@@ -71,12 +68,6 @@ class ConnectedServicesRepository:
 
     async def on_oauth2_disconnected(self, user_id: str, client_id: str) -> None:
         """Revoke user viewer access from all RPs linked to the provider."""
-        if self.member_repo is None:
-            return
-        from renku_data_services.base_models.core import InternalServiceAdmin
-        from renku_data_services.crc import orm as crc_schemas
-        from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
-
         admin = InternalServiceAdmin()
         async with self.session_maker() as session:
             rps = await session.scalars(
