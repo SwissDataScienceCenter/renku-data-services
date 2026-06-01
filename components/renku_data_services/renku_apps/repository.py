@@ -4,6 +4,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logger
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.crc.db import ResourcePoolRepository
@@ -65,3 +66,25 @@ class RenkuAppsRepository:
 
         launcher = await self.session_repo.get_launcher(user, runtime_state.launcher_id)
         return build_app(launcher, runtime_state)
+
+    async def delete_app(self, user: base_models.APIUser, app_name: str) -> None:
+        """Delete an app by its name."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        runtime_state = await self.k8s_client.get_app_deployment(app_name)
+        if runtime_state is None:
+            logger.info(f"App with name {app_name} was not found.")
+            return None
+
+        launcher = await self.session_repo.get_launcher(user, runtime_state.launcher_id)
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, launcher.project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"App with name '{app_name}' does not exist or you do not have authorization to modify it."
+            )
+
+        await self.k8s_client.delete_app_deployment(app_name)
+        logger.info(f"App with name {app_name} has been deleted.")
+        return None
