@@ -234,7 +234,7 @@ class ProjectRepository:
             user, ResourceType.platform, _AuthzConverter.platform().object_id, Scope.CREATE_PROJECTS
         )
         if not allowed:
-            raise errors.UnauthorizedError(
+            raise errors.ForbiddenError(
                 message="Your administrator has limited who can create projects in the "
                 "platform and you are not allowed to create projects.",
             )

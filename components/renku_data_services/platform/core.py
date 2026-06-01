@@ -121,7 +121,10 @@ async def update_authz_config(
     """Update the authorization configuration."""
     current_config = await get_authz_config(authz)
     if current_config.etag != etag:
-        raise errors.ConflictError(message="The authorization config you are trying to patch is out of date.")
+        raise errors.ConflictError(
+            message="The authorization config you are trying to patch is out of date. "
+            f"Current ETag is {current_config.etag}, not {etag}.",
+        )
 
     if patch.create_groups is not None:
         await authz.set_group_creation_permission(patch.create_groups)

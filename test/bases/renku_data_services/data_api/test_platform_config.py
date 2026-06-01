@@ -372,7 +372,7 @@ async def test_patch_authz_config(
         headers=user_headers,
         json=dict(name="test-user-group-1", slug="test-user-group-1"),
     )
-    assert res.status_code == 401, (res.status_code, res.text)
+    assert res.status_code == 403, (res.status_code, res.text)
 
     # Check that groups can be created by the admin
     _, res = await sanic_client.post(
@@ -388,7 +388,7 @@ async def test_patch_authz_config(
         headers=user_headers,
         json=dict(name="test-project", namespace=regular_user.namespace.path.serialize()),
     )
-    assert res.status_code == 401, (res.status_code, res.text)
+    assert res.status_code == 403, (res.status_code, res.text)
 
     # Check that projects can be created by the admin
     _, res = await sanic_client.post(
