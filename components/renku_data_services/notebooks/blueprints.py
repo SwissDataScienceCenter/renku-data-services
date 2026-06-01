@@ -260,6 +260,8 @@ class NotebooksNewBP(CustomBlueprint):
                 conn = apispec.ImageConnection(
                     id=str(result.connection.id), provider_id=result.connection.provider_id, status=status
                 )
+            elif result.error is not None:
+                raise result.error
 
             provider: apispec.ImageProvider | None = None
             if result.client:

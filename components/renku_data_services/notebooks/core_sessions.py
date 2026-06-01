@@ -675,6 +675,9 @@ async def __get_connected_services_image_pull_secret(
 ) -> ExtraSecret | None:
     """Return a secret for accessing the image if one is available for the given user."""
     image_check_result = await image_check_repo.check_image(user=user, gitlab_user=None, image_src=launcher)
+    if image_check_result.error is not None:
+        raise image_check_result.error
+
     logger.debug(
         f"Set pull secret for {launcher.environment.container_image} to connection {image_check_result.image_provider}"
     )

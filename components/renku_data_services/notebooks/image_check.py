@@ -54,7 +54,7 @@ class CheckResult:
     response_code: int
     image_provider: ImageProvider | None = None
     token: str | None = field(default=None, repr=False)
-    error: errors.UnauthorizedError | None = None
+    error: errors.UnauthorizedError | errors.ValidationError | errors.ForbiddenError | None = None
 
     def __str__(self) -> str:
         token = "***" if self.token else "None"
@@ -163,8 +163,17 @@ class ImageCheckRepository:
         """Check access to the image from the given launcher or image and provide image and access details."""
 
         if isinstance(image_src, SessionLauncher):
-            await self.__check_built_image_accessibility(user, gitlab_user, image_src)
-
+            try:
+                await self.__check_built_image_accessibility(user, gitlab_user, image_src)
+            except (errors.ValidationError, errors.ForbiddenError) as error:
+                return CheckResult(
+                    accessible=False,
+                    platforms=None,
+                    response_code=422 if isinstance(error, errors.ValidationError) else 403,
+                    image_provider=None,
+                    token=None,
+                    error=error,
+                )
             image = Image.from_path(image_src.environment.container_image)
         else:
             image = image_src
