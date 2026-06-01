@@ -4,7 +4,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.app_config import logger
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.crc.db import ResourcePoolRepository
@@ -14,6 +14,8 @@ from renku_data_services.renku_apps.core import build_app
 from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
 from renku_data_services.renku_apps.models import App
 from renku_data_services.session.db import SessionRepository
+
+logger = logging.getLogger(__name__)
 
 
 class RenkuAppsRepository:
