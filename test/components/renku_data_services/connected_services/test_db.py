@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from typing import cast
 
 import pytest
+from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
 
+from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services.db import ConnectedServicesRepository, Image
 from renku_data_services.connected_services.models import (
@@ -89,6 +91,22 @@ async def setup_users(app_manager_instance: DependencyManager) -> SetupData:
     admin_info = cast(UserInfo, await user_repo.get_or_create_user(admin, str(admin.id)))
     user1_info = cast(UserInfo, await user_repo.get_or_create_user(user1, str(user1.id)))
     user2_info = cast(UserInfo, await user_repo.get_or_create_user(user2, str(user2.id)))
+
+    # Bootstrap the admin user as a platform admin in Authzed so that Authzed-based permission
+    # checks pass when the tests call get_resource_pool_members with the admin user.
+    authz = app_manager_instance.authz
+    rels = [
+        RelationshipUpdate(
+            operation=RelationshipUpdate.OPERATION_TOUCH,
+            relationship=Relationship(
+                resource=_AuthzConverter.platform(),
+                relation="admin",
+                subject=SubjectReference(object=_AuthzConverter.user(admin.id)),
+            ),
+        )
+    ]
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
+
     return SetupData(admin, admin_info, user1, user1_info, user2, user2_info, app_manager_instance)
 
 

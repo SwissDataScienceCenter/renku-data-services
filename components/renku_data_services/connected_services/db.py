@@ -24,6 +24,7 @@ from renku_data_services.connected_services.oauth_http import (
 from renku_data_services.crc import orm as crc_schemas
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.users.db import APIUser
+from renku_data_services.utils.core import with_db_transaction
 from renku_data_services.utils.cryptography import encrypt_string
 
 if TYPE_CHECKING:
@@ -48,7 +49,7 @@ class ConnectedServicesRepository:
         self.supported_image_registry_providers = {models.ProviderKind.gitlab, models.ProviderKind.github}
         self.member_repo = member_repo
 
-    async def _get_rp_ids_for_provider(self, client_id: str) -> list[int]:
+    async def _get_rp_ids_for_provider(self, client_id: str, session: AsyncSession) -> list[int]:
         """Get all resource pool IDs linked to a given OAuth2 provider."""
         async with self.session_maker() as session:
             rps = await session.scalars(
@@ -56,25 +57,31 @@ class ConnectedServicesRepository:
             )
             return [rp.id for rp in rps]
 
-    async def on_oauth2_connected(self, user_id: str, client_id: str) -> None:
+    @with_db_transaction
+    async def on_oauth2_connected(self, user_id: str, client_id: str, session: AsyncSession | None = None) -> None:
         """Grant user viewer access to all RPs linked to the provider."""
+        if session is None:
+            raise errors.ProgrammingError(message="A session must be set to query the database")
         admin = InternalServiceAdmin()
-        rp_ids = await self._get_rp_ids_for_provider(client_id)
+        rp_ids = await self._get_rp_ids_for_provider(client_id, session)
         if rp_ids:
             try:
-                await self.member_repo.update_user_resource_pools(admin, user_id, rp_ids, append=True)
+                await self.member_repo.update_user_resource_pools(admin, user_id, rp_ids, append=True, session=session)
             except errors.BaseError as e:
                 logger.warning(
                     f"Failed to auto-grant member {user_id} to resource pools {rp_ids} for provider {client_id}: {e}"
                 )
 
-    async def on_oauth2_disconnected(self, user_id: str, client_id: str) -> None:
+    @with_db_transaction
+    async def on_oauth2_disconnected(self, user_id: str, client_id: str, session: AsyncSession | None = None) -> None:
         """Revoke user viewer access from all RPs linked to the provider."""
+        if session is None:
+            raise errors.ProgrammingError(message="A session must be set to query the database")
         admin = InternalServiceAdmin()
-        rp_ids = await self._get_rp_ids_for_provider(client_id)
+        rp_ids = await self._get_rp_ids_for_provider(client_id, session)
         if rp_ids:
             try:
-                await self.member_repo.remove_user_resource_pools(admin, user_id, rp_ids)
+                await self.member_repo.remove_user_resource_pools(admin, user_id, rp_ids, session=session)
             except errors.BaseError as e:
                 logger.warning(
                     f"Failed to auto-revoke member {user_id} from resource pools {rp_ids} for provider {client_id}: {e}"
@@ -231,14 +238,11 @@ class ConnectedServicesRepository:
             if conn is None:
                 return False
 
-            await self.on_oauth2_disconnected(conn.user_id, conn.client_id)
             await session.delete(conn)
             await session.flush()
 
-            # Ensure session is closed before calling on_oauth2_disconnected
-            # so that the connection is deleted even if revoke fails.
             try:
-                await self.on_oauth2_disconnected(conn.user_id, conn.client_id)
+                await self.on_oauth2_disconnected(conn.user_id, conn.client_id, session=session)
             except Exception as e:
                 logger.warning(
                     f"Failed to sync resource pool memberships after OAuth2 disconnection for user "
