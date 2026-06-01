@@ -1,7 +1,7 @@
 """Models for authorization."""
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, StrEnum
 
 from ulid import ULID
 
@@ -44,6 +44,13 @@ class Role(Enum):
                 raise errors.ProgrammingError(message=f"Could not convert role {self} into a group role")
 
 
+class PlatformRole(StrEnum):
+    """Roles specific to the platform resource in Authzed."""
+
+    project_creator = "project_creator"
+    group_creator = "group_creator"
+
+
 class Scope(Enum):
     """Types of permissions - i.e. scope."""
 
@@ -59,6 +66,8 @@ class Scope(Enum):
     EXCLUSIVE_EDITOR = "exclusive_editor"
     EXCLUSIVE_OWNER = "exclusive_owner"
     DIRECT_MEMBER = "direct_member"
+    CREATE_GROUPS = "create_groups"
+    CREATE_PROJECTS = "create_projects"
 
 
 @dataclass
