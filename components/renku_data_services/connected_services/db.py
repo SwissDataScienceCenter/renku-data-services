@@ -22,7 +22,6 @@ from renku_data_services.connected_services.oauth_http import (
     OAuthHttpFactoryError,
 )
 from renku_data_services.crc import orm as crc_schemas
-from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.users.db import APIUser
 from renku_data_services.utils.cryptography import encrypt_string
@@ -49,39 +48,37 @@ class ConnectedServicesRepository:
         self.supported_image_registry_providers = {models.ProviderKind.gitlab, models.ProviderKind.github}
         self.member_repo = member_repo
 
-    async def on_oauth2_connected(self, user_id: str, client_id: str) -> None:
-        """Grant user viewer access to all RPs linked to the provider."""
-        admin = InternalServiceAdmin()
+    async def _get_rp_ids_for_provider(self, client_id: str) -> list[int]:
+        """Get all resource pool IDs linked to a given OAuth2 provider."""
         async with self.session_maker() as session:
             rps = await session.scalars(
                 select(crc_schemas.ResourcePoolORM).where(crc_schemas.ResourcePoolORM.remote_provider_id == client_id)
             )
-            rps_list = list(rps)
-            member = ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=user_id)
-            for rp in rps_list:
-                try:
-                    await self.member_repo.grant_resource_pool_members(admin, rp.id, [member])
-                except errors.BaseError as e:
-                    logger.warning(
-                        f"Failed to auto-grant member {user_id} to resource pool {rp.id} for provider {client_id}: {e}"
-                    )
+            return [rp.id for rp in rps]
+
+    async def on_oauth2_connected(self, user_id: str, client_id: str) -> None:
+        """Grant user viewer access to all RPs linked to the provider."""
+        admin = InternalServiceAdmin()
+        rp_ids = await self._get_rp_ids_for_provider(client_id)
+        if rp_ids:
+            try:
+                await self.member_repo.update_user_resource_pools(admin, user_id, rp_ids, append=True)
+            except errors.BaseError as e:
+                logger.warning(
+                    f"Failed to auto-grant member {user_id} to resource pools {rp_ids} for provider {client_id}: {e}"
+                )
 
     async def on_oauth2_disconnected(self, user_id: str, client_id: str) -> None:
         """Revoke user viewer access from all RPs linked to the provider."""
         admin = InternalServiceAdmin()
-        async with self.session_maker() as session:
-            rps = await session.scalars(
-                select(crc_schemas.ResourcePoolORM).where(crc_schemas.ResourcePoolORM.remote_provider_id == client_id)
-            )
-            member = ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=user_id)
-            for rp in rps:
-                try:
-                    await self.member_repo.revoke_resource_pool_members(admin, rp.id, [member])
-                except errors.BaseError as e:
-                    logger.warning(
-                        f"Failed to auto-revoke member {user_id} from resource pool {rp.id} "
-                        f"for provider {client_id}: {e}"
-                    )
+        rp_ids = await self._get_rp_ids_for_provider(client_id)
+        if rp_ids:
+            try:
+                await self.member_repo.remove_user_resource_pools(admin, user_id, rp_ids)
+            except errors.BaseError as e:
+                logger.warning(
+                    f"Failed to auto-revoke member {user_id} from resource pools {rp_ids} for provider {client_id}: {e}"
+                )
 
     async def get_oauth2_clients(
         self,

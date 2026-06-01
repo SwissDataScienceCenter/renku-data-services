@@ -1065,6 +1065,28 @@ class MemberRepository(_Base):
                 output.append(rp.dump(quota))
             return output
 
+    async def _sync_user_resource_pool_membership(
+        self,
+        api_user: base_models.APIUser,
+        user: schemas.UserORM,
+        rps_to_add: Collection[schemas.ResourcePoolORM],
+        rps_to_remove: Collection[schemas.ResourcePoolORM],
+    ) -> None:
+        """Synchronize a user's resource pool memberships in SQL and Authz."""
+        member_identifier = ResourcePoolMemberIdentifier(member_id=user.keycloak_id, member_type=MemberType.USER)
+        for rp in rps_to_add:
+            if rp not in user.resource_pools:
+                user.resource_pools.append(rp)
+            await self._grant_resource_pool_members(api_user, rp.id, [member_identifier])
+            if rp.default or rp.public:
+                await self._unprohibit_resource_pool_users(api_user, rp.id, [user.keycloak_id])
+        for rp in rps_to_remove:
+            if rp in user.resource_pools:
+                user.resource_pools.remove(rp)
+            await self._revoke_resource_pool_members(api_user, rp.id, [member_identifier])
+            if rp.default or rp.public:
+                await self._prohibit_resource_pool_users(api_user, rp.id, [user.keycloak_id])
+
     @_only_admins
     async def update_user_resource_pools(
         self, api_user: base_models.APIUser, keycloak_id: str, resource_pool_ids: list[int], append: bool = True
@@ -1110,28 +1132,39 @@ class MemberRepository(_Base):
             existing_rp_ids = {rp.id for rp in user.resource_pools}
             new_rp_ids = {rp.id for rp in rps_to_add}
             if append:
-                rps_to_add = [rp for rp in rps_to_add if rp.id not in existing_rp_ids]
-                user.resource_pools.extend(rps_to_add)
-                removed_rps: list[schemas.ResourcePoolORM] = []
+                actual_add = [rp for rp in rps_to_add if rp.id not in existing_rp_ids]
+                actual_remove: list[schemas.ResourcePoolORM] = []
             else:
-                removed_rps = [rp for rp in user.resource_pools if rp.id not in new_rp_ids]
-                user.resource_pools = list(rps_to_add)
-            # TODO: the authz changes below are done in separate db transactions,
-            # TODO: use only one (collect everything into a single authz change)
-            member_identifier = ResourcePoolMemberIdentifier(member_id=keycloak_id, member_type=MemberType.USER)
-            for rp in rps_to_add:
-                await self._grant_resource_pool_members(api_user, rp.id, [member_identifier])
-                if rp.default or rp.public:
-                    await self._unprohibit_resource_pool_users(api_user, rp.id, [keycloak_id])
-            for rp in removed_rps:
-                await self._revoke_resource_pool_members(api_user, rp.id, [member_identifier])
-                if rp.default or rp.public:
-                    await self._prohibit_resource_pool_users(api_user, rp.id, [keycloak_id])
+                actual_add = list(rps_to_add)
+                actual_remove = [rp for rp in user.resource_pools if rp.id not in new_rp_ids]
+            await self._sync_user_resource_pool_membership(api_user, user, actual_add, actual_remove)
             output: list[models.ResourcePool] = []
-            for rp in rps_to_add:
+            for rp in actual_add:
                 quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
                 output.append(rp.dump(quota))
             return output
+
+    @_only_admins
+    async def remove_user_resource_pools(
+        self, api_user: base_models.APIUser, keycloak_id: str, resource_pool_ids: list[int]
+    ) -> None:
+        """Remove a user from specific resource pools."""
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                select(schemas.UserORM)
+                .where(schemas.UserORM.keycloak_id == keycloak_id)
+                .options(selectinload(schemas.UserORM.resource_pools))
+            )
+            res = await session.execute(stmt)
+            user = res.scalars().first()
+            if user is None:
+                return
+            for rp in list(user.resource_pools):
+                if rp.id in resource_pool_ids:
+                    user.resource_pools.remove(rp)
+            member_identifier = ResourcePoolMemberIdentifier(member_id=keycloak_id, member_type=MemberType.USER)
+            for rp_id in resource_pool_ids:
+                await self._revoke_resource_pool_members(api_user, rp_id, [member_identifier])
 
     @_only_admins
     async def delete_resource_pool_user(
