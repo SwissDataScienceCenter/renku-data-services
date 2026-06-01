@@ -15,8 +15,6 @@ from sqlalchemy import (
     Interval,
     MetaData,
     String,
-    func,
-    select,
     text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
@@ -38,12 +36,6 @@ class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
     metadata = MetaData(schema="resource_pools")  # Has to match alembic ini section name
-
-
-class PlainBase(DeclarativeBase):
-    """Base class for view-like orms where instead of a table there is a query."""
-
-    pass
 
 
 class ResourceRequestsLogORM(BaseORM):
@@ -154,50 +146,11 @@ class ResourceRequestsLogORM(BaseORM):
         )
 
 
-__lead_capture_date = func.lead(ResourceRequestsLogORM.capture_date).over(
-    partition_by=[ResourceRequestsLogORM.uid, ResourceRequestsLogORM.phase],
-    order_by=ResourceRequestsLogORM.capture_date,
-)
+class ResourceRequestsViewORM(BaseORM):
+    """View for resource requests."""
 
-__corrected_interval = func.least(
-    __lead_capture_date - ResourceRequestsLogORM.capture_date, ResourceRequestsLogORM.capture_interval
-).label("corrected_interval")
+    __tablename__ = "resource_requests_view_v2"
 
-_corrected_requests_query = select(
-    ResourceRequestsLogORM.id,
-    ResourceRequestsLogORM.cluster_id,
-    ResourceRequestsLogORM.namespace,
-    ResourceRequestsLogORM.name,
-    ResourceRequestsLogORM.uid,
-    ResourceRequestsLogORM.kind,
-    ResourceRequestsLogORM.api_version,
-    ResourceRequestsLogORM.phase,
-    ResourceRequestsLogORM.capture_date,
-    ResourceRequestsLogORM.capture_interval,
-    ResourceRequestsLogORM.user_id,
-    ResourceRequestsLogORM.project_id,
-    ResourceRequestsLogORM.launcher_id,
-    ResourceRequestsLogORM.resource_class_id,
-    ResourceRequestsLogORM.resource_class_cost,
-    ResourceRequestsLogORM.resource_pool_id,
-    ResourceRequestsLogORM.since,
-    ResourceRequestsLogORM.cpu_request,
-    ResourceRequestsLogORM.memory_request,
-    ResourceRequestsLogORM.gpu_request,
-    ResourceRequestsLogORM.gpu_slice,
-    ResourceRequestsLogORM.gpu_product,
-    ResourceRequestsLogORM.disk_request,
-    __corrected_interval,
-).select_from(ResourceRequestsLogORM)
-
-
-class ResourceRequestsViewORM(PlainBase):
-    """Query for resource requests.
-
-    NOTE: Without filtering this by at least user, resource pool or date range the query will be very slow.
-    """
-
-    __table__ = _corrected_requests_query.subquery()
     __table_args__ = (
         # info tells tools like Alembic to ignore this during 'revision'
         {"info": {"is_view": True}}
