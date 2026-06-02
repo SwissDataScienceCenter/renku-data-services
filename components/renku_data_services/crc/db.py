@@ -29,7 +29,7 @@ from renku_data_services.authz.models import Change, Member, MembershipChange, R
 from renku_data_services.base_models import RESET
 from renku_data_services.base_models.core import ResetType, ResourceType
 from renku_data_services.connected_services.models import ConnectionStatus
-from renku_data_services.connected_services.orm import OAuth2ConnectionORM
+from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2ConnectionORM
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import (
@@ -455,17 +455,14 @@ class ResourcePoolRepository(_Base):
         self, api_user: base_models.APIUser, new_resource_pool: models.UnsavedResourcePool
     ) -> models.ResourcePool:
         """Insert resource pool into database."""
-        provider_id = None
-        if new_resource_pool.remote and new_resource_pool.remote.provider_id:
-            provider_id = new_resource_pool.remote.provider_id
-            async with self.session_maker() as session:
-                from renku_data_services.connected_services.orm import OAuth2ClientORM
-
+        async with self.session_maker() as session, session.begin():
+            provider_id = None
+            if new_resource_pool.remote and new_resource_pool.remote.provider_id:
+                provider_id = new_resource_pool.remote.provider_id
                 client = await session.scalar(select(OAuth2ClientORM).where(OAuth2ClientORM.id == provider_id))
                 if client is None:
                     raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
-        async with self.session_maker() as session, session.begin():
             result = await self._insert_resource_pool(
                 api_user=api_user,
                 new_resource_pool=new_resource_pool,
@@ -479,7 +476,7 @@ class ResourcePoolRepository(_Base):
                 await self.member_repo.grant_resource_pool_members(api_user, result.id, members)
             except errors.BaseError as e:
                 logger.warning(
-                    f"Failed to auto-grant members  to resource pool {result.id} " f"for provider {provider_id}: {e}"
+                    f"Failed to auto-grant members to resource pool {result.id} " f"for provider {provider_id}: {e}"
                 )
 
         return result
@@ -674,8 +671,6 @@ class ResourcePoolRepository(_Base):
                     update.remote.provider_id if update.remote.provider_id is not None else rp.remote_provider_id
                 )
                 if new_provider_id is not None and new_provider_id != rp.remote_provider_id:
-                    from renku_data_services.connected_services.orm import OAuth2ClientORM
-
                     client = await session.scalar(select(OAuth2ClientORM).where(OAuth2ClientORM.id == new_provider_id))
                     if client is None:
                         raise errors.MissingResourceError(
