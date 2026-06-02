@@ -51,11 +51,10 @@ class ConnectedServicesRepository:
 
     async def _get_rp_ids_for_provider(self, client_id: str, session: AsyncSession) -> list[int]:
         """Get all resource pool IDs linked to a given OAuth2 provider."""
-        async with self.session_maker() as session:
-            rps = await session.scalars(
-                select(crc_schemas.ResourcePoolORM).where(crc_schemas.ResourcePoolORM.remote_provider_id == client_id)
-            )
-            return [rp.id for rp in rps]
+        rps = await session.scalars(
+            select(crc_schemas.ResourcePoolORM).where(crc_schemas.ResourcePoolORM.remote_provider_id == client_id)
+        )
+        return [rp.id for rp in rps]
 
     @with_db_transaction
     async def on_oauth2_connected(self, user_id: str, client_id: str, session: AsyncSession | None = None) -> None:
