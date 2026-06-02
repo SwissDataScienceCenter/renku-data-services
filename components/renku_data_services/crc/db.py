@@ -473,10 +473,10 @@ class ResourcePoolRepository(_Base):
             user_ids = await self._get_connected_user_ids(provider_id)
             members = [ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid) for uid in user_ids]
             try:
-                await self.member_repo.grant_resource_pool_members(api_user, result.id, members)
+                await self.member_repo.grant_resource_pool_members(api_user, result.id, members, skip_missing=True)
             except errors.BaseError as e:
                 logger.warning(
-                    f"Failed to auto-grant members to resource pool {result.id} " f"for provider {provider_id}: {e}"
+                    f"Failed to auto-grant members to resource pool {result.id} for provider {provider_id}: {e}"
                 )
 
         return result
@@ -716,10 +716,12 @@ class ResourcePoolRepository(_Base):
                     ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid) for uid in new_user_ids
                 ]
                 try:
-                    await self.member_repo.grant_resource_pool_members(api_user, resource_pool_id, members)
+                    await self.member_repo.grant_resource_pool_members(
+                        api_user, resource_pool_id, members, skip_missing=True
+                    )
                 except errors.BaseError as e:
                     logger.warning(
-                        f"Failed to auto-grant member {uid} to resource pool {resource_pool_id} "
+                        f"Failed to auto-grant members to resource pool {resource_pool_id} "
                         f"for provider {new_provider_id}: {e}"
                     )
 
@@ -1343,28 +1345,30 @@ class MemberRepository(_Base):
         self,
         api_user: base_models.APIUser,
         members: Collection[ResourcePoolMemberIdentifier],
-    ) -> list[tuple[str, ResourceType, str]]:
-        """Resolve ResourcePoolMemberIdentifiers to (internal_id, subject_type, role) tuples."""
-        resolved: list[tuple[str, ResourceType, str]] = []
+        skip_missing: bool = False,
+    ) -> list[tuple[str, ResourceType, str, MemberType]]:
+        """Resolve ResourcePoolMemberIdentifiers to (internal_id, subject_type, role, member_type) tuples."""
+        resolved: list[tuple[str, ResourceType, str, MemberType]] = []
         for member in members:
             match member.member_type:
                 case MemberType.USER:
                     kc_user = await self.kc_user_repo.get_user(id=member.member_id)
                     if kc_user is None:
+                        if skip_missing:
+                            logger.warning(f"Skipping auto-grant for missing user {member.member_id}")
+                            continue
                         raise errors.MissingResourceError(message=f"User with ID {member.member_id} does not exist")
-                    resolved.append((kc_user.id, ResourceType.user, member.role))
+                    resolved.append((kc_user.id, ResourceType.user, member.role, member.member_type))
 
                 case MemberType.GROUP:
                     group_id = ULID.from_str(member.member_id)
                     group = await self.group_repo.get_group_by_id(api_user, group_id)
-                    if group is None:
-                        raise errors.MissingResourceError(message=f"Group with id {member.member_id!r} does not exist")
-                    resolved.append((str(group.id), ResourceType.group, member.role))
+                    resolved.append((str(group.id), ResourceType.group, member.role, member.member_type))
 
                 case MemberType.PROJECT:
                     project_id = ULID.from_str(member.member_id)
                     project = await self.project_repo.get_project(api_user, project_id)
-                    resolved.append((str(project.id), ResourceType.project, member.role))
+                    resolved.append((str(project.id), ResourceType.project, member.role, member.member_type))
 
         return resolved
 
@@ -1400,13 +1404,14 @@ class MemberRepository(_Base):
         resource_pool_id: int,
         members: Collection[ResourcePoolMemberIdentifier],
         session: AsyncSession | None = None,
+        skip_missing: bool = False,
     ) -> models.ResourcePoolMembershipChange | None:
-        specs = await self._resolve_members(api_user, members)
+        specs = await self._resolve_members(api_user, members, skip_missing=skip_missing)
         return self._build_pool_membership_changes(
             resource_pool_id,
             [
-                (member_id, subject_type, self._api_role_to_authz_role(role, member.member_type))
-                for (member_id, subject_type, role), member in zip(specs, members, strict=True)
+                (member_id, subject_type, self._api_role_to_authz_role(role, member_type))
+                for (member_id, subject_type, role, member_type) in specs
             ],
             Change.ADD,
         )
@@ -1419,13 +1424,14 @@ class MemberRepository(_Base):
         resource_pool_id: int,
         members: Collection[ResourcePoolMemberIdentifier],
         session: AsyncSession | None = None,
+        skip_missing: bool = False,
     ) -> models.ResourcePoolMembershipChange | None:
-        specs = await self._resolve_members(api_user, members)
+        specs = await self._resolve_members(api_user, members, skip_missing=skip_missing)
         return self._build_pool_membership_changes(
             resource_pool_id,
             [
-                (member_id, subject_type, self._api_role_to_authz_role(role, member.member_type))
-                for (member_id, subject_type, role), member in zip(specs, members, strict=True)
+                (member_id, subject_type, self._api_role_to_authz_role(role, member_type))
+                for (member_id, subject_type, role, member_type) in specs
             ],
             Change.REMOVE,
         )
@@ -1437,10 +1443,13 @@ class MemberRepository(_Base):
         resource_pool_id: int,
         members: Collection[ResourcePoolMemberIdentifier],
         append: bool = True,
+        skip_missing: bool = False,
     ) -> None:
         """Grant access to a resource pool for a collection of members (Users, Groups, Projects)."""
         async with self.session_maker() as session, session.begin():
-            await self._grant_resource_pool_members(api_user, resource_pool_id, members, session=session)
+            await self._grant_resource_pool_members(
+                api_user, resource_pool_id, members, session=session, skip_missing=skip_missing
+            )
 
     @_only_admins
     async def revoke_resource_pool_members(
