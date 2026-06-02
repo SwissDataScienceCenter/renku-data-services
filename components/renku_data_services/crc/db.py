@@ -474,15 +474,13 @@ class ResourcePoolRepository(_Base):
 
         if provider_id and self.member_repo is not None:
             user_ids = await self._get_connected_user_ids(provider_id)
-            for uid in user_ids:
-                member = ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid)
-                try:
-                    await self.member_repo.grant_resource_pool_members(api_user, result.id, [member])
-                except errors.BaseError as e:
-                    logger.warning(
-                        f"Failed to auto-grant member {uid} to resource pool {result.id} "
-                        f"for provider {provider_id}: {e}"
-                    )
+            members = [ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid) for uid in user_ids]
+            try:
+                await self.member_repo.grant_resource_pool_members(api_user, result.id, members)
+            except errors.BaseError as e:
+                logger.warning(
+                    f"Failed to auto-grant members  to resource pool {result.id} " f"for provider {provider_id}: {e}"
+                )
 
         return result
 
@@ -719,15 +717,16 @@ class ResourcePoolRepository(_Base):
             # Grant new
             if new_provider_id is not None:
                 new_user_ids = await self._get_connected_user_ids(new_provider_id)
-                for uid in new_user_ids:
-                    member = ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid)
-                    try:
-                        await self.member_repo.grant_resource_pool_members(api_user, resource_pool_id, [member])
-                    except errors.BaseError as e:
-                        logger.warning(
-                            f"Failed to auto-grant member {uid} to resource pool {resource_pool_id} "
-                            f"for provider {new_provider_id}: {e}"
-                        )
+                members = [
+                    ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid) for uid in new_user_ids
+                ]
+                try:
+                    await self.member_repo.grant_resource_pool_members(api_user, resource_pool_id, members)
+                except errors.BaseError as e:
+                    logger.warning(
+                        f"Failed to auto-grant member {uid} to resource pool {resource_pool_id} "
+                        f"for provider {new_provider_id}: {e}"
+                    )
 
         return transaction_result
 
