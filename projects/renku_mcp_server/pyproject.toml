@@ -1,0 +1,30 @@
+[project]
+name = "renku_mcp_server"
+version = "0.1.0"
+description = "MCP server for Renku"
+authors = [
+  { name = "Swiss Data Science Center", email = "contact@datascience.ch" },
+]
+license = ""
+requires-python = ">=3.13"
+dynamic = ["dependencies"]
+
+[tool.poetry]
+packages = [
+  { include = "renku_data_services/mcp_api", from = "../../bases" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.13"
+mcp = { extras = ["cli"], version = "^1.0" }
+httpx = "^0.28"
+uvicorn = "^0.34"
+starlette = "^0.46"
+pydantic = "^2.10.6"
+
+[tool.poetry.scripts]
+renku-mcp = "renku_data_services.mcp_api.main:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
