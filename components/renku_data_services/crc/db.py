@@ -1078,15 +1078,15 @@ class MemberRepository(_Base):
         for rp in rps_to_add:
             if rp not in user.resource_pools:
                 user.resource_pools.append(rp)
-            await self._grant_resource_pool_members(api_user, rp.id, [member_identifier], session=session)
+            await self._grant_resource_pool_members(api_user, rp.id, [member_identifier])
             if rp.default or rp.public:
-                await self._unprohibit_resource_pool_users(api_user, rp.id, [user.keycloak_id], session=session)
+                await self._unprohibit_resource_pool_users(api_user, rp.id, [user.keycloak_id])
         for rp in rps_to_remove:
             if rp in user.resource_pools:
                 user.resource_pools.remove(rp)
-            await self._revoke_resource_pool_members(api_user, rp.id, [member_identifier], session=session)
+            await self._revoke_resource_pool_members(api_user, rp.id, [member_identifier])
             if rp.default or rp.public:
-                await self._prohibit_resource_pool_users(api_user, rp.id, [user.keycloak_id], session=session)
+                await self._prohibit_resource_pool_users(api_user, rp.id, [user.keycloak_id])
 
     @with_db_transaction
     @_only_admins
