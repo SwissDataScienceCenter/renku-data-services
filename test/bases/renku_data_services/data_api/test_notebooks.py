@@ -216,8 +216,8 @@ async def test_check_docker_image_url(sanic_client: SanicASGITestClient, user_he
             },
             ["https://github.com/SwissDataScienceCenter/other-private"],
             False,  # Does not matter, repo does not exist
-            422,
-            "no_git_repo",  # Default GitRepositoriesRepository is use
+            200,
+            None,
         ),
         (
             {
@@ -341,8 +341,8 @@ async def test_check_docker_image_launcher(
             },
             ["https://github.com/SwissDataScienceCenter/other-private"],
             False,  # Does not matter, the user does not have access
-            403,
-            "You do not have pull access to the code repository used for this session.",
+            200,
+            None,
         ),
         (
             {

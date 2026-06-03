@@ -260,8 +260,6 @@ class NotebooksNewBP(CustomBlueprint):
                 conn = apispec.ImageConnection(
                     id=str(result.connection.id), provider_id=result.connection.provider_id, status=status
                 )
-            elif result.error is not None:
-                raise result.error
 
             provider: apispec.ImageProvider | None = None
             if result.client:
@@ -274,7 +272,10 @@ class NotebooksNewBP(CustomBlueprint):
                 platforms = [apispec.ImagePlatform.model_validate(p) for p in result.platforms]
 
             resp = apispec.ImageCheckResponse(
-                accessible=result.accessible, platforms=platforms, connection=conn, provider=provider
+                accessible=result.accessible,
+                platforms=platforms,
+                connection=conn,
+                provider=provider,
             )
 
             return json(resp.model_dump(exclude_none=True, mode="json"))

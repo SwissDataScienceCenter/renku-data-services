@@ -675,8 +675,9 @@ async def __get_connected_services_image_pull_secret(
 ) -> ExtraSecret | None:
     """Return a secret for accessing the image if one is available for the given user."""
     image_check_result = await image_check_repo.check_image(user=user, gitlab_user=None, image_src=launcher)
-    if image_check_result.error is not None:
-        raise image_check_result.error
+
+    if not image_check_result.accessible:
+        return None
 
     logger.debug(
         f"Set pull secret for {launcher.environment.container_image} to connection {image_check_result.image_provider}"
@@ -705,12 +706,6 @@ async def get_image_pull_secret(
 ) -> ExtraSecret | None:
     """Get an image pull secret."""
 
-    v2_secret = await __get_connected_services_image_pull_secret(
-        f"{server_name}-image-secret", image_check_repo, launcher, user
-    )
-    if v2_secret:
-        return v2_secret
-
     if (
         builds_config.enabled
         and builds_config.build_output_private_image_prefix is not None
@@ -723,6 +718,12 @@ async def get_image_pull_secret(
             ),
             adopt=False,
         )
+
+    v2_secret = await __get_connected_services_image_pull_secret(
+        f"{server_name}-image-secret", image_check_repo, launcher, user
+    )
+    if v2_secret:
+        return v2_secret
 
     if (
         nb_config.enable_internal_gitlab

@@ -1557,21 +1557,6 @@ def actual_user_headers(request, regular_user_access_token) -> dict[str, str]:
             201,
             None,
         ),
-        (
-            {
-                "name": "Private build image",
-                "description": "A session launcher",
-                "environment": {
-                    "container_image": f"{BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX}some-environment",
-                    "environment_kind": "CUSTOM",
-                    "name": "test",
-                    "port": 8888,
-                    "environment_image_source": "image",
-                },
-            },
-            422,
-            "Image was built but build parameters are missing",
-        ),
     ],
     ids=id_from_launcher,
 )
@@ -1664,22 +1649,6 @@ async def test_starting_session(
         ),
         (
             {
-                "name": "Private build image with wrong environment",
-                "description": "A session launcher",
-                "environment": {
-                    "container_image": f"{BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX}some-environment",
-                    "environment_kind": "CUSTOM",
-                    "name": "test",
-                    "port": 8888,
-                    "environment_image_source": "image",
-                },
-            },
-            ["https://github.com/SwissDataScienceCenter/renku-data-services"],
-            422,
-            "Image was built but build parameters are missing",
-        ),
-        (
-            {
                 "name": "Private build image with accessible repository",
                 "description": "A session launcher",
                 "environment": {
@@ -1705,8 +1674,8 @@ async def test_starting_session(
                 },
             },
             ["https://github.com/SwissDataScienceCenter/other-private"],
-            403,
-            "You do not have pull access to the code repository used for this session.",
+            201,
+            None,
         ),
         (
             {
@@ -1720,8 +1689,8 @@ async def test_starting_session(
                 },
             },
             ["https://github.com/SwissDataScienceCenter/private"],
-            422,
-            "Image was not built from a repository in this project",
+            201,
+            None,
         ),
     ],
     ids=id_from_launcher,
@@ -1769,13 +1738,6 @@ async def test_starting_session_with_builds_enabled(
     payload = {"project_id": project_id, "launcher_id": launcher_id}
     cookies = {"_renku_session": "some content"}
 
-    if (
-        "Renku-Auth-Anon-Id" in actual_user_headers
-        and launcher_conf["environment"].get("repository") == "https://github.com/SwissDataScienceCenter/private"
-    ):
-        expected_status_code = 403
-        expected_error_message = "You do not have pull access to the code repository used for this session."
-
     _, session_res = await sanic_client.post(
         "/api/data/sessions", headers=actual_user_headers, json=payload, cookies=cookies
     )
@@ -1811,13 +1773,13 @@ async def test_starting_session_with_builds_enabled(
             True,
         ),
         (
-            422,
+            201,
             "https://github.com/SwissDataScienceCenter/renku",
             "https://github.com/SwissDataScienceCenter/not-the same",
             False,
         ),
         (
-            403,
+            201,
             "https://github.com/SwissDataScienceCenter/other-private",
             "https://github.com/SwissDataScienceCenter/other-private",
             True,

@@ -440,6 +440,7 @@ class DependencyManager:
             git_provider_helper=git_provider_helper,
             project_repo=project_repo,
             git_repositories_repo=git_repositories_repo,
+            session_repo=session_repo,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_http_client_factory,
         )

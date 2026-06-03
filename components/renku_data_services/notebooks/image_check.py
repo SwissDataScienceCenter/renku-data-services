@@ -34,12 +34,12 @@ from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDock
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.oci.models import Platform
 from renku_data_services.notebooks.oci.utils import get_image_platforms
-from renku_data_services.notebooks.utils import repositories_from_project
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata as RepoMetadata
 from renku_data_services.session.config import BuildsConfig
-from renku_data_services.session.models import SessionLauncher
+from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.models import BuildStatus, SessionLauncher
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +101,7 @@ class ImageCheckRepository:
         git_provider_helper: GitProviderHelperProto,
         project_repo: ProjectRepository,
         git_repositories_repo: GitRepositoriesRepository,
+        session_repo: SessionRepository,
         connected_services_repo: ConnectedServicesRepository,
         oauth_client_factory: OAuthHttpClientFactory,
     ) -> None:
@@ -109,6 +110,7 @@ class ImageCheckRepository:
         self.git_provider_helper = git_provider_helper
         self.project_repo = project_repo
         self.git_repositories_repo = git_repositories_repo
+        self.session_repo = session_repo
         self.connected_services_repo = connected_services_repo
         self.oauth_client_factory = oauth_client_factory
 
@@ -120,30 +122,36 @@ class ImageCheckRepository:
         environment = launcher.environment
         image = launcher.environment.container_image
 
-        if (
+        if self.builds_config.build_output_private_image_prefix and image.startswith(
             self.builds_config.build_output_private_image_prefix
-            and image.startswith(self.builds_config.build_output_private_image_prefix)
-            or image == "image:unknown-at-the-moment"
         ):
+            builds = await self.session_repo.get_environment_builds(user=user, environment_id=environment.id)
+
+            latest_successful_build = None
+            for build in builds:
+                if build.status == BuildStatus.succeeded:
+                    latest_successful_build = build
+                    break
+
+            if latest_successful_build is None or latest_successful_build.result is None:
+                raise errors.ValidationError(message="Image is not yet ready")
+
+            if latest_successful_build.result.image != image:
+                raise errors.ProgrammingError(message="Database inconsistency")
+
             if environment.build_parameters is None:
                 raise errors.ValidationError(message="Image was built but build parameters are missing")
 
-            project = await self.project_repo.get_project(user=user, project_id=launcher.project_id)
-            git_providers = await self.git_provider_helper.get_providers(user=user)
-            repositories = repositories_from_project(project, git_providers)
-
-            build_repository = environment.build_parameters.repository
-            if build_repository not in [repository.url for repository in repositories]:
-                raise errors.ValidationError(message="Image was not built from a repository in this project")
-
             repo_data = await self.git_repositories_repo.get_repository(
-                repository_url=build_repository,
+                repository_url=latest_successful_build.result.repository_url,
                 user=user,
                 etag=None,
                 internal_gitlab_user=gitlab_user if gitlab_user else APIUser(),
             )
+
             if repo_data.is_error:
-                raise errors.ValidationError(message=str(repo_data.error))
+                raise errors.ValidationError(message="There was an issue accessing repo information")
+
             if isinstance(repo_data.metadata, RepoMetadata) and not repo_data.metadata.pull_permission:
                 raise errors.ForbiddenError(
                     message="You do not have pull access to the code repository used for this session."
@@ -163,13 +171,25 @@ class ImageCheckRepository:
         """Check access to the image from the given launcher or image and provide image and access details."""
 
         if isinstance(image_src, SessionLauncher):
+            # image can be "image:unknown-at-the-moment" which is returned until the first
+            # successful build however users can force a session start although it will fail
+            if image_src.environment.container_image == "image:unknown-at-the-moment":
+                return CheckResult(
+                    accessible=False,
+                    platforms=None,
+                    response_code=422,
+                    image_provider=None,
+                    token=None,
+                    error=errors.ValidationError(message="Image not built"),
+                )
+
             try:
                 await self.__check_built_image_accessibility(user, gitlab_user, image_src)
             except (errors.ValidationError, errors.ForbiddenError) as error:
                 return CheckResult(
                     accessible=False,
                     platforms=None,
-                    response_code=422 if isinstance(error, errors.ValidationError) else 403,
+                    response_code=403 if isinstance(error, errors.ForbiddenError) else 422,
                     image_provider=None,
                     token=None,
                     error=error,
