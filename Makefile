@@ -56,7 +56,7 @@ API_SPECS := \
     components/renku_data_services/notifications/apispec.py \
     components/renku_data_services/capacity_reservation/apispec.py \
     components/renku_data_services/resource_usage/apispec.py \
-		components/renku_data_services/renku_apps/apispec.py \
+    components/renku_data_services/renku_apps/apispec.py \
 	components/renku_data_services/authn/api/apispec.py
 
 schemas: ${API_SPECS}  ## Generate pydantic classes from apispec yaml files
@@ -124,6 +124,14 @@ shipwright_schema:  ## Updates the Shipwright pydantic classes
 .PHONY: knative_serving_schema
 knative_serving_schema: ## Updates the Knative Serving pydantic classes
 	curl https://raw.githubusercontent.com/knative/serving/refs/tags/${KNATIVE_SERVING_VERSION}/config/core/300-resources/service.yaml | yq '.spec.versions[] | select(.name == "v1") | .schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/renku_apps/cr_knative_service.py --base-class renku_data_services.renku_apps.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
+
+.PHONY: oci_schema
+oci_schema:  ## Updates the OCI classes
+	poetry run datamodel-codegen --url "https://raw.githubusercontent.com/opencontainers/image-spec/26647a49f642c7d22a1cd3aa0a48e4650a542269/schema/config-schema.json" --output components/renku_data_services/notebooks/oci/image_config.py --class-name ImageConfig --base-class renku_data_services.notebooks.oci.base_model.BaseOciModel ${CR_CODEGEN_PARAMS}
+	poetry run datamodel-codegen --url "https://raw.githubusercontent.com/opencontainers/image-spec/refs/tags/v1.1.1/schema/image-index-schema.json" --output components/renku_data_services/notebooks/oci/image_index.py --class-name ImageIndex --base-class renku_data_services.notebooks.oci.base_model.BaseOciModel ${CR_CODEGEN_PARAMS}
+	poetry run datamodel-codegen --url "https://raw.githubusercontent.com/opencontainers/image-spec/refs/tags/v1.1.1/schema/image-manifest-schema.json" --output components/renku_data_services/notebooks/oci/image_manifest.py --class-name ImageManifest --base-class renku_data_services.notebooks.oci.base_model.BaseOciModel ${CR_CODEGEN_PARAMS}
+
+##@ Devcontainer
 
 .PHONY: devcontainer_up
 devcontainer_up:  ## Start dev containers
