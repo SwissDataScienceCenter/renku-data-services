@@ -1,6 +1,7 @@
 """K8s client wrapper for Renku apps."""
 
 from collections.abc import AsyncGenerator
+from datetime import datetime
 from typing import Any
 
 from renku_data_services.crc.db import ClusterRepository
@@ -9,7 +10,9 @@ from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, DUMMY_RENKU_APP_USER_ID, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObjectMeta
 from renku_data_services.project.models import Project
+from renku_data_services.renku_apps.cr_knative_service import Condition
 from renku_data_services.renku_apps.crs import KnativeService
+from renku_data_services.renku_apps.models import AppRuntimeState
 from renku_data_services.session.models import SessionLauncher
 
 KNATIVE_SERVICE_GVK = GVK(kind="Service", group="serving.knative.dev", version="v1")
@@ -36,8 +39,8 @@ class RenkuAppsK8sClient:
 
     async def create_app_deployment(
         self, session_launcher: SessionLauncher, resource_class: ResourceClass | None, project: Project
-    ) -> KnativeService:
-        """Create a deployment for the given app and return the created Knative Service."""
+    ) -> AppRuntimeState:
+        """Create a deployment for the given app and return its observed runtime state."""
         cluster_id: ClusterId = DEFAULT_K8S_CLUSTER
         cluster = await self.__client.cluster_by_id(cluster_id)
         app_name = _generate_app_name(project)
@@ -52,10 +55,10 @@ class RenkuAppsK8sClient:
         created = await self.__client.create(
             meta.with_manifest(manifest.model_dump(exclude_none=True, mode="json")), refresh=True
         )
-        return KnativeService.model_validate(created.manifest)
+        return _extract_runtime_state(KnativeService.model_validate(created.manifest))
 
-    async def get_app_deployment(self, app_name: str) -> KnativeService | None:
-        """Get the deployment for the given app name, or None if it does not exist."""
+    async def get_app_deployment(self, app_name: str) -> AppRuntimeState | None:
+        """Get the runtime state for the given app name, or None if it does not exist."""
         cluster_id: ClusterId = DEFAULT_K8S_CLUSTER
         cluster = await self.__client.cluster_by_id(cluster_id)
         meta = K8sObjectMeta(
@@ -68,21 +71,21 @@ class RenkuAppsK8sClient:
         obj = await self.__client.get(meta)
         if obj is None:
             return None
-        return KnativeService.model_validate(obj.manifest)
+        return _extract_runtime_state(KnativeService.model_validate(obj.manifest))
 
-    async def get_app_deployment_for_project(self, project: Project) -> KnativeService | None:
-        """Get the app deployment for the given project, or None if it does not exist."""
+    async def get_app_deployment_for_project(self, project: Project) -> AppRuntimeState | None:
+        """Get the runtime state for the given project's app, or None if it does not exist."""
         return await self.get_app_deployment(_generate_app_name(project))
 
     async def delete_app_deployment(self, app_name: str) -> None:
         """Delete the deployment for the given app name. NOT IMPLEMENTED."""
         raise NotImplementedError("Deleting app deployment is not implemented yet")
 
-    async def list_app_deployments(self) -> AsyncGenerator[KnativeService, None]:
+    async def list_app_deployments(self) -> AsyncGenerator[AppRuntimeState, None]:
         """List all app deployments. NOT IMPLEMENTED."""
         raise NotImplementedError("Listing app deployments is not implemented yet")
 
-    async def update_app_deployment(self, app_name: str, session_launcher: SessionLauncher) -> KnativeService:
+    async def update_app_deployment(self, app_name: str, session_launcher: SessionLauncher) -> AppRuntimeState:
         """Update the deployment for the given app name. NOT IMPLEMENTED."""
         raise NotImplementedError("Updating app deployment is not implemented yet")
 
@@ -141,4 +144,39 @@ def _build_app_deployment_manifest(
                 },
             },
         }
+    )
+
+
+def _url(knative_service: KnativeService) -> str | None:
+    """Get the public URL Knative assigned to the service, or None if it is not yet routed."""
+    if knative_service.status is None:
+        return None
+    return knative_service.status.url
+
+
+def _ready_condition(knative_service: KnativeService) -> Condition | None:
+    """Get the Ready condition from a Knative service, or None if it doesn't exist."""
+    if knative_service.status is None or not knative_service.status.conditions:
+        return None
+    return next((c for c in knative_service.status.conditions if c.type == "Ready"), None)
+
+
+def _started_at(knative_service: KnativeService) -> datetime | None:
+    """Get the time the Knative service became Ready, or None if not yet ready."""
+    ready = _ready_condition(knative_service)
+    if ready is None or ready.status != "True" or ready.lastTransitionTime is None:
+        return None
+    return datetime.fromisoformat(ready.lastTransitionTime)
+
+
+def _extract_runtime_state(knative_service: KnativeService) -> AppRuntimeState:
+    """Read app runtime state primitives off a Knative Service."""
+    ready = _ready_condition(knative_service)
+    return AppRuntimeState(
+        name=knative_service.metadata.name,
+        launcher_id=knative_service.launcher_id,
+        project_id=knative_service.project_id,
+        ready_status=ready.status if ready is not None else None,
+        url=_url(knative_service),
+        started_at=_started_at(knative_service),
     )

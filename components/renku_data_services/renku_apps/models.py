@@ -40,3 +40,21 @@ class App:
             started=self.started,
             image=self.image,
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class AppRuntimeState:
+    """Runtime state of an app deployment, as observed in the cluster.
+
+    Carries the primitives that the K8s adapter extracts from a Knative Service
+    so that domain logic can compose an App without depending on K8s types.
+    The ready_status field holds the raw Kubernetes Ready-condition status value
+    ("True", "False", "Unknown", or None if the condition is absent).
+    """
+
+    name: str
+    launcher_id: ULID
+    project_id: ULID
+    ready_status: str | None
+    url: str | None
+    started_at: datetime | None

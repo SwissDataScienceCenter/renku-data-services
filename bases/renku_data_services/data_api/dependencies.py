@@ -263,7 +263,13 @@ class DependencyManager:
                 default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_repo,
                 cache=k8s_db_cache,
-                kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK, KNATIVE_SERVICE_GVK],
+                kinds_to_cache=[
+                    AMALTHEA_SESSION_GVK,
+                    JUPYTER_SESSION_GVK,
+                    BUILD_RUN_GVK,
+                    TASK_RUN_GVK,
+                    KNATIVE_SERVICE_GVK,
+                ],
             ),
         )
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
@@ -310,7 +316,13 @@ class DependencyManager:
                             default_kubeconfig=default_kubeconfig,
                             cluster_repo=cluster_repo,
                             cache=k8s_db_cache,
-                            kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK, KNATIVE_SERVICE_GVK],
+                            kinds_to_cache=[
+                                AMALTHEA_SESSION_GVK,
+                                JUPYTER_SESSION_GVK,
+                                BUILD_RUN_GVK,
+                                TASK_RUN_GVK,
+                                KNATIVE_SERVICE_GVK,
+                            ],
                         ),
                     ),
                     namespace=config.k8s_namespace,
