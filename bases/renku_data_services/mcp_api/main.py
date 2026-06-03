@@ -137,7 +137,7 @@ def _resolve_token() -> str:
 # ---------------------------------------------------------------------------
 
 
-def _build_http_app(deps: MCPDependencies):  # type: ignore[return]
+def _build_http_app(deps: MCPDependencies) -> Any:
     """Wrap the FastMCP ASGI app with per-request Bearer-token auth middleware."""
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.requests import Request
@@ -153,7 +153,7 @@ def _build_http_app(deps: MCPDependencies):  # type: ignore[return]
             return await call_next(request)
 
     asgi_app = mcp.streamable_http_app()
-    asgi_app.add_middleware(_AuthMiddleware)  # type: ignore[attr-defined]
+    asgi_app.add_middleware(_AuthMiddleware)
     return asgi_app
 
 

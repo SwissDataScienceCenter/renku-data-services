@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextvars
 import datetime
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
@@ -111,7 +112,7 @@ def create_server(deps: MCPDependencies) -> FastMCP:
     """Create and return the configured FastMCP server."""
 
     @asynccontextmanager
-    async def lifespan(server: FastMCP):  # type: ignore[type-arg]
+    async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
         yield {"deps": deps, "token": _current_token.get()}
 
     mcp = FastMCP(
@@ -280,6 +281,43 @@ def create_server(deps: MCPDependencies) -> FastMCP:
             {"repositories": repos},
             extra_headers={"If-Match": etag},
         )
+
+    @mcp.tool()
+    async def project_update(
+        ctx: Context,
+        project_id: Annotated[str, Field(description="Project ULID")],
+        name: Annotated[str | None, Field(description="New project name")] = None,
+        description: Annotated[str | None, Field(description="Short project description (shown in listings)")] = None,
+        documentation: Annotated[str | None, Field(description="Long-form project documentation (markdown)")] = None,
+        visibility: Annotated[str | None, Field(description="'public' or 'private'")] = None,
+    ) -> dict[str, Any]:
+        """Update project metadata. Omit any field to leave it unchanged.
+        Use description for a short summary shown in listings.
+        Use documentation for longer markdown content — project README, usage instructions, etc."""
+        proj = await _api(ctx, "GET", f"/projects/{project_id}")
+        etag = proj.get("etag")
+        if not etag:
+            raise RuntimeError("Could not get project ETag — cannot PATCH safely")
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        if documentation is not None:
+            body["documentation"] = documentation
+        if visibility is not None:
+            body["visibility"] = visibility
+        if not body:
+            raise RuntimeError("project_update: provide at least one field to update")
+        return await _api(ctx, "PATCH", f"/projects/{project_id}", body, extra_headers={"If-Match": etag})
+
+    @mcp.tool()
+    async def project_get_documentation(
+        ctx: Context,
+        project_id: Annotated[str, Field(description="Project ULID")],
+    ) -> dict[str, Any]:
+        """Get a project including its full documentation field (not returned by project_get by default)."""
+        return await _api(ctx, "GET", f"/projects/{project_id}", query={"with_documentation": "true"})
 
     # ------------------------------------------------------------------ #
     # Data connectors                                                      #

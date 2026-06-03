@@ -137,7 +137,7 @@ async def test_list_tools_smoke(mock_deps):
         assert "job_run" in names
         assert "session_delete_if_failed" in names
         assert "build_wait" in names
-        assert len(names) == 39
+        assert len(names) == 41
 
 
 @pytest.mark.asyncio
