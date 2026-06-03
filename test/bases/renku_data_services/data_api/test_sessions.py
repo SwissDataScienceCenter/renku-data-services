@@ -1803,9 +1803,6 @@ async def test_starting_session_with_built_environment(
     is_private,
     builds_enabled,
 ) -> None:
-    if not builds_enabled and is_private:
-        expected_status_code = 422
-
     project: dict[str, Any] = await create_project(
         sanic_client,
         "Some project",
