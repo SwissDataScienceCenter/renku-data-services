@@ -6,11 +6,10 @@ import secrets
 from abc import abstractmethod
 from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services import base_models
@@ -28,11 +27,10 @@ from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.kc_api import IKeycloakAPI
 from renku_data_services.users.models import (
     DeletedUser,
-    KeycloakAdminEvent,
+    KeycloakEventSource,
     PinnedProjects,
     UnsavedUserInfo,
     UserInfo,
-    UserInfoFieldUpdate,
     UserInfoUpdate,
     UserPatch,
     UserPreferences,
@@ -403,73 +401,88 @@ class UsersSync:
         for user in kc_users:
             await _do_update(user)
 
-    async def events_sync(self, kc_api: IKeycloakAPI) -> None:
-        """Use the events from Keycloak to update the users database."""
+    async def admin_events_sync(self, kc_api: IKeycloakAPI) -> None:
+        """Update the authorization database using the Keycloak admin events API."""
+        logger.info("Starting admin events sync")
         async with self.session_maker() as session, session.begin():
-            res_count = await session.execute(select(func.count()).select_from(UserORM))
-            count = res_count.scalar() or 0
-            if count == 0:
-                await self.users_sync(kc_api)
-            logger.info("Starting periodic event sync.")
-            stmt = select(LastKeycloakEventTimestamp)
-            latest_utc_timestamp_orm = (await session.execute(stmt)).scalar_one_or_none()
+            stmt = select(LastKeycloakEventTimestamp).where(
+                LastKeycloakEventTimestamp.id == KeycloakEventSource.realm_admin_events
+            )
+            latest_utc_timestamp_orm = await session.scalar(stmt)
             previous_sync_latest_utc_timestamp = (
-                latest_utc_timestamp_orm.timestamp_utc if latest_utc_timestamp_orm is not None else None
+                latest_utc_timestamp_orm.timestamp_utc if latest_utc_timestamp_orm else None
             )
             logger.info(f"The previous sync latest event is {previous_sync_latest_utc_timestamp} UTC")
-            now_utc = datetime.now(tz=UTC)
-            # start_date = now_utc.date() - timedelta(days=1)
-            start_date = now_utc.date() - timedelta(minutes=1)
-            logger.info(f"Pulling events with a start date of {start_date} UTC")
-            user_events = kc_api.get_user_events(start_date=start_date)
-            update_admin_events = kc_api.get_admin_events(
-                start_date=start_date, event_types=[KeycloakAdminEvent.CREATE, KeycloakAdminEvent.UPDATE]
-            )
-            # delete_admin_events = kc_api.get_admin_events(
-            #     start_date=start_date, event_types=[KeycloakAdminEvent.DELETE]
-            # )
-            parsed_updates = UserInfoFieldUpdate.from_json_admin_events(update_admin_events)
-            parsed_updates.extend(UserInfoFieldUpdate.from_json_user_events(user_events))
-            # parsed_deletions = UserInfoFieldUpdate.from_json_admin_events(delete_admin_events)
-            parsed_updates = sorted(parsed_updates, key=lambda x: x.timestamp_utc)
-            # parsed_deletions = sorted(parsed_deletions, key=lambda x: x.timestamp_utc)
-            if previous_sync_latest_utc_timestamp is not None:
-                # Some events have already been processed - filter out old events we have seen
-                logger.info(f"Filtering events older than {previous_sync_latest_utc_timestamp}")
-                parsed_updates = [u for u in parsed_updates if u.timestamp_utc > previous_sync_latest_utc_timestamp]
-                # parsed_deletions = [u for u in parsed_deletions if u.timestamp_utc > previous_sync_latest_utc_timestamp] # noqa: E501
-            latest_update_timestamp = None
-            # latest_delete_timestamp = None
-            for update in parsed_updates:
-                logger.info(f"Processing update event {update}")
-                # TODO: add typing to `update.field_name` for safer updates
-                await self.update_or_insert_user(
-                    user=UnsavedUserInfo(id=update.user_id, **{update.field_name: update.new_value})
-                )
-                latest_update_timestamp = update.timestamp_utc
-            # for deletion in parsed_deletions:
-            #     logger.info(f"Processing deletion event {deletion}")
-            #     await self.user_repo.remove_user(
-            #         requested_by=InternalServiceAdmin(id=ServiceAdminId.migrations), user_id=deletion.user_id
-            #     )
-            #     latest_delete_timestamp = deletion.timestamp_utc
-            # Update the latest processed event timestamp
-            current_sync_latest_utc_timestamp = latest_update_timestamp
-            # if latest_delete_timestamp is not None and (
-            #     current_sync_latest_utc_timestamp is None or current_sync_latest_utc_timestamp < latest_delete_timestamp # noqa: E501
-            # ):
-            #     current_sync_latest_utc_timestamp = latest_delete_timestamp
-            if current_sync_latest_utc_timestamp is not None:
-                if latest_utc_timestamp_orm is None:
-                    session.add(LastKeycloakEventTimestamp(current_sync_latest_utc_timestamp))
-                    logger.info(
-                        f"Inserted the latest sync event timestamp in the database: {current_sync_latest_utc_timestamp}"
-                    )
-                else:
-                    latest_utc_timestamp_orm.timestamp_utc = current_sync_latest_utc_timestamp
-                    logger.info(
-                        f"Updated the latest sync event timestamp in the database: {current_sync_latest_utc_timestamp}"
-                    )
+
+            pass
+
+    # async def events_sync(self, kc_api: IKeycloakAPI) -> None:
+    #     """Use the events from Keycloak to update the users database."""
+    #     async with self.session_maker() as session, session.begin():
+    #         res_count = await session.execute(select(func.count()).select_from(UserORM))
+    #         count = res_count.scalar() or 0
+    #         if count == 0:
+    #             await self.users_sync(kc_api)
+    #         logger.info("Starting periodic event sync.")
+    #         stmt = select(LastKeycloakEventTimestamp)
+    #         latest_utc_timestamp_orm = (await session.execute(stmt)).scalar_one_or_none()
+    #         previous_sync_latest_utc_timestamp = (
+    #             latest_utc_timestamp_orm.timestamp_utc if latest_utc_timestamp_orm is not None else None
+    #         )
+    #         logger.info(f"The previous sync latest event is {previous_sync_latest_utc_timestamp} UTC")
+    #         now_utc = datetime.now(tz=UTC)
+    #         # start_date = now_utc.date() - timedelta(days=1)
+    #         start_date = now_utc.date() - timedelta(minutes=1)
+    #         logger.info(f"Pulling events with a start date of {start_date} UTC")
+    #         user_events = kc_api.get_user_events(start_date=start_date)
+    #         update_admin_events = kc_api.get_admin_events(
+    #             start_date=start_date, event_types=[KeycloakAdminEvent.CREATE, KeycloakAdminEvent.UPDATE]
+    #         )
+    #         # delete_admin_events = kc_api.get_admin_events(
+    #         #     start_date=start_date, event_types=[KeycloakAdminEvent.DELETE]
+    #         # )
+    #         parsed_updates = UserInfoFieldUpdate.from_json_admin_events(update_admin_events)
+    #         parsed_updates.extend(UserInfoFieldUpdate.from_json_user_events(user_events))
+    #         # parsed_deletions = UserInfoFieldUpdate.from_json_admin_events(delete_admin_events)
+    #         parsed_updates = sorted(parsed_updates, key=lambda x: x.timestamp_utc)
+    #         # parsed_deletions = sorted(parsed_deletions, key=lambda x: x.timestamp_utc)
+    #         if previous_sync_latest_utc_timestamp is not None:
+    #             # Some events have already been processed - filter out old events we have seen
+    #             logger.info(f"Filtering events older than {previous_sync_latest_utc_timestamp}")
+    #             parsed_updates = [u for u in parsed_updates if u.timestamp_utc > previous_sync_latest_utc_timestamp]
+    #             # parsed_deletions = [u for u in parsed_deletions if u.timestamp_utc > previous_sync_latest_utc_timestamp] # noqa: E501
+    #         latest_update_timestamp = None
+    #         # latest_delete_timestamp = None
+    #         for update in parsed_updates:
+    #             logger.info(f"Processing update event {update}")
+    #             # TODO: add typing to `update.field_name` for safer updates
+    #             await self.update_or_insert_user(
+    #                 user=UnsavedUserInfo(id=update.user_id, **{update.field_name: update.new_value})
+    #             )
+    #             latest_update_timestamp = update.timestamp_utc
+    #         # for deletion in parsed_deletions:
+    #         #     logger.info(f"Processing deletion event {deletion}")
+    #         #     await self.user_repo.remove_user(
+    #         #         requested_by=InternalServiceAdmin(id=ServiceAdminId.migrations), user_id=deletion.user_id
+    #         #     )
+    #         #     latest_delete_timestamp = deletion.timestamp_utc
+    #         # Update the latest processed event timestamp
+    #         current_sync_latest_utc_timestamp = latest_update_timestamp
+    #         # if latest_delete_timestamp is not None and (
+    #         #     current_sync_latest_utc_timestamp is None or current_sync_latest_utc_timestamp < latest_delete_timestamp # noqa: E501
+    #         # ):
+    #         #     current_sync_latest_utc_timestamp = latest_delete_timestamp
+    #         if current_sync_latest_utc_timestamp is not None:
+    #             if latest_utc_timestamp_orm is None:
+    #                 session.add(LastKeycloakEventTimestamp(current_sync_latest_utc_timestamp))
+    #                 logger.info(
+    #                     f"Inserted the latest sync event timestamp in the database: {current_sync_latest_utc_timestamp}"
+    #                 )
+    #             else:
+    #                 latest_utc_timestamp_orm.timestamp_utc = current_sync_latest_utc_timestamp
+    #                 logger.info(
+    #                     f"Updated the latest sync event timestamp in the database: {current_sync_latest_utc_timestamp}"
+    #                 )
 
 
 @dataclass
