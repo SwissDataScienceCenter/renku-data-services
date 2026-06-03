@@ -31,10 +31,9 @@ from renku_data_services.connected_services.oauth_http import (
 )
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
-from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
+from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.oci.models import Platform
 from renku_data_services.notebooks.oci.utils import get_image_platforms
-from renku_data_services.project.db import ProjectRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata as RepoMetadata
 from renku_data_services.session.config import BuildsConfig
@@ -98,8 +97,6 @@ class ImageCheckRepository:
         self,
         nb_config: NotebooksConfig,
         builds_config: BuildsConfig,
-        git_provider_helper: GitProviderHelperProto,
-        project_repo: ProjectRepository,
         git_repositories_repo: GitRepositoriesRepository,
         session_repo: SessionRepository,
         connected_services_repo: ConnectedServicesRepository,
@@ -107,8 +104,6 @@ class ImageCheckRepository:
     ) -> None:
         self.nb_config = nb_config
         self.builds_config = builds_config
-        self.git_provider_helper = git_provider_helper
-        self.project_repo = project_repo
         self.git_repositories_repo = git_repositories_repo
         self.session_repo = session_repo
         self.connected_services_repo = connected_services_repo
