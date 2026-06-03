@@ -134,8 +134,6 @@ class ImageCheckRepository:
             if latest_successful_build.result.image != image:
                 raise errors.ProgrammingError(message="Database inconsistency")
 
-            if environment.build_parameters is None:
-                raise errors.ValidationError(message="Image was built but build parameters are missing")
 
             repo_data = await self.git_repositories_repo.get_repository(
                 repository_url=latest_successful_build.result.repository_url,
