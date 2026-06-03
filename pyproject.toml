@@ -289,6 +289,17 @@ ignore_missing_imports = true
 module = ["test.*"]
 disable_error_code = ["no-untyped-def", "var-annotated", "import-untyped"]
 
+[[tool.mypy.overrides]]
+# MCP tools return JSON responses (Any) from HTTP calls — warn_return_any
+# would require casts on every tool, adding noise without safety benefit.
+module = ["renku_data_services.mcp_api.*"]
+warn_return_any = false
+disable_error_code = ["no-untyped-def"]
+
+[[tool.mypy.overrides]]
+module = ["mcp.*", "fastmcp.*", "uvicorn.*", "starlette.*"]
+ignore_missing_imports = true
+
 [tool.coverage.run]
 source = ["bases/", "components/"]
 omit = ["components/renku_data_services/notebooks"]
