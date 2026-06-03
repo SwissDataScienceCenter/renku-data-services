@@ -846,7 +846,7 @@ async def start_session(
     if session_type.is_non_interactive and launch_request.submission_id is None:
         raise errors.ValidationError(message="Job submissions require a submission_id.")
 
-    if session_type.is_interactive and launch_request.job_args_overrides:
+    if session_type.is_interactive and (launch_request.job_args_overrides or launch_request.job_command_overrides):
         raise errors.ValidationError(message="Interactive sessions don't allow job_args_override.")
 
     # Determine resource_class_id: the class can be overwritten at the user's request
@@ -1110,8 +1110,11 @@ async def start_session(
     # if non-interactive and built-from-code, we need to wrap the "real" command in a launcher script
     if session_type.is_non_interactive and launcher.environment.build_parameters_id is not None:
         command = ["/cnb/lifecycle/launcher", "--"]
-        args = (environment.command or []) + (launch_request.job_args_overrides or environment.args or [])
+        args = (launch_request.job_command_overrides or environment.command or []) + (
+            launch_request.job_args_overrides or environment.args or []
+        )
     elif session_type.is_non_interactive:
+        command = launch_request.job_command_overrides or environment.command or []
         args = launch_request.job_args_overrides or environment.args or []
 
     session = AmaltheaSessionV1Alpha1(
@@ -1538,6 +1541,7 @@ def validate_session_post_request(body: apispec.SessionPostRequest) -> SessionLa
         data_connectors_overrides=data_connectors_overrides,
         env_variable_overrides=env_variable_overrides,
         submission_id=submission_id,
+        job_command_overrides=body.job_command_override,
         job_args_overrides=body.job_args_override,
     )
 
