@@ -264,6 +264,10 @@ components:
           format: date-time
           nullable: true
           type: string
+        job_completed_at:
+          type: string
+          format: date-time
+          nullable: true
         lastInteraction:
           type: string
           format: date-time

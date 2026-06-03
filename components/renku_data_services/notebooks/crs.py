@@ -372,6 +372,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 else None,
             ),
             started=self.metadata.creationTimestamp,
+            job_completed_at=self.status.idleSince if session_type == apispec.SessionType.non_interactive else None,
             lastInteraction=self.spec.culling.lastInteraction if self.spec.culling else None,
             status=apispec.SessionStatus(
                 state=state,
