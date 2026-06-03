@@ -97,3 +97,6 @@ result
 # VScode local config
 .vscode/*
 !.vscode/settings.json
+
+# AI
+.claude

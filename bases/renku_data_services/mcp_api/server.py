@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import contextvars
 import datetime
+import os
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
+from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.server import Context
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field
 
 from renku_data_services.mcp_api.dependencies import MCPDependencies
@@ -46,6 +49,7 @@ async def _require_non_admin(ctx: Context) -> None:
     Set RENKU_MCP_ALLOW_ADMIN=1 in the server environment to override.
     """
     import os
+
     if os.environ.get("RENKU_MCP_ALLOW_ADMIN"):
         return
     t = _token(ctx)
@@ -115,9 +119,23 @@ def create_server(deps: MCPDependencies) -> FastMCP:
     async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
         yield {"deps": deps, "token": _current_token.get()}
 
+    # Allow the deployment hostname so the MCP SDK's DNS-rebinding protection
+    # doesn't reject requests that arrive with the public hostname as Host header.
+    _base_host = urlparse(deps.base_url).hostname or ""
+    _transport_security = (
+        TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=["127.0.0.1:*", "localhost:*", _base_host, f"{_base_host}:*"],
+            allowed_origins=[deps.base_url, f"{deps.base_url}/*"],
+        )
+        if _base_host
+        else None
+    )
+
     mcp = FastMCP(
         "Renku",
         lifespan=lifespan,
+        transport_security=_transport_security,
         instructions=(
             "Tools for the Renku data science platform.\n\n"
             "Safety rules:\n"
@@ -181,7 +199,11 @@ def create_server(deps: MCPDependencies) -> FastMCP:
         Always call this before creating a launcher or running a job.
         Pass your resource requirements so the API can set matching=true on
         suitable classes. Pick the smallest class where matching=true."""
-        query = {k: v for k, v in {"cpu": cpu, "memory": memory, "gpu": gpu, "max_storage": max_storage}.items() if v is not None}
+        query = {
+            k: v
+            for k, v in {"cpu": cpu, "memory": memory, "gpu": gpu, "max_storage": max_storage}.items()
+            if v is not None
+        }
         pools = await _api(ctx, "GET", "/resource_pools", query=query or None)
         classes: list[dict[str, Any]] = []
         for pool in pools if isinstance(pools, list) else pools.get("resource_pools", []):
@@ -277,7 +299,9 @@ def create_server(deps: MCPDependencies) -> FastMCP:
         if repository_url not in repos:
             repos.append(repository_url)
         return await _api(
-            ctx, "PATCH", f"/projects/{proj['id']}",
+            ctx,
+            "PATCH",
+            f"/projects/{proj['id']}",
             {"repositories": repos},
             extra_headers={"If-Match": etag},
         )
@@ -289,11 +313,13 @@ def create_server(deps: MCPDependencies) -> FastMCP:
         name: Annotated[str | None, Field(description="New project name")] = None,
         description: Annotated[str | None, Field(description="Short project description (shown in listings)")] = None,
         documentation: Annotated[str | None, Field(description="Long-form project documentation (markdown)")] = None,
+        keywords: Annotated[list[str] | None, Field(description="Project keywords (replaces existing list)")] = None,
         visibility: Annotated[str | None, Field(description="'public' or 'private'")] = None,
     ) -> dict[str, Any]:
         """Update project metadata. Omit any field to leave it unchanged.
         Use description for a short summary shown in listings.
-        Use documentation for longer markdown content — project README, usage instructions, etc."""
+        Use documentation for longer markdown content — project README, usage instructions, etc.
+        keywords replaces the entire keyword list — include all desired keywords, not just new ones."""
         proj = await _api(ctx, "GET", f"/projects/{project_id}")
         etag = proj.get("etag")
         if not etag:
@@ -305,6 +331,8 @@ def create_server(deps: MCPDependencies) -> FastMCP:
             body["description"] = description
         if documentation is not None:
             body["documentation"] = documentation
+        if keywords is not None:
+            body["keywords"] = keywords
         if visibility is not None:
             body["visibility"] = visibility
         if not body:
@@ -344,8 +372,12 @@ def create_server(deps: MCPDependencies) -> FastMCP:
     async def connector_create(
         ctx: Context,
         storage: Annotated[dict[str, Any], Field(description="Storage configuration dict")],
-        name: Annotated[str | None, Field(description="Connector display name (required for namespaced connectors)")] = None,
-        namespace: Annotated[str | None, Field(description="Namespace slug (required for namespaced connectors)")] = None,
+        name: Annotated[
+            str | None, Field(description="Connector display name (required for namespaced connectors)")
+        ] = None,
+        namespace: Annotated[
+            str | None, Field(description="Namespace slug (required for namespaced connectors)")
+        ] = None,
         visibility: Annotated[str, Field(description="'public' or 'private'")] = "public",
         project_id: Annotated[str, Field(description="Link to this project immediately (recommended)")] = "",
     ) -> dict[str, Any]:
@@ -374,7 +406,10 @@ def create_server(deps: MCPDependencies) -> FastMCP:
             if not name or not namespace:
                 raise RuntimeError("name and namespace are required for non-DOI connectors")
             body: dict[str, Any] = {
-                "name": name, "namespace": namespace, "visibility": visibility, "storage": storage,
+                "name": name,
+                "namespace": namespace,
+                "visibility": visibility,
+                "storage": storage,
             }
             data = await _api(ctx, "POST", "/data_connectors", body)
         if project_id:
@@ -400,7 +435,8 @@ def create_server(deps: MCPDependencies) -> FastMCP:
         connector_id: Annotated[str, Field(description="Connector ID")],
         body: Annotated[dict[str, Any], Field(description="Partial update body")],
     ) -> dict[str, Any]:
-        """Patch a data connector (name, namespace, visibility, storage fields, etc.).
+        """Patch a data connector. Patchable fields: name, namespace, visibility, storage,
+        description, keywords (list of strings, replaces existing list).
 
         To remove a project-owned connector from a project without deleting it:
           1. Call connector_patch(connector_id, {"namespace": "<your-username>"}) to move it to
@@ -489,8 +525,10 @@ def create_server(deps: MCPDependencies) -> FastMCP:
         if environment.get("environment_image_source") != "build" and "name" not in environment:
             environment = {"name": name, **environment}
         body: dict[str, Any] = {
-            "project_id": project_id, "name": name,
-            "resource_class_id": resource_class_id, "environment": environment,
+            "project_id": project_id,
+            "name": name,
+            "resource_class_id": resource_class_id,
+            "environment": environment,
         }
         if description:
             body["description"] = description
@@ -705,9 +743,7 @@ def create_server(deps: MCPDependencies) -> FastMCP:
         try:
             started_at = data.get("started_at") or (data.get("status") or {}).get("started_at")
             if started_at:
-                age = time.time() - datetime.datetime.fromisoformat(
-                    started_at.replace("Z", "+00:00")
-                ).timestamp()
+                age = time.time() - datetime.datetime.fromisoformat(started_at.replace("Z", "+00:00")).timestamp()
                 created = age < 60
         except Exception:
             pass
@@ -764,9 +800,7 @@ def create_server(deps: MCPDependencies) -> FastMCP:
             if state in terminal:
                 result: dict[str, Any] = {"state": state, "timed_out": False, "session": session}
                 if isinstance(logs, dict):
-                    result["logs"] = dict(
-                        sorted(logs.items(), key=lambda kv: (kv[0] != "amalthea-session", kv[0]))
-                    )
+                    result["logs"] = dict(sorted(logs.items(), key=lambda kv: (kv[0] != "amalthea-session", kv[0])))
                 elif logs is not None:
                     result["logs"] = logs
                 return result
