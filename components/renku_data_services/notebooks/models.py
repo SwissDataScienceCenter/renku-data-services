@@ -302,4 +302,5 @@ class SessionLaunchRequest:
     data_connectors_overrides: list[SessionDataConnectorOverride] | None
     env_variable_overrides: list[SessionEnvVar] | None
     submission_id: SubmissionId | None
+    job_command_overrides: list[str] | None
     job_args_overrides: list[str] | None
