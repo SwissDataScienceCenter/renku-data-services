@@ -137,21 +137,84 @@ def _resolve_token() -> str:
 # ---------------------------------------------------------------------------
 
 
+def _keycloak_issuer_url() -> str:
+    """Return the Keycloak realm issuer URL from KEYCLOAK_ISSUER_URL env var."""
+    return os.environ.get("KEYCLOAK_ISSUER_URL", "").rstrip("/")
+
+
 def _build_http_app(deps: MCPDependencies) -> Any:
-    """Wrap the FastMCP ASGI app with per-request Bearer-token auth middleware."""
+    """Build the HTTP ASGI app with OAuth metadata endpoints and Bearer-token middleware.
+
+    Routes and middleware are added directly to the FastMCP app so its lifespan
+    (which initialises the task group) runs correctly under uvicorn.
+    """
+    import httpx
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.requests import Request
-    from starlette.responses import Response
+    from starlette.responses import JSONResponse, Response
+
+    base_url = deps.base_url
+    keycloak_realm_url = _keycloak_issuer_url()
+
+    @mcp.custom_route("/.well-known/oauth-protected-resource", methods=["GET"])  # type: ignore[misc]
+    async def protected_resource_metadata(request: Request) -> JSONResponse:
+        """RFC 9728 — tells clients where to find the authorization server."""
+        doc: dict[str, Any] = {"resource": f"{base_url}/mcp"}
+        if keycloak_realm_url:
+            doc["authorization_servers"] = [keycloak_realm_url]
+        return JSONResponse(doc)
+
+    @mcp.custom_route("/.well-known/oauth-authorization-server", methods=["GET"])  # type: ignore[misc]
+    async def authorization_server_metadata(request: Request) -> JSONResponse:
+        """RFC 8414 — proxy Keycloak's OIDC discovery as OAuth AS metadata."""
+        if not keycloak_realm_url:
+            return JSONResponse({"error": "KEYCLOAK_ISSUER_URL not configured"}, status_code=503)
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(f"{keycloak_realm_url}/.well-known/openid-configuration", timeout=5)
+                resp.raise_for_status()
+                oidc = resp.json()
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=502)
+        return JSONResponse(
+            {
+                "issuer": oidc.get("issuer"),
+                "authorization_endpoint": oidc.get("authorization_endpoint"),
+                "token_endpoint": oidc.get("token_endpoint"),
+                "token_endpoint_auth_methods_supported": oidc.get(
+                    "token_endpoint_auth_methods_supported", ["client_secret_post", "client_secret_basic"]
+                ),
+                "jwks_uri": oidc.get("jwks_uri"),
+                "scopes_supported": oidc.get("scopes_supported"),
+                "response_types_supported": oidc.get("response_types_supported"),
+                "grant_types_supported": oidc.get("grant_types_supported", ["authorization_code", "refresh_token"]),
+                "code_challenge_methods_supported": ["S256"],
+                "revocation_endpoint": oidc.get("revocation_endpoint"),
+                # Omit registration_endpoint — clients should use the pre-registered
+                # renku-mcp client rather than attempting dynamic client registration.
+            }
+        )
 
     class _AuthMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next: Any) -> Response:
+            # Metadata endpoints are public — no auth required.
+            if request.url.path.startswith("/.well-known/"):
+                return await call_next(request)
             # Token validation is handled by the ingress proxy, same as the
             # rest of the data service. We just extract and forward the token.
             auth_header = request.headers.get("Authorization", "")
             token = auth_header.removeprefix("Bearer ").removeprefix("bearer ").strip()
+            if not token:
+                resource_metadata_url = f"{base_url}/.well-known/oauth-protected-resource"
+                return Response(
+                    status_code=401,
+                    headers={"WWW-Authenticate": f'Bearer resource_metadata="{resource_metadata_url}"'},
+                )
             set_current_token(token)
             return await call_next(request)
 
+    # Add middleware directly to the FastMCP app — no outer wrapper so the
+    # FastMCP lifespan (task group init) runs correctly under uvicorn.
     asgi_app = mcp.streamable_http_app()
     asgi_app.add_middleware(_AuthMiddleware)
     return asgi_app

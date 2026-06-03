@@ -144,7 +144,7 @@ async def test_list_tools_smoke(mock_deps):
 async def test_session_list_filters_stale(mock_deps):
     mock_deps.api.return_value = [
         make_session("running"),
-        make_session("hibernated", will_delete_at=iso_ago(60)),    # stale
+        make_session("hibernated", will_delete_at=iso_ago(60)),  # stale
         make_session("running", will_delete_at=iso_future(3600)),  # not stale
     ]
 
@@ -203,6 +203,7 @@ async def test_session_delete_if_failed_skips_running(mock_deps):
 @pytest.mark.asyncio
 async def test_job_wait_returns_timed_out_flag(mock_deps):
     """job_wait returns timed_out=True instead of raising when it times out."""
+
     async def fake_api(method, path, token, *args, **kwargs):
         if "/logs" in path:
             return {}
