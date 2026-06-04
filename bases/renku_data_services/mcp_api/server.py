@@ -8,7 +8,7 @@ import os
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Annotated, Any
+from typing import Annotated, Any, Callable
 from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
@@ -18,7 +18,7 @@ from pydantic import Field
 
 from renku_data_services.mcp_api.dependencies import MCPDependencies
 
-# Current request token — set by ASGI auth middleware (HTTP) or main.py at startup (stdio).
+# Current request token — set by ASGI auth middleware (HTTP) or resolved lazily in stdio mode.
 _current_token: contextvars.ContextVar[str] = contextvars.ContextVar("mcp_token", default="")
 
 
@@ -30,7 +30,18 @@ def _token(ctx: Context) -> str:
     t = _current_token.get()
     if t:
         return t
-    return ctx.request_context.lifespan_context.get("token", "")
+    # In stdio mode, try the resolver so that a fresh rnk login is picked up
+    # without restarting the server.
+    resolver: Callable[[], str] | None = ctx.request_context.lifespan_context.get("token_resolver")
+    if resolver:
+        try:
+            t = resolver()
+            if t:
+                set_current_token(t)  # cache for this session once found
+                return t
+        except Exception:
+            pass
+    return ""
 
 
 def _deps(ctx: Context) -> MCPDependencies:
@@ -112,12 +123,20 @@ def _project_path(ident: str) -> str:
     return f"/projects/{urllib.parse.quote(ident, safe='')}"
 
 
-def create_server(deps: MCPDependencies) -> FastMCP:
-    """Create and return the configured FastMCP server."""
+def create_server(
+    deps: MCPDependencies,
+    token_resolver: Callable[[], str] | None = None,
+) -> FastMCP:
+    """Create and return the configured FastMCP server.
+
+    token_resolver: optional callable that returns a fresh token string (stdio mode).
+    When provided, _token() calls it on each request so a fresh rnk login is picked
+    up without restarting the server.
+    """
 
     @asynccontextmanager
     async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
-        yield {"deps": deps, "token": _current_token.get()}
+        yield {"deps": deps, "token_resolver": token_resolver}
 
     # Allow the deployment hostname so the MCP SDK's DNS-rebinding protection
     # doesn't reject requests that arrive with the public hostname as Host header.
@@ -138,6 +157,17 @@ def create_server(deps: MCPDependencies) -> FastMCP:
         transport_security=_transport_security,
         instructions=(
             "Tools for the Renku data science platform.\n\n"
+            "Authentication:\n"
+            "- Call auth_status first. If authenticated=false, stop immediately and tell the user "
+            "their Renku token is missing or expired. Do not attempt other tools.\n"
+            "- If any tool returns an error containing 'Bearer', '401', 'Unauthorized', or "
+            "'authenticated: false', treat it as an auth failure — not an API or schema problem. "
+            "Stop retrying other tools and ask the user to re-authenticate.\n"
+            "- In stdio mode: tell the user to run rnk login "
+            "(with --renku-url <base_url> for non-default deployments), "
+            "then retry the failed tool call — the server will pick up the new token automatically.\n"
+            "- In HTTP mode (remote server): tell the user to reconnect the MCP server in their "
+            "client (Claude Code, pi, Codex) to trigger a new OAuth login.\n\n"
             "Safety rules:\n"
             "- If auth_status shows is_admin=true, do not perform any operation. "
             "Ask the user to log out and log back in as a non-admin.\n"
@@ -149,8 +179,6 @@ def create_server(deps: MCPDependencies) -> FastMCP:
             "- Never include credentials in connector storage configurations. "
             "Direct the user to add secrets through the Renku UI after creation.\n"
             "- Confirm with the user before deleting connectors, launchers, or running sessions.\n"
-            "- Never ask for storage credentials (S3 keys, passwords). "
-            "Direct the user to add them through the Renku UI.\n"
             "- Never sleep or poll manually while waiting for sessions, jobs, or builds. "
             "Always use session_wait(), job_wait(), or build_wait() instead.\n\n"
             "Session URLs:\n"
@@ -503,6 +531,7 @@ def create_server(deps: MCPDependencies) -> FastMCP:
         name: Annotated[str, Field(description="Launcher name")],
         resource_class_id: Annotated[int, Field(description="Resource class ID (from resource_classes())")],
         environment: Annotated[dict[str, Any], Field(description="Environment definition dict")],
+        launcher_type: Annotated[str, Field(description="'interactive' for sessions, 'non_interactive' for jobs")] = "interactive",
         description: Annotated[str, Field(description="Optional description")] = "",
     ) -> dict[str, Any]:
         """Create a session launcher. Always call resource_classes(cpu=..., memory=...) first.
@@ -529,6 +558,7 @@ def create_server(deps: MCPDependencies) -> FastMCP:
             "name": name,
             "resource_class_id": resource_class_id,
             "environment": environment,
+            "launcher_type": launcher_type,
         }
         if description:
             body["description"] = description
@@ -607,9 +637,16 @@ def create_server(deps: MCPDependencies) -> FastMCP:
         disk_storage: Annotated[int | None, Field(description="Override disk storage in GB")] = None,
     ) -> dict[str, Any]:
         """Launch an interactive session from a launcher.
-        After calling this, use session_wait(session_id) to wait for it to reach
-        'running' state — do not sleep or poll manually."""
-        body: dict[str, Any] = {"launcher_id": launcher_id, "session_type": "interactive"}
+        Verifies the launcher has launcher_type='interactive' — use job_run for non_interactive launchers.
+        After calling this, use session_wait(session_id) to wait for 'running' state —
+        do not sleep or poll manually."""
+        launcher = await _api(ctx, "GET", f"/session_launchers/{launcher_id}")
+        if launcher.get("launcher_type") != "interactive":
+            raise RuntimeError(
+                f"Launcher {launcher_id!r} has launcher_type={launcher.get('launcher_type')!r}. "
+                "Use job_run for non_interactive launchers."
+            )
+        body: dict[str, Any] = {"launcher_id": launcher_id}
         if resource_class_id is not None:
             body["resource_class_id"] = resource_class_id
         if disk_storage is not None:
@@ -722,6 +759,7 @@ def create_server(deps: MCPDependencies) -> FastMCP:
         disk_storage: Annotated[int | None, Field(description="Override disk storage in GB")] = None,
     ) -> dict[str, Any]:
         """Launch a non-interactive job from a launcher.
+        Verifies the launcher has launcher_type='non_interactive' — use session_launch for interactive launchers.
         Always call resource_classes() first.
         After calling this, use job_wait(session_id) to wait for completion — do not sleep
         or poll manually.
@@ -731,7 +769,13 @@ def create_server(deps: MCPDependencies) -> FastMCP:
         it first. The platform may silently return an existing session rather than creating
         a new one — always verify _created=true in the response. If _created=false, delete
         the returned session and retry."""
-        body: dict[str, Any] = {"launcher_id": launcher_id, "session_type": "non-interactive"}
+        launcher = await _api(ctx, "GET", f"/session_launchers/{launcher_id}")
+        if launcher.get("launcher_type") != "non_interactive":
+            raise RuntimeError(
+                f"Launcher {launcher_id!r} has launcher_type={launcher.get('launcher_type')!r}. "
+                "Use session_launch for interactive launchers."
+            )
+        body: dict[str, Any] = {"launcher_id": launcher_id}
         if resource_class_id is not None:
             body["resource_class_id"] = resource_class_id
         if disk_storage is not None:

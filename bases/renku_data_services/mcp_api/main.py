@@ -26,7 +26,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import logging
 
@@ -142,13 +142,58 @@ def _keycloak_issuer_url() -> str:
     return os.environ.get("KEYCLOAK_ISSUER_URL", "").rstrip("/")
 
 
+def _protected_resource_doc(base_url: str, keycloak_realm_url: str) -> dict[str, Any]:
+    """Build the RFC 9728 protected resource metadata document."""
+    doc: dict[str, Any] = {"resource": f"{base_url}/mcp"}
+    if keycloak_realm_url:
+        doc["authorization_servers"] = [keycloak_realm_url]
+    return doc
+
+
+async def _authorization_server_doc(keycloak_realm_url: str) -> tuple[dict[str, Any], int]:
+    """Fetch and reformat Keycloak OIDC discovery as RFC 8414 AS metadata.
+
+    Returns (body_dict, status_code).
+    """
+    import httpx
+
+    if not keycloak_realm_url:
+        return {"error": "KEYCLOAK_ISSUER_URL not configured"}, 503
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{keycloak_realm_url}/.well-known/openid-configuration", timeout=5)
+            resp.raise_for_status()
+            oidc = resp.json()
+    except Exception as exc:
+        return {"error": str(exc)}, 502
+    return {
+        "issuer": oidc.get("issuer"),
+        "authorization_endpoint": oidc.get("authorization_endpoint"),
+        "token_endpoint": oidc.get("token_endpoint"),
+        "token_endpoint_auth_methods_supported": oidc.get(
+            "token_endpoint_auth_methods_supported", ["client_secret_post", "client_secret_basic"]
+        ),
+        "jwks_uri": oidc.get("jwks_uri"),
+        # Advertise only the scopes the MCP server needs. Keycloak supports many
+        # more (address, phone, roles, web-origins, etc.) but advertising them
+        # causes clients to request them all, which Keycloak may reject or which
+        # add unnecessary claims to tokens.
+        "scopes_supported": ["openid", "profile", "email", "offline_access"],
+        "response_types_supported": oidc.get("response_types_supported"),
+        "grant_types_supported": oidc.get("grant_types_supported", ["authorization_code", "refresh_token"]),
+        "code_challenge_methods_supported": ["S256"],
+        "revocation_endpoint": oidc.get("revocation_endpoint"),
+        # Omit registration_endpoint — clients should use the pre-registered
+        # renku-mcp client rather than attempting dynamic client registration.
+    }, 200
+
+
 def _build_http_app(deps: MCPDependencies) -> Any:
     """Build the HTTP ASGI app with OAuth metadata endpoints and Bearer-token middleware.
 
     Routes and middleware are added directly to the FastMCP app so its lifespan
     (which initialises the task group) runs correctly under uvicorn.
     """
-    import httpx
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
@@ -158,50 +203,21 @@ def _build_http_app(deps: MCPDependencies) -> Any:
 
     @mcp.custom_route("/.well-known/oauth-protected-resource", methods=["GET"])  # type: ignore[misc]
     async def protected_resource_metadata(request: Request) -> JSONResponse:
-        """RFC 9728 — tells clients where to find the authorization server."""
-        doc: dict[str, Any] = {"resource": f"{base_url}/mcp"}
-        if keycloak_realm_url:
-            doc["authorization_servers"] = [keycloak_realm_url]
-        return JSONResponse(doc)
+        return JSONResponse(_protected_resource_doc(base_url, keycloak_realm_url))
 
     @mcp.custom_route("/.well-known/oauth-authorization-server", methods=["GET"])  # type: ignore[misc]
     async def authorization_server_metadata(request: Request) -> JSONResponse:
-        """RFC 8414 — proxy Keycloak's OIDC discovery as OAuth AS metadata."""
-        if not keycloak_realm_url:
-            return JSONResponse({"error": "KEYCLOAK_ISSUER_URL not configured"}, status_code=503)
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(f"{keycloak_realm_url}/.well-known/openid-configuration", timeout=5)
-                resp.raise_for_status()
-                oidc = resp.json()
-        except Exception as exc:
-            return JSONResponse({"error": str(exc)}, status_code=502)
-        return JSONResponse(
-            {
-                "issuer": oidc.get("issuer"),
-                "authorization_endpoint": oidc.get("authorization_endpoint"),
-                "token_endpoint": oidc.get("token_endpoint"),
-                "token_endpoint_auth_methods_supported": oidc.get(
-                    "token_endpoint_auth_methods_supported", ["client_secret_post", "client_secret_basic"]
-                ),
-                "jwks_uri": oidc.get("jwks_uri"),
-                "scopes_supported": oidc.get("scopes_supported"),
-                "response_types_supported": oidc.get("response_types_supported"),
-                "grant_types_supported": oidc.get("grant_types_supported", ["authorization_code", "refresh_token"]),
-                "code_challenge_methods_supported": ["S256"],
-                "revocation_endpoint": oidc.get("revocation_endpoint"),
-                # Omit registration_endpoint — clients should use the pre-registered
-                # renku-mcp client rather than attempting dynamic client registration.
-            }
-        )
+        body, status = await _authorization_server_doc(keycloak_realm_url)
+        return JSONResponse(body, status_code=status)
 
     class _AuthMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next: Any) -> Response:
             # Metadata endpoints are public — no auth required.
             if request.url.path.startswith("/.well-known/"):
                 return await call_next(request)
-            # Token validation is handled by the ingress proxy, same as the
-            # rest of the data service. We just extract and forward the token.
+            # We extract the token here but do not validate it. Validation
+            # happens implicitly downstream: if the token is invalid or expired,
+            # the Renku data API returns a 401 when the tool calls deps.api().
             auth_header = request.headers.get("Authorization", "")
             token = auth_header.removeprefix("Bearer ").removeprefix("bearer ").strip()
             if not token:
@@ -222,21 +238,13 @@ def _build_http_app(deps: MCPDependencies) -> Any:
 
 # Module-level objects so `mcp dev` can discover the server by name.
 _deps = MCPDependencies.from_env()
-mcp = create_server(_deps)
 
-# Resolve and seed the token at import time only for stdio mode.
-# In HTTP mode the per-request middleware is the sole source of tokens —
-# seeding here would create a process-wide default that could leak across
-# requests if the middleware ever failed to run.
-if os.environ.get("MCP_TRANSPORT", "stdio") != "streamable-http":
-    try:
-        _resolved_token = _resolve_token()
-    except RuntimeError as exc:
-        logger.warning("Could not resolve a Renku token: %s", exc)
-        _resolved_token = ""
-    if not _resolved_token:
-        logger.warning("No token found — most tools will return permission errors.")
-    set_current_token(_resolved_token)
+# In stdio mode, pass _resolve_token as a lazy resolver so the server picks up
+# a fresh rnk login without needing a restart.
+# In HTTP mode, the per-request middleware is the sole source of tokens.
+_is_stdio = os.environ.get("MCP_TRANSPORT", "stdio") != "streamable-http"
+_token_resolver: Callable[[], str] | None = _resolve_token if _is_stdio else None
+mcp = create_server(_deps, token_resolver=_token_resolver)
 
 
 async def _run_stdio() -> None:
