@@ -1085,6 +1085,7 @@ async def start_session(
         env.extend(
             [
                 SessionEnvItem(name="RENKU_JOB", value="1"),
+                SessionEnvItem(name="RENKU_SUBMISSION_ID", value=str(launch_request.submission_id)),
             ]
         )
     if session_location == SessionLocation.remote:
