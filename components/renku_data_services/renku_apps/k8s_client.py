@@ -24,27 +24,32 @@ _APP_AUTOSCALING_ANNOTATIONS = {
 }
 
 
-def _generate_app_name(project: Project) -> str:
-    """Generate a DNS-1035 label name for an app from its project path."""
-    namespace = project.namespace.path.serialize().replace("/", "-")
-    return f"{project.slug}-{namespace}".lower()[:63]
+def _generate_app_name(project: Project, session_launcher: SessionLauncher) -> str:
+    """Generate a DNS-1035 label name for an app."""
+    launcher_id_slice = str(session_launcher.id)[18:26].lower()
+    return f"{project.slug.lower()[:54]}-{launcher_id_slice}"
 
 
 class RenkuAppsK8sClient:
     """K8s client for Renku apps operations."""
 
-    def __init__(self, client: K8sClusterClientsPool, cluster_repo: ClusterRepository) -> None:
+    def __init__(
+        self,
+        client: K8sClusterClientsPool,
+        cluster_repo: ClusterRepository,
+        cluster_id: ClusterId = DEFAULT_K8S_CLUSTER,
+    ) -> None:
         self.__client = client
         self.__cluster_repo = cluster_repo
+        self.__cluster_id = cluster_id
 
     async def create_app_deployment(
         self, session_launcher: SessionLauncher, resource_class: ResourceClass | None, project: Project
     ) -> AppRuntimeState:
         """Create a deployment for the given app and return its observed runtime state."""
-        cluster_id: ClusterId = DEFAULT_K8S_CLUSTER
-        cluster = await self.__client.cluster_by_id(cluster_id)
-        app_name = _generate_app_name(project)
-        manifest = _build_app_deployment_manifest(session_launcher, app_name, resource_class)
+        cluster = await self.__client.cluster_by_id(self.__cluster_id)
+        app_name = _generate_app_name(project, session_launcher)
+        manifest = _build_app_deployment_manifest(session_launcher, app_name, resource_class, project)
         meta = K8sObjectMeta(
             name=app_name,
             namespace=cluster.namespace,
@@ -59,8 +64,7 @@ class RenkuAppsK8sClient:
 
     async def get_app_deployment(self, app_name: str) -> AppRuntimeState | None:
         """Get the runtime state for the given app name, or None if it does not exist."""
-        cluster_id: ClusterId = DEFAULT_K8S_CLUSTER
-        cluster = await self.__client.cluster_by_id(cluster_id)
+        cluster = await self.__client.cluster_by_id(self.__cluster_id)
         meta = K8sObjectMeta(
             name=app_name,
             namespace=cluster.namespace,
@@ -73,9 +77,11 @@ class RenkuAppsK8sClient:
             return None
         return _extract_runtime_state(KnativeService.model_validate(obj.manifest))
 
-    async def get_app_deployment_for_project(self, project: Project) -> AppRuntimeState | None:
+    async def get_app_deployment_for_project(
+        self, project: Project, session_launcher: SessionLauncher
+    ) -> AppRuntimeState | None:
         """Get the runtime state for the given project's app, or None if it does not exist."""
-        return await self.get_app_deployment(_generate_app_name(project))
+        return await self.get_app_deployment(_generate_app_name(project, session_launcher))
 
     async def delete_app_deployment(self, app_name: str) -> None:
         """Delete the deployment for the given app name. NOT IMPLEMENTED."""
@@ -102,7 +108,7 @@ def _resources_from_resource_class(resource_class: ResourceClass) -> dict[str, A
 
 
 def _build_app_deployment_manifest(
-    session_launcher: SessionLauncher, app_name: str, resource_class: ResourceClass | None
+    session_launcher: SessionLauncher, app_name: str, resource_class: ResourceClass | None, project: Project
 ) -> KnativeService:
     """Build a Knative Service manifest derived from the session launcher."""
     environment = session_launcher.environment
@@ -126,20 +132,28 @@ def _build_app_deployment_manifest(
     if environment.working_directory is not None:
         container["workingDir"] = str(environment.working_directory)
 
+    labels = {
+        "renku.io/safe-username": DUMMY_RENKU_APP_USER_ID,
+        "renku.io/project-slug": project.slug.lower(),
+        "renku.io/project-namespace": project.namespace.path.serialize().replace("/", "-").lower(),
+        "renku.io/project-id": str(project.id),
+        "renku.io/launcher-id": str(session_launcher.id),
+    }
+
     return KnativeService.model_validate(
         {
             "apiVersion": "serving.knative.dev/v1",
             "kind": "Service",
             "metadata": {
                 "name": app_name,
-                "annotations": {
-                    "renku.io/launcher_id": str(session_launcher.id),
-                    "renku.io/project_id": str(session_launcher.project_id),
-                },
+                "labels": labels,
             },
             "spec": {
                 "template": {
-                    "metadata": {"annotations": _APP_AUTOSCALING_ANNOTATIONS},
+                    "metadata": {
+                        "labels": labels,
+                        "annotations": _APP_AUTOSCALING_ANNOTATIONS,
+                    },
                     "spec": {"containers": [container]},
                 },
             },

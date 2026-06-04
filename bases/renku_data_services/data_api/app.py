@@ -178,11 +178,15 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         metrics=dm.metrics,
     )
-    renku_apps = RenkuAppBP(
-        name="renku_apps",
-        url_prefix=url_prefix,
-        apps_repo=dm.apps_repo,
-        authenticator=dm.authenticator,
+    renku_apps = (
+        RenkuAppBP(
+            name="renku_apps",
+            url_prefix=url_prefix,
+            apps_repo=dm.apps_repo,
+            authenticator=dm.authenticator,
+        )
+        if dm.config.apps.enabled and dm.apps_repo is not None
+        else None
     )
     builds = (
         BuildsBP(
@@ -340,7 +344,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             group.blueprint(),
             session_environments.blueprint(),
             session_launchers.blueprint(),
-            renku_apps.blueprint(),
             oauth2_clients.blueprint(),
             oauth2_connections.blueprint(),
             repositories.blueprint(),
@@ -357,6 +360,8 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     )
     if builds is not None:
         app.blueprint(builds.blueprint())
+    if renku_apps is not None:
+        app.blueprint(renku_apps.blueprint())
 
     # We need to patch sanic_ext as since version 24.12 they only send a string representation of errors
     import sanic_ext.extras.validation.setup

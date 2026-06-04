@@ -148,8 +148,8 @@ class DependencyManager:
     search_updates_repo: SearchUpdatesRepo
     search_reprovisioning: SearchReprovision
     session_repo: SessionRepository
-    apps_k8s_client: RenkuAppsK8sClient
-    apps_repo: RenkuAppsRepository
+    apps_k8s_client: RenkuAppsK8sClient | None
+    apps_repo: RenkuAppsRepository | None
     user_preferences_repo: UserPreferencesRepository
     kc_user_repo: KcUserRepo
     low_level_user_secrets_repo: LowLevelUserSecretsRepo
@@ -402,14 +402,17 @@ class DependencyManager:
             builds_config=config.builds,
             git_repositories_repo=git_repositories_repo,
         )
-        apps_k8s_client = RenkuAppsK8sClient(client=client, cluster_repo=cluster_repo)
-        apps_repo = RenkuAppsRepository(
-            authz=authz,
-            session_repo=session_repo,
-            rp_repo=rp_repo,
-            project_repo=project_repo,
-            k8s_client=apps_k8s_client,
-        )
+        apps_k8s_client: RenkuAppsK8sClient | None = None
+        apps_repo: RenkuAppsRepository | None = None
+        if config.apps.enabled:
+            apps_k8s_client = RenkuAppsK8sClient(client=client, cluster_repo=cluster_repo)
+            apps_repo = RenkuAppsRepository(
+                authz=authz,
+                session_repo=session_repo,
+                rp_repo=rp_repo,
+                project_repo=project_repo,
+                k8s_client=apps_k8s_client,
+            )
         project_migration_repo = ProjectMigrationRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,

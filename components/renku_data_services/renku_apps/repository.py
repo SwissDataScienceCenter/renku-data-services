@@ -50,7 +50,7 @@ class RenkuAppsRepository:
             resource_class = await self.rp_repo.get_resource_class(user, launcher.resource_class_id)
 
         project = await self.project_repo.get_project(user, launcher.project_id)
-        if await self.k8s_client.get_app_deployment_for_project(project) is not None:
+        if await self.k8s_client.get_app_deployment_for_project(project, launcher) is not None:
             raise errors.ConflictError(message=f"An app already exists for project '{launcher.project_id}'.")
         runtime_state = await self.k8s_client.create_app_deployment(launcher, resource_class, project)
         return build_app(launcher, runtime_state)

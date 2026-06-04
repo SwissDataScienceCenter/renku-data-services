@@ -66,6 +66,19 @@ class _V1ServicesConfig:
 
 
 @dataclass
+class _AppsConfig:
+    """Configuration for Renku apps."""
+
+    enabled: bool
+
+    @classmethod
+    def from_env(cls) -> _AppsConfig:
+        """Load values from environment variables."""
+        enabled = os.environ.get("APPS_ENABLED", "false").lower() == "true"
+        return cls(enabled=enabled)
+
+
+@dataclass
 class Config:
     """K8s cache config."""
 
@@ -74,6 +87,7 @@ class Config:
     metrics: _MetricsConfig
     image_builders: _ImageBuilderConfig
     v1_services: _V1ServicesConfig
+    apps: _AppsConfig
     sentry: SentryConfig
 
     @classmethod
@@ -84,6 +98,7 @@ class Config:
         metrics = _MetricsConfig.from_env()
         image_builders = _ImageBuilderConfig.from_env()
         v1_services = _V1ServicesConfig.from_env()
+        apps = _AppsConfig.from_env()
         sentry = SentryConfig.from_env()
         return cls(
             db=db,
@@ -91,5 +106,6 @@ class Config:
             metrics=metrics,
             image_builders=image_builders,
             v1_services=v1_services,
+            apps=apps,
             sentry=sentry,
         )

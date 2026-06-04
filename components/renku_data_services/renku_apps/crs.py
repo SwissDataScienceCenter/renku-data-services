@@ -69,18 +69,18 @@ class KnativeService(_KnativeService):
 
     @property
     def launcher_id(self) -> ULID:
-        """Get the session launcher ID from the annotations."""
-        if "renku.io/launcher_id" not in self.metadata.annotations:
+        """Get the session launcher ID from the labels."""
+        if "renku.io/launcher-id" not in self.metadata.labels:
             raise errors.ProgrammingError(
-                message=f"The app with name {self.metadata.name} is missing its launcher_id annotation"
+                message=f"The app with name {self.metadata.name} is missing its launcher-id label"
             )
-        return cast(ULID, ULID.from_str(self.metadata.annotations["renku.io/launcher_id"]))
+        return cast(ULID, ULID.from_str(self.metadata.labels["renku.io/launcher-id"]))
 
     @property
     def project_id(self) -> ULID:
-        """Get the project ID from the annotations."""
-        if "renku.io/project_id" not in self.metadata.annotations:
+        """Get the project ID from the labels."""
+        if "renku.io/project-id" not in self.metadata.labels:
             raise errors.ProgrammingError(
-                message=f"The app with name {self.metadata.name} is missing its project_id annotation"
+                message=f"The app with name {self.metadata.name} is missing its project-id label"
             )
-        return cast(ULID, ULID.from_str(self.metadata.annotations["renku.io/project_id"]))
+        return cast(ULID, ULID.from_str(self.metadata.labels["renku.io/project-id"]))
