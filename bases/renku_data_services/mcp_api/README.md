@@ -100,10 +100,24 @@ Run the unit tests (no external services required):
 poetry run pytest test/bases/renku_data_services/mcp_api/
 ```
 
+## Token handling
+
+The MCP server does not validate tokens. It extracts the Bearer token from the
+`Authorization` header and forwards it with every call to the Renku data API. The
+data API is responsible for validating the token and enforcing permissions — if the
+token is missing or invalid, the data API rejects the request and the tool returns an
+error.
+
+In HTTP mode, unauthenticated requests to `/mcp` receive a `401` response with a
+`WWW-Authenticate` header pointing at the OAuth discovery endpoints. This is the
+signal MCP clients use to trigger the OAuth flow; the flow itself happens entirely
+between the client and Keycloak.
+
 ## Safety rules (enforced in code)
 
-- **Admin accounts are blocked.** The server calls `GET /user` on startup and refuses all tool
-  calls if `is_admin=true`. Set `RENKU_MCP_ALLOW_ADMIN=1` to override.
+- **Admin accounts are blocked.** The server calls `GET /user` on each tool invocation
+  and refuses if `is_admin=true`. The result is cached per token so the check only
+  hits the API once per session. Set `RENKU_MCP_ALLOW_ADMIN=1` to override.
 - **Credentials are never accepted as tool parameters.** Storage credentials (S3 keys,
   passwords) must be added through the Renku UI after creating a connector.
 
