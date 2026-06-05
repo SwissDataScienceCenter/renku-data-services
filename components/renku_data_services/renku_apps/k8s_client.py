@@ -85,8 +85,7 @@ class RenkuAppsK8sClient:
 
     async def delete_app_deployment(self, app_name: str) -> None:
         """Delete the deployment for the given app name."""
-        cluster_id: ClusterId = DEFAULT_K8S_CLUSTER
-        cluster = await self.__client.cluster_by_id(cluster_id)
+        cluster = await self.__client.cluster_by_id(self.__cluster_id)
         meta = K8sObjectMeta(
             name=app_name,
             namespace=cluster.namespace,
@@ -95,7 +94,6 @@ class RenkuAppsK8sClient:
             user_id=DUMMY_RENKU_APP_USER_ID,
         )
         await self.__client.delete(meta)
-        return None
 
     async def list_app_deployments(self) -> AsyncGenerator[AppRuntimeState, None]:
         """List all app deployments. NOT IMPLEMENTED."""
