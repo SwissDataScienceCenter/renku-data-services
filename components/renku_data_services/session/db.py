@@ -846,8 +846,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
-            if user.id is not None:
-                await self._refresh_build(build=build, session=session, user_id=user.id)
+            await self._refresh_build(build=build, session=session)
+            # if user.id is not None:
+            #     await self._refresh_build(build=build, session=session, user_id=user.id)
 
             return build.dump()
 
@@ -884,7 +885,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
             # Check and refresh the status of in-progress builds
             for build in builds:
-                await self._refresh_build(build=build, session=session, user_id=user.id)
+                await self._refresh_build(build=build, session=session)
+                # await self._refresh_build(build=build, session=session, user_id=user.id)
 
             return [build.dump() for build in builds]
 
@@ -929,7 +931,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 .order_by(schemas.BuildORM.id.desc())
             )
             async for item in in_progress_builds:
-                await self._refresh_build(build=item, session=session, user_id=user.id)
+                await self._refresh_build(build=item, session=session)
+                # await self._refresh_build(build=item, session=session, user_id=user.id)
                 if item.status == models.BuildStatus.in_progress:
                     raise errors.ConflictError(
                         message=f"Session environment with id '{build.environment_id}' already has a build in progress."
@@ -986,7 +989,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
-            await self._refresh_build(build=build, session=session, user_id=user.id)
+            await self._refresh_build(build=build, session=session)
+            # await self._refresh_build(build=build, session=session, user_id=user.id)
 
             if build.status == models.BuildStatus.succeeded or build.status == models.BuildStatus.failed:
                 raise errors.ValidationError(
@@ -1054,7 +1058,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             buildrun_name=build_model.k8s_name, user_id=user.id, max_log_lines=max_log_lines
         )
 
-    async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession, user_id: str) -> None:
+    # async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession, user_id: str) -> None:
+    async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession) -> None:
         """Refresh the status and environment of a build by querying Shipwright.
 
         Once the build run has completed, the corresponding session launcher's environment
@@ -1070,7 +1075,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
         # TODO: consider how we can parallelize calls to `shipwright_client` for refreshes.
         status_update, frontend_var = await self.shipwright_client.update_image_build_status(
-            buildrun_name=build.dump().k8s_name, user_id=user_id
+            buildrun_name=build.dump().k8s_name  # , user_id=user_id
         )
 
         if status_update.update is None:

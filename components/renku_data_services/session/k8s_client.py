@@ -83,7 +83,7 @@ class ShipwrightClient:
             yield BuildRun.model_validate(build.manifest.to_dict())
         return
 
-    async def get_build_run(self, name: str, user_id: str) -> BuildRun | None:
+    async def get_build_run(self, name: str) -> BuildRun | None:
         """Get a Shipwright BuildRun."""
         result = await self.client.get(
             K8sObjectMeta(
@@ -91,7 +91,6 @@ class ShipwrightClient:
                 namespace=self.namespace,
                 cluster=self.cluster_id(),
                 gvk=BUILD_RUN_GVK,
-                user_id=user_id,
             )
         )
         if result is None:
@@ -252,11 +251,14 @@ class ShipwrightClient:
             patch = [{"op": "replace", "path": "/metadata/ownerReferences", "value": [owner_reference]}]
             await self.secret_client.patch_secret(secret, patch)
 
+    # async def update_image_build_status(
+    #     self, buildrun_name: str, user_id: str
+    # ) -> tuple[models.ShipwrightBuildStatusUpdate, str | None]:
     async def update_image_build_status(
-        self, buildrun_name: str, user_id: str
+        self, buildrun_name: str
     ) -> tuple[models.ShipwrightBuildStatusUpdate, str | None]:
         """Update the status of a build by pulling the corresponding BuildRun from Shipwright."""
-        k8s_build = await self.get_build_run(name=buildrun_name, user_id=user_id)
+        k8s_build = await self.get_build_run(name=buildrun_name)
 
         if k8s_build is None:
             logger.warning(f"Buildrun {buildrun_name} considered failed because we cannot find it in the cluster.")
