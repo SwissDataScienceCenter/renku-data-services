@@ -1,14 +1,18 @@
 """K8s client wrapper for Renku apps."""
 
+from __future__ import annotations
+
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from typing import Any
+
+from ulid import ULID
 
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, DUMMY_RENKU_APP_USER_ID, ClusterId
-from renku_data_services.k8s.models import GVK, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.project.models import Project
 from renku_data_services.renku_apps.cr_knative_service import Condition
 from renku_data_services.renku_apps.crs import KnativeService
@@ -17,9 +21,13 @@ from renku_data_services.session.models import SessionLauncher
 
 KNATIVE_SERVICE_GVK = GVK(kind="Service", group="serving.knative.dev", version="v1")
 
+_MAX_SCALE_ANNOTATION = "autoscaling.knative.dev/max-scale"
+_MAX_SCALE_RUNNING = "3"
+_MAX_SCALE_HIBERNATED = "0"
+
 _APP_AUTOSCALING_ANNOTATIONS = {
     "autoscaling.knative.dev/min-scale": "0",
-    "autoscaling.knative.dev/max-scale": "3",
+    _MAX_SCALE_ANNOTATION: _MAX_SCALE_RUNNING,
     "autoscaling.knative.dev/scale-to-zero-pod-retention-period": "2m",
 }
 
@@ -95,13 +103,62 @@ class RenkuAppsK8sClient:
         )
         await self.__client.delete(meta)
 
-    async def list_app_deployments(self) -> AsyncGenerator[AppRuntimeState, None]:
-        """List all app deployments. NOT IMPLEMENTED."""
-        raise NotImplementedError("Listing app deployments is not implemented yet")
+    async def list_app_deployments(self, project_id: ULID | None = None) -> AsyncGenerator[AppRuntimeState, None]:
+        """List all app deployments."""
+        cluster = await self.__client.cluster_by_id(self.__cluster_id)
+        obj_filter = K8sObjectFilter(
+            name=None,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            gvk=KNATIVE_SERVICE_GVK,
+            user_id=DUMMY_RENKU_APP_USER_ID,
+            label_selector={"renku.io/project-id": str(project_id)} if project_id is not None else None,
+        )
+        async for obj in self.__client.list(obj_filter):
+            yield _extract_runtime_state(KnativeService.model_validate(obj.manifest))
 
-    async def update_app_deployment(self, app_name: str, session_launcher: SessionLauncher) -> AppRuntimeState:
-        """Update the deployment for the given app name. NOT IMPLEMENTED."""
-        raise NotImplementedError("Updating app deployment is not implemented yet")
+    async def hibernate_app_deployment(self, app_name: str) -> AppRuntimeState:
+        """Hibernate the app by patching its max-scale annotation to zero."""
+        return await self._patch_max_scale(app_name, _MAX_SCALE_HIBERNATED)
+
+    async def resume_app_deployment(self, app_name: str) -> AppRuntimeState:
+        """Resume the app by restoring the default max-scale annotation."""
+        return await self._patch_max_scale(app_name, _MAX_SCALE_RUNNING)
+
+    async def set_app_deployment_resources(self, app_name: str, resource_class: ResourceClass) -> AppRuntimeState:
+        """Update the container resources of the app to match the given resource class."""
+        cluster = await self.__client.cluster_by_id(self.__cluster_id)
+        meta = K8sObjectMeta(
+            name=app_name,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            gvk=KNATIVE_SERVICE_GVK,
+            user_id=DUMMY_RENKU_APP_USER_ID,
+        )
+        patch_body: dict[str, Any] = {
+            "spec": {
+                "template": {
+                    "spec": {"containers": [{"resources": _resources_from_resource_class(resource_class)}]},
+                }
+            }
+        }
+        updated = await self.__client.patch(meta, patch_body)
+        return _extract_runtime_state(KnativeService.model_validate(updated.manifest))
+
+    async def _patch_max_scale(self, app_name: str, max_scale: str) -> AppRuntimeState:
+        cluster = await self.__client.cluster_by_id(self.__cluster_id)
+        meta = K8sObjectMeta(
+            name=app_name,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            gvk=KNATIVE_SERVICE_GVK,
+            user_id=DUMMY_RENKU_APP_USER_ID,
+        )
+        patch_body: dict[str, Any] = {
+            "spec": {"template": {"metadata": {"annotations": {_MAX_SCALE_ANNOTATION: max_scale}}}}
+        }
+        updated = await self.__client.patch(meta, patch_body)
+        return _extract_runtime_state(KnativeService.model_validate(updated.manifest))
 
 
 def _resources_from_resource_class(resource_class: ResourceClass) -> dict[str, Any]:
@@ -191,6 +248,31 @@ def _started_at(knative_service: KnativeService) -> datetime | None:
     return datetime.fromisoformat(ready.lastTransitionTime)
 
 
+def _is_hibernated(knative_service: KnativeService) -> bool:
+    """Determine if the Knative service is hibernated based on its annotations."""
+    if (
+        knative_service.spec is None
+        or knative_service.spec.template is None
+        or knative_service.spec.template.metadata is None
+        or knative_service.spec.template.metadata.annotations is None
+    ):
+        return False
+    max_scale = knative_service.spec.template.metadata.annotations.get(_MAX_SCALE_ANNOTATION)
+    return max_scale == _MAX_SCALE_HIBERNATED
+
+
+def _container_image(knative_service: KnativeService) -> str | None:
+    """Get the container image actually configured on the Knative service, or None if absent."""
+    if (
+        knative_service.spec is None
+        or knative_service.spec.template is None
+        or knative_service.spec.template.spec is None
+        or not knative_service.spec.template.spec.containers
+    ):
+        return None
+    return knative_service.spec.template.spec.containers[0].image
+
+
 def _extract_runtime_state(knative_service: KnativeService) -> AppRuntimeState:
     """Read app runtime state primitives off a Knative Service."""
     ready = _ready_condition(knative_service)
@@ -199,6 +281,8 @@ def _extract_runtime_state(knative_service: KnativeService) -> AppRuntimeState:
         launcher_id=knative_service.launcher_id,
         project_id=knative_service.project_id,
         ready_status=ready.status if ready is not None else None,
+        is_hibernated=_is_hibernated(knative_service),
+        image=_container_image(knative_service),
         url=_url(knative_service),
         started_at=_started_at(knative_service),
     )

@@ -10,22 +10,20 @@ def build_app(launcher: SessionLauncher, runtime: AppRuntimeState) -> App:
         name=runtime.name,
         launcher_id=launcher.id,
         project_id=launcher.project_id,
-        status=app_status_from_ready(runtime.ready_status),
+        status=derive_app_status(runtime),
         url=runtime.url,
         started=runtime.started_at,
-        image=launcher.environment.container_image,
+        image=runtime.image,
     )
 
 
-def app_status_from_ready(ready_status: str | None) -> AppStatus:
-    """Map a Kubernetes Ready-condition status value to an app status.
+def derive_app_status(runtime: AppRuntimeState) -> AppStatus:
+    """Derive an app status from the runtime state."""
 
-    Inputs follow the Kubernetes condition convention: "True", "False",
-    "Unknown", or None when the condition is absent. Unknown and absent
-    both collapse to PENDING.
-    """
-    if ready_status == "True":
+    if runtime.is_hibernated:
+        return AppStatus.HIBERNATED
+    if runtime.ready_status == "True":
         return AppStatus.READY
-    if ready_status == "False":
+    if runtime.ready_status == "False":
         return AppStatus.FAILED
     return AppStatus.PENDING

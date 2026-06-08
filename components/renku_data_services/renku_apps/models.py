@@ -15,6 +15,7 @@ class AppStatus(StrEnum):
     PENDING = "pending"
     READY = "ready"
     FAILED = "failed"
+    HIBERNATED = "hibernated"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -56,5 +57,7 @@ class AppRuntimeState:
     launcher_id: ULID
     project_id: ULID
     ready_status: str | None
+    is_hibernated: bool
+    image: str | None
     url: str | None
     started_at: datetime | None
