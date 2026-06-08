@@ -6,9 +6,9 @@ import contextvars
 import datetime
 import os
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
-from typing import Annotated, Any, Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager, suppress
+from typing import Annotated, Any
 from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
@@ -23,6 +23,7 @@ _current_token: contextvars.ContextVar[str] = contextvars.ContextVar("mcp_token"
 
 
 def set_current_token(token: str) -> contextvars.Token[str]:
+    """Store the Bearer token in the current async context."""
     return _current_token.set(token)
 
 
@@ -59,7 +60,6 @@ async def _require_non_admin(ctx: Context) -> None:
     permission checks — running agent operations as an admin is dangerous.
     Set RENKU_MCP_ALLOW_ADMIN=1 in the server environment to override.
     """
-    import os
 
     if os.environ.get("RENKU_MCP_ALLOW_ADMIN"):
         return
@@ -196,7 +196,9 @@ def create_server(
     @mcp.tool()
     async def auth_status(ctx: Context) -> dict[str, Any]:
         """Return current authentication status and user info.
-        Always call this first; refuse all operations if is_admin is true."""
+
+        Always call this first; refuse all operations if is_admin is true.
+        """
         t = _token(ctx)
         if not t:
             return {
@@ -224,9 +226,11 @@ def create_server(
         max_storage: Annotated[int | None, Field(description="Minimum storage in GB required", ge=0)] = None,
     ) -> list[dict[str, Any]]:
         """List available compute resource classes.
+
         Always call this before creating a launcher or running a job.
         Pass your resource requirements so the API can set matching=true on
-        suitable classes. Pick the smallest class where matching=true."""
+        suitable classes. Pick the smallest class where matching=true.
+        """
         query = {
             k: v
             for k, v in {"cpu": cpu, "memory": memory, "gpu": gpu, "max_storage": max_storage}.items()
@@ -249,9 +253,11 @@ def create_server(
     @mcp.tool()
     async def global_environments(ctx: Context) -> list[dict[str, Any]]:
         """List global session environments provided by the platform.
+
         Use these when the user has no container image and no repository to build from.
         Present the list to the user and let them pick one, then pass its id as the
-        environment when calling launcher_create."""
+        environment when calling launcher_create.
+        """
         return await _api(ctx, "GET", "/environments")
 
     # ------------------------------------------------------------------ #
@@ -285,8 +291,10 @@ def create_server(
         repository_url: Annotated[str, Field(description="Optional Git repository URL to attach")] = "",
     ) -> dict[str, Any]:
         """Create a new Renku project.
+
         Call namespaces() first to get the correct namespace slug. If the user already has a repository
-        they want to add, add it here instead of with project_repo_add to do it all in one call."""
+        they want to add, add it here instead of with project_repo_add to do it all in one call.
+        """
         body: dict[str, Any] = {"name": name, "namespace": namespace, "visibility": visibility}
         if description:
             body["description"] = description
@@ -307,7 +315,8 @@ def create_server(
           explicit confirmation before proceeding.
         - Running or pending sessions: stop them with session_delete.
         - Hibernated or paused sessions: warn the user that unsaved work inside those
-          sessions will be lost, and ask for explicit confirmation before stopping them."""
+          sessions will be lost, and ask for explicit confirmation before stopping them.
+        """
         proj = await _api(ctx, "GET", _project_path(project), _token(ctx))
         await _api(ctx, "DELETE", f"/projects/{proj['id']}")
         return f"Deleted project {proj['id']} ({proj.get('name', '')})"
@@ -345,9 +354,11 @@ def create_server(
         visibility: Annotated[str | None, Field(description="'public' or 'private'")] = None,
     ) -> dict[str, Any]:
         """Update project metadata. Omit any field to leave it unchanged.
+
         Use description for a short summary shown in listings.
         Use documentation for longer markdown content — project README, usage instructions, etc.
-        keywords replaces the entire keyword list — include all desired keywords, not just new ones."""
+        keywords replaces the entire keyword list — include all desired keywords, not just new ones.
+        """
         proj = await _api(ctx, "GET", f"/projects/{project_id}")
         etag = proj.get("etag")
         if not etag:
@@ -424,7 +435,8 @@ def create_server(
         direct the user to add any required secrets (passwords, access keys) through the Renku UI.
 
         Always pass project_id to link the connector immediately — a connector without a project
-        link is orphaned and not visible in any project."""
+        link is orphaned and not visible in any project.
+        """
         is_doi = (storage.get("configuration") or {}).get("type") == "doi"
         if is_doi:
             data = await _api(ctx, "POST", "/data_connectors/global", {"storage": storage})
@@ -463,13 +475,16 @@ def create_server(
         connector_id: Annotated[str, Field(description="Connector ID")],
         body: Annotated[dict[str, Any], Field(description="Partial update body")],
     ) -> dict[str, Any]:
-        """Patch a data connector. Patchable fields: name, namespace, visibility, storage,
+        """Patch a data connector.
+
+        Patchable fields: name, namespace, visibility, storage,
         description, keywords (list of strings, replaces existing list).
 
         To remove a project-owned connector from a project without deleting it:
           1. Call connector_patch(connector_id, {"namespace": "<your-username>"}) to move it to
              a user namespace — it is now independently owned.
-          2. Call connector_unlink(connector_id, link_id) to remove the project association."""
+          2. Call connector_unlink(connector_id, link_id) to remove the project association.
+        """
         return await _api(ctx, "PATCH", f"/data_connectors/{connector_id}", body)
 
     @mcp.tool()
@@ -479,11 +494,13 @@ def create_server(
         link_id: Annotated[str, Field(description="Link ID (from connector_get)")],
     ) -> str:
         """Unlink a data connector from a project.
+
         Only works when the connector lives in a user or group namespace (not the project itself).
         For connectors that live in a project namespace:
           - To remove it entirely: use connector_delete (no move needed).
           - To detach from the project but keep the connector: use connector_patch to move it to
-            a user namespace first, then call connector_unlink."""
+            a user namespace first, then call connector_unlink.
+        """
         await _api(ctx, "DELETE", f"/data_connectors/{connector_id}/project_links/{link_id}")
         return f"Unlinked connector {connector_id} (link {link_id})"
 
@@ -492,10 +509,13 @@ def create_server(
         ctx: Context,
         connector_id: Annotated[str, Field(description="Connector ID")],
     ) -> str:
-        """Delete a data connector entirely. Works whether the connector lives in a project
-        namespace or a user/group namespace. Confirm with the user before calling.
+        """Delete a data connector entirely.
+
+        Works whether the connector lives in a project namespace or a user/group namespace.
+        Confirm with the user before calling.
         To keep the connector but remove it from a project, use connector_unlink (user/group
-        namespace) or connector_patch + connector_unlink (project namespace)."""
+        namespace) or connector_patch + connector_unlink (project namespace).
+        """
         await _api(ctx, "DELETE", f"/data_connectors/{connector_id}")
         return f"Deleted connector {connector_id}"
 
@@ -540,6 +560,7 @@ def create_server(
         description: Annotated[str, Field(description="Optional description")] = "",
     ) -> dict[str, Any]:
         """Create a session launcher. Always call resource_classes(cpu=..., memory=...) first.
+
         Do NOT set launcher_type unless creating a non_interactive job launcher — leave it unset
         for interactive sessions. Sending launcher_type='interactive' will fail on older deployments.
 
@@ -556,7 +577,8 @@ def create_server(
         3. Custom image ('image'): include environment_image_source='image',
            environment_kind='CUSTOM', container_image,
            working_directory='/home/renku/work', mount_directory='/home/renku/work',
-           command=['/cnb/lifecycle/launcher'], args, port, uid, gid."""
+           command=['/cnb/lifecycle/launcher'], args, port, uid, gid.
+        """
         # 'name' is required for image-source environments but rejected by BuildParametersPost.
         if environment.get("environment_image_source") != "build" and "name" not in environment:
             environment = {"name": name, **environment}
@@ -645,9 +667,11 @@ def create_server(
         disk_storage: Annotated[int | None, Field(description="Override disk storage in GB")] = None,
     ) -> dict[str, Any]:
         """Launch an interactive session from a launcher.
+
         Verifies the launcher has launcher_type='interactive' — use job_run for non_interactive launchers.
         After calling this, use session_wait(session_id) to wait for 'running' state —
-        do not sleep or poll manually."""
+        do not sleep or poll manually.
+        """
         launcher = await _api(ctx, "GET", f"/session_launchers/{launcher_id}")
         # None means the API predates launcher_type — treat as interactive (the historical default).
         if launcher.get("launcher_type") not in ("interactive", None):
@@ -691,8 +715,10 @@ def create_server(
         session_id: Annotated[str, Field(description="Session name or ID")],
     ) -> dict[str, Any]:
         """Get logs for a session.
+
         Returns a dict of container_name -> log_text.
-        The 'amalthea-session' container holds the main application logs."""
+        The 'amalthea-session' container holds the main application logs.
+        """
         return await _api(ctx, "GET", f"/sessions/{session_id}/logs")
 
     @mcp.tool()
@@ -709,9 +735,12 @@ def create_server(
         ctx: Context,
         session_id: Annotated[str, Field(description="Session name or ID")],
     ) -> str:
-        """Delete a session if it is in any terminal state (failed, error, stopped, succeeded,
-        completed, finished). Safe no-op if the session is still running or starting.
-        Use this before job_run to ensure the slot is clear."""
+        """Delete a session if it is in any terminal state.
+
+        Terminal states: failed, error, stopped, succeeded, completed, finished.
+        Safe no-op if the session is still running or starting.
+        Use this before job_run to ensure the slot is clear.
+        """
         session = await _api(ctx, "GET", f"/sessions/{session_id}")
         status = session.get("status") or {}
         state = status.get("state") or session.get("state") or "unknown"
@@ -729,9 +758,11 @@ def create_server(
         interval: Annotated[int, Field(description="Poll interval in seconds", ge=1)] = 10,
     ) -> dict[str, Any]:
         """Wait for an interactive session to reach 'running' state.
+
         Returns the final state dict; includes logs on failure.
         On timeout returns {"state": <last_state>, "timed_out": true} — always check
-        timed_out before assuming the session is running."""
+        timed_out before assuming the session is running.
+        """
         import asyncio
 
         terminal = {"running", "succeeded", "failed", "error", "stopped"}
@@ -747,10 +778,8 @@ def create_server(
             if state in terminal:
                 result: dict[str, Any] = {"state": state, "timed_out": False, "session": session}
                 if state not in success:
-                    try:
+                    with suppress(Exception):
                         result["logs"] = await _api(ctx, "GET", f"/sessions/{session_id}/logs")
-                    except Exception:
-                        pass
                 return result
             await asyncio.sleep(min(poll, interval))
             poll = min(poll * 1.5, interval)
@@ -768,6 +797,7 @@ def create_server(
         disk_storage: Annotated[int | None, Field(description="Override disk storage in GB")] = None,
     ) -> dict[str, Any]:
         """Launch a non-interactive job from a launcher.
+
         Verifies the launcher has launcher_type='non_interactive' — use session_launch for interactive launchers.
         Always call resource_classes() first.
         After calling this, use job_wait(session_id) to wait for completion — do not sleep
@@ -777,7 +807,8 @@ def create_server(
         the same launcher_id. If one exists in a non-terminal state, call session_delete on
         it first. The platform may silently return an existing session rather than creating
         a new one — always verify _created=true in the response. If _created=false, delete
-        the returned session and retry."""
+        the returned session and retry.
+        """
         launcher = await _api(ctx, "GET", f"/session_launchers/{launcher_id}")
         # None means the API predates launcher_type — treat as interactive, so block job_run.
         if launcher.get("launcher_type") != "non_interactive":
@@ -826,11 +857,13 @@ def create_server(
         interval: Annotated[int, Field(description="Poll interval in seconds", ge=1)] = 15,
     ) -> dict[str, Any]:
         """Wait for a non-interactive job to reach a terminal state.
+
         Polls both session status and logs on every interval so the caller always has
         the latest output. Logs are included in the result regardless of success or failure,
         with amalthea-session first.
         On timeout returns {"state": <last_state>, "timed_out": true} — always check
-        timed_out and follow up with job_list to confirm actual state before retrying."""
+        timed_out and follow up with job_list to confirm actual state before retrying.
+        """
         import asyncio
 
         terminal = {"succeeded", "completed", "finished", "failed", "error", "stopped"}
@@ -911,10 +944,8 @@ def create_server(
             if state in terminal:
                 result: dict[str, Any] = {"state": state, "timed_out": False, "build": build}
                 if state != "succeeded":
-                    try:
+                    with suppress(Exception):
                         result["logs"] = await _api(ctx, "GET", f"/builds/{build_id}/logs")
-                    except Exception:
-                        pass
                 return result
             await asyncio.sleep(min(poll, interval))
             poll = min(poll * 1.5, interval)

@@ -1,4 +1,4 @@
-"""Entrypoint for the Renku MCP server.
+r"""Entrypoint for the Renku MCP server.
 
 Usage
 -----
@@ -22,13 +22,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import os
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-
-import logging
+from typing import Any
 
 from renku_data_services.mcp_api.dependencies import MCPDependencies
 from renku_data_services.mcp_api.server import create_server, set_current_token
@@ -262,6 +262,7 @@ def _run_http() -> None:
 
 
 def main() -> None:
+    """Start the MCP server using the transport configured via MCP_TRANSPORT env var."""
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
     if transport == "streamable-http":
         _run_http()
