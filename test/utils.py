@@ -422,6 +422,7 @@ class TestDependencyManager(DependencyManager):
             session_maker=config.db.async_session_maker,
             encryption_key=config.secrets.encryption_key,
             oauth_client_factory=oauth_client_factory,
+            member_repo=member_repo,
         )
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,

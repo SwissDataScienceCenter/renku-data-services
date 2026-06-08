@@ -1065,73 +1065,115 @@ class MemberRepository(_Base):
                 output.append(rp.dump(quota))
             return output
 
+    async def _sync_user_resource_pool_membership(
+        self,
+        api_user: base_models.APIUser,
+        user: schemas.UserORM,
+        rps_to_add: Collection[schemas.ResourcePoolORM],
+        rps_to_remove: Collection[schemas.ResourcePoolORM],
+        session: AsyncSession,
+    ) -> None:
+        """Synchronize a user's resource pool memberships in SQL and Authz."""
+        member_identifier = ResourcePoolMemberIdentifier(member_id=user.keycloak_id, member_type=MemberType.USER)
+        for rp in rps_to_add:
+            if rp not in user.resource_pools:
+                user.resource_pools.append(rp)
+            await self._grant_resource_pool_members(api_user, rp.id, [member_identifier])
+            if rp.default or rp.public:
+                await self._unprohibit_resource_pool_users(api_user, rp.id, [user.keycloak_id])
+        for rp in rps_to_remove:
+            if rp in user.resource_pools:
+                user.resource_pools.remove(rp)
+            await self._revoke_resource_pool_members(api_user, rp.id, [member_identifier])
+            if rp.default or rp.public:
+                await self._prohibit_resource_pool_users(api_user, rp.id, [user.keycloak_id])
+
+    @with_db_transaction
     @_only_admins
     async def update_user_resource_pools(
-        self, api_user: base_models.APIUser, keycloak_id: str, resource_pool_ids: list[int], append: bool = True
+        self,
+        api_user: base_models.APIUser,
+        keycloak_id: str,
+        resource_pool_ids: list[int],
+        append: bool = True,
+        session: AsyncSession | None = None,
     ) -> list[models.ResourcePool]:
         """Update the resource pools that a specific user has access to."""
-        async with self.session_maker() as session, session.begin():
-            kc_user = await self.kc_user_repo.get_user(keycloak_id)
-            if kc_user is None:
-                raise errors.MissingResourceError(message=f"The user with ID {keycloak_id} does not exist")
-            stmt = (
-                select(schemas.UserORM)
-                .where(schemas.UserORM.keycloak_id == keycloak_id)
-                .options(selectinload(schemas.UserORM.resource_pools))
-            )
-            res = await session.execute(stmt)
-            user = res.scalars().first()
-            if user is None:
-                user = schemas.UserORM(keycloak_id=keycloak_id)
-                session.add(user)
-            stmt_rp = (
-                select(schemas.ResourcePoolORM)
-                .where(schemas.ResourcePoolORM.id.in_(resource_pool_ids))
-                .options(selectinload(schemas.ResourcePoolORM.classes))
-            )
-            if user.no_default_access:
-                stmt_rp = stmt_rp.where(schemas.ResourcePoolORM.default == false())
-            res_rp = await session.execute(stmt_rp)
-            rps_to_add = res_rp.scalars().all()
-            if len(rps_to_add) != len(resource_pool_ids):
-                missing_rps = set(resource_pool_ids).difference(set([i.id for i in rps_to_add]))
-                raise errors.MissingResourceError(
-                    message=(
-                        f"The resource pools with ids: {missing_rps} do not exist or user doesn't have access to "
-                        "default resource pool."
-                    )
+        if session is None:
+            raise errors.ProgrammingError(message="A session must be set to query the database")
+        kc_user = await self.kc_user_repo.get_user(keycloak_id)
+        if kc_user is None:
+            raise errors.MissingResourceError(message=f"The user with ID {keycloak_id} does not exist")
+        stmt = (
+            select(schemas.UserORM)
+            .where(schemas.UserORM.keycloak_id == keycloak_id)
+            .options(selectinload(schemas.UserORM.resource_pools))
+        )
+        res = await session.execute(stmt)
+        user = res.scalars().first()
+        if user is None:
+            user = schemas.UserORM(keycloak_id=keycloak_id)
+            session.add(user)
+        stmt_rp = (
+            select(schemas.ResourcePoolORM)
+            .where(schemas.ResourcePoolORM.id.in_(resource_pool_ids))
+            .options(selectinload(schemas.ResourcePoolORM.classes))
+        )
+        if user.no_default_access:
+            stmt_rp = stmt_rp.where(schemas.ResourcePoolORM.default == false())
+        res_rp = await session.execute(stmt_rp)
+        rps_to_add = res_rp.scalars().all()
+        if len(rps_to_add) != len(resource_pool_ids):
+            missing_rps = set(resource_pool_ids).difference(set([i.id for i in rps_to_add]))
+            raise errors.MissingResourceError(
+                message=(
+                    f"The resource pools with ids: {missing_rps} do not exist or user doesn't have access to "
+                    "default resource pool."
                 )
-            if user.no_default_access:
-                default_rp = next((rp for rp in rps_to_add if rp.default), None)
-                if default_rp:
-                    raise errors.ForbiddenError(
-                        message=f"User with keycloak id {keycloak_id} cannot access the default resource pool"
-                    )
-            existing_rp_ids = {rp.id for rp in user.resource_pools}
-            new_rp_ids = {rp.id for rp in rps_to_add}
-            if append:
-                rps_to_add = [rp for rp in rps_to_add if rp.id not in existing_rp_ids]
-                user.resource_pools.extend(rps_to_add)
-                removed_rps: list[schemas.ResourcePoolORM] = []
-            else:
-                removed_rps = [rp for rp in user.resource_pools if rp.id not in new_rp_ids]
-                user.resource_pools = list(rps_to_add)
-            # TODO: the authz changes below are done in separate db transactions,
-            # TODO: use only one (collect everything into a single authz change)
-            member_identifier = ResourcePoolMemberIdentifier(member_id=keycloak_id, member_type=MemberType.USER)
-            for rp in rps_to_add:
-                await self._grant_resource_pool_members(api_user, rp.id, [member_identifier])
-                if rp.default or rp.public:
-                    await self._unprohibit_resource_pool_users(api_user, rp.id, [keycloak_id])
-            for rp in removed_rps:
-                await self._revoke_resource_pool_members(api_user, rp.id, [member_identifier])
-                if rp.default or rp.public:
-                    await self._prohibit_resource_pool_users(api_user, rp.id, [keycloak_id])
-            output: list[models.ResourcePool] = []
-            for rp in rps_to_add:
-                quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
-                output.append(rp.dump(quota))
-            return output
+            )
+        if user.no_default_access:
+            default_rp = next((rp for rp in rps_to_add if rp.default), None)
+            if default_rp:
+                raise errors.ForbiddenError(
+                    message=f"User with keycloak id {keycloak_id} cannot access the default resource pool"
+                )
+        existing_rp_ids = {rp.id for rp in user.resource_pools}
+        new_rp_ids = {rp.id for rp in rps_to_add}
+        if append:
+            actual_add = [rp for rp in rps_to_add if rp.id not in existing_rp_ids]
+            actual_remove: list[schemas.ResourcePoolORM] = []
+        else:
+            actual_add = list(rps_to_add)
+            actual_remove = [rp for rp in user.resource_pools if rp.id not in new_rp_ids]
+        await self._sync_user_resource_pool_membership(api_user, user, actual_add, actual_remove, session)
+        output: list[models.ResourcePool] = []
+        for rp in actual_add:
+            quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
+            output.append(rp.dump(quota))
+        return output
+
+    @with_db_transaction
+    @_only_admins
+    async def remove_user_resource_pools(
+        self,
+        api_user: base_models.APIUser,
+        keycloak_id: str,
+        resource_pool_ids: list[int],
+        session: AsyncSession | None = None,
+    ) -> None:
+        """Remove a user from specific resource pools."""
+        if session is None:
+            raise errors.ProgrammingError(message="A session must be set to query the database")
+        stmt = (
+            select(schemas.UserORM)
+            .where(schemas.UserORM.keycloak_id == keycloak_id)
+            .options(selectinload(schemas.UserORM.resource_pools))
+        )
+        res = await session.execute(stmt)
+        user = res.scalars().first()
+        if user is not None:
+            actual_remove = [rp for rp in user.resource_pools if rp.id in resource_pool_ids]
+            await self._sync_user_resource_pool_membership(api_user, user, [], actual_remove, session)
 
     @_only_admins
     async def delete_resource_pool_user(
