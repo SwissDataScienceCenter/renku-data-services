@@ -40,7 +40,9 @@ def _token(ctx: Context) -> str:
             if t:
                 set_current_token(t)  # cache for this session once found
                 return t
-        except Exception:
+        except RuntimeError:
+            # _resolve_token raises RuntimeError when no token is available;
+            # return empty string so the tool call proceeds and the API returns 401.
             pass
     return ""
 
@@ -830,7 +832,8 @@ def create_server(
             if started_at:
                 age = time.time() - datetime.datetime.fromisoformat(started_at.replace("Z", "+00:00")).timestamp()
                 created = age < 60
-        except Exception:
+        except (ValueError, TypeError, AttributeError):
+            # Malformed or missing started_at — assume created to be safe.
             pass
         data["_created"] = created
         return data
