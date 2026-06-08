@@ -64,6 +64,8 @@ from renku_data_services.project.db import (
     ProjectRepository,
     ProjectSessionSecretRepository,
 )
+from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
+from renku_data_services.renku_apps.repository import RenkuAppsRepository
 from renku_data_services.repositories import models as repositories_models
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.git_url import GitUrl, GitUrlError
@@ -471,9 +473,19 @@ class TestDependencyManager(DependencyManager):
         resource_requests_repo = ResourceRequestsRepo(session_maker=config.db.async_session_maker)
         resource_usage_service = ResourceUsageService(resource_requests_repo)
 
+        apps_k8s_client = RenkuAppsK8sClient(client=client, cluster_repo=cluster_repo)
+        apps_repo = RenkuAppsRepository(
+            authz=authz,
+            session_repo=session_repo,
+            rp_repo=rp_repo,
+            project_repo=project_repo,
+            k8s_client=apps_k8s_client,
+        )
         return cls(
             config=config,
             k8s_client=client,
+            apps_k8s_client=apps_k8s_client,
+            apps_repo=apps_repo,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
             internal_authenticator=internal_authenticator,
