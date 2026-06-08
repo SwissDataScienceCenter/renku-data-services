@@ -91,10 +91,11 @@ def _load_rnk_token() -> str | None:
                     continue  # token is for a different deployment
                 if payload.get("exp") and time.time() > int(payload["exp"]) - 60:
                     continue  # token is expired or expires in < 60 s
-            except Exception:
-                pass  # accept token anyway if JWT decode fails
+            except (ValueError, KeyError, IndexError):
+                # JWT decode failed — accept the token anyway and let Keycloak validate it.
+                pass
             return access
-        except Exception:
+        except (OSError, json.JSONDecodeError, KeyError):
             continue
     return None
 
@@ -115,8 +116,8 @@ def _resolve_token() -> str:
                 entry = json.loads(f.read_text()).get(_base_url(), {})
                 if t := entry.get("access_token") or entry.get("token"):
                     return t
-            except Exception:
-                pass
+            except (OSError, json.JSONDecodeError, KeyError, AttributeError):
+                pass  # malformed or unreadable credential file — try next source
 
     # 3. Official rnk CLI token file
     if t := _load_rnk_token():
@@ -254,7 +255,7 @@ async def _run_stdio() -> None:
 def _run_http() -> None:
     import uvicorn
 
-    host = os.environ.get("MCP_HOST", "0.0.0.0")
+    host = os.environ.get("MCP_HOST", "0.0.0.0")  # nosec B104 — intentional for server deployment
     port = int(os.environ.get("MCP_PORT", "9000"))
     app = _build_http_app(_deps)
     logger.info("Starting Renku MCP server (HTTP) on %s:%s", host, port)
