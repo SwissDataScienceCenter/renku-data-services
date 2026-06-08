@@ -639,7 +639,7 @@ async def create_deposit_upload(
                 gvk = GVK(kind="PersistentVolumeClaim", version="v1")
             case x:
                 raise errors.ProgrammingError(
-                    message=f"Unexpected reosurce type {x.api_version}-{x.kind} when creating converting k8s object"
+                    message=f"Unexpected resource type {x.api_version}-{x.kind} when creating converting k8s object"
                 )
 
         return K8sObject(

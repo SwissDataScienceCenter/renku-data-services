@@ -261,7 +261,7 @@ class ResourceRequestsRepo:
             cte = cte + " and user_id = :user_id "
             params["user_id"] = rq.user_id
         if rq.resource_pool_id is not None:
-            cte = cte + " and resource_pool_id = :reosurce_pool_id "
+            cte = cte + " and resource_pool_id = :resource_pool_id "
             params["resource_pool_id"] = rq.resource_pool_id
         cte = cte + ")\n"
 
