@@ -907,7 +907,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 raise errors.MissingResourceError(message=not_found_message)
 
             authorized = await self._get_environment_authorization(
-                session=session, user=user, environment=environment, scope=Scope.READ
+                session=session, user=user, environment=environment, scope=Scope.WRITE
             )
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_message)
@@ -1025,29 +1025,15 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             result = await session.scalars(stmt)
             build = result.one_or_none()
 
+            not_found_message = f"Build with id '{build_id}' does not exist or you do not have access to it."
             if build is None:
-                raise errors.MissingResourceError(
-                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
-                )
+                raise errors.MissingResourceError(message=not_found_message)
 
-            if build.environment.environment_kind == models.EnvironmentKind.GLOBAL:
-                authorized = True
-            else:
-                launcher = await session.scalar(
-                    select(schemas.SessionLauncherORM).where(
-                        schemas.SessionLauncherORM.environment_id == build.environment_id
-                    )
-                )
-                if launcher is None:
-                    authorized = False
-                else:
-                    authorized = await self.project_authz.has_permission(
-                        user, ResourceType.project, launcher.project_id, Scope.WRITE
-                    )
+            authorized = await self._get_environment_authorization(
+                session=session, user=user, environment=build.environment, scope=Scope.WRITE
+            )
             if not authorized:
-                raise errors.MissingResourceError(
-                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
-                )
+                raise errors.MissingResourceError(message=not_found_message)
 
         build_model = build.dump()
 
@@ -1055,7 +1041,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             raise errors.MissingResourceError(message=f"Build with id '{build_id}' does not have logs.")
 
         return await self.shipwright_client.get_image_build_logs(
-            buildrun_name=build_model.k8s_name, user_id=user.id, max_log_lines=max_log_lines
+            buildrun_name=build_model.k8s_name, max_log_lines=max_log_lines
         )
 
     # async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession, user_id: str) -> None:
