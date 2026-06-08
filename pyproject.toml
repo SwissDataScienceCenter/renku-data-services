@@ -295,7 +295,9 @@ disable_error_code = ["no-untyped-def", "var-annotated", "import-untyped"]
 # would require casts on every tool, adding noise without safety benefit.
 module = ["renku_data_services.mcp_api.*"]
 warn_return_any = false
-disable_error_code = ["no-untyped-def"]
+# misc covers "untyped decorator makes function untyped" from @mcp.tool() —
+# the mcp package doesn't ship type stubs.
+disable_error_code = ["no-untyped-def", "misc"]
 
 [[tool.mypy.overrides]]
 module = ["mcp.*", "fastmcp.*", "uvicorn.*", "starlette.*"]
