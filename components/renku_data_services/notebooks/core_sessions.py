@@ -695,6 +695,27 @@ async def __get_connected_services_image_pull_secret(
     )
 
 
+async def __get_private_image_build_secret(
+    launcher: SessionLauncher, user: APIUser, image_check_repo: ImageCheckRepository, builds_config: BuildsConfig
+) -> ExtraSecret | None:
+    """Get the private image pull secret if user has access to the repository used to build the image."""
+
+    if user.is_anonymous:
+        return None
+
+    try:
+        await image_check_repo.check_built_image_accessibility(user=user, gitlab_user=None, launcher=launcher)
+    except (errors.ValidationError, errors.ProgrammingError, errors.ForbiddenError):
+        return None
+
+    return ExtraSecret(
+        V1Secret(
+            metadata=V1ObjectMeta(name=builds_config.pull_private_image_secret_name),
+        ),
+        adopt=False,
+    )
+
+
 async def get_image_pull_secret(
     launcher: SessionLauncher,
     server_name: str,
@@ -706,24 +727,23 @@ async def get_image_pull_secret(
 ) -> ExtraSecret | None:
     """Get an image pull secret."""
 
-    if (
-        builds_config.enabled
-        and builds_config.build_output_private_image_prefix is not None
-        and launcher.environment.container_image.startswith(builds_config.build_output_private_image_prefix)
-        and not user.is_anonymous
-    ):
-        return ExtraSecret(
-            V1Secret(
-                metadata=V1ObjectMeta(name=builds_config.pull_private_image_secret_name),
-            ),
-            adopt=False,
-        )
-
     v2_secret = await __get_connected_services_image_pull_secret(
         f"{server_name}-image-secret", image_check_repo, launcher, user
     )
     if v2_secret:
         return v2_secret
+
+    if (
+        builds_config.enabled
+        and builds_config.build_output_private_image_prefix is not None
+        and launcher.environment.container_image.startswith(builds_config.build_output_private_image_prefix)
+    ):
+        return await __get_private_image_build_secret(
+            launcher=launcher,
+            user=user,
+            image_check_repo=image_check_repo,
+            builds_config=builds_config,
+        )
 
     if (
         nb_config.enable_internal_gitlab

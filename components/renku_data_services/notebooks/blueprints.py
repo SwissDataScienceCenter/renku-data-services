@@ -33,7 +33,7 @@ from renku_data_services.notebooks.core_sessions import (
     validate_session_post_request,
 )
 from renku_data_services.notebooks.data_sources import DataSourceRepository
-from renku_data_services.notebooks.image_check import ImageCheckRepository
+from renku_data_services.notebooks.image_check import CheckResult, ImageCheckRepository
 from renku_data_services.notebooks.models import SessionType
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
@@ -236,11 +236,32 @@ class NotebooksNewBP(CustomBlueprint):
             elif query.launcher_id:
                 launcher_id = cast(ULID, ULID.from_str(query.launcher_id))
                 launcher = await self.session_repo.get_launcher(user=user, launcher_id=launcher_id)
-                result = await self.image_check_repo.check_image(
-                    user=user,
-                    gitlab_user=internal_gitlab_user,
-                    image_src=launcher,
-                )
+
+                if (
+                    self.builds_config.enabled
+                    and self.builds_config.build_output_private_image_prefix is not None
+                    and launcher.environment.container_image.startswith(
+                        self.builds_config.build_output_private_image_prefix
+                    )
+                ):
+                    try:
+                        await self.image_check_repo.check_built_image_accessibility(
+                            user=user, gitlab_user=internal_gitlab_user, launcher=launcher
+                        )
+                    except (errors.ValidationError, errors.ProgrammingError, errors.ForbiddenError) as error:
+                        result = CheckResult(
+                            accessible=False,
+                            response_code=403 if isinstance(error, errors.ForbiddenError) else 422,
+                            error=error,
+                        )
+                    else:
+                        result = CheckResult(accessible=True, response_code=200)
+                else:
+                    result = await self.image_check_repo.check_image(
+                        user=user,
+                        gitlab_user=internal_gitlab_user,
+                        image_src=launcher,
+                    )
                 logger.info(f"Checked image {launcher.environment.container_image}: {result}")
             else:
                 raise errors.ValidationError(message="One of image_url or launcher_id must be defined")

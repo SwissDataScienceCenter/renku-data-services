@@ -15,7 +15,7 @@ For the latter case, try to find out as much as possible:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import final, overload
+from typing import final
 
 import httpx
 from authlib.integrations.httpx_client import OAuthError
@@ -109,53 +109,55 @@ class ImageCheckRepository:
         self.connected_services_repo = connected_services_repo
         self.oauth_client_factory = oauth_client_factory
 
-    async def __check_built_image_accessibility(
+    async def check_built_image_accessibility(
         self, user: APIUser, gitlab_user: APIUser | None, launcher: SessionLauncher
     ) -> None:
-        # image can be "image:unknown-at-the-moment" which is returned until the first
-        # successful build however users can force a session start although it will fail
+        """Checks whether a user has access to the image from the given launcher."""
+
         environment = launcher.environment
         image = launcher.environment.container_image
 
-        if self.builds_config.build_output_private_image_prefix and image.startswith(
+        assert self.builds_config.build_output_private_image_prefix is not None and image.startswith(
             self.builds_config.build_output_private_image_prefix
-        ):
-            builds = await self.session_repo.get_environment_builds(user=user, environment_id=environment.id)
+        )
 
-            latest_successful_build = None
-            for build in builds:
-                if build.status == BuildStatus.succeeded:
-                    latest_successful_build = build
-                    break
+        builds = await self.session_repo.get_environment_builds(user=user, environment_id=environment.id)
 
-            if latest_successful_build is None or latest_successful_build.result is None:
-                raise errors.ValidationError(message="Image is not yet ready")
+        latest_successful_build = None
+        for build in builds:
+            if build.status == BuildStatus.succeeded:
+                latest_successful_build = build
+                break
 
-            if latest_successful_build.result.image != image:
-                raise errors.ProgrammingError(
-                    message=(
-                        f"Cannot get source repository for image {image}: the build history is not consistent with the"
-                        " current image. You may need to rebuild it."
-                    )
+        if latest_successful_build is None:
+            raise errors.ValidationError(message="Image is not yet ready")
+        elif latest_successful_build.result is None:
+            raise errors.ValidationError(
+                message=f"Cannot get source repository for image {image}. You may need to rebuild it."
+            )
+        elif latest_successful_build.result.image != image:
+            raise errors.ProgrammingError(
+                message=(
+                    f"Cannot get source repository for image {image}: the build history is not consistent with the"
+                    " current image. You may need to rebuild it."
                 )
-
-            repository_url = latest_successful_build.result.repository_url
-            repo_data = await self.git_repositories_repo.get_repository(
-                repository_url=repository_url,
-                user=user,
-                etag=None,
-                internal_gitlab_user=gitlab_user if gitlab_user else APIUser(),
             )
 
-            if repo_data.is_error:
-                raise errors.ValidationError(message="There was an issue accessing repo information")
+        repository_url = latest_successful_build.result.repository_url
+        repo_data = await self.git_repositories_repo.get_repository(
+            repository_url=repository_url,
+            user=user,
+            etag=None,
+            internal_gitlab_user=gitlab_user if gitlab_user else APIUser(),
+        )
 
-            if isinstance(repo_data.metadata, RepoMetadata) and not repo_data.metadata.pull_permission:
-                raise errors.ForbiddenError(
-                    message=(
-                        f"You do not have pull access to the code repository {repository_url} used for this session."
-                    )
-                )
+        if repo_data.is_error:
+            raise errors.ValidationError(message="There was an issue accessing repo information")
+
+        if isinstance(repo_data.metadata, RepoMetadata) and not repo_data.metadata.pull_permission:
+            raise errors.ForbiddenError(
+                message=(f"You do not have pull access to the code repository {repository_url} used for this session.")
+            )
 
     async def check_image(
         self, user: APIUser, gitlab_user: APIUser | None, image_src: SessionLauncher | Image
@@ -175,17 +177,6 @@ class ImageCheckRepository:
                     error=errors.ValidationError(message="Image not built"),
                 )
 
-            try:
-                await self.__check_built_image_accessibility(user, gitlab_user, image_src)
-            except (errors.ValidationError, errors.ForbiddenError) as error:
-                return CheckResult(
-                    accessible=False,
-                    platforms=None,
-                    response_code=403 if isinstance(error, errors.ForbiddenError) else 422,
-                    image_provider=None,
-                    token=None,
-                    error=error,
-                )
             image = Image.from_path(image_src.environment.container_image)
         else:
             image = image_src
