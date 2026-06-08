@@ -1,4 +1,5 @@
 AMALTHEA_SESSIONS_VERSION ?= 0.25.0
+KNATIVE_SERVING_VERSION ?= knative-v1.22.0
 COMMON_CODEGEN_PARAMS := \
 	--output-model-type pydantic_v2.BaseModel \
 	--use-double-quotes \
@@ -55,6 +56,7 @@ API_SPECS := \
     components/renku_data_services/notifications/apispec.py \
     components/renku_data_services/capacity_reservation/apispec.py \
     components/renku_data_services/resource_usage/apispec.py \
+    components/renku_data_services/renku_apps/apispec.py \
 	components/renku_data_services/authn/api/apispec.py
 
 schemas: ${API_SPECS}  ## Generate pydantic classes from apispec yaml files
@@ -118,6 +120,10 @@ amalthea_schema:  ## Updates generates pydantic classes from CRDs
 .PHONY: shipwright_schema
 shipwright_schema:  ## Updates the Shipwright pydantic classes
 	curl https://raw.githubusercontent.com/shipwright-io/build/refs/tags/v0.15.2/deploy/crds/shipwright.io_buildruns.yaml | yq '.spec.versions[] | select(.name == "v1beta1") | .schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/session/cr_shipwright_buildrun.py --base-class renku_data_services.session.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
+
+.PHONY: knative_serving_schema
+knative_serving_schema: ## Updates the Knative Serving pydantic classes
+	curl https://raw.githubusercontent.com/knative/serving/refs/tags/${KNATIVE_SERVING_VERSION}/config/core/300-resources/service.yaml | yq '.spec.versions[] | select(.name == "v1") | .schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/renku_apps/cr_knative_service.py --base-class renku_data_services.renku_apps.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
 
 .PHONY: oci_schema
 oci_schema:  ## Updates the OCI classes
