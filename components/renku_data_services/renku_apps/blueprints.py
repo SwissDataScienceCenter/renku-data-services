@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from sanic import Request
+from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse, json
 from sanic_ext import validate
 from ulid import ULID
@@ -42,3 +42,14 @@ class RenkuAppBP(CustomBlueprint):
             return json(app.as_apispec().model_dump(exclude_none=True, mode="json"))
 
         return "/apps/<app_name>", ["GET"], _get_one
+
+    def delete_one(self) -> BlueprintFactoryResponse:
+        """Delete an app by name."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete_one(_: Request, user: base_models.APIUser, app_name: str) -> HTTPResponse:
+            await self.apps_repo.delete_app(user=user, app_name=app_name)
+            return HTTPResponse(status=204)
+
+        return "/apps/<app_name>", ["DELETE"], _delete_one
