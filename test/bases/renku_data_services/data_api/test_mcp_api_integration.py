@@ -180,9 +180,9 @@ async def test_launcher_create_without_launcher_type(
                     "environment": {"id": env["id"]},
                 },
             )
-            assert launcher_result.isError is not True, (
-                f"launcher_create failed without launcher_type: {launcher_result.content[0].text}"
-            )
+            assert (
+                launcher_result.isError is not True
+            ), f"launcher_create failed without launcher_type: {launcher_result.content[0].text}"
             launcher_id = tool_result_dict(launcher_result)["id"]
             await session.call_tool("launcher_delete", {"launcher_id": launcher_id})
         finally:
