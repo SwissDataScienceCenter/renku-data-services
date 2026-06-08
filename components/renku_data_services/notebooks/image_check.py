@@ -132,7 +132,7 @@ class ImageCheckRepository:
                 raise errors.ValidationError(message="Image is not yet ready")
 
             if latest_successful_build.result.image != image:
-                raise errors.ProgrammingError(message="Database inconsistency")
+                raise errors.ProgrammingError(message=f"Cannot get source repository for image {image}: the build history is not consistent with the current image. You may need to rebuild it.")
 
 
             repo_data = await self.git_repositories_repo.get_repository(
