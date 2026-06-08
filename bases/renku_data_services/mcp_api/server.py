@@ -532,7 +532,10 @@ def create_server(
         resource_class_id: Annotated[int, Field(description="Resource class ID (from resource_classes())")],
         environment: Annotated[dict[str, Any], Field(description="Environment definition dict")],
         launcher_type: Annotated[
-            str | None, Field(description="Set to 'non_interactive' for job launchers. Leave unset for interactive sessions (default).")
+            str | None,
+            Field(
+                description="Set to 'non_interactive' for job launchers. Leave unset for interactive sessions (default)."
+            ),
         ] = None,
         description: Annotated[str, Field(description="Optional description")] = "",
     ) -> dict[str, Any]:
