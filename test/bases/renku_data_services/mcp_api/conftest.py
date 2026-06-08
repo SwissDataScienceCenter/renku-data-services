@@ -46,10 +46,8 @@ async def mcp_session(deps: MCPDependencies, token: str = "test-token"):
                 yield session, deps
         finally:
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
-            except (asyncio.CancelledError, Exception):
-                pass
 
 
 def tool_result_list(result: Any) -> list[Any]:

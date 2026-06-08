@@ -12,10 +12,13 @@ import httpx
 
 @dataclass
 class MCPDependencies:
+    """Dependency container for the MCP server — just a base URL and an HTTP client."""
+
     base_url: str
 
     @classmethod
     def from_env(cls) -> MCPDependencies:
+        """Build MCPDependencies from environment variables."""
         base_url = os.environ.get("RENKU_BASE_URL", "https://renkulab.io").rstrip("/")
         return cls(base_url=base_url)
 

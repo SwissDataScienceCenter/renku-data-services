@@ -177,6 +177,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "test/*" = ["D"]
+"bases/renku_data_services/mcp_api/server.py" = ["E501"]
 "*/versions/*" = ["D", "E", "W"]
 "apispec.py" = ["D", "E", "W", "I", "UP", "F401"]
 "components/renku_data_services/notebooks/crs.py" = ["F401"]
