@@ -186,6 +186,8 @@ components:
       properties:
         state:
           $ref: "#/components/schemas/AppState"
+        resource_class_id:
+          type: integer
 
     ErrorResponse:
       type: object
