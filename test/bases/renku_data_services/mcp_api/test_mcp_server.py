@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 
 from renku_data_services.mcp_api.dependencies import MCPDependencies
-from renku_data_services.mcp_api.main import _authorization_server_doc, _protected_resource_doc
+from renku_data_services.mcp_api.main import (
+    _authorization_server_doc,
+    _load_rnk_token,
+    _protected_resource_doc,
+    _resolve_token,
+    _rnk_token_paths,
+)
 from renku_data_services.mcp_api.server import (
     _admin_cache,
     _is_stale_session,
@@ -129,6 +136,86 @@ async def test_authorization_server_doc_proxies_keycloak(httpx_mock):
 async def test_authorization_server_doc_no_keycloak_url():
     body, status = await _authorization_server_doc("")
     assert status == 503
+
+
+# ------------------------------------------------------------------ #
+# Token resolution — _load_rnk_token and _resolve_token               #
+# ------------------------------------------------------------------ #
+
+
+def test_load_rnk_token_finds_token_in_response_key(tmp_path, monkeypatch):
+    """_load_rnk_token reads the token from the 'response' wrapper used by rnk."""
+    token_file = tmp_path / "token.json"
+    token_file.write_text(json.dumps({"response": {"access_token": "my-token"}}))
+
+    monkeypatch.setattr("renku_data_services.mcp_api.main._rnk_token_paths", lambda: [token_file])
+    assert _load_rnk_token() == "my-token"
+
+
+def test_load_rnk_token_finds_token_at_root(tmp_path, monkeypatch):
+    """_load_rnk_token also reads the token when there's no 'response' wrapper."""
+    token_file = tmp_path / "token.json"
+    token_file.write_text(json.dumps({"access_token": "my-token"}))
+
+    monkeypatch.setattr("renku_data_services.mcp_api.main._rnk_token_paths", lambda: [token_file])
+    assert _load_rnk_token() == "my-token"
+
+
+def test_load_rnk_token_forwards_any_token_value(tmp_path, monkeypatch):
+    """_load_rnk_token forwards tokens as-is without JWT validation — the API validates."""
+    token_file = tmp_path / "token.json"
+    token_file.write_text(json.dumps({"access_token": "opaque-or-expired-or-wrong-issuer"}))
+
+    monkeypatch.setattr("renku_data_services.mcp_api.main._rnk_token_paths", lambda: [token_file])
+    assert _load_rnk_token() == "opaque-or-expired-or-wrong-issuer"
+
+
+def test_load_rnk_token_no_file(monkeypatch):
+    """_load_rnk_token returns None when no token file exists."""
+    monkeypatch.setattr("renku_data_services.mcp_api.main._rnk_token_paths", lambda: [])
+    assert _load_rnk_token() is None
+
+
+def test_resolve_token_prefers_env_var(tmp_path, monkeypatch):
+    """_resolve_token returns the env var even when an rnk token file exists."""
+    monkeypatch.setenv("RENKU_ACCESS_TOKEN", "env-token")
+    monkeypatch.setattr("renku_data_services.mcp_api.main._rnk_token_paths", lambda: [])
+    assert _resolve_token() == "env-token"
+
+
+def test_resolve_token_falls_back_to_rnk(tmp_path, monkeypatch):
+    """_resolve_token falls back to the rnk file when no env var is set."""
+    base_url = "https://renkulab.io"
+    monkeypatch.setenv("RENKU_BASE_URL", base_url)
+    monkeypatch.delenv("RENKU_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("RENKU_TOKEN", raising=False)
+    monkeypatch.delenv("RENKU_CLI_ACCESS_TOKEN", raising=False)
+
+    token_file = tmp_path / "token.json"
+    token_file.write_text(json.dumps({"access_token": "rnk-token"}))
+
+    monkeypatch.setattr("renku_data_services.mcp_api.main._rnk_token_paths", lambda: [token_file])
+    assert _resolve_token() == "rnk-token"
+
+
+def test_resolve_token_raises_when_nothing_found(monkeypatch):
+    """_resolve_token raises RuntimeError with a helpful message when no token is available."""
+    monkeypatch.delenv("RENKU_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("RENKU_TOKEN", raising=False)
+    monkeypatch.delenv("RENKU_CLI_ACCESS_TOKEN", raising=False)
+    monkeypatch.setattr("renku_data_services.mcp_api.main._rnk_token_paths", lambda: [])
+
+    with pytest.raises(RuntimeError, match="rnk login"):
+        _resolve_token()
+
+
+def test_rnk_token_paths_uses_xdg(monkeypatch):
+    """_rnk_token_paths respects XDG_DATA_HOME."""
+    monkeypatch.setenv("XDG_DATA_HOME", "/custom/xdg")
+    monkeypatch.delenv("APPDATA", raising=False)
+
+    paths = _rnk_token_paths()
+    assert any("/custom/xdg" in str(p) for p in paths)
 
 
 # ------------------------------------------------------------------ #

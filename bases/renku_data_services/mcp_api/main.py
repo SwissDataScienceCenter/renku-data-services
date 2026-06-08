@@ -13,19 +13,16 @@ streamable-http (production):
 Token resolution order
 ----------------------
 1. RENKU_ACCESS_TOKEN, RENKU_TOKEN, or RENKU_CLI_ACCESS_TOKEN env var.
-2. Legacy credential files (~/.config/renku-agent-skill/credentials.json, etc.).
-3. Official rnk CLI token file (platform-specific path, validated for issuer + expiry).
+2. rnk CLI token file (platform-specific path, token forwarded as-is to the data API).
 """
 
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import logging
 import os
 import sys
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -45,19 +42,6 @@ def _base_url() -> str:
     return os.environ.get("RENKU_BASE_URL", "https://renkulab.io").rstrip("/")
 
 
-def _creds_candidates() -> list[Path]:
-    """Legacy credential file paths to search."""
-    candidates: list[Path] = []
-    if d := os.environ.get("RENKU_CONFIG_DIR"):
-        candidates.append(Path(d) / "credentials.json")
-    home = Path.home()
-    candidates += [
-        home / ".config" / "renku-agent-skill" / "credentials.json",
-        home / ".pi" / "renku-config" / "credentials.json",
-    ]
-    return candidates
-
-
 def _rnk_token_paths() -> list[Path]:
     """Paths where the official rnk CLI stores its token file (platform-specific)."""
     home = Path.home()
@@ -72,8 +56,11 @@ def _rnk_token_paths() -> list[Path]:
 
 
 def _load_rnk_token() -> str | None:
-    """Read an access token from the rnk CLI token file, validating issuer and expiry."""
-    expected_issuer = _base_url() + "/auth/realms/Renku"
+    """Read an access token from the rnk CLI token file.
+
+    No JWT validation is performed here — the token is forwarded to the Renku
+    data API which is the authoritative validator (signature, issuer, expiry).
+    """
     for path in _rnk_token_paths():
         if not path.exists():
             continue
@@ -81,20 +68,8 @@ def _load_rnk_token() -> str | None:
             data = json.loads(path.read_text())
             response = data.get("response") or data
             access = response.get("access_token")
-            if not access:
-                continue
-            try:
-                payload_part = access.split(".")[1]
-                payload_part += "=" * (-len(payload_part) % 4)
-                payload: dict[str, Any] = json.loads(base64.urlsafe_b64decode(payload_part.encode()))
-                if payload.get("iss") != expected_issuer:
-                    continue  # token is for a different deployment
-                if payload.get("exp") and time.time() > int(payload["exp"]) - 60:
-                    continue  # token is expired or expires in < 60 s
-            except (ValueError, KeyError, IndexError):
-                # JWT decode failed — accept the token anyway and let Keycloak validate it.
-                pass
-            return access
+            if access:
+                return access
         except (OSError, json.JSONDecodeError, KeyError):
             continue
     return None
@@ -102,24 +77,12 @@ def _load_rnk_token() -> str | None:
 
 def _resolve_token() -> str:
     """Return the best available token, or raise with a helpful message."""
-    # 1. Environment variables (highest priority)
+    # 1. Environment variables (explicit override)
     for var in ("RENKU_ACCESS_TOKEN", "RENKU_TOKEN", "RENKU_CLI_ACCESS_TOKEN"):
         if t := os.environ.get(var):
             return t
 
-    # 2. Legacy credential files
-    checked: list[str] = []
-    for f in _creds_candidates():
-        checked.append(str(f))
-        if f.exists():
-            try:
-                entry = json.loads(f.read_text()).get(_base_url(), {})
-                if t := entry.get("access_token") or entry.get("token"):
-                    return t
-            except (OSError, json.JSONDecodeError, KeyError, AttributeError):
-                pass  # malformed or unreadable credential file — try next source
-
-    # 3. Official rnk CLI token file
+    # 2. rnk CLI token file
     if t := _load_rnk_token():
         return t
 
@@ -127,7 +90,6 @@ def _resolve_token() -> str:
     raise RuntimeError(
         f"Not authenticated for {_base_url()}.\n"
         f"Run: rnk login\n"
-        f"Credentials searched in: {', '.join(checked)}\n"
         f"rnk token paths searched: {', '.join(rnk_paths)}\n"
         f"Or set RENKU_ACCESS_TOKEN in the MCP server environment config."
     )
