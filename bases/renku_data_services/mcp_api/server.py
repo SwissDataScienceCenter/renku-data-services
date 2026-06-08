@@ -531,10 +531,14 @@ def create_server(
         name: Annotated[str, Field(description="Launcher name")],
         resource_class_id: Annotated[int, Field(description="Resource class ID (from resource_classes())")],
         environment: Annotated[dict[str, Any], Field(description="Environment definition dict")],
-        launcher_type: Annotated[str, Field(description="'interactive' for sessions, 'non_interactive' for jobs")] = "interactive",
+        launcher_type: Annotated[
+            str | None, Field(description="Set to 'non_interactive' for job launchers. Leave unset for interactive sessions (default).")
+        ] = None,
         description: Annotated[str, Field(description="Optional description")] = "",
     ) -> dict[str, Any]:
         """Create a session launcher. Always call resource_classes(cpu=..., memory=...) first.
+        Do NOT set launcher_type unless creating a non_interactive job launcher — leave it unset
+        for interactive sessions. Sending launcher_type='interactive' will fail on older deployments.
 
         Three ways to specify the environment:
 
@@ -558,8 +562,9 @@ def create_server(
             "name": name,
             "resource_class_id": resource_class_id,
             "environment": environment,
-            "launcher_type": launcher_type,
         }
+        if launcher_type is not None:
+            body["launcher_type"] = launcher_type
         if description:
             body["description"] = description
         return _launcher_summary(await _api(ctx, "POST", "/session_launchers", body))
@@ -641,7 +646,8 @@ def create_server(
         After calling this, use session_wait(session_id) to wait for 'running' state —
         do not sleep or poll manually."""
         launcher = await _api(ctx, "GET", f"/session_launchers/{launcher_id}")
-        if launcher.get("launcher_type") != "interactive":
+        # None means the API predates launcher_type — treat as interactive (the historical default).
+        if launcher.get("launcher_type") not in ("interactive", None):
             raise RuntimeError(
                 f"Launcher {launcher_id!r} has launcher_type={launcher.get('launcher_type')!r}. "
                 "Use job_run for non_interactive launchers."
@@ -770,9 +776,10 @@ def create_server(
         a new one — always verify _created=true in the response. If _created=false, delete
         the returned session and retry."""
         launcher = await _api(ctx, "GET", f"/session_launchers/{launcher_id}")
+        # None means the API predates launcher_type — treat as interactive, so block job_run.
         if launcher.get("launcher_type") != "non_interactive":
             raise RuntimeError(
-                f"Launcher {launcher_id!r} has launcher_type={launcher.get('launcher_type')!r}. "
+                f"Launcher {launcher_id!r} has launcher_type={launcher.get('launcher_type') or 'interactive (default)'}. "
                 "Use session_launch for interactive launchers."
             )
         body: dict[str, Any] = {"launcher_id": launcher_id}
