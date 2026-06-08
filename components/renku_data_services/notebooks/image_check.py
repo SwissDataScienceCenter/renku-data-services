@@ -132,11 +132,16 @@ class ImageCheckRepository:
                 raise errors.ValidationError(message="Image is not yet ready")
 
             if latest_successful_build.result.image != image:
-                raise errors.ProgrammingError(message=f"Cannot get source repository for image {image}: the build history is not consistent with the current image. You may need to rebuild it.")
+                raise errors.ProgrammingError(
+                    message=(
+                        f"Cannot get source repository for image {image}: the build history is not consistent with the"
+                        " current image. You may need to rebuild it."
+                    )
+                )
 
-
+            repository_url = latest_successful_build.result.repository_url
             repo_data = await self.git_repositories_repo.get_repository(
-                repository_url=latest_successful_build.result.repository_url,
+                repository_url=repository_url,
                 user=user,
                 etag=None,
                 internal_gitlab_user=gitlab_user if gitlab_user else APIUser(),
@@ -147,7 +152,9 @@ class ImageCheckRepository:
 
             if isinstance(repo_data.metadata, RepoMetadata) and not repo_data.metadata.pull_permission:
                 raise errors.ForbiddenError(
-                    message="You do not have pull access to the code repository used for this session."
+                    message=(
+                        f"You do not have pull access to the code repository {repository_url} used for this session."
+                    )
                 )
 
     async def check_image(
