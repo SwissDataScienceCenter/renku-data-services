@@ -150,14 +150,6 @@ class ImageCheckRepository:
                     message="You do not have pull access to the code repository used for this session."
                 )
 
-    @overload
-    async def check_image(
-        self, user: APIUser, gitlab_user: APIUser | None, image_src: SessionLauncher
-    ) -> CheckResult: ...
-
-    @overload
-    async def check_image(self, user: APIUser, gitlab_user: APIUser | None, image_src: Image) -> CheckResult: ...
-
     async def check_image(
         self, user: APIUser, gitlab_user: APIUser | None, image_src: SessionLauncher | Image
     ) -> CheckResult:
