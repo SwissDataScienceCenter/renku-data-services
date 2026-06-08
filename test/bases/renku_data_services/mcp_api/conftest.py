@@ -26,10 +26,10 @@ def mock_deps() -> MCPDependencies:
 
 
 @contextlib.asynccontextmanager
-async def mcp_session(deps: MCPDependencies):
+async def mcp_session(deps: MCPDependencies, token: str = "test-token"):
     """Async context manager that runs the MCP server in-process.
     Must be used within a single asyncio task to keep anyio cancel scopes happy."""
-    set_current_token("test-token")
+    set_current_token(token)
     server = create_server(deps)
 
     async with create_client_server_memory_streams() as (client_streams, server_streams):

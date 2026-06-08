@@ -186,6 +186,7 @@ async def test_api_returns_headers_when_requested(httpx_mock):
 @pytest.mark.asyncio
 async def test_admin_blocks_tool_calls(mock_deps):
     """All tools except auth_status are blocked for admin users."""
+
     async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
         if path == "/user":
             return {"is_admin": True, "id": "admin"}
@@ -202,6 +203,7 @@ async def test_admin_blocks_tool_calls(mock_deps):
 @pytest.mark.asyncio
 async def test_non_admin_allowed(mock_deps):
     """Non-admin users can call tools normally."""
+
     async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
         if path == "/user":
             return {"is_admin": False, "id": "user1"}
@@ -217,6 +219,7 @@ async def test_non_admin_allowed(mock_deps):
 @pytest.mark.asyncio
 async def test_admin_check_cached(mock_deps):
     """/user is only called once per token, even across multiple tool calls."""
+
     async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
         if path == "/user":
             return {"is_admin": False, "id": "user1"}
@@ -261,10 +264,20 @@ async def test_list_tools_smoke(mock_deps):
         result = await session.list_tools()
         names = {t.name for t in result.tools}
         for expected in (
-            "auth_status", "project_list", "project_create", "project_update",
-            "connector_create", "launcher_create", "launcher_delete",
-            "session_launch", "session_wait", "job_run", "job_wait", "build_wait",
-            "global_environments", "renku_group_members",
+            "auth_status",
+            "project_list",
+            "project_create",
+            "project_update",
+            "connector_create",
+            "launcher_create",
+            "launcher_delete",
+            "session_launch",
+            "session_wait",
+            "job_run",
+            "job_wait",
+            "build_wait",
+            "global_environments",
+            "renku_group_members",
         ):
             assert expected in names, f"Missing tool: {expected}"
 
@@ -273,7 +286,7 @@ async def test_list_tools_smoke(mock_deps):
 async def test_session_list_filters_stale(mock_deps):
     mock_deps.api.return_value = [
         make_session("running"),
-        make_session("hibernated", will_delete_at=iso_ago(60)),    # stale
+        make_session("hibernated", will_delete_at=iso_ago(60)),  # stale
         make_session("running", will_delete_at=iso_future(3600)),  # not stale
     ]
 
@@ -406,9 +419,7 @@ async def test_project_repo_add_sends_etag(mock_deps):
     mock_deps.api.side_effect = fake_api
 
     async with mcp_session(mock_deps) as (session, deps):
-        await session.call_tool(
-            "project_repo_add", {"project": "proj-1", "repository_url": "https://github.com/x/y"}
-        )
+        await session.call_tool("project_repo_add", {"project": "proj-1", "repository_url": "https://github.com/x/y"})
 
     patch_calls = [c for c in deps.api.call_args_list if c.args[0] == "PATCH"]
     assert len(patch_calls) == 1
@@ -418,6 +429,7 @@ async def test_project_repo_add_sends_etag(mock_deps):
 @pytest.mark.asyncio
 async def test_project_repo_add_raises_without_etag(mock_deps):
     """project_repo_add raises when the project has no ETag."""
+
     async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
         if path == "/user":
             return {"is_admin": False}
