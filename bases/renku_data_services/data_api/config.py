@@ -17,6 +17,7 @@ from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.data_connectors.config import DepositConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.renku_apps.config import AppsConfig
 from renku_data_services.secrets.config import PublicSecretsConfig
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.solr.solr_client import SolrClientConfig
@@ -33,6 +34,7 @@ class Config:
     k8s_config_root: str
     db: DBConfig
     builds: BuildsConfig
+    apps: AppsConfig
     nb_config: NotebooksConfig
     secrets: PublicSecretsConfig
     sentry: SentryConfig
@@ -81,6 +83,7 @@ class Config:
             k8s_config_root=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
             db=db,
             builds=BuildsConfig.from_env(),
+            apps=AppsConfig.from_env(),
             nb_config=nb_config,
             secrets=PublicSecretsConfig.from_env(),
             sentry=SentryConfig.from_env(),
