@@ -476,6 +476,8 @@ class ResourcePoolRepository(_Base):
                 session=session,
             )
 
+            # TODO figure out how to ensure we can commit AUTHZ changes in the same DB session
+
             if members is not None and self.member_repo is not None:
                 try:
                     await self.member_repo.grant_resource_pool_members(api_user, result.id, members, skip_missing=True)
