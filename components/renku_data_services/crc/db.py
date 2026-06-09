@@ -440,15 +440,17 @@ class ResourcePoolRepository(_Base):
         """Get resource pools from database with indication of which resource class matches the specified criteria."""
         return await self.__query_repository.filter_resource_pools(api_user, cpu, memory, max_storage, gpu)
 
-    async def _get_connected_user_ids(self, provider_id: str) -> list[str]:
+    @with_db_transaction
+    async def _get_connected_user_ids(self, provider_id: str, session: AsyncSession | None = None) -> list[str]:
         """Query all users with a connected OAuth2 connection to the given provider."""
-        async with self.session_maker() as session:
-            result = await session.scalars(
-                select(OAuth2ConnectionORM.user_id)
-                .where(OAuth2ConnectionORM.client_id == provider_id)
-                .where(OAuth2ConnectionORM.status == ConnectionStatus.connected)
-            )
-            return list(result.all())
+        if session is None:
+            raise errors.ProgrammingError(message="A session must be set to query the database")
+        result = await session.scalars(
+            select(OAuth2ConnectionORM.user_id)
+            .where(OAuth2ConnectionORM.client_id == provider_id)
+            .where(OAuth2ConnectionORM.status == ConnectionStatus.connected)
+        )
+        return list(result.all())
 
     @_only_admins
     async def insert_resource_pool(
@@ -463,21 +465,24 @@ class ResourcePoolRepository(_Base):
                 if client is None:
                     raise errors.ValidationError(message=f"Provider ID's value is incorrect: '{provider_id}'")
 
+            members = None
+            if provider_id:
+                user_ids = await self._get_connected_user_ids(provider_id, session=session)
+                members = [ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid) for uid in user_ids]
+
             result = await self._insert_resource_pool(
                 api_user=api_user,
                 new_resource_pool=new_resource_pool,
                 session=session,
             )
 
-        if provider_id and self.member_repo is not None:
-            user_ids = await self._get_connected_user_ids(provider_id)
-            members = [ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid) for uid in user_ids]
-            try:
-                await self.member_repo.grant_resource_pool_members(api_user, result.id, members, skip_missing=True)
-            except errors.BaseError as e:
-                logger.warning(
-                    f"Failed to auto-grant members to resource pool {result.id} for provider {provider_id}: {e}"
-                )
+            if members is not None and self.member_repo is not None:
+                try:
+                    await self.member_repo.grant_resource_pool_members(api_user, result.id, members, skip_missing=True)
+                except errors.BaseError as e:
+                    logger.warning(
+                        f"Failed to auto-grant members to resource pool {result.id} for provider {provider_id}: {e}"
+                    )
 
         return result
 
@@ -685,39 +690,48 @@ class ResourcePoolRepository(_Base):
             await gather(*new_classes_coroutines)
             await session.flush()
             await session.refresh(rp)
-            result = rp.dump(quota=quota)
+            transaction_result = rp.dump(quota=quota)
+            new_provider_id = transaction_result.remote.provider_id if transaction_result.remote else None
+            old_members, new_members = None, None
+            if old_provider_id != new_provider_id:
+                # Get old
+                if old_provider_id is not None:
+                    old_user_ids = await self._get_connected_user_ids(old_provider_id, session=session)
+                    old_members = [
+                        ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid) for uid in old_user_ids
+                    ]
+                # Get new
+                if new_provider_id is not None:
+                    new_user_ids = await self._get_connected_user_ids(new_provider_id, session=session)
+                    new_members = [
+                        ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid) for uid in new_user_ids
+                    ]
             if update_authz:
-                result = await self._update_resource_pool(
+                transaction_result = await self._update_resource_pool(
                     api_user=api_user,
-                    rp=result,
+                    rp=transaction_result,
                     session=session,
                 )
-            transaction_result = result
 
         # After transaction, sync memberships
-        new_provider_id = transaction_result.remote.provider_id if transaction_result.remote else None
-        if old_provider_id != new_provider_id and self.member_repo is not None:
+        if self.member_repo is not None:
             # Revoke old
-            if old_provider_id is not None:
-                old_user_ids = await self._get_connected_user_ids(old_provider_id)
-                for uid in old_user_ids:
-                    member = ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid)
-                    try:
-                        await self.member_repo.revoke_resource_pool_members(api_user, resource_pool_id, [member])
-                    except errors.BaseError as e:
-                        logger.warning(
-                            f"Failed to auto-revoke member {uid} from resource pool {resource_pool_id} "
-                            f"for provider {old_provider_id}: {e}"
-                        )
+            if old_members is not None:
+                try:
+                    await self.member_repo.revoke_resource_pool_members(
+                        api_user, resource_pool_id, old_members, skip_missing=True
+                    )
+                except errors.BaseError as e:
+                    logger.warning(
+                        f"Failed to auto-revoke members from resource pool {resource_pool_id} "
+                        f"for provider {old_provider_id}: {e}"
+                    )
+
             # Grant new
-            if new_provider_id is not None:
-                new_user_ids = await self._get_connected_user_ids(new_provider_id)
-                members = [
-                    ResourcePoolMemberIdentifier(member_type=MemberType.USER, member_id=uid) for uid in new_user_ids
-                ]
+            if new_members is not None:
                 try:
                     await self.member_repo.grant_resource_pool_members(
-                        api_user, resource_pool_id, members, skip_missing=True
+                        api_user, resource_pool_id, new_members, skip_missing=True
                     )
                 except errors.BaseError as e:
                     logger.warning(
@@ -1499,10 +1513,13 @@ class MemberRepository(_Base):
         api_user: base_models.APIUser,
         resource_pool_id: int,
         members: Collection[ResourcePoolMemberIdentifier],
+        skip_missing: bool = False,
     ) -> None:
         """Revoke access to a resource pool for a collection of members (Users, Groups, Projects)."""
         async with self.session_maker() as session, session.begin():
-            await self._revoke_resource_pool_members(api_user, resource_pool_id, members, session=session)
+            await self._revoke_resource_pool_members(
+                api_user, resource_pool_id, members, session=session, skip_missing=skip_missing
+            )
 
     @_only_admins
     async def get_resource_pool_members(
