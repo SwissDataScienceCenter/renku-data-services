@@ -1109,7 +1109,7 @@ async def test_resource_pool_insert_with_nonexistent_provider_id_fails(
         ),
     )
 
-    with pytest.raises(errors.MissingResourceError):
+    with pytest.raises(errors.ValidationError):
         await app_manager_instance.rp_repo.insert_resource_pool(admin_user, rp)
 
 

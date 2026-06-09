@@ -461,7 +461,7 @@ class ResourcePoolRepository(_Base):
                 provider_id = new_resource_pool.remote.provider_id
                 client = await session.scalar(select(OAuth2ClientORM).where(OAuth2ClientORM.id == provider_id))
                 if client is None:
-                    raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
+                    raise errors.ValidationError(message=f"Provider ID's value is incorrect: '{provider_id}'")
 
             result = await self._insert_resource_pool(
                 api_user=api_user,
