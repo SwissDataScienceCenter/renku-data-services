@@ -45,13 +45,14 @@ def _base_url() -> str:
 def _rnk_token_paths() -> list[Path]:
     """Paths where the official rnk CLI stores its token file (platform-specific)."""
     home = Path.home()
+    token_path =  "io.renku.sdsc.renku-cli" / "token.json"
     paths: list[Path] = []
     if sys.platform == "darwin":
-        paths.append(home / "Library" / "Application Support" / "io.renku.sdsc.renku-cli" / "token.json")
+        paths.append(home / "Library" / "Application Support" / token_path)
     xdg = Path(os.environ.get("XDG_DATA_HOME", str(home / ".local" / "share")))
-    paths.append(xdg / "io.renku.sdsc.renku-cli" / "token.json")
+    paths.append(xdg / token_path)
     if appdata := os.environ.get("APPDATA"):
-        paths.append(Path(appdata) / "io.renku.sdsc.renku-cli" / "token.json")
+        paths.append(Path(appdata) / token_path)
     return paths
 
 
@@ -66,12 +67,12 @@ def _load_rnk_token() -> str | None:
             continue
         try:
             data = json.loads(path.read_text())
-            response = data.get("response") or data
-            access = response.get("access_token")
-            if access:
-                return access
-        except (OSError, json.JSONDecodeError, KeyError):
+        except (OSError, json.JSONDecodeError):
             continue
+        response = data.get("response") or data
+        access = response.get("access_token")
+        if access:
+            return access
     return None
 
 
