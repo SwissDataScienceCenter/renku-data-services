@@ -53,7 +53,9 @@ class CheckResult:
     response_code: int
     image_provider: ImageProvider | None = None
     token: str | None = field(default=None, repr=False)
-    error: errors.UnauthorizedError | errors.ValidationError | errors.ProgrammingError | errors.ForbiddenError | None = None
+    error: (
+        errors.UnauthorizedError | errors.ValidationError | errors.ProgrammingError | errors.ForbiddenError | None
+    ) = None
 
     def __str__(self) -> str:
         token = "***" if self.token else "None"
