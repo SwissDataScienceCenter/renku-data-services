@@ -251,11 +251,12 @@ class NotebooksNewBP(CustomBlueprint):
                     except (errors.ValidationError, errors.ProgrammingError, errors.ForbiddenError) as error:
                         result = CheckResult(
                             accessible=False,
+                            platforms=None,
                             response_code=403 if isinstance(error, errors.ForbiddenError) else 422,
                             error=error,
                         )
                     else:
-                        result = CheckResult(accessible=True, response_code=200)
+                        result = CheckResult(accessible=True, platforms=None, response_code=200)
                 else:
                     result = await self.image_check_repo.check_image(
                         user=user,
