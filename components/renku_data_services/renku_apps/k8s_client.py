@@ -89,6 +89,7 @@ class RenkuAppsK8sClient:
         self, project: Project, session_launcher: SessionLauncher
     ) -> AppRuntimeState | None:
         """Get the runtime state for the given project's app, or None if it does not exist."""
+        # TODO: Implement authorization when we have private apps
         return await self.get_app_deployment(_generate_app_name(project, session_launcher))
 
     async def delete_app_deployment(self, app_name: str) -> None:
@@ -105,6 +106,7 @@ class RenkuAppsK8sClient:
 
     async def list_app_deployments(self, project_id: ULID | None = None) -> AsyncGenerator[AppRuntimeState, None]:
         """List all app deployments."""
+        # TODO: Implement authorization when we have private apps
         cluster = await self.__client.cluster_by_id(self.__cluster_id)
         obj_filter = K8sObjectFilter(
             name=None,

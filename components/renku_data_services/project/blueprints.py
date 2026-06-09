@@ -292,6 +292,8 @@ class ProjectsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, project_id: ULID, body: apispec.ProjectPatch, etag: str
         ) -> JSONResponse:
+            # TODO: check if the project goes from public to private
+            # If the project has any launchers of type app then fail
             project_patch = validate_project_patch(body)
             project_update = await self.project_repo.update_project(
                 user=user, project_id=project_id, etag=etag, patch=project_patch

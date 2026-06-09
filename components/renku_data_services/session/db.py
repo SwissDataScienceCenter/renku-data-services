@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
+import os
 from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy import select
@@ -14,7 +15,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
-from renku_data_services.authz.authz import Authz, ResourceType
+from renku_data_services.authz.authz import Authz, ResourceType, Visibility
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
@@ -359,6 +360,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         project_ids = await self.project_authz.resources_with_permission(
             user, user.id, ResourceType.project, scope=Scope.READ
         )
+        # TODO: filter out session launchers of type app to not confuse the UI
+        # inside here or as part of the function signature
 
         async with self.session_maker() as session:
             res = await session.scalars(
@@ -371,6 +374,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
     async def get_project_launchers(self, user: base_models.APIUser, project_id: ULID) -> list[models.SessionLauncher]:
         """Get all session launchers in a project from the database."""
+        # TODO: filter out launchers of type app and only leave job and interactive
         authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
@@ -429,6 +433,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 raise errors.MissingResourceError(
                     message=f"Project with id '{project_id}' does not exist or you do not have access to it."
                 )
+            if project.visibility != "public":
+                # TODO: Find the right enum to compare against
+                raise errors.ValidationError()
 
             environment_id: ULID
             environment: models.Environment
@@ -803,6 +810,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
     async def delete_launcher(self, user: base_models.APIUser, launcher_id: ULID) -> None:
         """Delete a session launcher entry."""
+        # TODO: When the launcher of type app gets deleted, delete the app too
         if not user.is_authenticated or user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
