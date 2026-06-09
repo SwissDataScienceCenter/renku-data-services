@@ -202,6 +202,7 @@ def _build_app_deployment_manifest(
         "renku.io/project-slug": project.slug.lower(),
         "renku.io/project-namespace": project.namespace.path.serialize().replace("/", "-").lower(),
         "renku.io/project-id": str(project.id),
+        "renku.io/project-id-slug": str(project.id)[18:26].lower(),
         "renku.io/launcher-id": str(session_launcher.id),
     }
 
