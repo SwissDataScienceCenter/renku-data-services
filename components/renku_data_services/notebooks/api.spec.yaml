@@ -150,21 +150,13 @@ paths:
     get:
       summary: Check if a session image exists
       parameters:
-        - description: |
-            The Docker image URL (tag included) that should be fetched.
-            (Must NOT be used at the same time as session_id)
-          in: query
-          name: image_url
-          schema:
-            type: string
-            minLength: 1
-        - description: |
-            The id of the launcher from which the image must be checked.
-            (Must NOT be used at the same time as image_url)
-          in: query
-          name: launcher_id
-          schema:
-            $ref: "#/components/schemas/Ulid"
+      - description: The Docker image URL (tag included) that should be fetched.
+        in: query
+        name: image_url
+        required: true
+        schema:
+          type: string
+          minLength: 1
       responses:
         "200":
           description: Information about the accessibility of the image
