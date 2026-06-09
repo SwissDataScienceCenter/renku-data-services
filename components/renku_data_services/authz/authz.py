@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
-from typing import ClassVar, Concatenate, ParamSpec, Protocol, TypeVar, cast
+from typing import Any, ClassVar, Concatenate, Literal, ParamSpec, Protocol, TypeVar, cast, overload
 
 from authzed.api.v1 import (
     AsyncClient,
@@ -41,12 +41,17 @@ from renku_data_services.authz.models import (
     CheckPermissionItem,
     Member,
     MembershipChange,
+    PlatformRole,
     Role,
     Scope,
     Visibility,
 )
 from renku_data_services.base_models.core import InternalServiceAdmin, ResourceType
-from renku_data_services.crc.models import DeletedResourcePool, ResourcePool, ResourcePoolMembershipChange
+from renku_data_services.crc.models import (
+    DeletedResourcePool,
+    ResourcePool,
+    ResourcePoolMembershipChange,
+)
 from renku_data_services.data_connectors.models import (
     DataConnector,
     DataConnectorToProjectLink,
@@ -65,6 +70,7 @@ from renku_data_services.namespace.models import (
     ProjectNamespace,
     UserNamespace,
 )
+from renku_data_services.platform.models import AuthzFlag
 from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
 from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpdate
 
@@ -136,6 +142,8 @@ class _Relation(StrEnum):
     editor = "editor"
     viewer = "viewer"
     public_viewer = "public_viewer"
+    group_viewer = "group_viewer"
+    project_viewer = "project_viewer"
     admin = "admin"
     project_platform = "project_platform"
     group_platform = "group_platform"
@@ -234,6 +242,42 @@ class _AuthzConverter:
     def resource_pool(id: int) -> ObjectReference:
         """The id should be the id of the ResourcePoolORM object in the DB."""
         return ObjectReference(object_type=ResourceType.resource_pool.value, object_id=str(id))
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.project], resource_id: ULID) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.group], resource_id: ULID) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.user_namespace], resource_id: ULID) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.data_connector], resource_id: ULID) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.user], resource_id: str) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.anonymous_user], resource_id: str) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.resource_pool], resource_id: int) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: Literal[ResourceType.platform], resource_id: str) -> ObjectReference: ...
+
+    @overload
+    @staticmethod
+    def to_object(resource_type: ResourceType, resource_id: _ID) -> ObjectReference: ...
 
     @staticmethod
     def to_object(resource_type: ResourceType, resource_id: _ID) -> ObjectReference:
@@ -390,6 +434,67 @@ class Authz:
             self._client = self.authz_config.authz_async_client()
         return self._client
 
+    @overload
+    async def _has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.project], resource_id: ULID, scope: Scope
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.group], resource_id: ULID, scope: Scope
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.user_namespace],
+        resource_id: ULID,
+        scope: Scope,
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.data_connector],
+        resource_id: ULID,
+        scope: Scope,
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.user], resource_id: str, scope: Scope
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.anonymous_user],
+        resource_id: Any,
+        scope: Scope,
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.resource_pool],
+        resource_id: int,
+        scope: Scope,
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.platform], resource_id: str, scope: Scope
+    ) -> tuple[bool, ZedToken | None]: ...
+
+    @overload
+    async def _has_permission(
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID | None, scope: Scope
+    ) -> tuple[bool, ZedToken | None]: ...
+
     async def _has_permission(
         self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID | None, scope: Scope
     ) -> tuple[bool, ZedToken | None]:
@@ -412,6 +517,67 @@ class Authz:
             )
         )
         return response.permissionship == CheckPermissionResponse.PERMISSIONSHIP_HAS_PERMISSION, response.checked_at
+
+    @overload
+    async def has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.project], resource_id: ULID, scope: Scope
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.group], resource_id: ULID, scope: Scope
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.user_namespace],
+        resource_id: ULID,
+        scope: Scope,
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.data_connector],
+        resource_id: ULID,
+        scope: Scope,
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.user], resource_id: str, scope: Scope
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.anonymous_user],
+        resource_id: Any,
+        scope: Scope,
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self,
+        user: base_models.APIUser,
+        resource_type: Literal[ResourceType.resource_pool],
+        resource_id: int,
+        scope: Scope,
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self, user: base_models.APIUser, resource_type: Literal[ResourceType.platform], resource_id: str, scope: Scope
+    ) -> bool: ...
+
+    @overload
+    async def has_permission(
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID, scope: Scope
+    ) -> bool: ...
 
     async def has_permission(
         self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID, scope: Scope
@@ -465,7 +631,10 @@ class Authz:
         The person requesting the information can be the user or someone else. I.e. the admin can request
         what are the resources that a user has access to.
         """
-        if not requested_by.is_admin and requested_by.id != user_id:
+        is_platform_admin = await self.has_permission(
+            requested_by, ResourceType.platform, self._platform.object_id, Scope.IS_ADMIN
+        )
+        if not is_platform_admin and requested_by.id != user_id:
             raise errors.ForbiddenError(
                 message=f"User with ID {requested_by.id} cannot check the permissions of another user with ID {user_id}"
             )
@@ -518,7 +687,7 @@ class Authz:
         self,
         user: base_models.APIUser,
         resource_type: ResourceType,
-        resource_id: str,
+        resource_id: _ID,
         scope: Scope,  # The scope that the users should be allowed to exercise on the resource
         *,
         zed_token: ZedToken | None = None,
@@ -539,6 +708,47 @@ class Authz:
             if response.permissionship == LOOKUP_PERMISSIONSHIP_HAS_PERMISSION:
                 ids.append(response.subject.subject_object_id)
         return ids
+
+    async def get_resource_pool_members(
+        self,
+        user: base_models.APIUser,
+        resource_pool_id: int,
+        *,
+        zed_token: ZedToken | None = None,
+    ) -> list[tuple[str, str, str]]:
+        """Get all members of a resource pool from Authzed.
+
+        Returns a list of tuples: (subject_type, subject_id, relation).
+        Skips public_viewer and resource_pool_platform relations.
+        """
+        is_platform_admin = await self.has_permission(
+            user, ResourceType.platform, self._platform.object_id, Scope.IS_ADMIN
+        )
+        if not is_platform_admin:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        rel_filter = RelationshipFilter(
+            resource_type=ResourceType.resource_pool.value,
+            optional_resource_id=str(resource_pool_id),
+        )
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(
+                consistency=consistency,
+                relationship_filter=rel_filter,
+            )
+        )
+
+        members: list[tuple[str, str, str]] = []
+        skip_relations = {_Relation.public_viewer.value, _Relation.resource_pool_platform.value}
+        async for response in responses:
+            rel = response.relationship
+            if rel.relation in skip_relations:
+                continue
+            subject_type = rel.subject.object.object_type
+            subject_id = rel.subject.object.object_id
+            members.append((subject_type, subject_id, rel.relation))
+        return members
 
     async def get_all_members(
         self, resource_type: ResourceType, *, zed_token: ZedToken | None = None
@@ -1269,6 +1479,7 @@ class Authz:
             resource_type=platform.object_type,
             optional_resource_id=platform.object_id,
             optional_subject_filter=sub_filter,
+            optional_relation=_Relation.admin.value,
         )
         existing_admins: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(
@@ -1468,7 +1679,21 @@ class Authz:
             member = mc.member
             relation = _Relation.from_role(member.role).value
             resource = _AuthzConverter.resource_pool(cast(int, member.resource_id))
-            subject = _AuthzConverter.user_subject(member.user_id)
+
+            match member.subject_type:
+                case ResourceType.group:
+                    if member.role == Role.PROHIBITED:
+                        raise errors.ValidationError(message="Groups cannot be prohibited from resource pools")
+                    relation = _Relation.group_viewer.value
+                    subject = SubjectReference(object=_AuthzConverter.group(ULID.from_str(member.user_id)))
+                case ResourceType.project:
+                    if member.role == Role.PROHIBITED:
+                        raise errors.ValidationError(message="Projects cannot be prohibited from resource pools")
+                    relation = _Relation.project_viewer.value
+                    subject = SubjectReference(object=_AuthzConverter.project(ULID.from_str(member.user_id)))
+                case _:
+                    subject = _AuthzConverter.user_subject(member.user_id)
+
             rel = Relationship(resource=resource, relation=relation, subject=subject)
 
             if operation == AuthzOperation.create:
@@ -2174,3 +2399,89 @@ class Authz:
             updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
         )
         return _AuthzChange(apply=apply, undo=undo)
+
+    async def _relationship_exists(
+        self,
+        resource_type: str,
+        id: ULID | int | str,
+        relation: str,
+        subject: SubjectFilter,
+        zed_token: ZedToken | None = None,
+    ) -> tuple[bool, ZedToken | None]:
+        """If the filter conditions match multiple relationships then True is returned."""
+
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        req = ReadRelationshipsRequest(
+            consistency=consistency,
+            relationship_filter=RelationshipFilter(
+                resource_type=resource_type,
+                optional_relation=relation,
+                optional_resource_id=str(id),
+                optional_subject_filter=subject,
+            ),
+            optional_limit=1,
+        )
+
+        async for res in self.client.ReadRelationships(req):
+            return True, res.read_at
+        return False, zed_token
+
+    async def group_creation_allowed(self, zed_token: ZedToken | None = None) -> tuple[AuthzFlag, ZedToken | None]:
+        """Indicates whether users are allowed to create groups."""
+        platform = _AuthzConverter.platform()
+        all_users = _AuthzConverter.all_users()
+        groups_allowed, new_zed_token = await self._relationship_exists(
+            resource_type=platform.object_type,
+            id=platform.object_id,
+            relation=PlatformRole.group_creator.value,
+            subject=SubjectFilter(subject_type=ResourceType.user.value, optional_subject_id=all_users.object_id),
+            zed_token=zed_token,
+        )
+        return AuthzFlag.registered_users if groups_allowed else AuthzFlag.only_admins, new_zed_token
+
+    async def project_creation_allowed(self, zed_token: ZedToken | None = None) -> tuple[AuthzFlag, ZedToken | None]:
+        """Indicates whether users are allowed to create projects."""
+        platform = _AuthzConverter.platform()
+        all_users = _AuthzConverter.all_users()
+        projects_allowed, new_zed_token = await self._relationship_exists(
+            resource_type=platform.object_type,
+            id=platform.object_id,
+            relation=PlatformRole.project_creator.value,
+            subject=SubjectFilter(subject_type=ResourceType.user.value, optional_subject_id=all_users.object_id),
+            zed_token=zed_token,
+        )
+        return AuthzFlag.registered_users if projects_allowed else AuthzFlag.only_admins, new_zed_token
+
+    async def set_project_creation_permission(self, allowed: AuthzFlag) -> ZedToken:
+        """Controls whether any user or only admins are able to create projects."""
+        platform = _AuthzConverter.platform()
+        all_users = _AuthzConverter.all_users()
+        update = RelationshipUpdate(
+            operation=RelationshipUpdate.OPERATION_DELETE
+            if allowed == AuthzFlag.only_admins
+            else RelationshipUpdate.OPERATION_TOUCH,
+            relationship=Relationship(
+                resource=platform,
+                relation=PlatformRole.project_creator.value,
+                subject=SubjectReference(object=all_users),
+            ),
+        )
+        res = await self.client.WriteRelationships(WriteRelationshipsRequest(updates=[update]))
+        return cast(ZedToken, res.written_at)
+
+    async def set_group_creation_permission(self, allowed: AuthzFlag) -> ZedToken:
+        """Controls whether any user or only admins are able to create groups."""
+        platform = _AuthzConverter.platform()
+        all_users = _AuthzConverter.all_users()
+        update = RelationshipUpdate(
+            operation=RelationshipUpdate.OPERATION_DELETE
+            if allowed == AuthzFlag.only_admins
+            else RelationshipUpdate.OPERATION_TOUCH,
+            relationship=Relationship(
+                resource=platform,
+                relation=PlatformRole.group_creator.value,
+                subject=SubjectReference(object=all_users),
+            ),
+        )
+        res = await self.client.WriteRelationships(WriteRelationshipsRequest(updates=[update]))
+        return cast(ZedToken, res.written_at)

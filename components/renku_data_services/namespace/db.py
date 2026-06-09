@@ -19,7 +19,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
-from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
+from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType, _AuthzConverter
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Role, Scope, UnsavedMember
 from renku_data_services.base_api.pagination import PaginationRequest, paginate_queries
 from renku_data_services.base_models.core import (
@@ -202,6 +202,15 @@ class GroupRepository:
             group_orm, _ = await self._get_group(session, user, slug)
         return group_orm.dump()
 
+    async def get_group_by_id(self, user: base_models.APIUser, group_id: ULID) -> models.Group:
+        """Get a group from the DB by its ID."""
+        async with self.session_maker() as session:
+            stmt = select(schemas.GroupORM).where(schemas.GroupORM.id == group_id)
+            group = await session.scalar(stmt)
+            if not group:
+                raise errors.MissingResourceError(message=f"The group with id {group_id} does not exist")
+            return group.dump()
+
     @with_db_transaction
     async def get_group_members(
         self, user: base_models.APIUser, slug: Slug, *, session: AsyncSession | None = None
@@ -370,6 +379,15 @@ class GroupRepository:
             raise errors.ProgrammingError(message="A database session is required")
         if not user.id:
             raise errors.UnauthorizedError(message="Users need to be authenticated in order to create groups.")
+        allowed = await self.authz.has_permission(
+            user, ResourceType.platform, _AuthzConverter.platform().object_id, Scope.CREATE_GROUPS
+        )
+        if not allowed:
+            raise errors.ForbiddenError(
+                message="Your administrator has limited who can create groups in the "
+                "platform and you are not allowed to create groups.",
+            )
+
         creation_date = datetime.now(UTC).replace(microsecond=0)
         group = schemas.GroupORM(
             name=payload.name,

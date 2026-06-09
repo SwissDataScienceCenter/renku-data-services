@@ -18,7 +18,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
+from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType, _AuthzConverter
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope, Visibility
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import RESET, ProjectPath, ProjectSlug
@@ -230,6 +230,14 @@ class ProjectRepository:
         """Insert a new project entry."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
+        allowed = await self.authz.has_permission(
+            user, ResourceType.platform, _AuthzConverter.platform().object_id, Scope.CREATE_PROJECTS
+        )
+        if not allowed:
+            raise errors.ForbiddenError(
+                message="Your administrator has limited who can create projects in the "
+                "platform and you are not allowed to create projects.",
+            )
         ns = await session.scalar(
             select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == project.namespace.lower())
         )
