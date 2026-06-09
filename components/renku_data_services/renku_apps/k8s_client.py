@@ -135,13 +135,13 @@ class RenkuAppsK8sClient:
             gvk=KNATIVE_SERVICE_GVK,
             user_id=DUMMY_RENKU_APP_USER_ID,
         )
-        patch_body: dict[str, Any] = {
-            "spec": {
-                "template": {
-                    "spec": {"containers": [{"resources": _resources_from_resource_class(resource_class)}]},
-                }
+        patch_body: list[dict[str, Any]] = [
+            {
+                "op": "replace",
+                "path": "/spec/template/spec/containers/0/resources",
+                "value": _resources_from_resource_class(resource_class),
             }
-        }
+        ]
         updated = await self.__client.patch(meta, patch_body)
         return _extract_runtime_state(KnativeService.model_validate(updated.manifest))
 
