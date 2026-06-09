@@ -1415,7 +1415,7 @@ class MemberRepository(_Base):
         return resolved
 
     @with_db_transaction
-    @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
+    @Authz.authz_change(op=AuthzOperation.update_membership, resource=ResourceType.resource_pool)
     async def _unprohibit_resource_pool_users(
         self,
         api_user: base_models.APIUser,
@@ -1427,7 +1427,7 @@ class MemberRepository(_Base):
         return self._build_pool_membership_changes(resource_pool_id, specs, Change.REMOVE)
 
     @with_db_transaction
-    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
+    @Authz.authz_change(op=AuthzOperation.update_membership, resource=ResourceType.resource_pool)
     async def _prohibit_resource_pool_users(
         self,
         api_user: base_models.APIUser,
@@ -1439,7 +1439,7 @@ class MemberRepository(_Base):
         return self._build_pool_membership_changes(resource_pool_id, specs, Change.ADD)
 
     @with_db_transaction
-    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
+    @Authz.authz_change(op=AuthzOperation.update_membership, resource=ResourceType.resource_pool)
     async def _grant_resource_pool_members(
         self,
         api_user: base_models.APIUser,
@@ -1459,7 +1459,7 @@ class MemberRepository(_Base):
         )
 
     @with_db_transaction
-    @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
+    @Authz.authz_change(op=AuthzOperation.update_membership, resource=ResourceType.resource_pool)
     async def _revoke_resource_pool_members(
         self,
         api_user: base_models.APIUser,

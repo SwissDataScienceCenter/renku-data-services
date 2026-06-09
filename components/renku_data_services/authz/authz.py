@@ -189,6 +189,7 @@ class AuthzOperation(StrEnum):
     insert_many = "insert_many"
     create_link = "create_link"
     delete_link = "delete_link"
+    update_membership = "update_membership"
 
 
 class _AuthzConverter:
@@ -958,10 +959,9 @@ class Authz:
                     case AuthzOperation.delete, ResourceType.resource_pool if isinstance(result, DeletedResourcePool):
                         user = _extract_user_from_args(*func_args, **func_kwargs)
                         authz_change = await db_repo.authz._remove_resource_pool(user, result)
-                    case (
-                        (AuthzOperation.create | AuthzOperation.delete),
-                        ResourceType.resource_pool,
-                    ) if isinstance(result, ResourcePoolMembershipChange):
+                    case AuthzOperation.update_membership, ResourceType.resource_pool if isinstance(
+                        result, ResourcePoolMembershipChange
+                    ):
                         authz_change = db_repo.authz._resource_pool_membership_changes_to_authz_change(
                             result, operation
                         )
@@ -1693,7 +1693,7 @@ class Authz:
 
             rel = Relationship(resource=resource, relation=relation, subject=subject)
 
-            if operation == AuthzOperation.create:
+            if mc.change == Change.ADD:
                 apply_updates.append(RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel))
                 undo_updates.append(RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel))
             else:
