@@ -225,9 +225,10 @@ class NotebooksNewBP(CustomBlueprint):
             result = await self.image_check_repo.check_image(
                 user=user,
                 gitlab_user=internal_gitlab_user,
-                image=image,
+                image_src=image,
             )
             logger.info(f"Checked image {query.image_url}: {result}")
+
             conn = None
             if result.connection:
                 match result.connection.status:
@@ -255,7 +256,10 @@ class NotebooksNewBP(CustomBlueprint):
                 platforms = [apispec.ImagePlatform.model_validate(p) for p in result.platforms]
 
             resp = apispec.ImageCheckResponse(
-                accessible=result.accessible, platforms=platforms, connection=conn, provider=provider
+                accessible=result.accessible,
+                platforms=platforms,
+                connection=conn,
+                provider=provider,
             )
 
             return json(resp.model_dump(exclude_none=True, mode="json"))

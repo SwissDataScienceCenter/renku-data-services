@@ -228,7 +228,7 @@ class FakeGitRepositoriesRepository(GitRepositoriesRepository):
                 result = result.with_metadata(
                     repositories_models.Metadata(
                         git_url=valid_url.render(),
-                        pull_permission=True,
+                        pull_permission=not user.is_anonymous,
                         visibility=repositories_models.RepositoryVisibility.private,
                     )
                 )
@@ -456,14 +456,17 @@ class TestDependencyManager(DependencyManager):
             user_repo=kc_user_repo,
             internal_token_mint=internal_token_mint,
         )
+        git_provider_helper = GitProviderHelper(connected_services_repo, "", "", "", config.enable_internal_gitlab)
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
+            builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
+            session_repo=session_repo,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_client_factory,
         )
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         notifications_repo = NotificationsRepository(session_maker=config.db.async_session_maker)
-        git_provider_helper = GitProviderHelper(connected_services_repo, "", "", "", config.enable_internal_gitlab)
         capacity_reservation_repo = CapacityReservationRepository(
             session_maker=config.db.async_session_maker, cluster_repo=cluster_repo
         )
@@ -842,3 +845,28 @@ class KindCluster(AbstractContextManager):
     def config_yaml(self):
         with open(self.kubeconfig) as f:
             return f.read()
+
+
+class MemberContext(AbstractContextManager):
+    """Simple context manager to temporarily set a value on an object
+
+    Useful for long lived objects
+    """
+
+    def __init__(self, var: Any, context: dict[str, Any]) -> None:
+        self.var = var
+        self.context = context
+
+        self.orginal = {attr: getattr(var, attr) for attr in context}
+
+    def __enter__(self) -> MemberContext:
+        """Set the member value"""
+        for attr, value in self.context.items():
+            setattr(self.var, attr, value)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        """Set the member to it's original value"""
+        for attr, value in self.orginal.items():
+            setattr(self.var, attr, value)
+        return False

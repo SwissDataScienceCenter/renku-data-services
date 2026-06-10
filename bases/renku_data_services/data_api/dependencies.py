@@ -439,6 +439,9 @@ class DependencyManager:
         )
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
+            builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
+            session_repo=session_repo,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_http_client_factory,
         )

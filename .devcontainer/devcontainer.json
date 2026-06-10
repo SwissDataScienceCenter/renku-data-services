@@ -26,7 +26,7 @@
 			"yqVersion": "latest"
 		},
 		"ghcr.io/dhoeric/features/k9s:1": {
-			"version": "0.40.9"
+			"version": "0.50.18"
 		},
 		"ghcr.io/EliiseS/devcontainer-features/bash-profile:1": {
 			"command": "alias k=kubectl"
