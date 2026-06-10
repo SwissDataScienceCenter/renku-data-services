@@ -1127,7 +1127,7 @@ async def start_session(
                 stripURLPath=environment.strip_path_prefix,
                 env=env,
                 remoteSecretRef=remote_secret.ref() if remote_secret else None,
-                readinessProbe=ReadinessProbe(type=Type.none) if session_type.is_non_interactive else ReadinessProbe(),
+                readinessProbe=_get_readiness_probe(session_type, session_location),
             ),
             ingress=ingress_config.get_k8s_ingress() if session_type.is_interactive else None,
             extraContainers=session_extras.containers,
