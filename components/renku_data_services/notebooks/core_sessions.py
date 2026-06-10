@@ -1454,6 +1454,20 @@ async def patch_session(
     return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch_serialized)
 
 
+def _get_readiness_probe(session_type: SessionType, session_location: SessionLocation) -> ReadinessProbe:
+    """Return the readiness probe for a session based on type and location.
+
+    - Non-interactive sessions get no probe (Type.none).
+    - Interactive remote sessions (firecrest/runai) use an HTTP probe.
+    - Interactive local sessions use the default TCP probe.
+    """
+    if session_type.is_non_interactive:
+        return ReadinessProbe(type=Type.none)
+    if session_location == SessionLocation.remote:
+        return ReadinessProbe(type=Type.http)
+    return ReadinessProbe(type=Type.tcp)
+
+
 class _NamedResource(Protocol):
     """Represents a resource with a name."""
 
