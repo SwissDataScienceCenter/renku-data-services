@@ -132,7 +132,7 @@ class ImageCheckRepository:
                 break
 
         if latest_successful_build is None:
-            raise errors.ValidationError(message="Image is not yet ready")
+            raise errors.ValidationError(message="Successful build not found")
         elif latest_successful_build.result is None:
             raise errors.ValidationError(
                 message=f"Cannot get source repository for image {image}. You may need to rebuild it."
