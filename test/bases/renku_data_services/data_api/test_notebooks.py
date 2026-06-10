@@ -329,6 +329,7 @@ async def test_not_found_server(
 
     assert res.status_code == 404, res.text
 
+
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 @pytest.mark.sessions
 @pytest.mark.asyncio
