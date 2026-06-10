@@ -85,17 +85,6 @@ async def _api(ctx: Context, method: str, path: str, body: Any = None, **kwargs:
     return await _deps(ctx).api(method, path, _token(ctx), body, **kwargs)
 
 
-def _is_stale_session(s: dict[str, Any]) -> bool:
-    """True if a session has a will_delete_at timestamp already in the past."""
-    wda = s.get("will_delete_at")
-    if not wda:
-        return False
-    try:
-        ts = datetime.datetime.fromisoformat(wda.replace("Z", "+00:00")).timestamp()
-        return ts < time.time()
-    except ValueError:
-        return False
-
 
 def _launcher_summary(data: dict[str, Any]) -> dict[str, Any]:
     """Attach a concise _handoff block to a launcher response for easy downstream use."""
@@ -691,14 +680,11 @@ def create_server(
         session_type: Annotated[str, Field(description="'interactive' or 'non-interactive'")] = "interactive",
         project_id: Annotated[str, Field(description="Optional project ID filter")] = "",
     ) -> list[dict[str, Any]]:
-        """List sessions, filtering out stale hibernated records."""
+        """List sessions."""
         query: dict[str, Any] = {"session_type": session_type}
         if project_id:
             query["project_id"] = project_id
-        sessions = await _api(ctx, "GET", "/sessions", query=query)
-        if not isinstance(sessions, list):
-            return sessions
-        return [s for s in sessions if not _is_stale_session(s)]
+        return await _api(ctx, "GET", "/sessions", query=query)
 
     @mcp.tool()
     async def session_get(
@@ -840,14 +826,11 @@ def create_server(
         ctx: Context,
         project_id: Annotated[str, Field(description="Optional project ID filter")] = "",
     ) -> list[dict[str, Any]]:
-        """List non-interactive job sessions, filtering out stale records."""
+        """List non-interactive job sessions."""
         query: dict[str, Any] = {"session_type": "non-interactive"}
         if project_id:
             query["project_id"] = project_id
-        sessions = await _api(ctx, "GET", "/sessions", query=query)
-        if not isinstance(sessions, list):
-            return sessions
-        return [s for s in sessions if not _is_stale_session(s)]
+        return await _api(ctx, "GET", "/sessions", query=query)
 
     @mcp.tool()
     async def job_wait(
