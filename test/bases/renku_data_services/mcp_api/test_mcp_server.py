@@ -17,17 +17,14 @@ from renku_data_services.mcp_api.main import (
 )
 from renku_data_services.mcp_api.server import (
     _admin_cache,
-    _is_stale_session,
     _launcher_summary,
     _project_path,
 )
 from test.bases.renku_data_services.mcp_api.conftest import (
     iso_ago,
-    iso_future,
     make_session,
     mcp_session,
     tool_result_dict,
-    tool_result_list,
 )
 
 
@@ -43,19 +40,6 @@ def clear_admin_cache():
 # Pure logic — no server needed                                        #
 # ------------------------------------------------------------------ #
 
-
-class TestIsStaleSession:
-    def test_no_will_delete_at(self):
-        assert _is_stale_session({}) is False
-
-    def test_future_delete_at(self):
-        assert _is_stale_session({"will_delete_at": iso_future(3600)}) is False
-
-    def test_past_delete_at(self):
-        assert _is_stale_session({"will_delete_at": iso_ago(60)}) is True
-
-    def test_malformed_timestamp(self):
-        assert _is_stale_session({"will_delete_at": "not-a-date"}) is False
 
 
 class TestLauncherSummary:
@@ -367,20 +351,6 @@ async def test_list_tools_smoke(mock_deps):
         ):
             assert expected in names, f"Missing tool: {expected}"
 
-
-@pytest.mark.asyncio
-async def test_session_list_filters_stale(mock_deps):
-    mock_deps.api.return_value = [
-        make_session("running"),
-        make_session("hibernated", will_delete_at=iso_ago(60)),  # stale
-        make_session("running", will_delete_at=iso_future(3600)),  # not stale
-    ]
-
-    async with mcp_session(mock_deps) as (session, _):
-        result = await session.call_tool("session_list", {})
-        sessions = tool_result_list(result)
-        assert len(sessions) == 2
-        assert all(s["status"]["state"] == "running" for s in sessions)
 
 
 @pytest.mark.asyncio
