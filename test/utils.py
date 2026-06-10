@@ -365,6 +365,7 @@ class TestDependencyManager(DependencyManager):
             resource_usage_service=resource_usage_service,
             authz=authz,
             resource_requests_repo=resource_requests_repo,
+            member_repo=member_repo,
         )
         storage_repo = StorageRepository(
             session_maker=config.db.async_session_maker,
