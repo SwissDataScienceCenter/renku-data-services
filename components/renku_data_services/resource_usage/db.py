@@ -1,8 +1,11 @@
 """Repository implementation."""
 
+from __future__ import annotations
+
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Generator, Iterable, Sequence
-from datetime import datetime
+from datetime import timedelta
 from itertools import islice
+from typing import Any
 
 import sqlalchemy.sql as sa
 from sqlalchemy import bindparam
@@ -23,7 +26,6 @@ from renku_data_services.resource_usage.orm import (
     ResourceClassCost,
     ResourceClassCostORM,
     ResourceRequestsLogORM,
-    ResourceRequestsViewORM,
 )
 from renku_data_services.utils.sqlalchemy import CreditType, get_postgres_error_code
 
@@ -87,27 +89,6 @@ class ResourceRequestsRepo:
         rows = await session.execute(stmt)
         result = {id: value for id, value in rows.all()}
         return result
-
-    async def find_view(
-        self,
-        start: datetime,
-        end: datetime,
-        chunk_size: int = 100,
-        only_active_phases: bool = True,
-    ) -> AsyncIterator[ResourceRequestsViewORM]:
-        """Select view records."""
-        stmt = (
-            sa.select(ResourceRequestsViewORM)
-            .where(ResourceRequestsViewORM.capture_date >= start)
-            .where(ResourceRequestsViewORM.capture_date <= end)
-            .order_by(ResourceRequestsViewORM.capture_date.desc())
-        )
-        if only_active_phases:
-            stmt = stmt.where(ResourceRequestsViewORM.phase.in_(ACTIVE_PHASES))
-        async with self.session_maker() as session:
-            result = await session.stream(stmt.execution_options(yield_per=chunk_size))
-            async for e in result.scalars():
-                yield e
 
     async def set_resource_class_costs(self, costs: ResourceClassCost) -> bool:
         """Updates (inserts or update) the costs of a resource_class."""
@@ -232,10 +213,41 @@ class ResourceRequestsRepo:
 
     async def find_usage(self, rq: ResourceUsageQuery, chunk_size: int = 500) -> AsyncGenerator[ResourceUsage]:
         """Find resource usage."""
+        # NOTE: The query performs much better if the filtering is done in the same query
+        # that does the windowing (i.e. with lead) rather than afterward.
+        params: dict[str, Any] = {
+            "active_phases": ACTIVE_PHASES,
+            "from": rq.since,
+            # The cte_until farther out in the future  so that
+            # lead has an extra timestamp to calculate the last interval
+            # NOTE: That rq.since and rq.until are date, not datetime. So you can add
+            # to them stuff that is larger or equal to a day, anything shorter like minutes
+            # will be just silently ignored.
+            "until": rq.until + timedelta(days=1),
+            "cte_until": rq.until + timedelta(days=2),
+        }
         # TODO: Include or handle PVCs more gracefully rather than just filtering them out
-        by_user = " and user_id = :user_id " if rq.user_id is not None else ""
-        by_rp = " and resource_pool_id = :resource_pool_id " if rq.resource_pool_id is not None else ""
+        cte = """
+            with corrected_intervals as (
+                select
+                *,
+                least(lead(capture_date) over (partition by uid, phase order by capture_date) - capture_date, capture_interval) as corrected_interval
+                from
+                "resource_pools"."resource_requests_log"
+                where phase = ANY(:active_phases) and kind = 'Pod'
+                and capture_date >= :from and capture_date <= :cte_until
+        """  # noqa: E501
+
+        if rq.user_id is not None:
+            cte = cte + " and user_id = :user_id "
+            params["user_id"] = rq.user_id
+        if rq.resource_pool_id is not None:
+            cte = cte + " and resource_pool_id = :resource_pool_id "
+            params["resource_pool_id"] = rq.resource_pool_id
+        cte = cte + ")\n"
+
         stmt = f"""
+          {cte}
           select
             cluster_id,
             user_id,
@@ -252,21 +264,12 @@ class ResourceRequestsRepo:
             sum(memory_request * (extract(epoch from corrected_interval) / 3600)) as mem_hours,
             sum(disk_request * (extract(epoch from corrected_interval) / 3600)) as disk_hours,
             sum(gpu_request * (extract(epoch from corrected_interval) / 3600)) as gpu_hours
-          from "resource_pools"."resource_requests_view_v2"
-          where capture_date::date >= :from and capture_date::date <= :until
-              and phase = ANY(:active_phases) and kind = 'Pod'
-              {by_user} {by_rp}
+          from corrected_intervals
+          where capture_date <= :until
           group by cluster_id, resource_class_id, resource_pool_id,
             coalesce(resource_class_cost, 0),
             user_id, capture_date::date, gpu_slice
         """  # nosec: B608
-        params = {
-            "from": rq.since,
-            "until": rq.until,
-            "user_id": rq.user_id,
-            "resource_pool_id": rq.resource_pool_id,
-            "active_phases": tuple(ACTIVE_PHASES),
-        }
 
         async with self.session_maker() as session:
             query = sa.text(stmt).execution_options(yield_per=chunk_size)
