@@ -313,14 +313,6 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             environment.build_parameters.context_dir = None
         elif build_parameters.context_dir:
             environment.build_parameters.context_dir = build_parameters.context_dir
-        if build_parameters.job_command:
-            environment.command = build_parameters.job_command
-        else:
-            environment.command = None
-        if build_parameters.job_args:
-            environment.args = build_parameters.job_args
-        else:
-            environment.args = None
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: ULID, patch: models.EnvironmentPatch
