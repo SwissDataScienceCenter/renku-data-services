@@ -53,3 +53,36 @@ class RenkuAppBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/apps/<app_name>", ["DELETE"], _delete_one
+
+    def patch_one(self) -> BlueprintFactoryResponse:
+        """Patch an app."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.AppPatchRequest)
+        async def _patch_one(
+            _: Request, user: base_models.APIUser, body: apispec.AppPatchRequest, app_name: str
+        ) -> JSONResponse:
+            app = await self.apps_repo.update_app(
+                user=user,
+                app_name=app_name,
+                state=body.state,
+                resource_class_id=body.resource_class_id,
+            )
+            return json(app.as_apispec().model_dump(exclude_none=True, mode="json"))
+
+        return "/apps/<app_name>", ["PATCH"], _patch_one
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get all apps, optionally filtered by project ID."""
+
+        @authenticate(self.authenticator)
+        @validate(query=apispec.AppsGetParametersQuery)
+        async def _get_all(
+            _: Request, user: base_models.APIUser, query: apispec.AppsGetParametersQuery
+        ) -> JSONResponse:
+            project_id = ULID.from_str(query.project_id) if query.project_id is not None else None
+            apps = await self.apps_repo.list_apps(user=user, project_id=project_id)
+            return json([app.as_apispec().model_dump(exclude_none=True, mode="json") for app in apps])
+
+        return "/apps", ["GET"], _get_all

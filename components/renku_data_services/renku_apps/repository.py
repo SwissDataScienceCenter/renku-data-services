@@ -10,9 +10,10 @@ from renku_data_services.authz.models import Scope
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.project.db import ProjectRepository
+from renku_data_services.renku_apps import apispec
 from renku_data_services.renku_apps.core import build_app
 from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
-from renku_data_services.renku_apps.models import App
+from renku_data_services.renku_apps.models import App, AppRuntimeState
 from renku_data_services.session.db import SessionRepository
 
 logger = logging.getLogger(__name__)
@@ -90,3 +91,54 @@ class RenkuAppsRepository:
         await self.k8s_client.delete_app_deployment(app_name)
         logger.info(f"App with name {app_name} has been deleted.")
         return None
+
+    async def update_app(
+        self,
+        user: base_models.APIUser,
+        app_name: str,
+        state: apispec.AppState | None = None,
+        resource_class_id: int | None = None,
+    ) -> App:
+        """Update an app."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        runtime_state = await self.k8s_client.get_app_deployment(app_name)
+        if runtime_state is None:
+            raise errors.MissingResourceError(
+                message=f"App with name '{app_name}' does not exist or you do not have access to it."
+            )
+
+        launcher = await self.session_repo.get_launcher(user, runtime_state.launcher_id)
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, launcher.project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"App with name '{app_name}' does not exist or you do not have authorization to modify it."
+            )
+
+        latest: AppRuntimeState = runtime_state
+        if resource_class_id is not None:
+            resource_class = await self.rp_repo.get_resource_class(user, resource_class_id)
+            latest = await self.k8s_client.set_app_deployment_resources(app_name, resource_class)
+        if state == apispec.AppState.hibernated:
+            latest = await self.k8s_client.hibernate_app_deployment(app_name)
+        elif state == apispec.AppState.running:
+            latest = await self.k8s_client.resume_app_deployment(app_name)
+
+        return build_app(launcher, latest)
+
+    async def list_apps(self, user: base_models.APIUser, project_id: ULID | None = None) -> list[App]:
+        """List all apps, optionally filtered by project."""
+
+        apps: list[App] = []
+        async for runtime_state in self.k8s_client.list_app_deployments(project_id):
+            try:
+                launcher = await self.session_repo.get_launcher(user, runtime_state.launcher_id)
+            except errors.MissingResourceError:
+                logger.warning(
+                    f"Launcher with id '{runtime_state.launcher_id}' for app '{runtime_state.name}' was not found."
+                )
+                continue
+            apps.append(build_app(launcher, runtime_state))
+        return apps

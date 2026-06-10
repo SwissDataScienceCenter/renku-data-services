@@ -8,6 +8,26 @@ servers:
   - url: /api/data
 paths:
   /apps:
+    get:
+      summary: List apps
+      parameters:
+        - in: query
+          name: project_id
+          required: false
+          schema:
+            $ref: "#/components/schemas/Ulid"
+          description: If set, only return apps belonging to this project
+      responses:
+        "200":
+          description: The list of apps the caller can see
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppListResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - apps
     post:
       summary: Launch a new app
       requestBody:
@@ -48,6 +68,32 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - apps
+    patch:
+      summary: Update an app
+      parameters:
+        - in: path
+          name: app_name
+          required: true
+          schema:
+            $ref: "#/components/schemas/AppName"
+          description: The name of the app to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppPatchRequest"
+      responses:
+        "200":
+          description: The updated app
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - apps
     delete:
       summary: Delete an app
       parameters:
@@ -79,6 +125,14 @@ components:
         - pending
         - ready
         - failed
+        - hibernated
+
+    AppState:
+      description: The desired state of an app. `hibernated` scales the deployment to zero.
+      type: string
+      enum:
+        - running
+        - hibernated
 
     AppName:
       type: string
@@ -114,6 +168,11 @@ components:
         - status
         - project_id
 
+    AppListResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/AppResponse"
+
     AppPostRequest:
       type: object
       properties:
@@ -121,6 +180,14 @@ components:
           $ref: "#/components/schemas/Ulid"
       required:
         - launcher_id
+
+    AppPatchRequest:
+      type: object
+      properties:
+        state:
+          $ref: "#/components/schemas/AppState"
+        resource_class_id:
+          type: integer
 
     ErrorResponse:
       type: object
