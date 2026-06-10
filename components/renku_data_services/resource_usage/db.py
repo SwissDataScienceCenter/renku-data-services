@@ -240,10 +240,13 @@ class ResourceRequestsRepo:
         params: dict[str, Any] = {
             "active_phases": ACTIVE_PHASES,
             "from": rq.since,
-            "until": rq.until,
             # The cte_until farther out in the future  so that
             # lead has an extra timestamp to calculate the last interval
-            "cte_until": rq.until + timedelta(minutes=30),
+            # NOTE: That rq.since and rq.until are date, not datetime. So you can add
+            # to them stuff that is larger or equal to a day, anything shorter like minutes
+            # will be just silently ignored.
+            "until": rq.until + timedelta(days=1),
+            "cte_until": rq.until + timedelta(days=2),
         }
         # TODO: Include or handle PVCs more gracefully rather than just filtering them out
         cte = """

@@ -1738,6 +1738,7 @@ async def test_resource_pools_quota_with_partial_usage(
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": True,
         }
     ]
     payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
@@ -1950,6 +1951,7 @@ async def test_resource_pools_quota_exceeded(
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": True,
         }
     ]
     payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
@@ -2093,6 +2095,7 @@ async def test_resource_pools_quota_with_no_limits(
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": True,
         }
     ]
     payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
@@ -2214,6 +2217,7 @@ async def test_resource_pools_quota_with_no_costs(
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": True,
         }
     ]
     payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
