@@ -69,11 +69,8 @@ async def _require_non_admin(ctx: Context) -> None:
     if not t:
         return
     if t not in _admin_cache:
-        try:
-            user = await _deps(ctx).api("GET", "/user", t)
-            _admin_cache[t] = bool(user.get("is_admin", False))
-        except Exception:
-            return  # can't check — don't block, let the API enforce its own authz
+        user = await _deps(ctx).api("GET", "/user", t)
+        _admin_cache[t] = bool(user.get("is_admin", False))
     if _admin_cache.get(t):
         raise RuntimeError(
             "Refusing to operate as a Renku admin. "
@@ -96,7 +93,7 @@ def _is_stale_session(s: dict[str, Any]) -> bool:
     try:
         ts = datetime.datetime.fromisoformat(wda.replace("Z", "+00:00")).timestamp()
         return ts < time.time()
-    except Exception:
+    except ValueError:
         return False
 
 
