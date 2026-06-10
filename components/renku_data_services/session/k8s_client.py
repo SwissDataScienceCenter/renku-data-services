@@ -251,9 +251,6 @@ class ShipwrightClient:
             patch = [{"op": "replace", "path": "/metadata/ownerReferences", "value": [owner_reference]}]
             await self.secret_client.patch_secret(secret, patch)
 
-    # async def update_image_build_status(
-    #     self, buildrun_name: str, user_id: str
-    # ) -> tuple[models.ShipwrightBuildStatusUpdate, str | None]:
     async def update_image_build_status(
         self, buildrun_name: str
     ) -> tuple[models.ShipwrightBuildStatusUpdate, str | None]:
