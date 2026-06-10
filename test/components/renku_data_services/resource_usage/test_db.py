@@ -10,6 +10,7 @@ from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.resource_usage.db import ResourceClassCostWithPool, ResourceRequestsRepo
 from renku_data_services.resource_usage.model import (
     Credit,
+    DataSize,
     ResourceClassCost,
     ResourceUsageQuery,
 )
@@ -233,136 +234,76 @@ async def test_resource_usage_current_week(app_manager_instance: DependencyManag
     assert results.cost == Credit.zero()
 
 
-# TODO: Reenable the test with a different query
-# @pytest.mark.asyncio
-# async def test_record_resource_requests_grouping(app_manager_instance: DependencyManager) -> None:
-#     run_migrations_for_app("common")
-#     repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
-#     first_date = datetime(2026, 1, 22, 13, 26, 4, 0, tzinfo=UTC)
-#     interval = timedelta(minutes=10)
-#     requests = (
-#         [
-#             # a pod is running
-#             make_resources_request(
-#                 date=first_date + i * interval, interval=interval, cpu_request=0.5, memory_request="256Mi"
-#             )
-#             for i in range(0, 3)
-#         ]
-#         + [
-#             ## pod is down
-#             make_resources_request(
-#                 date=first_date + i * interval,
-#                 interval=interval,
-#                 cpu_request=0.5,
-#                 memory_request="256Mi",
-#                 phase="Stopped",
-#             )
-#             for i in range(3, 7)
-#         ]
-#         + [
-#             # pod is up again for one observation
-#             make_resources_request(
-#                 date=first_date + i * interval,
-#                 interval=interval,
-#                 cpu_request=0.5,
-#                 memory_request="256Mi",
-#             )
-#             for i in range(7, 8)
-#         ]
-#         + [
-#             # was not observed for some time
-#             make_resources_request(
-#                 date=first_date + i * interval,
-#                 interval=interval,
-#                 cpu_request=0.5,
-#                 memory_request="256Mi",
-#             )
-#             for i in range(14, 16)
-#         ]
-#         + [
-#             # resource_logging is restarted after 5min
-#             # the next interval is only 5min, then following again 10min intervals
-#             make_resources_request(
-#                 date=first_date + (i - 0.5) * interval,
-#                 interval=interval,
-#                 cpu_request=0.5,
-#                 memory_request="256Mi",
-#             )
-#             for i in range(16, 19)
-#         ]
-#     )
-#     await repo.insert_many(requests)
-#
-#     records = [e async for e in repo.find_view(first_date, first_date + timedelta(days=1))]
-#     records.sort(key=lambda e: e.capture_date)
-#     assert_view_records(
-#         records,
-#         [
-#             {
-#                 "kind": "Pod",
-#                 "capture_date": first_date,
-#                 "cpu_request": ComputeCapacity.from_cores(0.5),
-#                 "capture_interval": interval,
-#                 "memory_request": DataSize.from_mb(256),
-#             },
-#             {
-#                 "kind": "Pod",
-#                 "capture_date": first_date + interval,
-#                 "cpu_request": ComputeCapacity.from_cores(0.5),
-#                 "capture_interval": interval,
-#                 "memory_request": DataSize.from_mb(256),
-#             },
-#             {
-#                 "kind": "Pod",
-#                 "capture_date": first_date + 2 * interval,
-#                 "cpu_request": ComputeCapacity.from_cores(0.5),
-#                 "capture_interval": interval,
-#                 "memory_request": DataSize.from_mb(256),
-#             },
-#             # stopped pods are filtered out, the capture_interval will be used
-#             {
-#                 "kind": "Pod",
-#                 "capture_date": first_date + 7 * interval,
-#                 "capture_interval": interval,
-#                 "cpu_request": ComputeCapacity.from_cores(0.5),
-#                 "memory_request": DataSize.from_mb(256),
-#             },
-#             {
-#                 "kind": "Pod",
-#                 "capture_date": first_date + 14 * interval,
-#                 "cpu_request": ComputeCapacity.from_cores(0.5),
-#                 "capture_interval": interval,
-#                 "memory_request": DataSize.from_mb(256),
-#             },
-#             {
-#                 "kind": "Pod",
-#                 "capture_date": first_date + 15 * interval,
-#                 "cpu_request": ComputeCapacity.from_cores(0.5),
-#                 "capture_interval": timedelta(minutes=5),
-#                 "memory_request": DataSize.from_mb(256),
-#             },
-#             # here the request data collection was restarted 5min into the 10min wait interval
-#             # so the previous value is observed 5min, because there is already a new record
-#             {
-#                 "kind": "Pod",
-#                 "capture_date": first_date + 15.5 * interval,
-#                 "cpu_request": ComputeCapacity.from_cores(0.5),
-#                 "capture_interval": interval,
-#                 "memory_request": DataSize.from_mb(256),
-#             },
-#             {
-#                 "kind": "Pod",
-#                 "capture_date": first_date + 16.5 * interval,
-#                 "cpu_request": ComputeCapacity.from_cores(0.5),
-#                 "capture_interval": interval,
-#                 "memory_request": DataSize.from_mb(256),
-#             },
-#             {
-#                 "kind": "Pod",
-#                 "capture_date": first_date + 17.5 * interval,
-#                 "cpu_request": ComputeCapacity.from_cores(0.5),
-#                 "capture_interval": interval,
-#                 "memory_request": DataSize.from_mb(256),
-#             },
-#         ],
-#     )
+@pytest.mark.asyncio
+async def test_record_resource_requests_grouping(app_manager_instance: DependencyManager) -> None:
+    run_migrations_for_app("common")
+    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
+    first_date = datetime(2026, 1, 22, 13, 26, 4, 0, tzinfo=UTC)
+    interval = timedelta(minutes=10)
+    requests = (
+        [
+            # a pod is running
+            # 30 minutes runtime
+            make_resources_request(
+                date=first_date + i * interval, interval=interval, cpu_request=0.5, memory_request="256Mi"
+            )
+            for i in range(0, 3)
+        ]
+        + [
+            ## pod is down
+            make_resources_request(
+                date=first_date + i * interval,
+                interval=interval,
+                cpu_request=0.5,
+                memory_request="256Mi",
+                phase="Stopped",
+            )
+            for i in range(3, 7)
+        ]
+        + [
+            # pod is up again for one observation
+            # 10 minutes runtime
+            make_resources_request(
+                date=first_date + i * interval,
+                interval=interval,
+                cpu_request=0.5,
+                memory_request="256Mi",
+            )
+            for i in range(7, 8)
+        ]
+        + [
+            # was not observed for some time
+            # 15 mins runtime because the next period started early
+            make_resources_request(
+                date=first_date + i * interval,
+                interval=interval,
+                cpu_request=0.5,
+                memory_request="256Mi",
+            )
+            for i in range(14, 16)
+        ]
+        + [
+            # resource_logging is restarted after 5min
+            # 30 mins runtime
+            make_resources_request(
+                date=first_date + (i - 0.5) * interval,
+                interval=interval,
+                cpu_request=0.5,
+                memory_request="256Mi",
+            )
+            for i in range(16, 19)
+        ]
+    )
+    await repo.insert_many(requests)
+
+    rq = ResourceUsageQuery(since=first_date, until=first_date + timedelta(days=1))
+    records = [e async for e in repo.find_usage(rq)]
+    records.sort(key=lambda e: e.capture_date)
+    total_runtime = timedelta(minutes=85)
+    assert len(records) == 1, records
+    rec = records[0]
+    assert rec.cpu_hours == 0.5 * total_runtime.total_seconds() / 3600
+    assert rec.mem_hours == DataSize.from_mb(256).bytes * total_runtime.total_seconds() / 3600
+    assert rec.runtime_hour == total_runtime
+    assert rec.gpu_hours is None
+    assert rec.disk_hours is None

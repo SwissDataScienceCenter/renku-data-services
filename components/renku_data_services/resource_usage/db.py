@@ -90,28 +90,6 @@ class ResourceRequestsRepo:
         result = {id: value for id, value in rows.all()}
         return result
 
-    # Used only in tests
-    # async def find_view(
-    #     self,
-    #     start: datetime,
-    #     end: datetime,
-    #     chunk_size: int = 100,
-    #     only_active_phases: bool = True,
-    # ) -> AsyncIterator[ResourceRequestsViewORM]:
-    #     """Select view records."""
-    #     stmt = (
-    #         sa.select(ResourceRequestsViewORM)
-    #         .where(ResourceRequestsViewORM.capture_date >= start)
-    #         .where(ResourceRequestsViewORM.capture_date <= end)
-    #         .order_by(ResourceRequestsViewORM.capture_date.desc())
-    #     )
-    #     if only_active_phases:
-    #         stmt = stmt.where(ResourceRequestsViewORM.phase.in_(ACTIVE_PHASES))
-    #     async with self.session_maker() as session:
-    #         result = await session.stream(stmt.execution_options(yield_per=chunk_size))
-    #         async for e in result.scalars():
-    #             yield e
-
     async def set_resource_class_costs(self, costs: ResourceClassCost) -> bool:
         """Updates (inserts or update) the costs of a resource_class."""
         stmt = sa.text("""
