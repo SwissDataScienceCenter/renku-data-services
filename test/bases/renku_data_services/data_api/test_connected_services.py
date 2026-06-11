@@ -13,9 +13,10 @@ from renku_data_services.connected_services.apispec_base import CallbackParams
 from renku_data_services.connected_services.blueprints import OAuth2ClientsBP
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
+from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_client
-from test.utils import SanicReusableASGITestClient
+from test.utils import KindCluster, SanicReusableASGITestClient
 
 if TYPE_CHECKING:
     from renku_data_services.data_api.dependencies import DependencyManager
@@ -637,3 +638,155 @@ async def test_get_token_with_internal_token(
     assert isinstance(result.get("expires_at"), int) and result["expires_at"] > 0
     assert isinstance(result.get("expires_at_iso"), str) and result["expires_at_iso"] != ""
     assert result.get("expires_in") == 3600
+
+
+# --- Integration Group Connected Services API Tests (E1-E2) ---
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_adds_user_to_rp(
+    oauth2_test_client: SanicASGITestClient,
+    app_manager_instance: "DependencyManager",
+    admin_user: UserInfo,
+    regular_user: UserInfo,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    create_oauth2_provider,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+
+    provider = await create_oauth2_provider("hpc-auth")
+    provider_id = provider["id"]
+
+    # Admin creates a private RP linked to the provider
+    rp_payload = {
+        "name": "hpc-auth-rp",
+        "classes": [
+            {
+                "cpu": 1.0,
+                "memory": 10,
+                "gpu": 0,
+                "name": "class1",
+                "max_storage": 100,
+                "default_storage": 1,
+                "default": True,
+                "node_affinities": [],
+                "tolerations": [],
+            }
+        ],
+        "quota": {"cpu": 100, "memory": 100, "gpu": 0},
+        "default": False,
+        "public": False,
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": provider_id,
+            "api_url": "https://example.org",
+            "system_name": "sys",
+        },
+    }
+    _, res = await oauth2_test_client.post("/api/data/resource_pools", headers=admin_headers, json=rp_payload)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Regular user cannot see the RP before connecting
+    _, res = await oauth2_test_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    rp_ids_before = {r["id"] for r in res.json}
+    assert rp["id"] not in rp_ids_before
+
+    # Regular user completes OAuth flow
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/providers/{provider_id}/authorize", headers=user_headers)
+    assert res.status_code == 302
+    location = res.headers["location"]
+    state = parse_qs(urlparse(location).query)["state"][0]
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?state={state}")
+    assert res.status_code == 200
+
+    # Regular user can now see the RP
+    _, res = await oauth2_test_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    rp_ids_after = {r["id"] for r in res.json}
+    assert rp["id"] in rp_ids_after
+
+    # Cleanup
+    _, res = await oauth2_test_client.delete(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers)
+    assert res.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_oauth_connection_removes_rp_access(
+    oauth2_test_client: SanicASGITestClient,
+    app_manager_instance: "DependencyManager",
+    admin_user: UserInfo,
+    regular_user: UserInfo,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    create_oauth2_provider,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+
+    provider = await create_oauth2_provider("hpc-revoke")
+    provider_id = provider["id"]
+
+    rp_payload = {
+        "name": "hpc-revoke-rp",
+        "classes": [
+            {
+                "cpu": 1.0,
+                "memory": 10,
+                "gpu": 0,
+                "name": "class1",
+                "max_storage": 100,
+                "default_storage": 1,
+                "default": True,
+                "node_affinities": [],
+                "tolerations": [],
+            }
+        ],
+        "quota": {"cpu": 100, "memory": 100, "gpu": 0},
+        "default": False,
+        "public": False,
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": provider_id,
+            "api_url": "https://example.org",
+            "system_name": "sys",
+        },
+    }
+    _, res = await oauth2_test_client.post("/api/data/resource_pools", headers=admin_headers, json=rp_payload)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Regular user completes OAuth flow
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/providers/{provider_id}/authorize", headers=user_headers)
+    assert res.status_code == 302
+    location = res.headers["location"]
+    state = parse_qs(urlparse(location).query)["state"][0]
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?state={state}")
+    assert res.status_code == 200
+
+    # Regular user can see the RP
+    _, res = await oauth2_test_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    rp_ids_after = {r["id"] for r in res.json}
+    assert rp["id"] in rp_ids_after
+
+    # Delete the connection
+    _, res = await oauth2_test_client.get("/api/data/oauth2/connections", headers=user_headers)
+    assert res.status_code == 200
+    connections = res.json
+    conn = next(c for c in connections if c["provider_id"] == provider_id)
+    _, res = await oauth2_test_client.delete(f"/api/data/oauth2/connections/{conn['id']}", headers=user_headers)
+    assert res.status_code == 204
+
+    # Regular user can no longer see the RP
+    _, res = await oauth2_test_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    rp_ids_final = {r["id"] for r in res.json}
+    assert rp["id"] not in rp_ids_final
+
+    # Cleanup
+    _, res = await oauth2_test_client.delete(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers)
+    assert res.status_code == 204

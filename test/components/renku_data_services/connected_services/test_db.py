@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from typing import cast
 
 import pytest
+from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
 
+from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services.db import ConnectedServicesRepository, Image
 from renku_data_services.connected_services.models import (
@@ -14,10 +16,17 @@ from renku_data_services.connected_services.models import (
     UnsavedOAuth2Client,
 )
 from renku_data_services.connected_services.orm import OAuth2ConnectionORM
+from renku_data_services.crc import models as crc_models
+from renku_data_services.crc.models import (
+    MemberType,
+    RemoteConfigurationFirecrest,
+    RuntimePlatform,
+)
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.users.db import UserRepo
 from renku_data_services.users.models import UserInfo
+from test.utils import create_rp
 
 github_image = Image.from_path("ghcr.io/sdsc/test")
 gitlab_image = Image.from_path("registry.gitlab.com/sdsc/test")
@@ -82,6 +91,22 @@ async def setup_users(app_manager_instance: DependencyManager) -> SetupData:
     admin_info = cast(UserInfo, await user_repo.get_or_create_user(admin, str(admin.id)))
     user1_info = cast(UserInfo, await user_repo.get_or_create_user(user1, str(user1.id)))
     user2_info = cast(UserInfo, await user_repo.get_or_create_user(user2, str(user2.id)))
+
+    # Bootstrap the admin user as a platform admin in Authzed so that Authzed-based permission
+    # checks pass when the tests call get_resource_pool_members with the admin user.
+    authz = app_manager_instance.authz
+    rels = [
+        RelationshipUpdate(
+            operation=RelationshipUpdate.OPERATION_TOUCH,
+            relationship=Relationship(
+                resource=_AuthzConverter.platform(),
+                relation="admin",
+                subject=SubjectReference(object=_AuthzConverter.user(admin.id)),
+            ),
+        )
+    ]
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
+
     return SetupData(admin, admin_info, user1, user1_info, user2, user2_info, app_manager_instance)
 
 
@@ -214,6 +239,314 @@ async def test_get_provider_for_image_unsupported_provider(app_manager_instance)
 
     p = await setup.connected_repo.get_provider_for_image(setup.user1, gitlab_image)
     assert p is None
+
+
+@pytest.mark.asyncio
+async def test_oauth_connect_adds_user_to_rp(
+    app_manager_instance: DependencyManager, admin_user: APIUser, cluster: any
+) -> None:
+    run_migrations_for_app("common")
+    setup = await setup_users(app_manager_instance)
+
+    provider_id = "test-provider-oauth-connect"
+    client = await setup.insert_client(provider_id, ProviderKind.gitlab, "")
+
+    # Create an RP linked to the provider
+    rp = crc_models.UnsavedResourcePool(
+        name="test-oauth-rp",
+        classes=[],
+        quota=crc_models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=RuntimePlatform.linux_amd64,
+        remote=RemoteConfigurationFirecrest(
+            provider_id=provider_id,
+            api_url="https://example.org",
+            system_name="test-system",
+        ),
+    )
+    inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, setup.admin)
+
+    # Create a connection for user1
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        conn = OAuth2ConnectionORM(
+            user_id=setup.user1.id,
+            client_id=client.id,
+            token={"access_token": "bla"},
+            status=ConnectionStatus.connected,
+            state=None,
+            code_verifier=None,
+            next_url=None,
+        )
+        session.add(conn)
+
+    # Call on_oauth2_connected directly
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user1.id, client.id)
+
+    # Assert user1 is a viewer member of the RP
+    members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
+    user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+    assert setup.user1.id in user_ids
+
+    # Cleanup
+    await app_manager_instance.rp_repo.delete_resource_pool(setup.admin, inserted_rp.id)
+
+
+@pytest.mark.asyncio
+async def test_oauth_disconnect_removes_user_from_rp(
+    app_manager_instance: DependencyManager, admin_user: APIUser, cluster: any
+) -> None:
+    run_migrations_for_app("common")
+    setup = await setup_users(app_manager_instance)
+
+    provider_id = "test-provider-oauth-disconnect"
+    client = await setup.insert_client(provider_id, ProviderKind.gitlab, "")
+
+    # Create an RP linked to the provider
+    rp = crc_models.UnsavedResourcePool(
+        name="test-oauth-disconnect-rp",
+        classes=[],
+        quota=crc_models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=RuntimePlatform.linux_amd64,
+        remote=RemoteConfigurationFirecrest(
+            provider_id=provider_id,
+            api_url="https://example.org",
+            system_name="test-system",
+        ),
+    )
+    inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, setup.admin)
+
+    # Create a connection and grant access
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        conn = OAuth2ConnectionORM(
+            user_id=setup.user1.id,
+            client_id=client.id,
+            token={"access_token": "bla"},
+            status=ConnectionStatus.connected,
+            state=None,
+            code_verifier=None,
+            next_url=None,
+        )
+        session.add(conn)
+
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user1.id, client.id)
+
+    # Verify user1 has access
+    members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
+    user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+    assert setup.user1.id in user_ids
+
+    # Disconnect user1
+    await app_manager_instance.connected_services_repo.on_oauth2_disconnected(setup.user1.id, client.id)
+
+    # Assert user1 is no longer a member
+    members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
+    user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+    assert setup.user1.id not in user_ids
+
+    # Cleanup
+    await app_manager_instance.rp_repo.delete_resource_pool(setup.admin, inserted_rp.id)
+
+
+@pytest.mark.asyncio
+async def test_oauth_connect_with_no_matching_rp_does_nothing(
+    app_manager_instance: DependencyManager, admin_user: APIUser
+) -> None:
+    run_migrations_for_app("common")
+    setup = await setup_users(app_manager_instance)
+
+    provider_id = "test-provider-no-match"
+    client = await setup.insert_client(provider_id, ProviderKind.gitlab, "")
+
+    # Create a connection for user1 but no RP linked to this provider
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        conn = OAuth2ConnectionORM(
+            user_id=setup.user1.id,
+            client_id=client.id,
+            token={"access_token": "bla"},
+            status=ConnectionStatus.connected,
+            state=None,
+            code_verifier=None,
+            next_url=None,
+        )
+        session.add(conn)
+
+    # This should not crash
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user1.id, client.id)
+
+    # No RPs exist anyway so nothing to assert, just no crash
+
+
+@pytest.mark.asyncio
+async def test_two_users_connect_same_integration_both_get_access(
+    app_manager_instance: DependencyManager, admin_user: APIUser, cluster: any
+) -> None:
+    run_migrations_for_app("common")
+    setup = await setup_users(app_manager_instance)
+
+    provider_id = "test-provider-two-users"
+    client = await setup.insert_client(provider_id, ProviderKind.gitlab, "")
+
+    # Create an RP linked to the provider
+    rp = crc_models.UnsavedResourcePool(
+        name="test-two-users-rp",
+        classes=[],
+        quota=crc_models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=RuntimePlatform.linux_amd64,
+        remote=RemoteConfigurationFirecrest(
+            provider_id=provider_id,
+            api_url="https://example.org",
+            system_name="test-system",
+        ),
+    )
+    inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, setup.admin)
+
+    # Create connections for both users
+    for user in [setup.user1, setup.user2]:
+        async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+            conn = OAuth2ConnectionORM(
+                user_id=user.id,
+                client_id=client.id,
+                token={"access_token": "bla"},
+                status=ConnectionStatus.connected,
+                state=None,
+                code_verifier=None,
+                next_url=None,
+            )
+            session.add(conn)
+
+    # Connect both users
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user1.id, client.id)
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user2.id, client.id)
+
+    # Both should have access
+    members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
+    user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+    assert setup.user1.id in user_ids
+    assert setup.user2.id in user_ids
+
+    # Cleanup
+    await app_manager_instance.rp_repo.delete_resource_pool(setup.admin, inserted_rp.id)
+
+
+@pytest.mark.asyncio
+async def test_user_disconnect_only_affects_their_rp_access(
+    app_manager_instance: DependencyManager, admin_user: APIUser, cluster: any
+) -> None:
+    run_migrations_for_app("common")
+    setup = await setup_users(app_manager_instance)
+
+    provider_id = "test-provider-isolated-disconnect"
+    client = await setup.insert_client(provider_id, ProviderKind.gitlab, "")
+
+    # Create an RP linked to the provider
+    rp = crc_models.UnsavedResourcePool(
+        name="test-isolated-rp",
+        classes=[],
+        quota=crc_models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=RuntimePlatform.linux_amd64,
+        remote=RemoteConfigurationFirecrest(
+            provider_id=provider_id,
+            api_url="https://example.org",
+            system_name="test-system",
+        ),
+    )
+    inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, setup.admin)
+
+    # Create connections for both users
+    for user in [setup.user1, setup.user2]:
+        async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+            conn = OAuth2ConnectionORM(
+                user_id=user.id,
+                client_id=client.id,
+                token={"access_token": "bla"},
+                status=ConnectionStatus.connected,
+                state=None,
+                code_verifier=None,
+                next_url=None,
+            )
+            session.add(conn)
+
+    # Grant both users
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user1.id, client.id)
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user2.id, client.id)
+
+    # Disconnect user1 only
+    await app_manager_instance.connected_services_repo.on_oauth2_disconnected(setup.user1.id, client.id)
+
+    # user1 revoked, user2 still has access
+    members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
+    user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+    assert setup.user1.id not in user_ids
+    assert setup.user2.id in user_ids
+
+    # Cleanup
+    await app_manager_instance.rp_repo.delete_resource_pool(setup.admin, inserted_rp.id)
+
+
+@pytest.mark.asyncio
+async def test_delete_connection_revokes_rp_access(
+    app_manager_instance: DependencyManager, admin_user: APIUser, cluster: any
+) -> None:
+    run_migrations_for_app("common")
+    setup = await setup_users(app_manager_instance)
+
+    provider_id = "test-provider-delete-revoke"
+    client = await setup.insert_client(provider_id, ProviderKind.gitlab, "")
+
+    # Create an RP linked to the provider
+    rp = crc_models.UnsavedResourcePool(
+        name="test-delete-revoke-rp",
+        classes=[],
+        quota=crc_models.UnsavedQuota(cpu=1.0, memory=1, gpu=0),
+        public=False,
+        default=False,
+        platform=RuntimePlatform.linux_amd64,
+        remote=RemoteConfigurationFirecrest(
+            provider_id=provider_id,
+            api_url="https://example.org",
+            system_name="test-system",
+        ),
+    )
+    inserted_rp = await create_rp(rp, app_manager_instance.rp_repo, setup.admin)
+
+    # Create a connection and grant access
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        conn = OAuth2ConnectionORM(
+            user_id=setup.user1.id,
+            client_id=client.id,
+            token={"access_token": "bla"},
+            status=ConnectionStatus.connected,
+            state=None,
+            code_verifier=None,
+            next_url=None,
+        )
+        session.add(conn)
+
+    # Grant user1 access
+    await app_manager_instance.connected_services_repo.on_oauth2_connected(setup.user1.id, client.id)
+
+    # Verify user1 has access
+    members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
+    user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+    assert setup.user1.id in user_ids
+
+    # Delete the connection (this should trigger on_oauth2_disconnected)
+    await app_manager_instance.connected_services_repo.delete_oauth2_connection(setup.user1, conn.id)
+
+    # Verify user1 no longer has access
+    members = await app_manager_instance.member_repo.get_resource_pool_members(setup.admin, inserted_rp.id)
+    user_ids = {m.member_id for m in members if m.member_type == MemberType.USER}
+    assert setup.user1.id not in user_ids
+
+    # Cleanup
+    await app_manager_instance.rp_repo.delete_resource_pool(setup.admin, inserted_rp.id)
 
 
 @pytest.mark.asyncio
