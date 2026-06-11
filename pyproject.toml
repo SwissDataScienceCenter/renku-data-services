@@ -6,7 +6,7 @@ authors = [
   { name = "Swiss Data Science Center", email = "contact@datascience.ch" },
 ]
 readme = "README.md"
-license = "Apache License 2.0"
+license = "Apache-2.0"
 requires-python = ">=3.13"
 dynamic = ["dependencies"]
 
