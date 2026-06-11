@@ -513,6 +513,7 @@ async def test_post_job_launcher(
         "disk_storage": 2,
         "env_variables": [{"name": "KEY_NUMBER_1", "value": "a value"}],
         "launcher_type": "non-interactive",
+        "command": ["test.sh"],
         "environment": {
             "container_image": "some_image:some_tag",
             "name": "custom_name",
@@ -713,9 +714,9 @@ async def test_post_job_launcher_with_environment_build(
             "builder_variant": "python",
             "frontend_variant": "vscodium",
             "environment_image_source": "build",
-            "job_command": ["python"],
-            "job_args": ["$RENKU_WORK/myscript.py"],
         },
+        "command": ["python"],
+        "args": ["$RENKU_WORK/myscript.py"],
     }
 
     _, response = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
