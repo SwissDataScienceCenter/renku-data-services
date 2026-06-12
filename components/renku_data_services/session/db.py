@@ -1031,7 +1031,24 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 session=session, user=user, environment=build.environment, scope=Scope.WRITE
             )
 
-            # TODO: If the output image is private, check that the user can read the source repository
+            # If the output image is private, check that the user can read the source repository
+            if build.result_image is None:
+                authorized = False
+            else:
+                if self.builds_config.build_output_private_image_prefix is not None and build.result_image.startswith(
+                    self.builds_config.build_output_private_image_prefix
+                ):
+                    if build.result_repository_url is None:
+                        authorized = False
+                    else:
+                        repo_data = await self.git_repositories_repo.get_repository(
+                            repository_url=build.result_repository_url,
+                            user=user,
+                            etag=None,
+                            internal_gitlab_user=base_models.APIUser(),
+                        )
+                        if not isinstance(repo_data.metadata, Metadata) or not repo_data.metadata.pull_permission:
+                            authorized = False
 
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_message)
