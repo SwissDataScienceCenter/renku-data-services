@@ -942,21 +942,28 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             build_orm = schemas.BuildORM(
                 environment_id=build.environment_id,
                 status=models.BuildStatus.in_progress,
+                result_repository_url=build_parameters.repository,
             )
+
+            result = build_orm.dump()
+            launcher = launcher_orm.dump() if launcher_orm is not None else None
+
+            params: models.ShipwrightBuildRunParams | None = None
+            if self.shipwright_client is not None:
+                params = await self._get_buildrun_params(
+                    user=user, build=result, build_parameters=build_parameters, launcher=launcher
+                )
+                build_orm.result_image = params.output_image
+            else:
+                logger.error("Shipwright client is None")
+
             session.add(build_orm)
             await session.flush()
             await session.refresh(build_orm)
 
-        result = build_orm.dump()
-        launcher = launcher_orm.dump() if launcher_orm is not None else None
-
         if self.shipwright_client is not None:
-            params = await self._get_buildrun_params(
-                user=user, build=result, build_parameters=build_parameters, launcher=launcher
-            )
+            assert params is not None
             await self.shipwright_client.create_image_build(params=params, user_id=user.id)
-        else:
-            logger.error("Shipwright client is None")
 
         return result
 
@@ -1023,6 +1030,26 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             authorized = await self._get_environment_authorization(
                 session=session, user=user, environment=build.environment, scope=Scope.WRITE
             )
+
+            # If the output image is private, check that the user can read the source repository
+            if build.result_image is None:
+                authorized = False
+            else:
+                if self.builds_config.build_output_private_image_prefix is not None and build.result_image.startswith(
+                    self.builds_config.build_output_private_image_prefix
+                ):
+                    if build.result_repository_url is None:
+                        authorized = False
+                    else:
+                        repo_data = await self.git_repositories_repo.get_repository(
+                            repository_url=build.result_repository_url,
+                            user=user,
+                            etag=None,
+                            internal_gitlab_user=base_models.APIUser(),
+                        )
+                        if not isinstance(repo_data.metadata, Metadata) or not repo_data.metadata.pull_permission:
+                            authorized = False
+
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_message)
 
@@ -1147,7 +1174,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         )
 
         if result.is_error:
-            raise errors.CannotStartBuildError(message=str(result.error))
+            raise errors.UnauthorizedError(
+                message=f"You do not have the required credentials to clone the code repository {git_repository}."
+            )
 
         authentication_secret: models.AuthenticationSecret | None = None
         output_image_prefix = (
@@ -1160,6 +1189,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             visibility = result.metadata.visibility
 
         if visibility == RepositoryVisibility.private:
+            if isinstance(result.metadata, Metadata) and not result.metadata.pull_permission:
+                raise errors.ForbiddenError(
+                    message=f"You do not have the required permissions to clone the code repository {git_repository}."
+                )
+
             token: dict[str, Any] | None = await self.git_repositories_repo.get_token(
                 repository_url=git_repository, user=user
             )
