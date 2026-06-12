@@ -942,21 +942,28 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             build_orm = schemas.BuildORM(
                 environment_id=build.environment_id,
                 status=models.BuildStatus.in_progress,
+                result_repository_url=build_parameters.repository,
             )
+
+            result = build_orm.dump()
+            launcher = launcher_orm.dump() if launcher_orm is not None else None
+
+            params: models.ShipwrightBuildRunParams | None = None
+            if self.shipwright_client is not None:
+                params = await self._get_buildrun_params(
+                    user=user, build=result, build_parameters=build_parameters, launcher=launcher
+                )
+                build_orm.result_image = params.output_image
+            else:
+                logger.error("Shipwright client is None")
+
             session.add(build_orm)
             await session.flush()
             await session.refresh(build_orm)
 
-        result = build_orm.dump()
-        launcher = launcher_orm.dump() if launcher_orm is not None else None
-
         if self.shipwright_client is not None:
-            params = await self._get_buildrun_params(
-                user=user, build=result, build_parameters=build_parameters, launcher=launcher
-            )
+            assert params is not None
             await self.shipwright_client.create_image_build(params=params, user_id=user.id)
-        else:
-            logger.error("Shipwright client is None")
 
         return result
 
@@ -1024,7 +1031,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 session=session, user=user, environment=build.environment, scope=Scope.WRITE
             )
 
-            # TODO
+            # TODO: If the output image is private, check that the user can read the source repository
 
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_message)
