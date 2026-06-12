@@ -929,6 +929,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     raise errors.ConflictError(
                         message=f"Session environment with id '{build.environment_id}' already has a build in progress."
                     )
+                
+            # TODO
 
             # We check that we build for a single target platform
             if len(build_parameters.platforms) > 1:
@@ -1023,6 +1025,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             authorized = await self._get_environment_authorization(
                 session=session, user=user, environment=build.environment, scope=Scope.WRITE
             )
+
+            # TODO
+
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_message)
 
