@@ -929,8 +929,6 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     raise errors.ConflictError(
                         message=f"Session environment with id '{build.environment_id}' already has a build in progress."
                     )
-                
-            # TODO
 
             # We check that we build for a single target platform
             if len(build_parameters.platforms) > 1:
@@ -1152,7 +1150,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         )
 
         if result.is_error:
-            raise errors.CannotStartBuildError(message=str(result.error))
+            raise errors.UnauthorizedError(
+                message=f"You do not have the required credentials to clone the code repository {git_repository}."
+            )
 
         authentication_secret: models.AuthenticationSecret | None = None
         output_image_prefix = (
@@ -1165,6 +1165,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             visibility = result.metadata.visibility
 
         if visibility == RepositoryVisibility.private:
+            if isinstance(result.metadata, Metadata) and not result.metadata.pull_permission:
+                raise errors.ForbiddenError(
+                    message=f"You do not have the required permissions to clone the code repository {git_repository}."
+                )
+
             token: dict[str, Any] | None = await self.git_repositories_repo.get_token(
                 repository_url=git_repository, user=user
             )
