@@ -19,6 +19,7 @@ resource_pool_payload = {
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": True,
         }
     ],
     "quota": {"cpu": 100, "memory": 100, "gpu": 0},
