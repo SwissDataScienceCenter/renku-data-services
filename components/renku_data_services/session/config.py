@@ -60,8 +60,13 @@ class BuildsConfig:
             os.environ.get("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX") or constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
         )
 
-        if private_builds_enabled and build_output_image_prefix == build_output_private_image_prefix:
-            raise ValidationError("Public and private builds cannot use the same image prefix")
+        if private_builds_enabled:
+            if build_output_image_prefix == build_output_private_image_prefix:
+                raise ValidationError("Public and private builds cannot use the same image prefix")
+            if build_output_private_image_prefix.startswith(build_output_image_prefix):
+                raise ValidationError("Private builds cannot use the same prefix as public builds")
+            if build_output_image_prefix.startswith(build_output_private_image_prefix):
+                raise ValidationError("Public builds cannot use the same prefix as private builds")
 
         build_builder_image = os.environ.get("BUILD_BUILDER_IMAGE")
         build_run_image = os.environ.get("BUILD_RUN_IMAGE")
