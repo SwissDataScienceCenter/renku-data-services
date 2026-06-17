@@ -25,12 +25,6 @@ class BuildPlatformOverrides:
     tolerations: list[session_crs.Toleration] | None = None
 
 
-def get_environ_with_default(needle: str, default: str) -> str:
-    """Returns the default value if needle is not found or value is none/empty."""
-
-    return os.environ.get(needle, default) or default
-
-
 @dataclass
 class BuildsConfig:
     """Configuration for container image builds."""
@@ -59,11 +53,11 @@ class BuildsConfig:
         enabled = os.environ.get("IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
         private_builds_enabled = os.environ.get("BUILD_PRIVATE_REPO_BUILDS_ENABLED", "false").lower() == "true"
 
-        build_output_image_prefix = get_environ_with_default(
-            "BUILD_OUTPUT_IMAGE_PREFIX", constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
+        build_output_image_prefix = (
+            os.environ.get("BUILD_OUTPUT_IMAGE_PREFIX") or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
         )
-        build_output_private_image_prefix = get_environ_with_default(
-            "BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX", constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
+        build_output_private_image_prefix = (
+            os.environ.get("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX") or constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
         )
 
         if private_builds_enabled and build_output_image_prefix == build_output_private_image_prefix:
@@ -77,13 +71,14 @@ class BuildsConfig:
             logger.warn(
                 f"Trusting insecure registries, this is not recommended in production: {build_insecure_registries}"
             )
-        push_secret_name = get_environ_with_default("BUILD_PUSH_SECRET_NAME", constants.BUILD_DEFAULT_PUSH_SECRET_NAME)
-        push_private_secret_name = get_environ_with_default(
-            "BUILD_PUSH_PRIVATE_SECRET_NAME", constants.BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME
+        push_secret_name = os.environ.get("BUILD_PUSH_SECRET_NAME") or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
+        push_private_secret_name = (
+            os.environ.get("BUILD_PUSH_PRIVATE_SECRET_NAME") or constants.BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME
         )
-        pull_private_image_secret_name = get_environ_with_default(
-            "BUILD_PULL_PRIVATE_SECRET_NAME", constants.BUILD_DEFAULT_PULL_PRIVATE_SECRET_NAME
+        pull_private_image_secret_name = (
+            os.environ.get("BUILD_PULL_PRIVATE_SECRET_NAME") or constants.BUILD_DEFAULT_PULL_PRIVATE_SECRET_NAME
         )
+
         buildrun_retention_after_failed_seconds = int(os.environ.get("BUILD_RUN_RETENTION_AFTER_FAILED_SECONDS") or "0")
         buildrun_retention_after_failed = (
             timedelta(seconds=buildrun_retention_after_failed_seconds)
