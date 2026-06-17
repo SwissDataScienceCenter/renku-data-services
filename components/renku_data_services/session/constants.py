@@ -39,6 +39,9 @@ BUILD_DEFAULT_PUSH_SECRET_NAME: Final[str] = "renku-build-secret"
 BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME: Final[str] = "renku-build-private-secret"
 """The name of the default secret to use when pushing Renku builds to the private image registry."""
 
+BUILD_DEFAULT_PULL_PRIVATE_SECRET_NAME: Final[str] = "renku-build-pull-private-secret"
+"""The name of the default secret to use when pulling Renku builds from the private image registry."""
+
 BUILD_RUN_DEFAULT_RETENTION_AFTER_FAILED: Final[timedelta] = timedelta(minutes=5)
 """The default retention TTL for BuildRuns when in failed state."""
 

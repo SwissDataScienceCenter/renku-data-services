@@ -67,6 +67,7 @@ def launch_session(
     ],
 )
 def test_same_build_image_prefix(monkeypatch, prefix, private_prefix, must_raise) -> None:
+    monkeypatch.setenv("BUILD_PRIVATE_REPO_BUILDS_ENABLED", True)
     if prefix is not None:
         monkeypatch.setenv("BUILD_OUTPUT_IMAGE_PREFIX", prefix)
     if private_prefix is not None:
@@ -1755,6 +1756,48 @@ async def test_starting_session_with_builds_enabled(
         assert session_res.json["name"] in [i["name"] for i in res.json]
     else:
         assert session_res.json["error"]["message"] == expected_error_message
+
+
+@pytest.mark.skipif(
+    "not config.getoption('--enable-builds')",
+    reason="Only run when --enable-builds is given",
+)
+async def test_creating_session_launcher_with_builds_enabled_but_private_builds_disabled(
+    app_manager: DependencyManager,
+    sanic_client: SanicASGITestClient,
+    create_project,
+    create_resource_pool,
+    create_session_launcher,
+    user_headers,
+) -> None:
+    project: dict[str, Any] = await create_project(
+        sanic_client,
+        "Some project",
+        visibility="public",
+        repositories=["https://github.com/SwissDataScienceCenter/private"],
+    )
+    resource_pool = await create_resource_pool(admin=True)
+
+    launcher_conf = {
+        "project_id": project["id"],
+        "resource_class_id": resource_pool["classes"][0]["id"],
+        "disk_storage": 42,
+        "name": "Private build image with accessible repository",
+        "description": "A session launcher",
+        "environment": {
+            "environment_image_source": "build",
+            "repository": "https://github.com/SwissDataScienceCenter/private",
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+        },
+    }
+
+    builds_config = {"enabled": True, "private_builds_enabled": False}
+
+    with MemberContext(app_manager.config.builds, builds_config):
+        _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=launcher_conf)
+        assert res.status_code == 500
+        assert res.json["error"]["message"] == "Private repository builds are not enabled"
 
 
 @pytest.mark.parametrize(
