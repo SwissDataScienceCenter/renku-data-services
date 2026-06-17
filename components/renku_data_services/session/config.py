@@ -8,8 +8,8 @@ from pydantic import ValidationError as PydanticValidationError
 from sanic_ext.exceptions import ValidationError
 
 from renku_data_services.app_config import logging
+from renku_data_services.session import constants, models
 from renku_data_services.session import crs as session_crs
-from renku_data_services.session import models
 
 logger = logging.getLogger(__name__)
 
@@ -30,16 +30,17 @@ class BuildsConfig:
     """Configuration for container image builds."""
 
     enabled: bool = False
-    build_output_image_prefix: str | None = None
-    build_output_private_image_prefix: str | None = None
+    private_builds_enabled: bool = False
+    build_output_image_prefix: str = constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
+    build_output_private_image_prefix: str = constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
     build_builder_image: str | None = None
     build_run_image: str | None = None
     build_strategy_name: str | None = None
     build_insecure_registries: str = ""
     build_platform_overrides: dict[str, BuildPlatformOverrides] | None = None
-    push_secret_name: str | None = None
-    push_private_secret_name: str | None = None
-    pull_private_image_secret_name: str | None = None
+    push_secret_name: str = constants.BUILD_DEFAULT_PUSH_SECRET_NAME
+    push_private_secret_name: str = constants.BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME
+    pull_private_image_secret_name: str = constants.BUILD_DEFAULT_PULL_PRIVATE_SECRET_NAME
     buildrun_retention_after_failed: timedelta | None = None
     buildrun_retention_after_succeeded: timedelta | None = None
     buildrun_build_timeout: timedelta | None = None
@@ -50,15 +51,22 @@ class BuildsConfig:
     def from_env(cls) -> "BuildsConfig":
         """Create a config from environment variables."""
         enabled = os.environ.get("IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
-        build_output_image_prefix = os.environ.get("BUILD_OUTPUT_IMAGE_PREFIX")
-        build_output_private_image_prefix = os.environ.get("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX")
+        private_builds_enabled = os.environ.get("BUILD_PRIVATE_REPO_BUILDS_ENABLED", "false").lower() == "true"
 
-        if (
-            build_output_image_prefix is not None
-            and build_output_private_image_prefix is not None
-            and build_output_image_prefix == build_output_private_image_prefix
-        ):
-            raise ValidationError("Public and private builds cannot use the same image prefix")
+        build_output_image_prefix = (
+            os.environ.get("BUILD_OUTPUT_IMAGE_PREFIX") or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
+        )
+        build_output_private_image_prefix = (
+            os.environ.get("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX") or constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
+        )
+
+        if private_builds_enabled:
+            if build_output_image_prefix == build_output_private_image_prefix:
+                raise ValidationError("Public and private builds cannot use the same image prefix")
+            if build_output_private_image_prefix.startswith(build_output_image_prefix):
+                raise ValidationError("Private builds cannot use the same prefix as public builds")
+            if build_output_image_prefix.startswith(build_output_private_image_prefix):
+                raise ValidationError("Public builds cannot use the same prefix as private builds")
 
         build_builder_image = os.environ.get("BUILD_BUILDER_IMAGE")
         build_run_image = os.environ.get("BUILD_RUN_IMAGE")
@@ -68,9 +76,14 @@ class BuildsConfig:
             logger.warn(
                 f"Trusting insecure registries, this is not recommended in production: {build_insecure_registries}"
             )
-        push_secret_name = os.environ.get("BUILD_PUSH_SECRET_NAME")
-        push_private_secret_name = os.environ.get("BUILD_PUSH_PRIVATE_SECRET_NAME")
-        pull_private_image_secret_name = os.environ.get("BUILD_PULL_PRIVATE_SECRET_NAME")
+        push_secret_name = os.environ.get("BUILD_PUSH_SECRET_NAME") or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
+        push_private_secret_name = (
+            os.environ.get("BUILD_PUSH_PRIVATE_SECRET_NAME") or constants.BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME
+        )
+        pull_private_image_secret_name = (
+            os.environ.get("BUILD_PULL_PRIVATE_SECRET_NAME") or constants.BUILD_DEFAULT_PULL_PRIVATE_SECRET_NAME
+        )
+
         buildrun_retention_after_failed_seconds = int(os.environ.get("BUILD_RUN_RETENTION_AFTER_FAILED_SECONDS") or "0")
         buildrun_retention_after_failed = (
             timedelta(seconds=buildrun_retention_after_failed_seconds)
@@ -135,17 +148,18 @@ class BuildsConfig:
                 )
 
         return cls(
-            enabled=enabled or False,
-            build_output_image_prefix=build_output_image_prefix or None,
-            build_output_private_image_prefix=build_output_private_image_prefix or None,
+            enabled=enabled,
+            private_builds_enabled=private_builds_enabled,
+            build_output_image_prefix=build_output_image_prefix,
+            build_output_private_image_prefix=build_output_private_image_prefix,
             build_builder_image=build_builder_image,
             build_run_image=build_run_image,
             build_strategy_name=build_strategy_name or None,
             build_insecure_registries=build_insecure_registries,
             build_platform_overrides=build_platform_overrides,
-            push_secret_name=push_secret_name or None,
-            push_private_secret_name=push_private_secret_name or None,
-            pull_private_image_secret_name=pull_private_image_secret_name or None,
+            push_secret_name=push_secret_name,
+            push_private_secret_name=push_private_secret_name,
+            pull_private_image_secret_name=pull_private_image_secret_name,
             buildrun_retention_after_failed=buildrun_retention_after_failed,
             buildrun_retention_after_succeeded=buildrun_retention_after_succeeded,
             buildrun_build_timeout=buildrun_build_timeout,

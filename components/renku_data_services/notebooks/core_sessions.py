@@ -735,7 +735,7 @@ async def get_image_pull_secret(
 
     if (
         builds_config.enabled
-        and builds_config.build_output_private_image_prefix is not None
+        and builds_config.private_builds_enabled
         and launcher.environment.container_image.startswith(builds_config.build_output_private_image_prefix)
     ):
         return await __get_private_image_build_secret(
