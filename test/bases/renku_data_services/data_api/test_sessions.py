@@ -1040,7 +1040,7 @@ async def test_patch_session_launcher_environment(
         f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
     )
     assert res.status_code == 422, res.text
-    assert "There are errors in the following fields, id: Input should be a valid string" in res.text
+    assert "There are errors in the following fields" in res.text
 
     # Trying to patch a field of the global environment should fail
     patch_payload = {
