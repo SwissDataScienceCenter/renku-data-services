@@ -661,8 +661,10 @@ def create_server(
         do not sleep or poll manually.
         """
         launcher = await _api(ctx, "GET", f"/session_launchers/{launcher_id}")
+        # Normalise hyphen/underscore variants returned by different API versions.
         # None means the API predates launcher_type — treat as interactive (the historical default).
-        if launcher.get("launcher_type") not in ("interactive", None):
+        launcher_type = (launcher.get("launcher_type") or "").replace("-", "_")
+        if launcher_type not in ("interactive", ""):
             raise RuntimeError(
                 f"Launcher {launcher_id!r} has launcher_type={launcher.get('launcher_type')!r}. "
                 "Use job_run for non_interactive launchers."
@@ -795,8 +797,10 @@ def create_server(
         the returned session and retry.
         """
         launcher = await _api(ctx, "GET", f"/session_launchers/{launcher_id}")
+        # Normalise hyphen/underscore variants returned by different API versions.
         # None means the API predates launcher_type — treat as interactive, so block job_run.
-        if launcher.get("launcher_type") != "non_interactive":
+        launcher_type = (launcher.get("launcher_type") or "").replace("-", "_")
+        if launcher_type != "non_interactive":
             raise RuntimeError(
                 f"Launcher {launcher_id!r} has launcher_type={launcher.get('launcher_type') or 'interactive (default)'}. "
                 "Use session_launch for interactive launchers."
