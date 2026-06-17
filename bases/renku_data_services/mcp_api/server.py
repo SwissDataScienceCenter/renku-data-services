@@ -780,8 +780,21 @@ def create_server(
     async def job_run(
         ctx: Context,
         launcher_id: Annotated[str, Field(description="Launcher ID")],
+        submission_id: Annotated[
+            str | None,
+            Field(
+                description="Unique ID for this job submission (pattern: ^[a-z][-0-9a-z]{3,19}$). "
+                "Auto-generated if omitted. Use the same value to retry a failed job for deduplication.",
+            ),
+        ] = None,
         resource_class_id: Annotated[int | None, Field(description="Override resource class")] = None,
         disk_storage: Annotated[int | None, Field(description="Override disk storage in GB")] = None,
+        job_command_override: Annotated[
+            list[str] | None, Field(description="Override the container command")
+        ] = None,
+        job_args_override: Annotated[
+            list[str] | None, Field(description="Override the container args")
+        ] = None,
     ) -> dict[str, Any]:
         """Launch a non-interactive job from a launcher.
 
@@ -796,6 +809,8 @@ def create_server(
         a new one — always verify _created=true in the response. If _created=false, delete
         the returned session and retry.
         """
+        import uuid
+
         launcher = await _api(ctx, "GET", f"/session_launchers/{launcher_id}")
         # Normalise hyphen/underscore variants returned by different API versions.
         # None means the API predates launcher_type — treat as interactive, so block job_run.
@@ -805,11 +820,17 @@ def create_server(
                 f"Launcher {launcher_id!r} has launcher_type={launcher.get('launcher_type') or 'interactive (default)'}. "
                 "Use session_launch for interactive launchers."
             )
-        body: dict[str, Any] = {"launcher_id": launcher_id}
+        # submission_id is required by the API for non-interactive jobs; auto-generate if not provided.
+        effective_submission_id = submission_id or f"j{uuid.uuid4().hex[:15]}"
+        body: dict[str, Any] = {"launcher_id": launcher_id, "submission_id": effective_submission_id}
         if resource_class_id is not None:
             body["resource_class_id"] = resource_class_id
         if disk_storage is not None:
             body["disk_storage"] = disk_storage
+        if job_command_override is not None:
+            body["job_command_override"] = job_command_override
+        if job_args_override is not None:
+            body["job_args_override"] = job_args_override
         data = await _api(ctx, "POST", "/sessions", body)
         # Detect whether the platform returned a pre-existing session by checking if
         # started_at is more than 60 seconds in the past.
