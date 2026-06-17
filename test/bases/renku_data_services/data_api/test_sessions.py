@@ -717,8 +717,8 @@ async def test_post_job_launcher_with_environment_build(
             "builder_variant": "python",
             "frontend_variant": "vscodium",
             "environment_image_source": "build",
-            "job_command": ["python"],
-            "job_args": ["$RENKU_WORK/myscript.py"],
+            "command": ["python"],
+            "args": ["$RENKU_WORK/myscript.py"],
         },
     }
 
