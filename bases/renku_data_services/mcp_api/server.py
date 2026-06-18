@@ -585,12 +585,19 @@ def create_server(
           RENKU_SESSION_IP     Address to bind to (0.0.0.0)
           RENKU_SESSION        Set to "1" to detect Renku environment
 
-        Web apps MUST use RENKU_BASE_URL_PATH as their base path — Renku proxies all traffic
-        under that prefix and requests to / will 404. Examples:
+        Web apps must handle the path prefix. Two approaches:
+
+        Preferred — configure the app to use RENKU_BASE_URL_PATH as its base path:
           Streamlit:  streamlit run app.py --server.baseUrlPath $RENKU_BASE_URL_PATH
           Dash:       app = Dash(__name__, requests_pathname_prefix=os.environ['RENKU_BASE_URL_PATH'] + '/')
           FastAPI:    app = FastAPI(root_path=os.environ['RENKU_BASE_URL_PATH'])
           Panel:      pn.serve(..., prefix=os.environ['RENKU_BASE_URL_PATH'])
+
+        Alternative — if the framework cannot be configured to use a base path, enable
+        strip_path_prefix on the launcher's environment so Renku strips the prefix before
+        forwarding. Use launcher_patch with {"environment": {"strip_path_prefix": true}}.
+        The app then receives requests at / as normal, but loses the ability to generate
+        correct absolute URLs.
         """
         # 'name' is required for image-source environments but rejected by BuildParametersPost.
         if environment.get("environment_image_source") != "build" and "name" not in environment:
