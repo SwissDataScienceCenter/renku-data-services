@@ -84,8 +84,16 @@ class RenkuAppsK8sClient:
         return await self.get_app_deployment(_generate_app_name(project, session_launcher))
 
     async def delete_app_deployment(self, app_name: str) -> None:
-        """Delete the deployment for the given app name. NOT IMPLEMENTED."""
-        raise NotImplementedError("Deleting app deployment is not implemented yet")
+        """Delete the deployment for the given app name."""
+        cluster = await self.__client.cluster_by_id(self.__cluster_id)
+        meta = K8sObjectMeta(
+            name=app_name,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            gvk=KNATIVE_SERVICE_GVK,
+            user_id=DUMMY_RENKU_APP_USER_ID,
+        )
+        await self.__client.delete(meta)
 
     async def list_app_deployments(self) -> AsyncGenerator[AppRuntimeState, None]:
         """List all app deployments. NOT IMPLEMENTED."""

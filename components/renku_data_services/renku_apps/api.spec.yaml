@@ -48,6 +48,22 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - apps
+    delete:
+      summary: Delete an app
+      parameters:
+        - in: path
+          name: app_name
+          required: true
+          schema:
+            $ref: "#/components/schemas/AppName"
+          description: The name of the app to delete
+      responses:
+        "204":
+          description: The app was successfully deleted or did not exist
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - apps
 components:
   schemas:
     Ulid:
