@@ -177,6 +177,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         session_repo=dm.session_repo,
         authenticator=dm.authenticator,
         metrics=dm.metrics,
+        apps_repo=dm.apps_repo,
     )
     renku_apps = (
         RenkuAppBP(

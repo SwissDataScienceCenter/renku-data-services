@@ -293,6 +293,12 @@ class ProjectsBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, project_id: ULID, body: apispec.ProjectPatch, etag: str
         ) -> JSONResponse:
             project_patch = validate_project_patch(body)
+            if project_patch.visibility == Visibility.PRIVATE and await self.session_repo.project_has_app_launchers(
+                user, project_id
+            ):
+                raise errors.ValidationError(
+                    message="This project cannot be made private because it has one or more app launchers."
+                )
             project_update = await self.project_repo.update_project(
                 user=user, project_id=project_id, etag=etag, patch=project_patch
             )

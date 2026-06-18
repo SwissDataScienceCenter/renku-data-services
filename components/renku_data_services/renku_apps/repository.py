@@ -15,6 +15,7 @@ from renku_data_services.renku_apps.core import build_app
 from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
 from renku_data_services.renku_apps.models import App, AppRuntimeState
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.models import SessionLauncher
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,15 @@ class RenkuAppsRepository:
 
         await self.k8s_client.delete_app_deployment(app_name)
         logger.info(f"App with name {app_name} has been deleted.")
+        return None
+
+    async def delete_app_for_launcher(self, user: base_models.APIUser, launcher: SessionLauncher) -> None:
+        """Delete the app deployment backing the given launcher, if one exists."""
+        project = await self.project_repo.get_project(user, launcher.project_id)
+        runtime_state = await self.k8s_client.get_app_deployment_for_project(project, launcher)
+        if runtime_state is None:
+            return None
+        await self.delete_app(user, runtime_state.name)
         return None
 
     async def update_app(

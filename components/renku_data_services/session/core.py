@@ -204,8 +204,8 @@ def validate_unsaved_session_launcher(
     match launcher.launcher_type:
         case apispec.LauncherType.non_interactive:
             launcher_type = models.LauncherType.non_interactive
-        # case apispec.LauncherType.app:   # not yet supported
-        #     launcher_type = models.LauncherType.app
+        case apispec.LauncherType.app:
+            launcher_type = models.LauncherType.app
 
     return models.UnsavedSessionLauncher(
         project_id=ULID.from_str(launcher.project_id),

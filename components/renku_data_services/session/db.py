@@ -18,6 +18,7 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.project.apispec import Visibility as ProjectVisibility
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata, RepositoryVisibility
 from renku_data_services.session import constants, models
@@ -28,6 +29,14 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from renku_data_services.session.config import BuildsConfig
+
+
+def _validate_app_launcher_project_visibility(
+    launcher_type: models.LauncherType, project_visibility: ProjectVisibility
+) -> None:
+    """Enforce that an app launcher can only live in a public project."""
+    if launcher_type == models.LauncherType.app and project_visibility != ProjectVisibility.public:
+        raise errors.ValidationError(message="An app launcher can only be created in a public project.")
 
 
 class SessionEnvironmentRepositoryProtocol(Protocol):
@@ -386,6 +395,25 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             launcher = res.all()
             return [item.dump() for item in launcher]
 
+    async def project_has_app_launchers(self, user: base_models.APIUser, project_id: ULID) -> bool:
+        """Return whether the given project has any launchers of type app."""
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            res = await session.scalars(
+                select(schemas.SessionLauncherORM.id)
+                .where(
+                    schemas.SessionLauncherORM.project_id == project_id,
+                    schemas.SessionLauncherORM.launcher_type == models.LauncherType.app,
+                )
+                .limit(1)
+            )
+            return res.first() is not None
+
     async def get_launcher(self, user: base_models.APIUser, launcher_id: ULID) -> models.SessionLauncher:
         """Get one session launcher from the database."""
         async with self.session_maker() as session:
@@ -429,6 +457,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 raise errors.MissingResourceError(
                     message=f"Project with id '{project_id}' does not exist or you do not have access to it."
                 )
+
+            _validate_app_launcher_project_visibility(launcher.launcher_type, project.visibility)
 
             environment_id: ULID
             environment: models.Environment
@@ -575,6 +605,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     message=f"Project with id '{project_id}' does not exist or you do not have access to it."
                 )
 
+            _validate_app_launcher_project_visibility(launcher.launcher_type, project.visibility)
+
             if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:
                 environment = self.__copy_environment(user, session, launcher.environment)
                 environment_id = environment.id
@@ -589,6 +621,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 resource_class_id=launcher.resource_class_id,
                 disk_storage=launcher.disk_storage,
                 env_variables=models.EnvVar.to_dict(launcher.env_variables) if launcher.env_variables else None,
+                launcher_type=launcher.launcher_type,
                 created_by_id=user.id,
                 creation_date=datetime.now(UTC).replace(microsecond=0),
             )
