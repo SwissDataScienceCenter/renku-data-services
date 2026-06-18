@@ -577,6 +577,20 @@ def create_server(
            environment_kind='CUSTOM', container_image,
            working_directory='/home/renku/work', mount_directory='/home/renku/work',
            command=['/cnb/lifecycle/launcher'], args, port, uid, gid.
+
+        Session environment variables — available inside every running session/job container:
+          RENKU_BASE_URL_PATH  URL path prefix for the session (e.g. /sessions/my-session-abc)
+          RENKU_BASE_URL       Full base URL including the path prefix
+          RENKU_SESSION_PORT   Port the app must listen on
+          RENKU_SESSION_IP     Address to bind to (0.0.0.0)
+          RENKU_SESSION        Set to "1" to detect Renku environment
+
+        Web apps MUST use RENKU_BASE_URL_PATH as their base path — Renku proxies all traffic
+        under that prefix and requests to / will 404. Examples:
+          Streamlit:  streamlit run app.py --server.baseUrlPath $RENKU_BASE_URL_PATH
+          Dash:       app = Dash(__name__, requests_pathname_prefix=os.environ['RENKU_BASE_URL_PATH'] + '/')
+          FastAPI:    app = FastAPI(root_path=os.environ['RENKU_BASE_URL_PATH'])
+          Panel:      pn.serve(..., prefix=os.environ['RENKU_BASE_URL_PATH'])
         """
         # 'name' is required for image-source environments but rejected by BuildParametersPost.
         if environment.get("environment_image_source") != "build" and "name" not in environment:
