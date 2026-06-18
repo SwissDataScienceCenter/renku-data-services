@@ -173,7 +173,18 @@ def create_server(
             "Always construct session UI URLs as "
             "{base_url}/p/<namespace>/<project-slug>/sessions/show/<session-name>. "
             "Do NOT use the url field from the session API response — it returns an internal path, "
-            "not the correct UI URL."
+            "not the correct UI URL.\n\n"
+            "Web apps inside Renku sessions:\n"
+            "Renku proxies all session traffic under a path prefix. "
+            "Inside a session container these environment variables are set:\n"
+            "- RENKU_BASE_URL_PATH: the URL path prefix (e.g. /sessions/my-session-abc123)\n"
+            "- RENKU_BASE_URL: the full base URL including the path prefix\n"
+            "- RENKU_SESSION_PORT: the port the app should listen on\n"
+            "- RENKU_SESSION_IP: the address to bind to (0.0.0.0)\n"
+            "Web frameworks must be configured to serve from RENKU_BASE_URL_PATH, not /. "
+            "Examples: Streamlit --server.baseUrlPath $RENKU_BASE_URL_PATH, "
+            "Dash requests_pathname_prefix=$RENKU_BASE_URL_PATH/, "
+            "FastAPI root_path=$RENKU_BASE_URL_PATH."
         ),
     )
 
