@@ -1089,7 +1089,7 @@ async def start_session(
     }
 
     if session_location == SessionLocation.remote:
-        labels["renku.io/reverse-tunnel"] = "allow"
+        labels["renku.io/remote-tunnel"] = "allow"
 
     if user.is_anonymous:
         labels["renku.io/anonymous-session"] = "true"
