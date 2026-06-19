@@ -1136,6 +1136,59 @@ async def test_patch_session_launcher_environment(
 
 
 @pytest.mark.asyncio
+async def test_patch_session_launcher_from_code_update_command(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_resource_pool,
+    create_session_environment,
+) -> None:
+    project = await create_project(sanic_client, "Some project 1")
+    resource_pool = await create_resource_pool(admin=True)
+
+    # create initial session launcher as a build-from-code
+    payload = {
+        "project_id": project["id"],
+        "resource_class_id": resource_pool["id"],
+        "name": "Test name from code",
+        "launcher_type": "non-interactive",
+        "environment": {
+            "environment_image_source": "build",
+            "builder_variant": "python",
+            "frontend_variant": "jupyterlab",
+            "repository": "https://github.com/eikek/bfc_test",
+            "platforms": ["linux/amd64"],
+            "command": ["python", "dummy.py"],
+        },
+    }
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    assert res.json["environment"]["environment_kind"] == "CUSTOM"
+
+    launcher_id = res.json["id"]
+
+    patch_payload = {
+        "environment": {"environment_kind": "CUSTOM", "build_parameters": {}, "command": ["python", "dummy2.sh"]}
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json["environment"]["command"] == ["python", "dummy2.sh"]
+    assert res.json["launcher_type"] == "non-interactive"
+
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher_id}", headers=user_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json["environment"]["command"] == ["python", "dummy2.sh"]
+    assert res.json["launcher_type"] == "non-interactive"
+
+
+@pytest.mark.asyncio
 async def test_patch_session_launcher_environment_with_build_parameters(
     sanic_client: SanicASGITestClient,
     user_headers,

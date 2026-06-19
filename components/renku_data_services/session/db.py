@@ -293,6 +293,15 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         if not update.build_parameters:
             return
 
+        if update.args is RESET:
+            environment.args = None
+        elif update.args is not None:
+            environment.args = update.args
+        if update.command is RESET:
+            environment.command = None
+        elif update.command is not None:
+            environment.command = update.command
+
         build_parameters = update.build_parameters
 
         if build_parameters.repository is not None:
