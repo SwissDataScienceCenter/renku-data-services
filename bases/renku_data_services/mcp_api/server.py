@@ -563,6 +563,19 @@ def create_server(
         Do NOT set launcher_type unless creating a non_interactive job launcher — leave it unset
         for interactive sessions. Sending launcher_type='interactive' will fail on older deployments.
 
+        Choosing the right environment strategy:
+        If the project has a Git repository attached (check the 'repositories' field from
+        project_get), inspect the repo for these files before choosing an environment type:
+          requirements.txt         → Python/pip
+          pyproject.toml + uv.lock → Python/uv
+          pyproject.toml + poetry.lock → Python/Poetry
+          environment.yml          → Python/conda
+          renv.lock                → R/renv
+          *.R files + no renv.lock → R (basic)
+        If any of these are present, ask the user whether to build a custom image from the
+        repo (option 2 below) rather than using a global environment. Building from the repo
+        installs the project's exact dependencies and is usually the right choice.
+
         Three ways to specify the environment:
 
         1. Global environment (user has no image or repo): pass {"id": "<environment_id>"}
