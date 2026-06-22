@@ -1179,21 +1179,20 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             )
 
         authentication_secret: models.AuthenticationSecret | None = None
-        output_image_prefix = (
-            self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
-        )
-        push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
+        output_image_prefix = self.builds_config.build_output_image_prefix
+        push_secret_name = self.builds_config.push_secret_name
 
         visibility: RepositoryVisibility = RepositoryVisibility.public
         if isinstance(result.metadata, Metadata):
             visibility = result.metadata.visibility
 
         if visibility == RepositoryVisibility.private:
+            if not self.builds_config.private_builds_enabled:
+                raise errors.CannotStartBuildError(message="Private repository builds are not enabled")
             if isinstance(result.metadata, Metadata) and not result.metadata.pull_permission:
                 raise errors.ForbiddenError(
                     message=f"You do not have the required permissions to clone the code repository {git_repository}."
                 )
-
             token: dict[str, Any] | None = await self.git_repositories_repo.get_token(
                 repository_url=git_repository, user=user
             )
@@ -1202,14 +1201,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 password=token.get("access_token", "") if token is not None else "",
             )
 
-            output_image_prefix = (
-                self.builds_config.build_output_private_image_prefix
-                or constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
-            )
-
-            push_secret_name = (
-                self.builds_config.push_private_secret_name or constants.BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME
-            )
+            output_image_prefix = self.builds_config.build_output_private_image_prefix
+            push_secret_name = self.builds_config.push_private_secret_name
 
         output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
         output_image_tag = build.k8s_name

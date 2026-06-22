@@ -735,7 +735,7 @@ async def get_image_pull_secret(
 
     if (
         builds_config.enabled
-        and builds_config.build_output_private_image_prefix is not None
+        and builds_config.private_builds_enabled
         and launcher.environment.container_image.startswith(builds_config.build_output_private_image_prefix)
     ):
         return await __get_private_image_build_secret(
@@ -1127,7 +1127,7 @@ async def start_session(
                 stripURLPath=environment.strip_path_prefix,
                 env=env,
                 remoteSecretRef=remote_secret.ref() if remote_secret else None,
-                readinessProbe=ReadinessProbe(type=Type.none) if session_type.is_non_interactive else ReadinessProbe(),
+                readinessProbe=_get_readiness_probe(session_type, session_location),
             ),
             ingress=ingress_config.get_k8s_ingress() if session_type.is_interactive else None,
             extraContainers=session_extras.containers,
@@ -1452,6 +1452,20 @@ async def patch_session(
         return session
 
     return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch_serialized)
+
+
+def _get_readiness_probe(session_type: SessionType, session_location: SessionLocation) -> ReadinessProbe:
+    """Return the readiness probe for a session based on type and location.
+
+    - Non-interactive sessions get no probe (Type.none).
+    - Interactive remote sessions (firecrest/runai) use an HTTP probe.
+    - Interactive local sessions use the default TCP probe.
+    """
+    if session_type.is_non_interactive:
+        return ReadinessProbe(type=Type.none)
+    if session_location == SessionLocation.remote:
+        return ReadinessProbe(type=Type.http)
+    return ReadinessProbe(type=Type.tcp)
 
 
 class _NamedResource(Protocol):

@@ -278,7 +278,10 @@ class ResourcePoolQueryRepository:
             for rp in res.scalars().all():
                 quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id())
                 credits_used = None
-                if self.resource_usage_service and api_user.is_authenticated:
+                enforcement_enabled = any([c.quota_enforced for c in rp.classes])
+                # TODO: Enable resource usage reporting broadly when the resource usage
+                # tracking / queries are more performant.
+                if self.resource_usage_service and api_user.is_authenticated and enforcement_enabled:
                     usage_summary = await self.resource_usage_service.usage_of_running_week(rp.id, api_user.id)
                     if not usage_summary.is_empty():
                         credits_used = usage_summary.cost

@@ -11,6 +11,7 @@ from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import CustomBlueprint
 from renku_data_services.base_api.misc import BlueprintFactoryResponse, validate_db_ids
 from renku_data_services.base_models.validation import validated_json
+from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.resource_usage import apispec, model
 from renku_data_services.resource_usage.core import (
     ResourceUsageService,
@@ -26,6 +27,7 @@ class ResourceUsageBP(CustomBlueprint):
 
     rr_repo: ResourceRequestsRepo
     rr_svc: ResourceUsageService
+    rp_repo: ResourcePoolRepository
     authenticator: base_models.Authenticator
 
     def put_pool_limits(self) -> BlueprintFactoryResponse:
@@ -153,8 +155,13 @@ class ResourceUsageBP(CustomBlueprint):
             if requested_by != user.id and (user.access_token is None or not user.is_admin):
                 raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
+            rp = await self.rp_repo.get_resource_pool(user, resource_pool_id)
+            enforcement_enabled = any([c.quota_enforced for c in rp.classes])
+
             result: model.ResourcePoolUsage | None = None
-            if start_date:
+            if not enforcement_enabled:
+                result = None
+            elif start_date:
                 result = await self.rr_svc.get_for_date(resource_pool_id, requested_by or "", start_date, end_date)
             else:
                 result = await self.rr_svc.get_running_week(resource_pool_id, requested_by or "")
@@ -177,6 +184,8 @@ class ResourceUsageBP(CustomBlueprint):
                     output,
                 )
             else:
-                raise errors.MissingResourceError()
+                raise errors.MissingResourceError(
+                    message=f"Usage tracking for resource pool ID {resource_pool_id} is not available"
+                )
 
         return "/resource_pools/<resource_pool_id>/usage", ["GET"], _get
