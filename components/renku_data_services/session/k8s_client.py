@@ -223,10 +223,16 @@ class ShipwrightClient:
                             crs.ParamValue(name="frontend", value=params.frontend),
                             crs.ParamValue(name="run-image", value=params.run_image),
                             crs.ParamValue(name="builder-image", value=params.builder_image),
-                            crs.ParamValue(name="insecure-registries", value=params.insecure_registries),
+                            crs.ParamValue(
+                                name="insecure-registries",
+                                values=[
+                                    crs.Value(value=registry) for registry in params.insecure_registries.split(",")
+                                ],
+                            ),
                         ],
                         output=crs.BuildOutput(
                             image=params.output_image,
+                            insecure=params.build_insecure_ouput_enabled,
                             pushSecret=params.push_secret_name,
                         ),
                         timeout=f"{params.build_timeout.total_seconds()}s" if params.build_timeout else None,
