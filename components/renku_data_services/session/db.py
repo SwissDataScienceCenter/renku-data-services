@@ -945,13 +945,12 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 result_repository_url=build_parameters.repository,
             )
 
-            result = build_orm.dump()
             launcher = launcher_orm.dump() if launcher_orm is not None else None
 
             params: models.ShipwrightBuildRunParams | None = None
             if self.shipwright_client is not None:
                 params = await self._get_buildrun_params(
-                    user=user, build=result, build_parameters=build_parameters, launcher=launcher
+                    user=user, build=build_orm.dump(), build_parameters=build_parameters, launcher=launcher
                 )
                 build_orm.result_image = params.output_image
             else:
@@ -960,6 +959,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             session.add(build_orm)
             await session.flush()
             await session.refresh(build_orm)
+            result = build_orm.dump()
 
         if self.shipwright_client is not None:
             assert params is not None
