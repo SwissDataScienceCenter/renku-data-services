@@ -36,6 +36,7 @@ class UserORM(BaseORM):
     email: Mapped[str | None] = mapped_column(String(320), default=None, index=True)
     secret_key: Mapped[bytes | None] = mapped_column(LargeBinary(), default=None, repr=False)
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
+    example: Mapped[str | None] = mapped_column(String(), default=None)
 
     def dump(self) -> UserInfo:
         """Create a user object from the ORM object."""
