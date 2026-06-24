@@ -1,16 +1,19 @@
 """Renku apps blueprints."""
 
 from dataclasses import dataclass
+from typing import Any
 
 from sanic import HTTPResponse, Request
-from sanic.response import JSONResponse, json
+from sanic.response import JSONResponse
 from sanic_ext import validate
 from ulid import ULID
 
 from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.renku_apps import apispec
+from renku_data_services.renku_apps.models import App
 from renku_data_services.renku_apps.repository import RenkuAppsRepository
 
 
@@ -21,6 +24,19 @@ class RenkuAppBP(CustomBlueprint):
     apps_repo: RenkuAppsRepository
     authenticator: base_models.Authenticator
 
+    @staticmethod
+    def _dump_app(app: App) -> dict[str, Any]:
+        """Dump an app for API responses."""
+        return dict(
+            name=app.name,
+            launcher_id=str(app.launcher_id),
+            project_id=str(app.project_id),
+            status=app.status.value,
+            url=app.url,
+            started=app.started.isoformat() if app.started is not None else None,
+            image=app.image,
+        )
+
     def post(self) -> BlueprintFactoryResponse:
         """Launch a new app from a session launcher."""
 
@@ -29,7 +45,7 @@ class RenkuAppBP(CustomBlueprint):
         @validate(json=apispec.AppPostRequest)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.AppPostRequest) -> JSONResponse:
             app = await self.apps_repo.create_app(user=user, launcher_id=ULID.from_str(body.launcher_id))
-            return json(app.as_apispec().model_dump(exclude_none=True, mode="json"), status=201)
+            return validated_json(apispec.AppResponse, self._dump_app(app), status=201)
 
         return "/apps", ["POST"], _post
 
@@ -39,7 +55,7 @@ class RenkuAppBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_one(_: Request, user: base_models.APIUser, app_name: str) -> JSONResponse:
             app = await self.apps_repo.get_app(user=user, app_name=app_name)
-            return json(app.as_apispec().model_dump(exclude_none=True, mode="json"))
+            return validated_json(apispec.AppResponse, self._dump_app(app))
 
         return "/apps/<app_name>", ["GET"], _get_one
 
@@ -69,7 +85,7 @@ class RenkuAppBP(CustomBlueprint):
                 state=body.state,
                 resource_class_id=body.resource_class_id,
             )
-            return json(app.as_apispec().model_dump(exclude_none=True, mode="json"))
+            return validated_json(apispec.AppResponse, self._dump_app(app))
 
         return "/apps/<app_name>", ["PATCH"], _patch_one
 
@@ -83,6 +99,6 @@ class RenkuAppBP(CustomBlueprint):
         ) -> JSONResponse:
             project_id = ULID.from_str(query.project_id) if query.project_id is not None else None
             apps = await self.apps_repo.list_apps(user=user, project_id=project_id)
-            return json([app.as_apispec().model_dump(exclude_none=True, mode="json") for app in apps])
+            return validated_json(apispec.AppListResponse, [self._dump_app(app) for app in apps])
 
         return "/apps", ["GET"], _get_all

@@ -135,6 +135,10 @@ class RenkuAppsK8sClient:
             gvk=KNATIVE_SERVICE_GVK,
             user_id=DUMMY_RENKU_APP_USER_ID,
         )
+        # TODO: This JSON patch targets the container by position (containers/0). Once apps run more
+        # than one container this becomes fragile and should be a strategic merge patch keyed on the
+        # container name. Our kr8s wrapper only emits json/merge patches (never strategic merge), so
+        # switching requires extending the wrapper first.
         patch_body: list[dict[str, Any]] = [
             {
                 "op": "replace",

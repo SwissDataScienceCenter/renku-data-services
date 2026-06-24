@@ -19,6 +19,11 @@ from renku_data_services.session.db import SessionRepository
 logger = logging.getLogger(__name__)
 
 
+def _app_not_found_message(app_name: str) -> str:
+    """Build the message for a missing or inaccessible app."""
+    return f"App with name '{app_name}' does not exist or you do not have access to it."
+
+
 class RenkuAppsRepository:
     """Use-case-focused API for Renku apps, dispatching to k8s rather than SQL."""
 
@@ -63,9 +68,7 @@ class RenkuAppsRepository:
         """Retrieve an app by its name."""
         runtime_state = await self.k8s_client.get_app_deployment(app_name)
         if runtime_state is None:
-            raise errors.MissingResourceError(
-                message=f"App with name '{app_name}' does not exist or you do not have access to it."
-            )
+            raise errors.MissingResourceError(message=_app_not_found_message(app_name))
 
         launcher = await self.session_repo.get_launcher(user, runtime_state.launcher_id)
         return build_app(launcher, runtime_state)
@@ -84,9 +87,7 @@ class RenkuAppsRepository:
 
         authorized = await self.authz.has_permission(user, ResourceType.project, launcher.project_id, Scope.WRITE)
         if not authorized:
-            raise errors.MissingResourceError(
-                message=f"App with name '{app_name}' does not exist or you do not have authorization to modify it."
-            )
+            raise errors.MissingResourceError(message=_app_not_found_message(app_name))
 
         await self.k8s_client.delete_app_deployment(app_name)
         logger.info(f"App with name {app_name} has been deleted.")
@@ -105,25 +106,21 @@ class RenkuAppsRepository:
 
         runtime_state = await self.k8s_client.get_app_deployment(app_name)
         if runtime_state is None:
-            raise errors.MissingResourceError(
-                message=f"App with name '{app_name}' does not exist or you do not have access to it."
-            )
+            raise errors.MissingResourceError(message=_app_not_found_message(app_name))
 
         launcher = await self.session_repo.get_launcher(user, runtime_state.launcher_id)
 
         authorized = await self.authz.has_permission(user, ResourceType.project, launcher.project_id, Scope.WRITE)
         if not authorized:
-            raise errors.MissingResourceError(
-                message=f"App with name '{app_name}' does not exist or you do not have authorization to modify it."
-            )
+            raise errors.MissingResourceError(message=_app_not_found_message(app_name))
 
         latest: AppRuntimeState = runtime_state
         if resource_class_id is not None:
             resource_class = await self.rp_repo.get_resource_class(user, resource_class_id)
             latest = await self.k8s_client.set_app_deployment_resources(app_name, resource_class)
-        if state == apispec.AppState.hibernated:
+        if state == apispec.AppState.hibernated and not runtime_state.is_hibernated:
             latest = await self.k8s_client.hibernate_app_deployment(app_name)
-        elif state == apispec.AppState.running:
+        elif state == apispec.AppState.running and runtime_state.is_hibernated:
             latest = await self.k8s_client.resume_app_deployment(app_name)
 
         return build_app(launcher, latest)
