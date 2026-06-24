@@ -54,3 +54,14 @@ class BaseAPISpec(BaseModel):
         if isinstance(val, PurePosixPath):
             return val.as_posix()
         return val
+
+    @field_validator("launcher_type", mode="before", check_fields=False)
+    @classmethod
+    def serialize_launcher_type(cls, launcher_type: models.LauncherType | str) -> str:
+        """Custom serializer that can handle launcher types."""
+        if launcher_type == models.LauncherType.non_interactive:
+            return "non-interactive"
+        elif isinstance(launcher_type, models.LauncherType):
+            return launcher_type.value
+
+        return launcher_type
