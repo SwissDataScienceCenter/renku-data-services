@@ -186,10 +186,28 @@ def public_only() -> SolrToken:
 
 
 def content_all(text: str) -> SolrToken:
-    """Search the content_all field with fuzzy searching each term."""
-    terms: list[SolrToken] = list(map(lambda s: SolrToken(__escape_query(s) + "~"), re.split("\\s+", text)))
-    terms_str = "(" + " ".join(terms) + ")"
-    return SolrToken(f"{Fields.content_all}:{terms_str}")
+    """Search free text across several fields, weighting better matches higher.
+
+    The text is fuzzy-matched against the broad ``content_all`` field and, with a
+    higher boost, against ``name``. A single-word query is additionally matched
+    *exactly* (no fuzzy) against ``slug`` with the highest boost. ``slug`` is an
+    untokenized ``StrField``, so that clause is what reliably matches hyphenated
+    values such as "test-project": the tokenized fields split those on the hyphen
+    and the fuzzy operator bypasses the analyzer, so only the slug clause sees the
+    value whole. Scores from all matching clauses are summed, so name/slug hits
+    rank above generic content matches. The boost factors below are tunable knobs.
+    """
+    words = [w for w in re.split(r"\s+", text) if w != ""]
+    fuzzy = " ".join(f"{__escape_query(w)}~" for w in words)
+    clauses = [
+        f"{Fields.content_all}:({fuzzy})",
+        f"{Fields.name}:({fuzzy})^10",
+    ]
+    # A slug is a single, untokenized, lowercased token, so only a whitespace-free
+    # query can match it exactly. Lowercase the term since slugs are always lowercase.
+    if len(words) == 1:
+        clauses.append(f"{Fields.slug}:{__escape_query(words[0].lower())}^20")
+    return SolrToken("(" + " OR ".join(clauses) + ")")
 
 
 def created_by_exists() -> SolrToken:
