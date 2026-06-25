@@ -140,4 +140,6 @@ def test_content_all() -> None:
         "nameKeyword:Test\\-Project^30 OR slug:test\\-project^20)"
     )
     assert st.content_all("ab cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^10 OR nameKeyword:ab\\ cd^30)"
-    assert st.content_all("ab    cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^10 OR nameKeyword:ab\\ cd^30)"
+    assert (
+        st.content_all("ab    cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^10 OR nameKeyword:ab\\ \\ \\ \\ cd^30)"
+    )

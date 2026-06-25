@@ -313,7 +313,9 @@ async def search_push_updates():
                 async with DefaultSolrAdminClient(app_manager_instance.config.solr) as admin_client:
                     res = await admin_client.reload(None)
                     assert res.status_code == 200, res.text
-            responses = await search_core.update_solr(app_manager_instance.search_updates_repo, client, 10)
+            responses = await search_core.update_solr(
+                app_manager_instance.search_updates_repo, client, 10, app_manager_instance.config.solr
+            )
             assert len(responses) == 0, responses
 
     return search_push_updates_helper

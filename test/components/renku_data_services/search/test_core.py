@@ -11,7 +11,9 @@ from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.orm import RecordState, SearchUpdatesORM
 from renku_data_services.solr.entity_documents import User
+from renku_data_services.solr.entity_schema import all_migrations
 from renku_data_services.solr.solr_client import DefaultSolrClient, SolrClientConfig, SolrQuery
+from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.users.models import UserInfo
 
 user_namespace = UserNamespace(
@@ -25,6 +27,8 @@ user_namespace = UserNamespace(
 @pytest.mark.asyncio
 async def test_update_solr(app_manager_instance, solr_search):
     run_migrations_for_app("common")
+    schema_migrator = SchemaMigrator(app_manager_instance.config.solr)
+    await schema_migrator.migrate(all_migrations)
     repo = SearchUpdatesRepo(app_manager_instance.config.db.async_session_maker)
 
     user = UserInfo(id="user123", first_name="Tadej", last_name="Pogacar", namespace=user_namespace)
@@ -37,7 +41,7 @@ async def test_update_solr(app_manager_instance, solr_search):
         before = await client.query(SolrQuery.query_all_fields("_type:*"))
         assert len(before.response.docs) == 0
 
-        await core.update_solr(repo, client, 10)
+        await core.update_solr(repo, client, 10, app_manager_instance.config.solr)
 
         result = await client.query(SolrQuery.query_all_fields("_type:*"))
         assert len(result.response.docs) == 2
@@ -46,7 +50,7 @@ async def test_update_solr(app_manager_instance, solr_search):
 
         user = UserInfo(id="user234", first_name="Greg", last_name="Larrsson", namespace=user_namespace)
         await repo.upsert(user, started_at=None)
-        await core.update_solr(repo, client, 10)
+        await core.update_solr(repo, client, 10, app_manager_instance.config.solr)
         entities = await repo.select_next(10)
         assert len(entities) == 0
         doc = await client.get("user234")
@@ -57,6 +61,8 @@ async def test_update_solr(app_manager_instance, solr_search):
 @pytest.mark.asyncio
 async def test_update_no_solr(app_manager_instance):
     run_migrations_for_app("common")
+    schema_migrator = SchemaMigrator(app_manager_instance.config.solr)
+    await schema_migrator.migrate(all_migrations)
     repo = SearchUpdatesRepo(app_manager_instance.config.db.async_session_maker)
 
     user = UserInfo(id="user123", first_name="Tadej", last_name="Pogacar", namespace=user_namespace)
@@ -69,7 +75,7 @@ async def test_update_no_solr(app_manager_instance):
 
     async with DefaultSolrClient(solr_config) as client:
         try:
-            await core.update_solr(repo, client, 10)
+            await core.update_solr(repo, client, 10, app_manager_instance.config.solr)
             raise Exception("Not expected to succeed")
         except Exception as _:
             entities = await repo.select_next(10)

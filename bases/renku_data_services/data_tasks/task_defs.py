@@ -41,7 +41,7 @@ async def update_search(dm: DependencyManager) -> None:
     """Update the SOLR with data from the search staging table."""
     while True:
         async with DefaultSolrClient(dm.config.solr) as client:
-            await search_core.update_solr(dm.search_updates_repo, client, 20)
+            await search_core.update_solr(dm.search_updates_repo, client, 20, dm.config.solr)
         await asyncio.sleep(1)
 
 

@@ -175,6 +175,17 @@ class SchemaMigrator:
             else:
                 return doc.current_schema_version_l
 
+    async def schema_is_ready(self) -> bool:
+        """Checks if all migrations have been completed."""
+        from renku_data_services.solr.entity_schema import all_migrations
+
+        async with DefaultSolrClient(self.__config) as client:
+            doc = await self.__current_version0(client)
+            if doc is None:
+                return False
+            else:
+                return doc.current_schema_version_l == all_migrations[-1].version
+
     async def __current_version0(self, client: DefaultSolrClient) -> VersionDoc | None:
         """Return the current schema version document."""
         resp = await client.get_raw(self.__docId)

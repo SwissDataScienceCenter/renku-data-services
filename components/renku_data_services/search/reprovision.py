@@ -1,13 +1,15 @@
 """Code for reprovisioning the search index."""
 
+import asyncio
 from collections.abc import AsyncGenerator, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.data_connectors.models import DataConnector, GlobalDataConnector
+from renku_data_services.errors import errors
 from renku_data_services.errors.errors import ForbiddenError
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.message_queue.models import Reprovisioning
@@ -45,9 +47,22 @@ class SearchReprovision:
         self._group_repo = group_repo
         self._project_repo = project_repo
         self._data_connector_repo = data_connector_repo
+        self._migrator = SchemaMigrator(solr_config)
 
     async def run_reprovision(self, admin: APIUser, migrate_solr_schema: bool = True) -> int:
         """Start a reprovisioning if not already running."""
+        migration_timeout = timedelta(minutes=2)
+        start = datetime.now()
+        while True:
+            schema_ready = await self._migrator.schema_is_ready()
+            if schema_ready:
+                break
+            if datetime.now() - start > migration_timeout:
+                raise errors.ProgrammingError(
+                    message="Reproviosioning could not start because a solr schema migration "
+                    f"is needed first and is taking longer than {migration_timeout}"
+                )
+            await asyncio.sleep(5)
         reprovision = await self.acquire_reprovision()
         return await self.init_reprovision(admin, reprovision, migrate_solr_schema)
 
