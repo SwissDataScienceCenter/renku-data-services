@@ -178,7 +178,9 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
             logger.info(f"Inserting {size} resource request records.")
         await self._repo.insert_many(result)
         if self._metering is not None:
-            await self._metering.emit(result)
+            class_ids = {r.resource_class_id for r in result if r.resource_class_id is not None}
+            costs = await self._repo.get_costs_by_class_ids(class_ids)
+            await self._metering.emit(result, costs)
 
 
 class ResourceUsageService:

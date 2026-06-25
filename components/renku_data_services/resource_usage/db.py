@@ -84,6 +84,11 @@ class ResourceRequestsRepo:
                     session.add_all(vals)
                     await session.flush()
 
+    async def get_costs_by_class_ids(self, ids: set[int]) -> dict[int, Credit]:
+        """Return a mapping of resource_class_id to Credit for the given ids."""
+        async with self.session_maker() as session:
+            return await self._get_all_costs(session, ids)
+
     async def _get_all_costs(self, session: AsyncSession, ids: set[int]) -> dict[int, Credit]:
         stmt = sa.select(ResourceClassCostORM.id, ResourceClassCostORM.cost).where(ResourceClassCostORM.id.in_(ids))
         rows = await session.execute(stmt)
