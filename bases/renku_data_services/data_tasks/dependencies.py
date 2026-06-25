@@ -25,6 +25,7 @@ from renku_data_services.resource_usage.core import (
     ResourcesRequestRecorder,
     ResourceUsageService,
 )
+from renku_data_services.resource_usage.metering import MeteringClient
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.session.db import SessionRepository
@@ -123,8 +124,15 @@ class DependencyManager:
 
         resource_requests_recorder: ResourcesRequestRecorder
         if cfg.enable_resource_request_tracking:
+            metering_client = (
+                MeteringClient(endpoint_url=cfg.metering.endpoint_url, token=cfg.metering.token)
+                if cfg.metering.enabled
+                else None
+            )
             resource_requests_recorder = DefaultResourcesRequestRecorder(
-                repo=resource_requests_repo, fetch=ResourceRequestsFetch(k8s_client)
+                repo=resource_requests_repo,
+                fetch=ResourceRequestsFetch(k8s_client),
+                metering=metering_client,
             )
         else:
             logger.warning("Resource request tracking is disabled!")
