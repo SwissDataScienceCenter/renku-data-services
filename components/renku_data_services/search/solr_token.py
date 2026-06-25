@@ -196,7 +196,7 @@ def content_all(text: str) -> SolrToken:
     ranks it first, regardless of spaces, hyphens or underscores. A single-word
     query is additionally matched exactly against the untokenized ``slug``. Scores
     from all matching clauses are summed, so name/title hits rank above generic
-    content matches. The boost factors below are tunable knobs.
+    content matches.
     """
     words = [w for w in re.split(r"\s+", text) if w != ""]
     fuzzy = " ".join(f"{__escape_query(w)}~" for w in words)
@@ -205,8 +205,8 @@ def content_all(text: str) -> SolrToken:
         f"{Fields.name}:({fuzzy})^2",
         # Exact, case-insensitive match of the whole title. nameKeyword is
         # untokenized (it keeps spaces), and its query analyzer lowercases, so we
-        # only need to escape the text (escaping the spaces keeps it one term).
-        # Build it from `words` so runs of whitespace collapse to single spaces.
+        # only need to escape the text. If we use words we will lose the spaces.
+        # But we want the spaces so that we can have a strong score on exact name matches.
         f"{Fields.name_keyword}:{__escape_query(text.strip())}^10",
     ]
     # A slug is a single, untokenized, lowercased token, so only a whitespace-free
