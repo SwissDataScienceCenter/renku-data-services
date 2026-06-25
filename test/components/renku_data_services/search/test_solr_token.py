@@ -130,8 +130,14 @@ def test_created_by_exists() -> None:
 
 
 def test_content_all() -> None:
-    assert st.content_all("abc") == "(content_all:(abc~) OR name:(abc~)^10 OR slug:abc^20)"
-    assert st.content_all("a+b+c") == "(content_all:(a\\+b\\+c~) OR name:(a\\+b\\+c~)^10 OR slug:a\\+b\\+c^20)"
-    assert st.content_all("Test-Project") == "(content_all:(Test\\-Project~) OR name:(Test\\-Project~)^10 OR slug:test\\-project^20)"
-    assert st.content_all("ab cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^10)"
-    assert st.content_all("ab    cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^10)"
+    assert st.content_all("abc") == "(content_all:(abc~) OR name:(abc~)^10 OR nameKeyword:abc^30 OR slug:abc^20)"
+    assert (
+        st.content_all("a+b+c")
+        == "(content_all:(a\\+b\\+c~) OR name:(a\\+b\\+c~)^10 OR nameKeyword:a\\+b\\+c^30 OR slug:a\\+b\\+c^20)"
+    )
+    assert (
+        st.content_all("Test-Project")
+        == "(content_all:(Test\\-Project~) OR name:(Test\\-Project~)^10 OR nameKeyword:Test\\-Project^30 OR slug:test\\-project^20)"
+    )
+    assert st.content_all("ab cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^10 OR nameKeyword:ab\\ cd^30)"
+    assert st.content_all("ab    cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^10 OR nameKeyword:ab\\ cd^30)"

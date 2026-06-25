@@ -189,19 +189,25 @@ def content_all(text: str) -> SolrToken:
     """Search free text across several fields, weighting better matches higher.
 
     The text is fuzzy-matched against the broad ``content_all`` field and, with a
-    higher boost, against ``name``. A single-word query is additionally matched
-    *exactly* (no fuzzy) against ``slug`` with the highest boost. ``slug`` is an
-    untokenized ``StrField``, so that clause is what reliably matches hyphenated
-    values such as "test-project": the tokenized fields split those on the hyphen
-    and the fuzzy operator bypasses the analyzer, so only the slug clause sees the
-    value whole. Scores from all matching clauses are summed, so name/slug hits
-    rank above generic content matches. The boost factors below are tunable knobs.
+    higher boost, against ``name``. The whole text is also matched *exactly* (no
+    fuzzy) against ``nameKeyword`` with the highest boost: that field is a
+    ``keyword`` type that keeps the entire title -- including spaces -- as a single,
+    case-insensitive token, so typing a project's exact title reliably matches and
+    ranks it first, regardless of spaces, hyphens or underscores. A single-word
+    query is additionally matched exactly against the untokenized ``slug``. Scores
+    from all matching clauses are summed, so name/title hits rank above generic
+    content matches. The boost factors below are tunable knobs.
     """
     words = [w for w in re.split(r"\s+", text) if w != ""]
     fuzzy = " ".join(f"{__escape_query(w)}~" for w in words)
     clauses = [
         f"{Fields.content_all}:({fuzzy})",
         f"{Fields.name}:({fuzzy})^10",
+        # Exact, case-insensitive match of the whole title. nameKeyword is
+        # untokenized (it keeps spaces), and its query analyzer lowercases, so we
+        # only need to escape the text (escaping the spaces keeps it one term).
+        # Build it from `words` so runs of whitespace collapse to single spaces.
+        f"{Fields.name_keyword}:{__escape_query(' '.join(words))}^30",
     ]
     # A slug is a single, untokenized, lowercased token, so only a whitespace-free
     # query can match it exactly. Lowercase the term since slugs are always lowercase.
