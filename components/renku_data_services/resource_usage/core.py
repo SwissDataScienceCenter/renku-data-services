@@ -11,6 +11,7 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.resource_usage import apispec
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.resource_usage.metering import MeteringClient
 from renku_data_services.resource_usage.model import (
     Credit,
     ResourceClassCost,
@@ -155,9 +156,15 @@ class NoopResourcesRequestRecorder(ResourcesRequestRecorder):
 class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
     """Methods for recording resource requests."""
 
-    def __init__(self, repo: ResourceRequestsRepo, fetch: ResourceRequestsFetchProto) -> None:
+    def __init__(
+        self,
+        repo: ResourceRequestsRepo,
+        fetch: ResourceRequestsFetchProto,
+        metering: MeteringClient | None = None,
+    ) -> None:
         self._repo = repo
         self._fetch = fetch
+        self._metering = metering
 
     async def record_resource_requests(self, interval: timedelta) -> None:
         """Fetches all resource requests in the given namespace and stores them."""
@@ -170,6 +177,8 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
         else:
             logger.info(f"Inserting {size} resource request records.")
         await self._repo.insert_many(result)
+        if self._metering is not None:
+            await self._metering.emit(result)
 
 
 class ResourceUsageService:
