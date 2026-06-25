@@ -136,8 +136,8 @@ def test_content_all() -> None:
         == "(content_all:(a\\+b\\+c~) OR name:(a\\+b\\+c~)^10 OR nameKeyword:a\\+b\\+c^30 OR slug:a\\+b\\+c^20)"
     )
     assert (
-        st.content_all("Test-Project")
-        == "(content_all:(Test\\-Project~) OR name:(Test\\-Project~)^10 OR nameKeyword:Test\\-Project^30 OR slug:test\\-project^20)"
+        st.content_all("Test-Project") == "(content_all:(Test\\-Project~) OR name:(Test\\-Project~)^10 OR "
+        "nameKeyword:Test\\-Project^30 OR slug:test\\-project^20)"
     )
     assert st.content_all("ab cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^10 OR nameKeyword:ab\\ cd^30)"
     assert st.content_all("ab    cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^10 OR nameKeyword:ab\\ cd^30)"

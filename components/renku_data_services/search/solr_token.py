@@ -207,7 +207,7 @@ def content_all(text: str) -> SolrToken:
         # untokenized (it keeps spaces), and its query analyzer lowercases, so we
         # only need to escape the text (escaping the spaces keeps it one term).
         # Build it from `words` so runs of whitespace collapse to single spaces.
-        f"{Fields.name_keyword}:{__escape_query(' '.join(words))}^30",
+        f"{Fields.name_keyword}:{__escape_query(text.strip())}^30",
     ]
     # A slug is a single, untokenized, lowercased token, so only a whitespace-free
     # query can match it exactly. Lowercase the term since slugs are always lowercase.
