@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import Iterable
 from datetime import UTC, datetime
+from typing import Literal
 
 from authzed.api.v1 import (
     AsyncClient as AuthzClient,
@@ -45,14 +46,18 @@ logger = logging.getLogger(__name__)
 
 
 async def update_solr(
-    search_updates_repo: SearchUpdatesRepo, solr_client: SolrClient, batch_size: int, solr_config: SolrClientConfig
+    search_updates_repo: SearchUpdatesRepo,
+    solr_client: SolrClient,
+    batch_size: int,
+    solr_config: SolrClientConfig,
+    schema_version: Literal["latest"] | int = "latest",
 ) -> list[Exception]:
     """Selects entries from the search staging table and updates SOLR."""
     counter = 0
     output: list[Exception] = []
     migrator = SchemaMigrator(solr_config)
     while True:
-        schema_ready = await migrator.schema_is_ready()
+        schema_ready = await migrator.schema_version_is(schema_version)
         if not schema_ready:
             await asyncio.sleep(2)
             continue

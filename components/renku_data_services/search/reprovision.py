@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import AsyncGenerator, Callable
 from datetime import datetime, timedelta
+from typing import Literal
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
@@ -49,22 +50,27 @@ class SearchReprovision:
         self._data_connector_repo = data_connector_repo
         self._migrator = SchemaMigrator(solr_config)
 
-    async def run_reprovision(self, admin: APIUser, migrate_solr_schema: bool = True) -> int:
-        """Start a reprovisioning if not already running."""
-        migration_timeout = timedelta(minutes=2)
+    async def _wait_schema_version(
+        self, version: Literal["latest"] | int = "latest", timeout: timedelta = timedelta(minutes=2)
+    ) -> None:
         start = datetime.now()
         while True:
-            schema_ready = await self._migrator.schema_is_ready()
+            schema_ready = await self._migrator.schema_version_is(version)
             if schema_ready:
                 break
-            if datetime.now() - start > migration_timeout:
+            if datetime.now() - start > timeout:
                 raise errors.ProgrammingError(
                     message="Reproviosioning could not start because a solr schema migration "
-                    f"is needed first and is taking longer than {migration_timeout}"
+                    f"is needed first and is taking longer than {timeout}"
                 )
             await asyncio.sleep(5)
+
+    async def run_reprovision(
+        self, admin: APIUser, migrate_solr_schema: bool = True, schema_version: Literal["latest"] | int = "latest"
+    ) -> int:
+        """Start a reprovisioning if not already running."""
         reprovision = await self.acquire_reprovision()
-        return await self.init_reprovision(admin, reprovision, migrate_solr_schema)
+        return await self.init_reprovision(admin, reprovision, migrate_solr_schema, schema_version)
 
     async def acquire_reprovision(self) -> Reprovisioning:
         """Acquire a reprovisioning slot. Throws if already taken."""
@@ -93,7 +99,11 @@ class SearchReprovision:
                 yield dc
 
     async def init_reprovision(
-        self, admin: APIUser, reprovisioning: Reprovisioning, migrate_solr_schema: bool = True
+        self,
+        admin: APIUser,
+        reprovisioning: Reprovisioning,
+        migrate_solr_schema: bool = True,
+        schema_version: Literal["latest"] | int = "latest",
     ) -> int:
         """Initiates reprovisioning by inserting documents into the staging table.
 
@@ -110,6 +120,9 @@ class SearchReprovision:
         def log_counter(c: int) -> None:
             if c % 50 == 0:
                 logger.info(f"Inserted {c}. entities into staging table...")
+
+        if not migrate_solr_schema:
+            await self._wait_schema_version(schema_version)
 
         migrator = SchemaMigrator(self._solr_config)
         counter = 0
@@ -135,7 +148,11 @@ class SearchReprovision:
                         )
 
             if migrate_solr_schema:
-                await migrator.migrate(entity_schema.all_migrations)
+                if schema_version == "latest":
+                    migrations = entity_schema.all_migrations
+                else:
+                    migrations = [i for i in entity_schema.all_migrations if i.version <= schema_version]
+                await migrator.migrate(migrations)
 
             all_users = self._user_repo.get_all_users(requested_by=admin)
             counter = await self.__update_entities(all_users, "user", started, counter, log_counter)

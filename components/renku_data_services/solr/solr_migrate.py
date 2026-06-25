@@ -1,7 +1,7 @@
 """Manage solr schema migrations."""
 
 from dataclasses import dataclass
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import pydantic
 from pydantic import AliasChoices, BaseModel
@@ -175,7 +175,7 @@ class SchemaMigrator:
             else:
                 return doc.current_schema_version_l
 
-    async def schema_is_ready(self) -> bool:
+    async def schema_version_is(self, version: Literal["latest"] | int = "latest") -> bool:
         """Checks if all migrations have been completed."""
         from renku_data_services.solr.entity_schema import all_migrations
 
@@ -184,7 +184,8 @@ class SchemaMigrator:
             if doc is None:
                 return False
             else:
-                return doc.current_schema_version_l == all_migrations[-1].version
+                target_version = all_migrations[-1].version if version == "latest" else version
+                return doc.current_schema_version_l == target_version
 
     async def __current_version0(self, client: DefaultSolrClient) -> VersionDoc | None:
         """Return the current schema version document."""

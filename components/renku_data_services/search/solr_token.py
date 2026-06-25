@@ -202,17 +202,17 @@ def content_all(text: str) -> SolrToken:
     fuzzy = " ".join(f"{__escape_query(w)}~" for w in words)
     clauses = [
         f"{Fields.content_all}:({fuzzy})",
-        f"{Fields.name}:({fuzzy})^10",
+        f"{Fields.name}:({fuzzy})^2",
         # Exact, case-insensitive match of the whole title. nameKeyword is
         # untokenized (it keeps spaces), and its query analyzer lowercases, so we
         # only need to escape the text (escaping the spaces keeps it one term).
         # Build it from `words` so runs of whitespace collapse to single spaces.
-        f"{Fields.name_keyword}:{__escape_query(text.strip())}^30",
+        f"{Fields.name_keyword}:{__escape_query(text.strip())}^10",
     ]
     # A slug is a single, untokenized, lowercased token, so only a whitespace-free
     # query can match it exactly. Lowercase the term since slugs are always lowercase.
     if len(words) == 1:
-        clauses.append(f"{Fields.slug}:{__escape_query(words[0].lower())}^20")
+        clauses.append(f"{Fields.slug}:{__escape_query(words[0].lower())}^5")
     return SolrToken("(" + " OR ".join(clauses) + ")")
 
 

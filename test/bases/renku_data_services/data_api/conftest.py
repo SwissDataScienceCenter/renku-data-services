@@ -4,7 +4,7 @@ import json
 from collections.abc import AsyncGenerator, Callable
 from copy import deepcopy
 from datetime import timedelta
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import pytest
 import pytest_asyncio
@@ -287,7 +287,13 @@ async def sanic_client_with_solr(sanic_client: SanicASGITestClient, app_manager)
 class SearchReprovisionCall(Protocol):
     """The type for the `search_reprovision` fixture."""
 
-    async def __call__(self, app_manager_instance: DependencyManager, migrate_solr_schema: bool = True) -> None: ...
+    async def __call__(
+        self,
+        app_manager_instance: DependencyManager,
+        migrate_solr_schema: bool = True,
+        clear_index: bool = False,
+        schema_version: Literal["latest"] | int = "latest",
+    ) -> None: ...
 
 
 @pytest_asyncio.fixture
@@ -295,17 +301,24 @@ async def search_reprovision(search_push_updates) -> SearchReprovisionCall:
     admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
 
     async def search_reprovision_helper(
-        app_manager_instance: DependencyManager, migrate_solr_schema: bool = True, clear_index: bool = False
+        app_manager_instance: DependencyManager,
+        migrate_solr_schema: bool = True,
+        clear_index: bool = False,
+        schema_version: Literal["latest"] | int = "latest",
     ) -> None:
-        await app_manager_instance.search_reprovisioning.run_reprovision(admin, migrate_solr_schema)
-        await search_push_updates(app_manager_instance, clear_index=clear_index)
+        await app_manager_instance.search_reprovisioning.run_reprovision(admin, migrate_solr_schema, schema_version)
+        await search_push_updates(app_manager_instance, clear_index=clear_index, schema_version=schema_version)
 
     return search_reprovision_helper
 
 
 @pytest_asyncio.fixture
 async def search_push_updates():
-    async def search_push_updates_helper(app_manager_instance: DependencyManager, clear_index: bool = False) -> None:
+    async def search_push_updates_helper(
+        app_manager_instance: DependencyManager,
+        clear_index: bool = False,
+        schema_version: Literal["latest"] | int = "latest",
+    ) -> None:
         async with DefaultSolrClient(app_manager_instance.config.solr) as client:
             if clear_index:
                 res = await client.delete("_type:*")
@@ -314,7 +327,11 @@ async def search_push_updates():
                     res = await admin_client.reload(None)
                     assert res.status_code == 200, res.text
             responses = await search_core.update_solr(
-                app_manager_instance.search_updates_repo, client, 10, app_manager_instance.config.solr
+                app_manager_instance.search_updates_repo,
+                client,
+                10,
+                app_manager_instance.config.solr,
+                schema_version,
             )
             assert len(responses) == 0, responses
 
