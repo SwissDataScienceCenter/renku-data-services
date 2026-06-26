@@ -61,7 +61,7 @@ class MeteringClient:
         """POST all resource requests as a CloudEvents batch. Never raises."""
         if not requests:
             return
-        events = [_to_cloudevent(r, costs) for r in requests]
+        events = [_to_cloudevent(r, costs) for r in requests if r.resource_class_id is not None]
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(self._endpoint_url, headers=self._headers, json=events)
