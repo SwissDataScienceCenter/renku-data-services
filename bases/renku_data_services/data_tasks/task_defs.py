@@ -445,7 +445,7 @@ async def cleanup_orphaned_capacity_reservations(dm: DependencyManager) -> None:
 
 async def record_resource_requests(dm: DependencyManager) -> None:
     """Periodically record all resource requests."""
-    interval_seconds = 600
+    interval_seconds = 30 # increase before merging
     while True:
         await dm.resource_requests_recorder.record_resource_requests(timedelta(seconds=interval_seconds))
         await asyncio.sleep(interval_seconds)

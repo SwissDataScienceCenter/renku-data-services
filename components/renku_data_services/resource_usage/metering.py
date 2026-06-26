@@ -70,7 +70,7 @@ class MeteringClient:
                         f"Metering endpoint returned unexpected status {resp.status_code}: {resp.text[:200]}"
                     )
                 else:
-                    logger.debug(f"Emitted {len(events)} metering events, status={resp.status_code}")
+                    logger.info(f"Emitted {len(events)} metering events, status={resp.status_code}")
         except httpx.HTTPError as ex:
             logger.warning(f"Failed to emit metering events: {ex}", exc_info=ex)
         except Exception as ex:
