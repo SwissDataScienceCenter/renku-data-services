@@ -3,7 +3,6 @@
 import asyncio
 from collections.abc import Iterable
 from datetime import UTC, datetime
-from typing import Literal
 
 from authzed.api.v1 import (
     AsyncClient as AuthzClient,
@@ -40,7 +39,6 @@ from renku_data_services.solr.solr_client import (
     SolrQuery,
     SubQuery,
 )
-from renku_data_services.solr.solr_migrate import SchemaMigrator
 
 logger = logging.getLogger(__name__)
 
@@ -49,17 +47,11 @@ async def update_solr(
     search_updates_repo: SearchUpdatesRepo,
     solr_client: SolrClient,
     batch_size: int,
-    schema_version: Literal["latest"] | int = "latest",
 ) -> list[Exception]:
     """Selects entries from the search staging table and updates SOLR."""
     counter = 0
     output: list[Exception] = []
-    migrator = SchemaMigrator(solr_client.config)
     while True:
-        schema_ready = await migrator.schema_version_is(schema_version)
-        if not schema_ready:
-            await asyncio.sleep(2)
-            continue
         entries = await search_updates_repo.select_next(batch_size)
         if entries == []:
             break

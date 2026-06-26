@@ -1,12 +1,16 @@
 """Manage solr schema migrations."""
 
+import asyncio
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any, Literal, Self
 
 import pydantic
 from pydantic import AliasChoices, BaseModel
 
 from renku_data_services.app_config import logging
+from renku_data_services.errors import errors
+from renku_data_services.solr.constants import SOLR_VERSION_DEFAULT_TIMEOUT
 from renku_data_services.solr.solr_client import (
     DefaultSolrAdminClient,
     DefaultSolrClient,
@@ -176,7 +180,7 @@ class SchemaMigrator:
                 return doc.current_schema_version_l
 
     async def schema_version_is(self, version: Literal["latest"] | int = "latest") -> bool:
-        """Checks if all migrations have been completed."""
+        """Checks if the current migration in solr is >= the version passed in the function have been completed."""
         from renku_data_services.solr.entity_schema import all_migrations
 
         async with DefaultSolrClient(self.__config) as client:
@@ -185,7 +189,23 @@ class SchemaMigrator:
                 return False
             else:
                 target_version = all_migrations[-1].version if version == "latest" else version
-                return doc.current_schema_version_l == target_version
+                return doc.current_schema_version_l >= target_version
+
+    async def wait_for_schema_version(
+        self, version: Literal["latest"] | int = "latest", timeout: timedelta = SOLR_VERSION_DEFAULT_TIMEOUT
+    ) -> None:
+        """Waits for the schema in Solr to reach or pass the indicated version."""
+        start = datetime.now()
+        while True:
+            reached_version = await self.schema_version_is(version)
+            if reached_version:
+                break
+            if datetime.now() - start > timeout:
+                raise errors.ProgrammingError(
+                    message=f"Waiting for the Solr schema version to reach {version} "
+                    f"has timed out after {timeout.total_seconds} seconds."
+                )
+            await asyncio.sleep(2)
 
     async def __current_version0(self, client: DefaultSolrClient) -> VersionDoc | None:
         """Return the current schema version document."""
@@ -200,7 +220,11 @@ class SchemaMigrator:
                 return VersionDoc.model_validate(docs[0])
 
     async def migrate(self, migrations: list[SchemaMigration]) -> MigrateResult:
-        """Run all given migrations, skipping those that have been done before."""
+        """Run all given migrations, skipping those that have been done before.
+
+        If you call this but a migration is already underway then it will wait until
+        the migrations are all complete.
+        """
         async with DefaultSolrClient(self.__config) as client:
             initial_doc = await self.__current_version0(client)
             if initial_doc is None:
@@ -213,6 +237,9 @@ class SchemaMigrator:
 
             if initial_doc.migration_running_b:
                 logger.info("A solr migration is already running")
+                if len(migrations) == 0:
+                    return MigrateResult.empty()
+                await self.wait_for_schema_version(version=migrations[-1].version)
                 return MigrateResult.empty()
             else:
                 initial_doc.migration_running_b = True

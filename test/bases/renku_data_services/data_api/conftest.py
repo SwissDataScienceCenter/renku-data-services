@@ -292,7 +292,6 @@ class SearchReprovisionCall(Protocol):
         app_manager_instance: DependencyManager,
         migrate_solr_schema: bool = True,
         clear_index: bool = False,
-        schema_version: Literal["latest"] | int = "latest",
     ) -> None: ...
 
 
@@ -307,7 +306,7 @@ async def search_reprovision(search_push_updates) -> SearchReprovisionCall:
         schema_version: Literal["latest"] | int = "latest",
     ) -> None:
         await app_manager_instance.search_reprovisioning.run_reprovision(admin, migrate_solr_schema, schema_version)
-        await search_push_updates(app_manager_instance, clear_index=clear_index, schema_version=schema_version)
+        await search_push_updates(app_manager_instance, clear_index=clear_index)
 
     return search_reprovision_helper
 
@@ -317,7 +316,6 @@ async def search_push_updates():
     async def search_push_updates_helper(
         app_manager_instance: DependencyManager,
         clear_index: bool = False,
-        schema_version: Literal["latest"] | int = "latest",
     ) -> None:
         async with DefaultSolrClient(app_manager_instance.config.solr) as client:
             if clear_index:
@@ -330,7 +328,6 @@ async def search_push_updates():
                 app_manager_instance.search_updates_repo,
                 client,
                 10,
-                schema_version,
             )
             assert len(responses) == 0, responses
 
