@@ -330,7 +330,6 @@ async def search_push_updates():
                 app_manager_instance.search_updates_repo,
                 client,
                 10,
-                app_manager_instance.config.solr,
                 schema_version,
             )
             assert len(responses) == 0, responses

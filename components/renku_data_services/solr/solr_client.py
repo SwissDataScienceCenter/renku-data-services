@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
@@ -624,12 +624,18 @@ class SolrClient(AbstractAsyncContextManager, ABC):
         """Delete data that matches the `query`."""
         ...
 
+    @property
+    @abstractmethod
+    def config(self) -> SolrClientConfig:
+        """Get the config for the client."""
+        ...
+
 
 class DefaultSolrClient(SolrClient):
     """Default implementation of the solr client."""
 
     def __init__(self, cfg: SolrClientConfig):
-        self.config = cfg
+        self.__config = cfg
         url_parsed = list(urlparse(cfg.base_url))
         url_parsed[2] = urljoin(url_parsed[2], f"/solr/{cfg.core}")
         burl = urlunparse(url_parsed)
@@ -638,6 +644,11 @@ class DefaultSolrClient(SolrClient):
 
     def __repr__(self) -> str:
         return f"DefaultSolrClient(delegate={self.delegate}, config={self.config})"
+
+    @property
+    def config(self) -> SolrClientConfig:
+        """The client config."""
+        return self.__config
 
     async def __aenter__(self) -> Self:
         await self.delegate.__aenter__()
@@ -770,9 +781,14 @@ class DefaultSolrAdminClient(SolrAdminClient):
     """
 
     def __init__(self, cfg: SolrClientConfig):
-        self.config = cfg
+        self.__config = cfg
         bauth = BasicAuth(username=cfg.user.username, password=cfg.user.password) if cfg.user is not None else None
         self.delegate = AsyncClient(auth=bauth, base_url=self.config.base_url, timeout=cfg.timeout)
+
+    @property
+    def config(self) -> SolrClientConfig:
+        """The client config."""
+        return self.__config
 
     async def __aenter__(self) -> Self:
         await self.delegate.__aenter__()

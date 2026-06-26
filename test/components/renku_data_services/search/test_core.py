@@ -41,7 +41,7 @@ async def test_update_solr(app_manager_instance, solr_search):
         before = await client.query(SolrQuery.query_all_fields("_type:*"))
         assert len(before.response.docs) == 0
 
-        await core.update_solr(repo, client, 10, app_manager_instance.config.solr)
+        await core.update_solr(repo, client, 10)
 
         result = await client.query(SolrQuery.query_all_fields("_type:*"))
         assert len(result.response.docs) == 2
@@ -50,7 +50,7 @@ async def test_update_solr(app_manager_instance, solr_search):
 
         user = UserInfo(id="user234", first_name="Greg", last_name="Larrsson", namespace=user_namespace)
         await repo.upsert(user, started_at=None)
-        await core.update_solr(repo, client, 10, app_manager_instance.config.solr)
+        await core.update_solr(repo, client, 10)
         entities = await repo.select_next(10)
         assert len(entities) == 0
         doc = await client.get("user234")
@@ -75,7 +75,7 @@ async def test_update_no_solr(app_manager_instance):
 
     async with DefaultSolrClient(solr_config) as client:
         try:
-            await core.update_solr(repo, client, 10, app_manager_instance.config.solr)
+            await core.update_solr(repo, client, 10)
             raise Exception("Not expected to succeed")
         except Exception as _:
             entities = await repo.select_next(10)
