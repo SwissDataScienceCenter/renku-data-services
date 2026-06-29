@@ -19,6 +19,7 @@ from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.k8s.models import GVK, APIObjectInCluster, K8sObject, K8sObjectFilter
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.notebooks.crs import State
 
 logger = logging.getLogger(__name__)
@@ -189,8 +190,32 @@ async def collect_metrics(
     rp_repo: ResourcePoolQueryRepository,
 ) -> None:
     """Track product metrics."""
-    user = APIUser(id=user_id)
+    # Dispatch metric collection by kind
+    match new_obj.meta.gvk:
+        case gvk if gvk == AMALTHEA_SESSION_GVK:
+            await __collect_session_metrics(
+                previous_obj=previous_obj,
+                new_obj=new_obj,
+                event_type=event_type,
+                user_id=user_id,
+                metrics=metrics,
+                rp_repo=rp_repo,
+            )
+        case _:
+            # NOTE: at the moment, we only collect metrics on sessions
+            pass
 
+
+async def __collect_session_metrics(
+    previous_obj: K8sObject | None,
+    new_obj: APIObjectInCluster,
+    event_type: str,
+    user_id: str,
+    metrics: MetricsService,
+    rp_repo: ResourcePoolQueryRepository,
+) -> None:
+    """Track product metrics for sessions."""
+    user = APIUser(id=user_id)
     if event_type == "DELETED":
         # session stopping
         await metrics.session_stopped(user=user, metadata={"session_id": new_obj.meta.name})
