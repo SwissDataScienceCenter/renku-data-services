@@ -639,6 +639,7 @@ class ResourcePoolRepository(_Base):
                 # Remove the existing quota
                 await self.quotas_repo.delete_quota(name=rp.quota, cluster_id=cluster_id)
                 rp.quota = None
+                quota = None
             elif isinstance(update.quota, models.QuotaPatch) and rp.quota is None:
                 # Create a new quota, the `update.quota` object has already been validated
                 assert update.quota.cpu is not None
