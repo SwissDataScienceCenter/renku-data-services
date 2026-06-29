@@ -83,7 +83,6 @@ class RenkuAppBP(CustomBlueprint):
                 user=user,
                 app_name=app_name,
                 state=body.state,
-                resource_class_id=body.resource_class_id,
             )
             return validated_json(apispec.AppResponse, self._dump_app(app))
 

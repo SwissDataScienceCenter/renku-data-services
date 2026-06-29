@@ -98,7 +98,6 @@ class RenkuAppsRepository:
         user: base_models.APIUser,
         app_name: str,
         state: apispec.AppState | None = None,
-        resource_class_id: int | None = None,
     ) -> App:
         """Update an app."""
         if not user.is_authenticated or user.id is None:
@@ -115,12 +114,12 @@ class RenkuAppsRepository:
             raise errors.MissingResourceError(message=_app_not_found_message(app_name))
 
         latest: AppRuntimeState = runtime_state
-        if resource_class_id is not None:
-            resource_class = await self.rp_repo.get_resource_class(user, resource_class_id)
-            latest = await self.k8s_client.set_app_deployment_resources(app_name, resource_class)
         if state == apispec.AppState.hibernated and not runtime_state.is_hibernated:
             latest = await self.k8s_client.hibernate_app_deployment(app_name)
         elif state == apispec.AppState.running and runtime_state.is_hibernated:
+            if launcher.resource_class_id is not None:
+                resource_class = await self.rp_repo.get_resource_class(user, launcher.resource_class_id)
+                await self.k8s_client.set_app_deployment_resources(app_name, resource_class)
             latest = await self.k8s_client.resume_app_deployment(app_name)
 
         return build_app(launcher, latest)
