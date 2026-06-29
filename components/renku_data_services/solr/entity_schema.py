@@ -31,6 +31,7 @@ class Fields:
     last_name: Final[FieldName] = FieldName("lastName")
     members: Final[FieldName] = FieldName("members")
     name: Final[FieldName] = FieldName("name")
+    name_keyword: Final[FieldName] = FieldName("nameKeyword")
     repositories: Final[FieldName] = FieldName("repositories")
     slug: Final[FieldName] = FieldName("slug")
     visibility: Final[FieldName] = FieldName("visibility")
@@ -85,6 +86,38 @@ class Analyzers:
         filters=[Filters.lowercase],
     )
 
+    # Analyzers for the `name` field only. Unlike `text_index`, these use the
+    # whitespace tokenizer so hyphenated values stay intact long enough for the
+    # wordDelimiterGraph filter to split them. That filter then emits the word
+    # parts ("test", "project"), the catenated form ("testproject") and -- via
+    # preserveOriginal -- the whole token ("test-project"), so the name field
+    # matches all of those (including the hyphenated whole, which the fuzzy query
+    # operator can only hit because preserveOriginal keeps it in the index).
+    name_index: Final[Analyzer] = Analyzer(
+        tokenizer=Tokenizers.whitespace,
+        filters=[
+            Filters.word_delimiter_graph(catenate=True, preserve_original=True),
+            Filters.flatten_graph,
+            Filters.lowercase,
+            Filters.stop,
+            Filters.english_minimal_stem,
+            Filters.ascii_folding,
+            Filters.edgeNgram(2, 8, True),
+        ],
+    )
+
+    name_query: Final[Analyzer] = Analyzer(
+        tokenizer=Tokenizers.whitespace,
+        filters=[
+            # No catenate or flattenGraph at query time; the parser handles the graph.
+            Filters.word_delimiter_graph(catenate=False, preserve_original=True),
+            Filters.lowercase,
+            Filters.stop,
+            Filters.english_minimal_stem,
+            Filters.ascii_folding,
+        ],
+    )
+
 
 class FieldTypes:
     """A collection of field types."""
@@ -97,6 +130,14 @@ class FieldTypes:
         .with_index_analyzer(Analyzers.text_index)
         .with_query_analyzer(Analyzers.text_query)
     )
+    text_name: Final[FieldType] = (
+        FieldType.text(TypeName("SearchTextName"))
+        .with_index_analyzer(Analyzers.name_index)
+        .with_query_analyzer(Analyzers.name_query)
+    )
+    """Like `text`, but splits hyphenated/camelCase tokens into parts while also
+    keeping the whole and catenated forms. Used only for the `name` field."""
+
     text_all: Final[FieldType] = (
         FieldType.text(TypeName("SearchTextAll"))
         .with_index_analyzer(Analyzers.text_index)
@@ -186,6 +227,19 @@ all_migrations: Final[list[SchemaMigration]] = [
         version=14,
         commands=[
             ReplaceCommand(Field.of(Fields.keywords, FieldTypes.keyword).make_multi_valued()),
+        ],
+        requires_reindex=True,
+    ),
+    SchemaMigration(
+        version=15,
+        commands=[
+            AddCommand(FieldTypes.text_name),
+            ReplaceCommand(Field.of(Fields.name, FieldTypes.text_name)),
+            # An untokenized, case-insensitive copy of the name (FieldTypes.keyword
+            # keeps the whole value including spaces as a single token) so an exact
+            # title can be matched/boosted regardless of spaces or other separators.
+            AddCommand(Field.of(Fields.name_keyword, FieldTypes.keyword)),
+            AddCommand(CopyFieldRule(source=Fields.name, dest=Fields.name_keyword)),
         ],
         requires_reindex=True,
     ),

@@ -98,6 +98,7 @@ from renku_data_services.notebooks.models import (
     SessionExtraResources,
     SessionLaunchRequest,
     SessionType,
+    SubmissionId,
 )
 from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
@@ -856,8 +857,15 @@ async def start_session(
     """
     launcher = await session_repo.get_launcher(user=user, launcher_id=launch_request.launcher_id)
     launcher_id = launcher.id
+
     project = await project_repo.get_project(user=user, project_id=launcher.project_id)
     session_type = SessionType.from_launcher_type(launcher.launcher_type)
+
+    if session_type.is_non_interactive and launch_request.submission_id is None:
+        raise errors.ValidationError(message="Job submissions require a submission_id.")
+
+    if session_type.is_interactive and (launch_request.job_args_overrides or launch_request.job_command_overrides):
+        raise errors.ValidationError(message="Interactive sessions don't allow job_args_override.")
 
     # Determine resource_class_id: the class can be overwritten at the user's request
     resource_class_id = launch_request.resource_class_id or launcher.resource_class_id
@@ -865,7 +873,11 @@ async def start_session(
     cluster = await nb_config.k8s_v2_client.cluster_by_class_id(resource_class_id, user)
 
     server_name = renku_2_make_server_name(
-        user=user, project_id=str(launcher.project_id), launcher_id=str(launcher_id), cluster_id=str(cluster.id)
+        user=user,
+        project_id=str(launcher.project_id),
+        launcher_id=str(launcher_id),
+        cluster_id=str(cluster.id),
+        submission_id=launch_request.submission_id,
     )
     existing_session = await nb_config.k8s_v2_client.get_session(name=server_name, safe_username=user.id)
     if existing_session is not None:
@@ -990,6 +1002,8 @@ async def start_session(
         "renku.io/resource_class_id": str(resource_class.id),
         "renku.io/resource_pool_id": str(resource_pool.id),
     }
+    if launch_request.submission_id:
+        annotations.update({"renku.io/submission_id": str(launch_request.submission_id)})
 
     # Authentication
     if isinstance(user, AuthenticatedAPIUser):
@@ -1071,6 +1085,7 @@ async def start_session(
         env.extend(
             [
                 SessionEnvItem(name="RENKU_JOB", value="1"),
+                SessionEnvItem(name="RENKU_SUBMISSION_ID", value=str(launch_request.submission_id)),
             ]
         )
     if session_location == SessionLocation.remote:
@@ -1096,6 +1111,18 @@ async def start_session(
 
     if session_type.is_non_interactive:
         session_extras = session_extras.extra_container_as_sidecars()
+
+    command = environment.command
+    args = environment.args
+    # if non-interactive and built-from-code, we need to wrap the "real" command in a launcher script
+    if session_type.is_non_interactive and launcher.environment.build_parameters_id is not None:
+        command = ["/cnb/lifecycle/launcher", "--"]
+        args = (launch_request.job_command_overrides or environment.command or []) + (
+            launch_request.job_args_overrides or environment.args or []
+        )
+    elif session_type.is_non_interactive:
+        command = launch_request.job_command_overrides or environment.command or []
+        args = launch_request.job_args_overrides or environment.args or []
 
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations, labels=labels),
@@ -1124,8 +1151,8 @@ async def start_session(
                 runAsGroup=environment.gid,
                 resources=resources_from_resource_class(resource_class),
                 extraVolumeMounts=session_extras.volume_mounts,
-                command=environment.command,
-                args=environment.args,
+                command=command,
+                args=args,
                 shmSize=ShmSizeStr("1G"),
                 stripURLPath=environment.strip_path_prefix,
                 env=env,
@@ -1523,12 +1550,19 @@ def validate_session_post_request(body: apispec.SessionPostRequest) -> SessionLa
         if body.env_variable_overrides
         else None
     )
+    submission_id: SubmissionId | None = None
+    if body.submission_id:
+        submission_id = SubmissionId(body.submission_id)
+
     return SessionLaunchRequest(
         launcher_id=ULID.from_str(body.launcher_id),
         disk_storage=body.disk_storage,
         resource_class_id=body.resource_class_id,
         data_connectors_overrides=data_connectors_overrides,
         env_variable_overrides=env_variable_overrides,
+        submission_id=submission_id,
+        job_command_overrides=body.job_command_override,
+        job_args_overrides=body.job_args_override,
     )
 
 

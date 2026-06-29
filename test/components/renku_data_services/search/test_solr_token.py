@@ -130,7 +130,16 @@ def test_created_by_exists() -> None:
 
 
 def test_content_all() -> None:
-    assert st.content_all("abc") == "content_all:(abc~)"
-    assert st.content_all("a+b+c") == "content_all:(a\\+b\\+c~)"
-    assert st.content_all("ab cd") == "content_all:(ab~ cd~)"
-    assert st.content_all("ab    cd") == "content_all:(ab~ cd~)"
+    assert st.content_all("abc") == "(content_all:(abc~) OR name:(abc~)^2 OR nameKeyword:abc^10 OR slug:abc^5)"
+    assert (
+        st.content_all("a+b+c")
+        == "(content_all:(a\\+b\\+c~) OR name:(a\\+b\\+c~)^2 OR nameKeyword:a\\+b\\+c^10 OR slug:a\\+b\\+c^5)"
+    )
+    assert (
+        st.content_all("Test-Project") == "(content_all:(Test\\-Project~) OR name:(Test\\-Project~)^2 OR "
+        "nameKeyword:Test\\-Project^10 OR slug:test\\-project^5)"
+    )
+    assert st.content_all("ab cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^2 OR nameKeyword:ab\\ cd^10)"
+    assert (
+        st.content_all("ab    cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^2 OR nameKeyword:ab\\ \\ \\ \\ cd^10)"
+    )
