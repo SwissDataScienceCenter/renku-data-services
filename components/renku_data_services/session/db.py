@@ -1054,9 +1054,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             if build.result_image is None:
                 authorized = False
             else:
-                if builds_config.private_builds_enabled
-                    and launcher.environment.container_image.startswith(
-                        builds_config.build_output_private_image_prefix
+                if self.builds_config.private_builds_enabled and build.result_image.startswith(
+                    self.builds_config.build_output_private_image_prefix
                 ):
                     if build.result_repository_url is None:
                         authorized = False
