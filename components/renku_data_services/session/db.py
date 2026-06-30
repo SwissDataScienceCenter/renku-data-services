@@ -395,25 +395,6 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             launcher = res.all()
             return [item.dump() for item in launcher]
 
-    async def project_has_app_launchers(self, user: base_models.APIUser, project_id: ULID) -> bool:
-        """Return whether the given project has any launchers of type app."""
-        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
-        if not authorized:
-            raise errors.MissingResourceError(
-                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
-            )
-
-        async with self.session_maker() as session:
-            res = await session.scalars(
-                select(schemas.SessionLauncherORM.id)
-                .where(
-                    schemas.SessionLauncherORM.project_id == project_id,
-                    schemas.SessionLauncherORM.launcher_type == models.LauncherType.app,
-                )
-                .limit(1)
-            )
-            return res.first() is not None
-
     async def get_launcher(self, user: base_models.APIUser, launcher_id: ULID) -> models.SessionLauncher:
         """Get one session launcher from the database."""
         async with self.session_maker() as session:

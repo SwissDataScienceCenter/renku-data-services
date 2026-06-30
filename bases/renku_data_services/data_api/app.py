@@ -151,6 +151,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         session_repo=dm.session_repo,
         session_secret_repo=dm.project_session_secret_repo,
         metrics=dm.metrics,
+        apps_repo=dm.apps_repo,
     )
     project_session_secrets = ProjectSessionSecretBP(
         name="project_session_secrets",
