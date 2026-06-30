@@ -217,7 +217,7 @@ def validate_resource_pool_put_or_patch(
     classes = (
         [validate_resource_class_patch_or_put(body=rc, method=method) for rc in body.classes] if body.classes else None
     )
-    quota = validate_quota_put_patch(body=body.quota) if body.quota else None
+    quota = validate_quota_put_patch(body=body.quota) if body.quota else RESET if method == "PUT" else None
     remote = None
     match body.remote:
         case apispec.RemoteConfigurationPatchReset() as r:
