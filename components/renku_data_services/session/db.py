@@ -1195,7 +1195,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             frontend=build_parameters.frontend_variant,
             git_repository_revision=git_repository_revision,
             context_dir=context_dir,
-            build_insecure_ouput_enabled=self.builds_config.build_insecure_ouput_enabled,
+            build_insecure_output_enabled=self.builds_config.build_insecure_output_enabled,
             insecure_registries=self.builds_config.build_insecure_registries,
         )
 
