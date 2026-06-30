@@ -1,7 +1,9 @@
 """Project blueprint."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
@@ -43,6 +45,9 @@ from renku_data_services.project.db import (
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.users.db import UserRepo
 
+if TYPE_CHECKING:
+    from renku_data_services.renku_apps.repository import RenkuAppsRepository
+
 
 @dataclass(kw_only=True)
 class ProjectsBP(CustomBlueprint):
@@ -57,6 +62,7 @@ class ProjectsBP(CustomBlueprint):
     session_repo: SessionRepository
     session_secret_repo: ProjectSessionSecretRepository
     metrics: MetricsService
+    apps_repo: RenkuAppsRepository | None = None
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all projects."""
@@ -293,12 +299,6 @@ class ProjectsBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, project_id: ULID, body: apispec.ProjectPatch, etag: str
         ) -> JSONResponse:
             project_patch = validate_project_patch(body)
-            if project_patch.visibility == Visibility.PRIVATE and await self.session_repo.project_has_app_launchers(
-                user, project_id
-            ):
-                raise errors.ValidationError(
-                    message="This project cannot be made private because it has one or more app launchers."
-                )
             project_update = await self.project_repo.update_project(
                 user=user, project_id=project_id, etag=etag, patch=project_patch
             )
@@ -308,6 +308,10 @@ class ProjectsBP(CustomBlueprint):
                     message="Expected the result of a project update to be ProjectUpdate but instead "
                     f"got {type(project_update)}"
                 )
+
+            if project_patch.visibility == Visibility.PRIVATE and self.apps_repo is not None:
+                await self.apps_repo.hibernate_apps_for_project(project_id=project_id)
+
             if len(project_update.new.repositories) > len(project_update.old.repositories):
                 await self.metrics.code_repo_linked_to_project(user)
 
