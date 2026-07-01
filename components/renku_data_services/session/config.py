@@ -36,6 +36,7 @@ class BuildsConfig:
     build_builder_image: str | None = None
     build_run_image: str | None = None
     build_strategy_name: str | None = None
+    build_insecure_ouput_enabled: bool = False
     build_insecure_registries: str = ""
     build_platform_overrides: dict[str, BuildPlatformOverrides] | None = None
     push_secret_name: str = constants.BUILD_DEFAULT_PUSH_SECRET_NAME
@@ -71,8 +72,9 @@ class BuildsConfig:
         build_builder_image = os.environ.get("BUILD_BUILDER_IMAGE")
         build_run_image = os.environ.get("BUILD_RUN_IMAGE")
         build_strategy_name = os.environ.get("BUILD_STRATEGY_NAME")
+        build_insecure_ouput_enabled = os.environ.get("BUILD_INSECURE_OUTPUT_ENABLED", "false").lower() == "true"
         build_insecure_registries = os.environ.get("BUILD_INSECURE_REGISTRIES", "")
-        if build_insecure_registries:
+        if build_insecure_ouput_enabled and build_insecure_registries:
             logger.warn(
                 f"Trusting insecure registries, this is not recommended in production: {build_insecure_registries}"
             )
@@ -155,6 +157,7 @@ class BuildsConfig:
             build_builder_image=build_builder_image,
             build_run_image=build_run_image,
             build_strategy_name=build_strategy_name or None,
+            build_insecure_ouput_enabled=build_insecure_ouput_enabled,
             build_insecure_registries=build_insecure_registries,
             build_platform_overrides=build_platform_overrides,
             push_secret_name=push_secret_name,
