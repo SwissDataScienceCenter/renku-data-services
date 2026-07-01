@@ -24,6 +24,7 @@ def _to_meteroid_event(req: ResourcesRequest, costs: dict[int, Credit], metric_c
         "phase": req.phase,
         "capture_interval_seconds": str(req.capture_interval.total_seconds()),
         "resource_class_id": str(req.resource_class_id),
+        "user_id": str(req.user_id),
     }
     if req.resource_pool_id is not None:
         properties["resource_pool_id"] = str(req.resource_pool_id)
@@ -37,7 +38,7 @@ def _to_meteroid_event(req: ResourcesRequest, costs: dict[int, Credit], metric_c
     return {
         "event_id": f"{req.uid}/{req.capture_date.astimezone(UTC).isoformat()}",
         "code": metric_code,
-        "customer_id": req.user_id,
+        "customer_id": f"resource_pool_id-{req.resource_pool_id}",
         "timestamp": req.capture_date.astimezone(UTC).isoformat(),
         "properties": properties,
     }
@@ -58,7 +59,7 @@ class MeteringClient:
         events = [
             _to_meteroid_event(r, costs, metric_code)
             for r in requests
-            if r.resource_class_id is not None and r.user_id is not None
+            if r.resource_class_id is not None and r.user_id is not None and r.resource_pool_id is not None
         ]
         if not events:
             return
