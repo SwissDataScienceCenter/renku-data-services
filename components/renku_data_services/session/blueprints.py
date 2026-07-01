@@ -1,6 +1,9 @@
 """Session blueprint."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
@@ -23,6 +26,9 @@ from renku_data_services.session.core import (
     validate_unsaved_session_launcher,
 )
 from renku_data_services.session.db import SessionRepository
+
+if TYPE_CHECKING:
+    from renku_data_services.renku_apps.repository import RenkuAppsRepository
 
 
 @dataclass(kw_only=True)
@@ -100,6 +106,7 @@ class SessionLaunchersBP(CustomBlueprint):
     session_repo: SessionRepository
     authenticator: base_models.Authenticator
     metrics: MetricsService
+    apps_repo: RenkuAppsRepository | None = None
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all session launcher visible to user."""
@@ -176,6 +183,14 @@ class SessionLaunchersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         async def _delete(_: Request, user: base_models.APIUser, launcher_id: ULID) -> HTTPResponse:
+            apps_repo = self.apps_repo
+            if apps_repo is not None:
+                try:
+                    launcher = await self.session_repo.get_launcher(user=user, launcher_id=launcher_id)
+                except errors.MissingResourceError:
+                    launcher = None
+                if launcher is not None and launcher.launcher_type == models.LauncherType.app:
+                    await apps_repo.delete_app_for_launcher(user=user, launcher=launcher)
             await self.session_repo.delete_launcher(user=user, launcher_id=launcher_id)
             return HTTPResponse(status=204)
 
