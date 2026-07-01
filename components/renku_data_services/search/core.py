@@ -44,7 +44,9 @@ logger = logging.getLogger(__name__)
 
 
 async def update_solr(
-    search_updates_repo: SearchUpdatesRepo, solr_client: SolrClient, batch_size: int
+    search_updates_repo: SearchUpdatesRepo,
+    solr_client: SolrClient,
+    batch_size: int,
 ) -> list[Exception]:
     """Selects entries from the search staging table and updates SOLR."""
     counter = 0
@@ -95,7 +97,7 @@ async def _renku_query(
     authz_client: AuthzClient, ctx: Context, uq: SolrUserQuery, limit: int, offset: int
 ) -> SolrQuery:
     """Create the final solr query embedding the given user query."""
-    logger.debug(f"Searching as user: {ctx.role or "anonymous"}")
+    logger.debug(f"Searching as user: {ctx.role or 'anonymous'}")
     role_constraint: list[str] = [st.public_only()]
     match ctx.role:
         case AdminRole():
