@@ -11,7 +11,7 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.resource_usage import apispec
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
-from renku_data_services.resource_usage.metering import MeteringClient
+from renku_data_services.resource_usage.metering import MeteringClient, MetricCode
 from renku_data_services.resource_usage.model import (
     Credit,
     ResourceClassCost,
@@ -180,7 +180,7 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
         if self._metering is not None:
             class_ids = {r.resource_class_id for r in result if r.resource_class_id is not None}
             costs = await self._repo.get_costs_by_class_ids(class_ids)
-            await self._metering.emit(result, costs)
+            await self._metering.emit(result, costs, MetricCode.session_resource_usage)
 
 
 class ResourceUsageService:

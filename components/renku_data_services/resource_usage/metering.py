@@ -1,6 +1,7 @@
-"""CloudEvent emission for session resource usage metering."""
+"""Meteroid event emission for session resource usage metering."""
 
 from datetime import UTC
+from enum import StrEnum
 
 import httpx
 
@@ -9,62 +10,65 @@ from renku_data_services.resource_usage.model import Credit, ResourcesRequest
 
 logger = logging.getLogger(__file__)
 
-_CLOUDEVENTS_BATCH_CONTENT_TYPE = "application/cloudevents-batch+json"
-_CLOUDEVENTS_DATA_CONTENT_TYPE = "application/json"
-_CLOUDEVENTS_SPEC_VERSION = "1.0"
-_CLOUDEVENTS_SOURCE = "/renku-data-services/resource-usage"
-_CLOUDEVENTS_TYPE = "ch.renku.session.resource_usage"
+_INGEST_PATH = "/api/v1/events/ingest"
 
 
-def _to_cloudevent(req: ResourcesRequest, costs: dict[int, Credit]) -> dict:
-    cu_cost: float | None = None
-    if req.resource_class_id is not None:
-        cost = costs.get(req.resource_class_id, Credit.zero())
-        cu_cost = round(cost.value * (req.capture_interval.total_seconds() / 3600.0), 6)
+class MetricCode(StrEnum):
+    session_resource_usage = "session_resource_usage"
 
-    event: dict = {
-        "specversion": _CLOUDEVENTS_SPEC_VERSION,
-        "type": _CLOUDEVENTS_TYPE,
-        "source": _CLOUDEVENTS_SOURCE,
-        "id": f"{req.uid}/{req.capture_date.astimezone(UTC).isoformat()}",
-        "time": req.capture_date.astimezone(UTC).isoformat(),
-        "datacontenttype": _CLOUDEVENTS_DATA_CONTENT_TYPE,
-        "data": {
-            "uid": req.uid,
-            "kind": req.kind,
-            "project_id": str(req.project_id) if req.project_id is not None else None,
-            "launcher_id": str(req.launcher_id) if req.launcher_id is not None else None,
-            "resource_class_id": req.resource_class_id,
-            "resource_pool_id": req.resource_pool_id,
-            "cluster_id": str(req.cluster_id) if req.cluster_id is not None else None,
-            "phase": req.phase,
-            "capture_interval_seconds": req.capture_interval.total_seconds(),
-            "cu_cost": cu_cost,
-        },
+
+def _to_meteroid_event(req: ResourcesRequest, costs: dict[int, Credit], metric_code: str) -> dict:
+    cost = costs.get(req.resource_class_id, Credit.zero())  # type: ignore[arg-type]
+    cu_cost = round(cost.value * (req.capture_interval.total_seconds() / 3600.0), 6)
+
+    properties: dict[str, str] = {
+        "cu_cost": str(cu_cost),
+        "kind": req.kind,
+        "phase": req.phase,
+        "capture_interval_seconds": str(req.capture_interval.total_seconds()),
+        "resource_class_id": str(req.resource_class_id),
     }
-    if req.user_id is not None:
-        event["subject"] = req.user_id
-    return event
+    if req.resource_pool_id is not None:
+        properties["resource_pool_id"] = str(req.resource_pool_id)
+    if req.project_id is not None:
+        properties["project_id"] = str(req.project_id)
+    if req.launcher_id is not None:
+        properties["launcher_id"] = str(req.launcher_id)
+    if req.cluster_id is not None:
+        properties["cluster_id"] = str(req.cluster_id)
+
+    return {
+        "event_id": f"{req.uid}/{req.capture_date.astimezone(UTC).isoformat()}",
+        "code": metric_code,
+        "customer_id": req.user_id,
+        "timestamp": req.capture_date.astimezone(UTC).isoformat(),
+        "properties": properties,
+    }
 
 
 class MeteringClient:
-    """Emits session resource usage as CloudEvents to a metering endpoint."""
+    """Emits session resource usage events to Meteroid."""
 
     def __init__(self, endpoint_url: str, token: str) -> None:
-        self._endpoint_url = endpoint_url
+        self._endpoint_url = endpoint_url.rstrip("/") + _INGEST_PATH
         self._headers = {
             "Authorization": f"Bearer {token}",
-            "Content-Type": _CLOUDEVENTS_BATCH_CONTENT_TYPE,
+            "Content-Type": "application/json",
         }
 
-    async def emit(self, requests: list[ResourcesRequest], costs: dict[int, Credit]) -> None:
-        """POST all resource requests as a CloudEvents batch. Never raises."""
-        if not requests:
+    async def emit(self, requests: list[ResourcesRequest], costs: dict[int, Credit], metric_code: MetricCode) -> None:
+        """POST all resource requests as a Meteroid ingest batch. Never raises."""
+        events = [
+            _to_meteroid_event(r, costs, metric_code)
+            for r in requests
+            if r.resource_class_id is not None and r.user_id is not None
+        ]
+        if not events:
             return
-        events = [_to_cloudevent(r, costs) for r in requests if r.resource_class_id is not None]
+        body = {"allow_partial_failures": True, "events": events}
         try:
             async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.post(self._endpoint_url, headers=self._headers, json=events)
+                resp = await client.post(self._endpoint_url, headers=self._headers, json=body)
                 if resp.status_code >= 300 or resp.status_code < 200:
                     logger.warning(
                         f"Metering endpoint returned unexpected status {resp.status_code}: {resp.text[:200]}"
