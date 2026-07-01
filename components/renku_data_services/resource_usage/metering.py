@@ -10,9 +10,6 @@ from renku_data_services.resource_usage.model import Credit, ResourcesRequest
 
 logger = logging.getLogger(__file__)
 
-_INGEST_PATH = "/api/v1/events/ingest"
-
-
 class MetricCode(StrEnum):
     session_resource_usage = "session_resource_usage"
 
@@ -50,7 +47,7 @@ class MeteringClient:
     """Emits session resource usage events to Meteroid."""
 
     def __init__(self, endpoint_url: str, token: str) -> None:
-        self._endpoint_url = endpoint_url.rstrip("/") + _INGEST_PATH
+        self._endpoint_url = endpoint_url
         self._headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -74,7 +71,7 @@ class MeteringClient:
                         f"Metering endpoint returned unexpected status {resp.status_code}: {resp.text[:200]}"
                     )
                 else:
-                    logger.info(f"Emitted {len(events)} metering events, status={resp.status_code}")
+                    logger.info(f"Emitted {len(events)} metering events, status={resp.status_code}: {body}")
         except httpx.HTTPError as ex:
             logger.warning(f"Failed to emit metering events: {ex}", exc_info=ex)
         except Exception as ex:
