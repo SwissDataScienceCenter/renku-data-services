@@ -128,9 +128,7 @@ class RenkuAppsRepository:
         elif state == apispec.AppState.running and runtime_state.is_hibernated:
             project = await self.project_repo.get_project(user, launcher.project_id)
             if project.visibility != Visibility.PUBLIC:
-                raise errors.ValidationError(
-                    message="This app cannot be resumed because its project is not public."
-                )
+                raise errors.ValidationError(message="This app cannot be resumed because its project is not public.")
             if launcher.resource_class_id is not None:
                 resource_class = await self.rp_repo.get_resource_class(user, launcher.resource_class_id)
                 await self.k8s_client.set_app_deployment_resources(app_name, resource_class)
