@@ -9,9 +9,8 @@ spec:
       description: The referenced version is the minimum version that all relevant buildpack implementations support.
       default: "0.13"
     - name: insecure-registries
-      description: List of registries to consider insecure (http or self-signed certificate).
-      type: array
-      defaults: []
+      description: Comma separated list of registries to consider insecure (http or self-signed certificate)
+      default: ""
     - name: run-image
       description: The image to use as the base for all session images built with this strategy
       default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.1.0"
@@ -38,37 +37,19 @@ spec:
           value: $(params.run-image)
         - name: PARAM_OUTPUT_INSECURE
           value: $(params.shp-output-insecure)
+        - name: PARAM_INSECURE_REGISTRIES
+          value: $(params.insecure-registries)
       command:
         - /bin/bash
       args:
         - -c
         - |
-          insecureRegistries=""
-          inInsecureRegistries=false
+          set -euo pipefail
 
-          while [[ $# -gt 0 ]]; do
-            arg="$1"
-            shift
-
-            if [ "${arg}" == "--insecure-registries" ]; then
-              inInsecureRegistries=true
-            elif [ "${inInsecureRegistries}" == "true" ]; then
-              if [[ ! -z "${arg}" ]]; then
-                insecureRegistries="${insecureRegistries}${arg},"
-              fi
-            else
-              echo "Invalid usage"
-              exit 1
-            fi
-          done
-
-          outputImageHost="${PARAM_OUTPUT_IMAGE%%/*}"
-
-          if [[ "$insecureRegistries" =~ "$outputImageHost" && "${PARAM_OUTPUT_INSECURE}" != "true" ]]; then
-            echo "> WARNING misconfiguration: output registry listed as insecure registry while insecure output is disabled..."
-          fi
+          insecureRegistries="${PARAM_INSECURE_REGISTRIES}"
 
           if [[ "${PARAM_OUTPUT_INSECURE}" == "true" ]]; then
+            outputImageHost="${PARAM_OUTPUT_IMAGE%%/*}"
             if [[ "${outputImageHost}" == "${PARAM_OUTPUT_IMAGE}" || ( "${outputImageHost}" != *.* && "${outputImageHost}" != *:* && "${outputImageHost}" != "localhost" ) ]]; then
               echo "> Output image '${PARAM_OUTPUT_IMAGE}' has no explicit registry host; not adding to insecure registries."
             else
@@ -81,8 +62,6 @@ spec:
 
             export CNB_INSECURE_REGISTRIES="${insecureRegistries}"
           fi
-
-          set -euo pipefail
 
           echo "> Processing environment variables..."
           ENV_DIR="/platform/env"
@@ -117,9 +96,7 @@ spec:
             -report=/tmp/report.toml \
             -run-image=${PARAM_RUN_IMAGE} \
             ${PARAM_OUTPUT_IMAGE}
-        - --
-        - --insecure-registries
-        - $(params.insecure-registries[*])
+
       volumeMounts:
         - mountPath: /platform/env
           name: platform-env
