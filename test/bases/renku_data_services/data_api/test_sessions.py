@@ -14,10 +14,10 @@ from syrupy.filters import props
 from renku_data_services import errors
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.session.config import BuildsConfig
-from renku_data_services.session.constants import BUILD_RUN_GVK
+from renku_data_services.session.constants import BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX, BUILD_RUN_GVK
 from renku_data_services.session.models import EnvVar
 from renku_data_services.users.models import UserInfo
-from test.utils import KindCluster
+from test.utils import KindCluster, MemberContext
 
 BuildRun = new_class(
     kind=BUILD_RUN_GVK.kind,
@@ -60,13 +60,17 @@ def launch_session(
 @pytest.mark.parametrize(
     "prefix,private_prefix,must_raise",
     [
+        (None, None, False),  # Defaults will be used
         ("dummy/image-prefix", "dummy/private-image-prefix", False),
         (None, "dummy/private-image-prefix", False),
         ("dummy/image-prefix", None, False),
         ("dummy/private-image-prefix", "dummy/private-image-prefix", True),
+        ("dummy/some-image-prefix", "dummy/some-image-prefix/suffix", True),
+        ("dummy/some-image-prefix/suffix", "dummy/some-image-prefix", True),
     ],
 )
-def test_same_build_image_prefix(monkeypatch, prefix, private_prefix, must_raise) -> None:
+def test_build_image_prefix_handling(monkeypatch, prefix, private_prefix, must_raise) -> None:
+    monkeypatch.setenv("BUILD_PRIVATE_REPO_BUILDS_ENABLED", True)
     if prefix is not None:
         monkeypatch.setenv("BUILD_OUTPUT_IMAGE_PREFIX", prefix)
     if private_prefix is not None:
@@ -512,7 +516,7 @@ async def test_post_job_launcher(
         "resource_class_id": resource_pool["classes"][0]["id"],
         "disk_storage": 2,
         "env_variables": [{"name": "KEY_NUMBER_1", "value": "a value"}],
-        "launcher_type": "non_interactive",
+        "launcher_type": "non-interactive",
         "environment": {
             "container_image": "some_image:some_tag",
             "name": "custom_name",
@@ -537,7 +541,7 @@ async def test_post_job_launcher(
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert res.json.get("disk_storage") == 2
     assert res.json.get("env_variables") == [{"name": "KEY_NUMBER_1", "value": "a value"}]
-    assert res.json.get("launcher_type") == "non_interactive"
+    assert res.json.get("launcher_type") == "non-interactive"
     app_manager.metrics.session_launcher_created.assert_called_once()
 
 
@@ -643,6 +647,108 @@ async def test_post_session_launcher_with_environment_build(
         }
         assert environment.get("environment_image_source") == "build"
         assert environment.get("container_image") == "image:unknown-at-the-moment"
+
+        if builds_enabled:
+            _, response = await sanic_client.get(
+                f"/api/data/environments/{environment_id}/builds",
+                headers=user_headers,
+            )
+            assert response.status_code == 200, response.text
+            build = response.json[0]
+            build_id = build["id"]
+
+            api = kr8s.api(kubeconfig=cluster.kubeconfig)
+            build_run = BuildRun.get(name=f"renku-{build_id.lower()}", api=api)
+
+            build_spec = build_run.spec.build.spec
+            if is_private:
+                assert build_spec.source.git.get("cloneSecret") is not None
+                assert build_spec.output.image.startswith(app_manager.config.builds.build_output_private_image_prefix)
+                assert build_spec.output.pushSecret == app_manager.config.builds.push_private_secret_name
+            else:
+                assert build_spec.source.git.get("cloneSecret") is None
+                assert build_spec.output.image.startswith(app_manager.config.builds.build_output_image_prefix)
+                assert build_spec.output.pushSecret == app_manager.config.builds.push_secret_name
+
+    elif expected_status_code == 500:
+        assert response.json is not None
+        error = response.json.get("error")
+        assert error.get("message") == "no_git_repo"
+
+
+@pytest.mark.parametrize(
+    "expected_status_code,git_repo,is_private",
+    [
+        (
+            201,
+            "https://github.com/SwissDataScienceCenter/renku",
+            False,
+        ),
+        (
+            201,
+            "https://github.com/SwissDataScienceCenter/private",
+            True,
+        ),
+        (500, "https://github.com/some/repo", False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_post_job_launcher_with_environment_build(
+    app_manager: DependencyManager,
+    sanic_client,
+    user_headers,
+    create_project,
+    create_resource_pool,
+    expected_status_code,
+    git_repo,
+    is_private,
+    builds_enabled,
+    cluster,
+) -> None:
+    project = await create_project(sanic_client, "Some project")
+
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A job launcher.",
+        "launcher_type": "non-interactive",
+        "environment": {
+            "repository": git_repo,
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+            "command": ["python"],
+            "args": ["$RENKU_WORK/myscript.py"],
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+
+    if not builds_enabled:
+        expected_status_code = 201
+
+    assert response.status_code == expected_status_code, response.text
+    if expected_status_code == 201:
+        assert response.json is not None
+        assert response.json.get("name") == "Launcher 1"
+        assert response.json.get("project_id") == project["id"]
+        assert response.json.get("description") == "A job launcher."
+        assert response.json.get("launcher_type") == "non-interactive"
+        environment = response.json.get("environment", {})
+        environment_id = environment.get("id")
+        assert environment_id is not None
+        assert environment.get("name") == "Launcher 1"
+        assert environment.get("environment_kind") == "CUSTOM"
+        assert environment.get("build_parameters") == {
+            "repository": git_repo,
+            "platforms": ["linux/amd64"],
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+        }
+        assert environment.get("environment_image_source") == "build"
+        assert environment.get("container_image") == "image:unknown-at-the-moment"
+        assert environment.get("command") == ["python"]
+        assert environment.get("args") == ["$RENKU_WORK/myscript.py"]
 
         if builds_enabled:
             _, response = await sanic_client.get(
@@ -934,7 +1040,7 @@ async def test_patch_session_launcher_environment(
         f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
     )
     assert res.status_code == 422, res.text
-    assert "There are errors in the following fields, id: Input should be a valid string" in res.text
+    assert "There are errors in the following fields" in res.text
 
     # Trying to patch a field of the global environment should fail
     patch_payload = {
@@ -1027,6 +1133,59 @@ async def test_patch_session_launcher_environment(
     }
     assert environment.get("environment_image_source") == "build"
     assert environment.get("container_image") == "image:unknown-at-the-moment"
+
+
+@pytest.mark.asyncio
+async def test_patch_session_launcher_from_code_update_command(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_resource_pool,
+    create_session_environment,
+) -> None:
+    project = await create_project(sanic_client, "Some project 1")
+    resource_pool = await create_resource_pool(admin=True)
+
+    # create initial session launcher as a build-from-code
+    payload = {
+        "project_id": project["id"],
+        "resource_class_id": resource_pool["id"],
+        "name": "Test name from code",
+        "launcher_type": "non-interactive",
+        "environment": {
+            "environment_image_source": "build",
+            "builder_variant": "python",
+            "frontend_variant": "jupyterlab",
+            "repository": "https://github.com/eikek/bfc_test",
+            "platforms": ["linux/amd64"],
+            "command": ["python", "dummy.py"],
+        },
+    }
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    assert res.json["environment"]["environment_kind"] == "CUSTOM"
+
+    launcher_id = res.json["id"]
+
+    patch_payload = {
+        "environment": {"environment_kind": "CUSTOM", "build_parameters": {}, "command": ["python", "dummy2.sh"]}
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json["environment"]["command"] == ["python", "dummy2.sh"]
+    assert res.json["launcher_type"] == "non-interactive"
+
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher_id}", headers=user_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json["environment"]["command"] == ["python", "dummy2.sh"]
+    assert res.json["launcher_type"] == "non-interactive"
 
 
 @pytest.mark.asyncio
@@ -1508,18 +1667,72 @@ def anonymous_user_headers() -> dict[str, str]:
     return {"Renku-Auth-Anon-Id": "some-random-value-1234"}
 
 
+def id_from_launcher(val: Any) -> str | None:
+    if isinstance(val, dict):
+        return val["name"].replace(" ", "-")
+    return ""
+
+
+@pytest.fixture
+def actual_user_headers(request, regular_user_access_token) -> dict[str, str]:
+    if request.param == "anonymous":
+        return {"Renku-Auth-Anon-Id": "some-random-value-1234"}
+    else:
+        return {"Authorization": f"Bearer {regular_user_access_token}"}
+
+
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
-async def test_starting_session_anonymous(
+@pytest.mark.parametrize(
+    "actual_user_headers",
+    ["anonymous", "user"],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "builds_config",
+    [
+        pytest.param(
+            {"enabled": True, "build_output_private_image_prefix": BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX},
+            id="enabled",
+        ),
+        pytest.param({"enabled": False, "build_output_private_image_prefix": None}, id="disabled"),
+    ],
+)
+@pytest.mark.parametrize(
+    "launcher_conf,expected_status_code,expected_error_message",
+    [
+        (
+            {
+                "name": "Valid custom image",
+                "description": "A session launcher",
+                "environment": {
+                    "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
+                    "environment_kind": "CUSTOM",
+                    "name": "test",
+                    "port": 8888,
+                    "environment_image_source": "image",
+                },
+            },
+            201,
+            None,
+        ),
+    ],
+    ids=id_from_launcher,
+)
+async def test_starting_session(
+    app_manager: DependencyManager,
     sanic_client: SanicASGITestClient,
+    admin_headers,
     create_project,
     create_resource_pool,
     create_session_launcher,
-    user_headers,
-    app_manager: DependencyManager,
-    admin_headers,
     launch_session,
-    anonymous_user_headers,
+    amalthea_installation,
+    actual_user_headers,
+    launcher_conf,
+    expected_status_code,
+    expected_error_message,
+    builds_config,
 ) -> None:
     project: dict[str, Any] = await create_project(
         sanic_client,
@@ -1528,38 +1741,221 @@ async def test_starting_session_anonymous(
         repositories=["https://github.com/SwissDataScienceCenter/renku-data-services"],
     )
     resource_pool = await create_resource_pool(admin=True)
-    launcher: dict[str, Any] = await create_session_launcher(
-        name="Launcher 1",
-        project_id=project["id"],
-        description="A session launcher",
-        resource_class_id=resource_pool["classes"][0]["id"],
-        disk_storage=42,
-        environment={
-            "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
-            "environment_kind": "CUSTOM",
-            "name": "test",
-            "port": 8888,
-            "environment_image_source": "image",
-        },
-        env_variables=[
-            {"name": "TEST_ENV_VAR", "value": "some-random-value-1234"},
-        ],
+
+    launcher_conf.update(
+        dict(
+            project_id=project["id"],
+            resource_class_id=resource_pool["classes"][0]["id"],
+            disk_storage=42,
+        )
     )
+
+    if not builds_config["enabled"]:
+        expected_status_code = 201
+
+    with MemberContext(app_manager.config.builds, builds_config):
+        launcher: dict[str, Any] = await create_session_launcher(**launcher_conf)
+
+        launcher_id = launcher["id"]
+        project_id = project["id"]
+        payload = {"project_id": project_id, "launcher_id": launcher_id}
+        cookies = {"_renku_session": "some content"}
+
+        _, session_res = await sanic_client.post(
+            "/api/data/sessions", headers=actual_user_headers, json=payload, cookies=cookies
+        )
+        assert session_res.status_code == expected_status_code
+
+        if expected_status_code == 201:
+            _, res = await sanic_client.get(
+                f"/api/data/sessions/{session_res.json['name']}", headers=actual_user_headers, cookies=cookies
+            )
+            assert res.status_code == 200, res.text
+            assert res.json["name"] == session_res.json["name"]
+            _, res = await sanic_client.get("/api/data/sessions", headers=actual_user_headers, cookies=cookies)
+            assert res.status_code == 200, res.text
+            assert len(res.json) > 0
+            assert session_res.json["name"] in [i["name"] for i in res.json]
+        else:
+            assert session_res.json["error"]["message"] == expected_error_message
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+@pytest.mark.parametrize(
+    "actual_user_headers",
+    ["anonymous", "user"],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "launcher_conf,repositories,expected_status_code,expected_error_message",
+    [
+        (
+            {
+                "name": "Valid custom image",
+                "description": "A session launcher",
+                "environment": {
+                    "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
+                    "environment_kind": "CUSTOM",
+                    "name": "test",
+                    "port": 8888,
+                    "environment_image_source": "image",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/renku-data-services"],
+            201,
+            None,
+        ),
+        (
+            {
+                "name": "Private build image with accessible repository",
+                "description": "A session launcher",
+                "environment": {
+                    "environment_image_source": "build",
+                    "repository": "https://github.com/SwissDataScienceCenter/private",
+                    "builder_variant": "python",
+                    "frontend_variant": "vscodium",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/private"],
+            201,
+            None,
+        ),
+        (
+            {
+                "name": "Private build image with inaccessible repository",
+                "description": "A session launcher",
+                "environment": {
+                    "environment_image_source": "build",
+                    "repository": "https://github.com/SwissDataScienceCenter/other-private",
+                    "builder_variant": "python",
+                    "frontend_variant": "vscodium",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/other-private"],
+            201,
+            None,
+        ),
+        (
+            {
+                "name": "Private build image with a repository not in the list",
+                "description": "A session launcher",
+                "environment": {
+                    "environment_image_source": "build",
+                    "repository": "https://github.com/SwissDataScienceCenter/renku",
+                    "builder_variant": "python",
+                    "frontend_variant": "vscodium",
+                },
+            },
+            ["https://github.com/SwissDataScienceCenter/private"],
+            201,
+            None,
+        ),
+    ],
+    ids=id_from_launcher,
+)
+@pytest.mark.skipif(
+    "not config.getoption('--enable-builds')",
+    reason="Only run when --enable-builds is given",
+)
+async def test_starting_session_with_builds_enabled(
+    app_manager: DependencyManager,
+    sanic_client: SanicASGITestClient,
+    admin_headers,
+    create_project,
+    create_resource_pool,
+    create_session_launcher,
+    launch_session,
+    amalthea_installation,
+    launcher_conf,
+    expected_status_code,
+    expected_error_message,
+    repositories,
+    actual_user_headers,
+) -> None:
+    project: dict[str, Any] = await create_project(
+        sanic_client,
+        "Some project",
+        visibility="public",
+        repositories=repositories,
+    )
+    resource_pool = await create_resource_pool(admin=True)
+
+    launcher_conf.update(
+        dict(
+            project_id=project["id"],
+            resource_class_id=resource_pool["classes"][0]["id"],
+            disk_storage=42,
+        )
+    )
+
+    app_manager.config.builds.enabled = True  # This is the default for testing but ensures
+    launcher: dict[str, Any] = await create_session_launcher(**launcher_conf)
 
     launcher_id = launcher["id"]
     project_id = project["id"]
     payload = {"project_id": project_id, "launcher_id": launcher_id}
     cookies = {"_renku_session": "some content"}
-    session_res = await launch_session(payload, headers=anonymous_user_headers, cookies=cookies)
-    _, res = await sanic_client.get(
-        f"/api/data/sessions/{session_res.json['name']}", headers=anonymous_user_headers, cookies=cookies
+
+    _, session_res = await sanic_client.post(
+        "/api/data/sessions", headers=actual_user_headers, json=payload, cookies=cookies
     )
-    assert res.status_code == 200, res.text
-    assert res.json["name"] == session_res.json["name"]
-    _, res = await sanic_client.get("/api/data/sessions", headers=anonymous_user_headers, cookies=cookies)
-    assert res.status_code == 200, res.text
-    assert len(res.json) > 0
-    assert session_res.json["name"] in [i["name"] for i in res.json]
+    assert session_res.status_code == expected_status_code
+
+    if expected_status_code == 201:
+        _, res = await sanic_client.get(
+            f"/api/data/sessions/{session_res.json['name']}", headers=actual_user_headers, cookies=cookies
+        )
+        assert res.status_code == 200, res.text
+        assert res.json["name"] == session_res.json["name"]
+        _, res = await sanic_client.get("/api/data/sessions", headers=actual_user_headers, cookies=cookies)
+        assert res.status_code == 200, res.text
+        assert len(res.json) > 0
+        assert session_res.json["name"] in [i["name"] for i in res.json]
+    else:
+        assert session_res.json["error"]["message"] == expected_error_message
+
+
+@pytest.mark.skipif(
+    "not config.getoption('--enable-builds')",
+    reason="Only run when --enable-builds is given",
+)
+async def test_creating_session_launcher_with_builds_enabled_but_private_builds_disabled(
+    app_manager: DependencyManager,
+    sanic_client: SanicASGITestClient,
+    create_project,
+    create_resource_pool,
+    create_session_launcher,
+    user_headers,
+) -> None:
+    project: dict[str, Any] = await create_project(
+        sanic_client,
+        "Some project",
+        visibility="public",
+        repositories=["https://github.com/SwissDataScienceCenter/private"],
+    )
+    resource_pool = await create_resource_pool(admin=True)
+
+    launcher_conf = {
+        "project_id": project["id"],
+        "resource_class_id": resource_pool["classes"][0]["id"],
+        "disk_storage": 42,
+        "name": "Private build image with accessible repository",
+        "description": "A session launcher",
+        "environment": {
+            "environment_image_source": "build",
+            "repository": "https://github.com/SwissDataScienceCenter/private",
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+        },
+    }
+
+    builds_config = {"enabled": True, "private_builds_enabled": False}
+
+    with MemberContext(app_manager.config.builds, builds_config):
+        _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=launcher_conf)
+        assert res.status_code == 500
+        assert res.json["error"]["message"] == "Private repository builds are not enabled"
 
 
 @pytest.mark.parametrize(
@@ -1578,13 +1974,13 @@ async def test_starting_session_anonymous(
             True,
         ),
         (
-            422,
+            201,
             "https://github.com/SwissDataScienceCenter/renku",
             "https://github.com/SwissDataScienceCenter/not-the same",
             False,
         ),
         (
-            422,
+            201,
             "https://github.com/SwissDataScienceCenter/other-private",
             "https://github.com/SwissDataScienceCenter/other-private",
             True,
@@ -1608,9 +2004,6 @@ async def test_starting_session_with_built_environment(
     is_private,
     builds_enabled,
 ) -> None:
-    if not builds_enabled and is_private:
-        expected_status_code = 422
-
     project: dict[str, Any] = await create_project(
         sanic_client,
         "Some project",

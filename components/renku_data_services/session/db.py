@@ -293,6 +293,15 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         if not update.build_parameters:
             return
 
+        if update.args is RESET:
+            environment.args = None
+        elif update.args is not None:
+            environment.args = update.args
+        if update.command is RESET:
+            environment.command = None
+        elif update.command is not None:
+            environment.command = update.command
+
         build_parameters = update.build_parameters
 
         if build_parameters.repository is not None:
@@ -471,6 +480,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                         message=f"Frontend variant {launcher.environment.frontend_variant} is not valid or "
                         "cannot be found."
                     )
+
+                cmd_args = self.__make_cmd_and_args(launcher.launcher_type, launcher.environment)
+                cmd = cmd_args[0] if cmd_args else None
+                args = cmd_args[1] if cmd_args else None
+
                 environment_orm = schemas.EnvironmentORM(
                     name=launcher.name,
                     created_by_id=user.id,
@@ -483,8 +497,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     uid=env.uid,
                     gid=env.gid,
                     environment_kind=env.environment_kind,
-                    command=env.command,
-                    args=env.args,
+                    command=cmd or env.command,
+                    args=args or env.args,
                     creation_date=datetime.now(UTC).replace(microsecond=0),
                     environment_image_source=env.environment_image_source,
                     build_parameters_id=build_parameters_orm.id,
@@ -780,6 +794,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     raise errors.ValidationError(
                         message=f"Frontend variant {frontend_variant} is not valid or cannot be found."
                     )
+
+                cmd_args = self.__make_cmd_and_args(launcher.launcher_type, new_custom_built_environment)
+                cmd = cmd_args[0] if cmd_args else None
+                args = cmd_args[1] if cmd_args else None
+
                 launcher.environment.container_image = build_env.container_image
                 launcher.environment.default_url = build_env.default_url
                 launcher.environment.port = build_env.port
@@ -788,8 +807,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 launcher.environment.uid = build_env.uid
                 launcher.environment.gid = build_env.gid
                 launcher.environment.environment_kind = build_env.environment_kind
-                launcher.environment.command = build_env.command
-                launcher.environment.args = build_env.args
+                launcher.environment.command = cmd or build_env.command
+                launcher.environment.args = args or build_env.args
                 launcher.environment.environment_image_source = build_env.environment_image_source
                 launcher.environment.build_parameters_id = build_parameters_orm.id
                 launcher.environment.build_parameters = build_parameters_orm
@@ -846,17 +865,12 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
-            if user.id is not None:
-                await self._refresh_build(build=build, session=session, user_id=user.id)
+            await self._refresh_build(build=build, session=session)
 
             return build.dump()
 
     async def get_environment_builds(self, user: base_models.APIUser, environment_id: ULID) -> list[models.Build]:
         """Get all builds from a session environment."""
-
-        if not user.is_authenticated or user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-
         async with self.session_maker() as session, session.begin():
             environment = await session.scalar(
                 select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
@@ -884,7 +898,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
             # Check and refresh the status of in-progress builds
             for build in builds:
-                await self._refresh_build(build=build, session=session, user_id=user.id)
+                await self._refresh_build(build=build, session=session)
 
             return [build.dump() for build in builds]
 
@@ -905,7 +919,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 raise errors.MissingResourceError(message=not_found_message)
 
             authorized = await self._get_environment_authorization(
-                session=session, user=user, environment=environment, scope=Scope.READ
+                session=session, user=user, environment=environment, scope=Scope.WRITE
             )
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_message)
@@ -929,7 +943,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 .order_by(schemas.BuildORM.id.desc())
             )
             async for item in in_progress_builds:
-                await self._refresh_build(build=item, session=session, user_id=user.id)
+                await self._refresh_build(build=item, session=session)
                 if item.status == models.BuildStatus.in_progress:
                     raise errors.ConflictError(
                         message=f"Session environment with id '{build.environment_id}' already has a build in progress."
@@ -947,21 +961,28 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             build_orm = schemas.BuildORM(
                 environment_id=build.environment_id,
                 status=models.BuildStatus.in_progress,
+                result_repository_url=build_parameters.repository,
             )
+
+            launcher = launcher_orm.dump() if launcher_orm is not None else None
+
+            params: models.ShipwrightBuildRunParams | None = None
+            if self.shipwright_client is not None:
+                params = await self._get_buildrun_params(
+                    user=user, build=build_orm.dump(), build_parameters=build_parameters, launcher=launcher
+                )
+                build_orm.result_image = params.output_image
+            else:
+                logger.error("Shipwright client is None")
+
             session.add(build_orm)
             await session.flush()
             await session.refresh(build_orm)
-
-        result = build_orm.dump()
-        launcher = launcher_orm.dump() if launcher_orm is not None else None
+            result = build_orm.dump()
 
         if self.shipwright_client is not None:
-            params = await self._get_buildrun_params(
-                user=user, build=result, build_parameters=build_parameters, launcher=launcher
-            )
+            assert params is not None
             await self.shipwright_client.create_image_build(params=params, user_id=user.id)
-        else:
-            logger.error("Shipwright client is None")
 
         return result
 
@@ -986,7 +1007,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
-            await self._refresh_build(build=build, session=session, user_id=user.id)
+            await self._refresh_build(build=build, session=session)
 
             if build.status == models.BuildStatus.succeeded or build.status == models.BuildStatus.failed:
                 raise errors.ValidationError(
@@ -1021,29 +1042,35 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             result = await session.scalars(stmt)
             build = result.one_or_none()
 
+            not_found_message = f"Build with id '{build_id}' does not exist or you do not have access to it."
             if build is None:
-                raise errors.MissingResourceError(
-                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
-                )
+                raise errors.MissingResourceError(message=not_found_message)
 
-            if build.environment.environment_kind == models.EnvironmentKind.GLOBAL:
-                authorized = True
+            authorized = await self._get_environment_authorization(
+                session=session, user=user, environment=build.environment, scope=Scope.WRITE
+            )
+
+            # If the output image is private, check that the user can read the source repository
+            if build.result_image is None:
+                authorized = False
             else:
-                launcher = await session.scalar(
-                    select(schemas.SessionLauncherORM).where(
-                        schemas.SessionLauncherORM.environment_id == build.environment_id
-                    )
-                )
-                if launcher is None:
-                    authorized = False
-                else:
-                    authorized = await self.project_authz.has_permission(
-                        user, ResourceType.project, launcher.project_id, Scope.WRITE
-                    )
+                if self.builds_config.private_builds_enabled and build.result_image.startswith(
+                    self.builds_config.build_output_private_image_prefix
+                ):
+                    if build.result_repository_url is None:
+                        authorized = False
+                    else:
+                        repo_data = await self.git_repositories_repo.get_repository(
+                            repository_url=build.result_repository_url,
+                            user=user,
+                            etag=None,
+                            internal_gitlab_user=base_models.APIUser(),
+                        )
+                        if not isinstance(repo_data.metadata, Metadata) or not repo_data.metadata.pull_permission:
+                            authorized = False
+
             if not authorized:
-                raise errors.MissingResourceError(
-                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
-                )
+                raise errors.MissingResourceError(message=not_found_message)
 
         build_model = build.dump()
 
@@ -1051,10 +1078,10 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             raise errors.MissingResourceError(message=f"Build with id '{build_id}' does not have logs.")
 
         return await self.shipwright_client.get_image_build_logs(
-            buildrun_name=build_model.k8s_name, user_id=user.id, max_log_lines=max_log_lines
+            buildrun_name=build_model.k8s_name, max_log_lines=max_log_lines
         )
 
-    async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession, user_id: str) -> None:
+    async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession) -> None:
         """Refresh the status and environment of a build by querying Shipwright.
 
         Once the build run has completed, the corresponding session launcher's environment
@@ -1070,7 +1097,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
         # TODO: consider how we can parallelize calls to `shipwright_client` for refreshes.
         status_update, frontend_var = await self.shipwright_client.update_image_build_status(
-            buildrun_name=build.dump().k8s_name, user_id=user_id
+            buildrun_name=build.dump().k8s_name
         )
 
         if status_update.update is None:
@@ -1166,19 +1193,25 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         )
 
         if result.is_error:
-            raise errors.CannotStartBuildError(message=str(result.error))
+            raise errors.UnauthorizedError(
+                message=f"You do not have the required credentials to clone the code repository {git_repository}."
+            )
 
         authentication_secret: models.AuthenticationSecret | None = None
-        output_image_prefix = (
-            self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
-        )
-        push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
+        output_image_prefix = self.builds_config.build_output_image_prefix
+        push_secret_name = self.builds_config.push_secret_name
 
         visibility: RepositoryVisibility = RepositoryVisibility.public
         if isinstance(result.metadata, Metadata):
             visibility = result.metadata.visibility
 
         if visibility == RepositoryVisibility.private:
+            if not self.builds_config.private_builds_enabled:
+                raise errors.CannotStartBuildError(message="Private repository builds are not enabled")
+            if isinstance(result.metadata, Metadata) and not result.metadata.pull_permission:
+                raise errors.ForbiddenError(
+                    message=f"You do not have the required permissions to clone the code repository {git_repository}."
+                )
             token: dict[str, Any] | None = await self.git_repositories_repo.get_token(
                 repository_url=git_repository, user=user
             )
@@ -1187,14 +1220,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 password=token.get("access_token", "") if token is not None else "",
             )
 
-            output_image_prefix = (
-                self.builds_config.build_output_private_image_prefix
-                or constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
-            )
-
-            push_secret_name = (
-                self.builds_config.push_private_secret_name or constants.BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME
-            )
+            output_image_prefix = self.builds_config.build_output_private_image_prefix
+            push_secret_name = self.builds_config.push_private_secret_name
 
         output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
         output_image_tag = build.k8s_name
@@ -1246,6 +1273,16 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         if launcher:
             authorized = await self.project_authz.has_permission(user, ResourceType.project, launcher.project_id, scope)
         return authorized
+
+    def __make_cmd_and_args(
+        self, launcher_type: models.LauncherType, env: models.UnsavedBuildParameters
+    ) -> tuple[list[str], list[str]] | None:
+        if launcher_type == models.LauncherType.non_interactive:
+            cmd = env.job_command or []
+            args = env.job_args or []
+            return (cmd, args)
+        else:
+            return None
 
     @classmethod
     def make_session_environment_repo(

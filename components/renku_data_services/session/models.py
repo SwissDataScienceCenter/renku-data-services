@@ -91,6 +91,8 @@ class UnsavedBuildParameters:
     frontend_variant: str
     repository_revision: str | None = None
     context_dir: str | None = None
+    job_command: list[str] | None = None
+    job_args: list[str] | None = None
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)

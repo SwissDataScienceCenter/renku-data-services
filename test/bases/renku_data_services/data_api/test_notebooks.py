@@ -12,7 +12,13 @@ from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.dependencies import DependencyManager
-from renku_data_services.notebooks.crs import AmaltheaSessionSpec, AmaltheaSessionV1Alpha1, Resources, Session
+from renku_data_services.notebooks.crs import (
+    AmaltheaSessionSpec,
+    AmaltheaSessionV1Alpha1,
+    Resources,
+    Session,
+    Type,
+)
 
 
 @pytest.fixture
@@ -189,6 +195,7 @@ async def test_user_server_list(
     assert res.status_code == 200, res.text
     assert len(res.json) == 1
     assert res.json[0]["name"] == amalthea_session.metadata.name
+    assert res.json[0]["session_type"] == "interactive"
 
 
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
@@ -322,3 +329,71 @@ async def test_not_found_server(
     _, res = await sanic_client.get(f"/api/data/sessions/{server_name}", headers=authenticated_user_headers)
 
     assert res.status_code == 404, res.text
+
+
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+@pytest.mark.sessions
+@pytest.mark.asyncio
+async def test_start_server_remote_readiness_probe(
+    sanic_client: SanicASGITestClient,
+    authenticated_user_headers,
+    notebooks_fixtures,
+    create_session_launcher,
+    create_project,
+    renku_image,
+    create_resource_pool,
+    app_manager_instance: DependencyManager,
+    regular_user_api_user: APIUser,
+    admin_headers: dict[str, str],
+):
+    """Remote interactive sessions should use an HTTP readiness probe."""
+    # Create an OAuth2 provider required for a remote resource pool.
+    provider_payload = {
+        "id": "test-provider-for-remote-session-notebooks",
+        "kind": "gitlab",
+        "client_id": "test-client-id",
+        "display_name": "Test Provider",
+        "scope": "api",
+        "url": "https://example.org",
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=provider_payload)
+    assert res.status_code == 201, res.text
+
+    # Create a private resource pool and patch it to be remote.
+    rp = await create_resource_pool(admin=True, public=False)
+    patch = {
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": provider_payload["id"],
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    }
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+
+    proj = await create_project(sanic_client, "proj1")
+    env = {
+        "environment_kind": "CUSTOM",
+        "name": "Test",
+        "container_image": renku_image,
+        "environment_image_source": "image",
+    }
+    launcher = await create_session_launcher("launcher_name", proj["id"], **{"environment": env})
+    data = {"launcher_id": launcher["id"], "resource_class_id": rp["classes"][0]["id"]}
+    cookies = {app_manager_instance.config.nb_config.session_id_cookie_name: "session_id"}
+
+    # Use admin headers so the user can access the private remote pool.
+    _, res = await sanic_client.post("/api/data/sessions/", json=data, headers=admin_headers, cookies=cookies)
+    assert res.status_code == 201, res.text
+
+    server_name: str = res.json["name"]
+
+    # Fetch the created session from k8s and verify the readiness probe.
+    # NOTE: The session is created under the admin user's namespace (safe_username="admin").
+    session = await app_manager_instance.config.nb_config.k8s_v2_client.get_session(server_name, "admin")
+    assert session.spec.session.readinessProbe.type == Type.http
+
+    # Cleanup.
+    _, res = await sanic_client.delete(f"/api/data/sessions/{server_name}", headers=admin_headers)
+    assert res.status_code == 204, res.text

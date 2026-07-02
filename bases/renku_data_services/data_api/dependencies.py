@@ -244,11 +244,31 @@ class DependencyManager:
             config.secrets.encryption_key, config.db.async_session_maker
         )
 
-        connected_services_repo = ConnectedServicesRepository(
+        metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
+        metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
+        search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
+        authz = Authz(config.authz_config)
+        group_repo = GroupRepository(
             session_maker=config.db.async_session_maker,
-            encryption_key=config.secrets.encryption_key,
-            oauth_client_factory=oauth_http_client_factory,
+            group_authz=authz,
+            search_updates_repo=search_updates_repo,
         )
+        kc_user_repo = KcUserRepo(
+            session_maker=config.db.async_session_maker,
+            group_repo=group_repo,
+            search_updates_repo=search_updates_repo,
+            encryption_key=config.secrets.encryption_key,
+            metrics=metrics,
+            authz=authz,
+        )
+
+        project_repo = ProjectRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            group_repo=group_repo,
+            search_updates_repo=search_updates_repo,
+        )
+
         k8s_db_cache = K8sDbCache(config.db.async_session_maker)
         default_kubeconfig = KubeConfigEnv()
         client = K8sClusterClientsPool(
@@ -260,7 +280,22 @@ class DependencyManager:
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             ),
         )
+
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
+        member_repo = MemberRepository(
+            session_maker=config.db.async_session_maker,
+            quotas_repo=quota_repo,
+            user_repo=kc_user_repo,
+            group_repo=group_repo,
+            project_repo=project_repo,
+            authz=authz,
+        )
+        connected_services_repo = ConnectedServicesRepository(
+            session_maker=config.db.async_session_maker,
+            encryption_key=config.secrets.encryption_key,
+            oauth_client_factory=oauth_http_client_factory,
+            member_repo=member_repo,
+        )
         job_client = DepositUploadJobClient(client)
         secret_client = K8sSecretClient(client)
 
@@ -310,45 +345,12 @@ class DependencyManager:
                     namespace=config.k8s_namespace,
                 )
 
-        authz = Authz(config.authz_config)
         internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
         internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
         internal_scope_verifier = ScopeVerifier(
             deposit_config=config.deposit_config,
             notebook_k8s_client=config.nb_config.k8s_v2_client,
             job_client=job_client,
-        )
-        search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
-        metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
-        metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
-        group_repo = GroupRepository(
-            session_maker=config.db.async_session_maker,
-            group_authz=authz,
-            search_updates_repo=search_updates_repo,
-        )
-        kc_user_repo = KcUserRepo(
-            session_maker=config.db.async_session_maker,
-            group_repo=group_repo,
-            search_updates_repo=search_updates_repo,
-            encryption_key=config.secrets.encryption_key,
-            metrics=metrics,
-            authz=authz,
-        )
-
-        project_repo = ProjectRepository(
-            session_maker=config.db.async_session_maker,
-            authz=authz,
-            group_repo=group_repo,
-            search_updates_repo=search_updates_repo,
-        )
-
-        member_repo = MemberRepository(
-            session_maker=config.db.async_session_maker,
-            quotas_repo=quota_repo,
-            user_repo=kc_user_repo,
-            group_repo=group_repo,
-            project_repo=project_repo,
-            authz=authz,
         )
         resource_requests_repo = ResourceRequestsRepo(
             session_maker=config.db.async_session_maker,
@@ -360,6 +362,7 @@ class DependencyManager:
             authz=authz,
             resource_usage_service=resource_usage_service,
             resource_requests_repo=resource_requests_repo,
+            member_repo=member_repo,
         )
         storage_repo = StorageRepository(
             session_maker=config.db.async_session_maker,
@@ -439,6 +442,9 @@ class DependencyManager:
         )
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
+            builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
+            session_repo=session_repo,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_http_client_factory,
         )

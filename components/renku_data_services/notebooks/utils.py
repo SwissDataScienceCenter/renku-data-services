@@ -1,7 +1,10 @@
 """Utilities for notebooks."""
 
+from urllib.parse import urlparse
+
 import renku_data_services.crc.models as crc_models
 from renku_data_services.base_models.core import RESET, ResetType
+from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.crs import (
     Affinity,
     AffinityPatch,
@@ -16,6 +19,7 @@ from renku_data_services.notebooks.crs import (
     RequiredDuringSchedulingIgnoredDuringExecution,
     Toleration,
 )
+from renku_data_services.project.models import Project
 
 
 def intersect_node_affinities(
@@ -177,3 +181,16 @@ def tolerations_from_resource_class(
     for tol in resource_class.tolerations:
         output.append(Toleration(key=tol, operator="Exists"))
     return output
+
+
+def repositories_from_project(project: Project, git_providers: list[GitProvider]) -> list[Repository]:
+    """Get the list of git repositories from a project."""
+    repositories: list[Repository] = []
+    for repo in project.repositories:
+        found_provider_id: str | None = None
+        for provider in git_providers:
+            if urlparse(provider.url).netloc == urlparse(repo).netloc:
+                found_provider_id = provider.id
+                break
+        repositories.append(Repository(url=repo, provider=found_provider_id))
+    return repositories

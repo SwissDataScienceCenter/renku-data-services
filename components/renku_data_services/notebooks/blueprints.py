@@ -119,11 +119,13 @@ class NotebooksNewBP(CustomBlueprint):
         async def _handler(
             _: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, query: apispec.SessionsGetParametersQuery
         ) -> HTTPResponse:
-            session_mode = (
-                SessionType.non_interactive
-                if query.session_type == apispec.SessionType.non_interactive
-                else SessionType.interactive
-            )
+            session_mode: SessionType | None = None
+            match query.session_type:
+                case apispec.SessionType.interactive:
+                    session_mode = SessionType.interactive
+                case apispec.SessionType.non_interactive:
+                    session_mode = SessionType.non_interactive
+
             sessions = await self.nb_config.k8s_v2_client.list_sessions(user.id, session_mode)
             output: list[dict] = []
             for session in sessions:
@@ -225,9 +227,10 @@ class NotebooksNewBP(CustomBlueprint):
             result = await self.image_check_repo.check_image(
                 user=user,
                 gitlab_user=internal_gitlab_user,
-                image=image,
+                image_src=image,
             )
             logger.info(f"Checked image {query.image_url}: {result}")
+
             conn = None
             if result.connection:
                 match result.connection.status:
@@ -255,7 +258,10 @@ class NotebooksNewBP(CustomBlueprint):
                 platforms = [apispec.ImagePlatform.model_validate(p) for p in result.platforms]
 
             resp = apispec.ImageCheckResponse(
-                accessible=result.accessible, platforms=platforms, connection=conn, provider=provider
+                accessible=result.accessible,
+                platforms=platforms,
+                connection=conn,
+                provider=provider,
             )
 
             return json(resp.model_dump(exclude_none=True, mode="json"))

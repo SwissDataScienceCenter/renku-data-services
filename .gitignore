@@ -88,6 +88,11 @@ result
 .k3d-config.yaml
 .kind-kubeconfig.yaml
 
+# testmon
+.testmondata
+.testmondata-shm
+.testmondata-wal
+
 # Misc
 *.pem
 *.gz

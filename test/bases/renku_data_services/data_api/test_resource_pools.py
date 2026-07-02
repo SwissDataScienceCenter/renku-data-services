@@ -3,14 +3,17 @@ from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.resource_usage.model import Credit, ResourceClassCost, ResourcePoolLimits
-from test.bases.renku_data_services.data_api.utils import create_rp
+from renku_data_services.users.models import UserInfo
+from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_client, create_rp
 from test.components.renku_data_services.resource_usage.helper import make_resources_request
 from test.utils import KindCluster
 
@@ -1735,6 +1738,7 @@ async def test_resource_pools_quota_with_partial_usage(
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": True,
         }
     ]
     payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
@@ -1947,6 +1951,7 @@ async def test_resource_pools_quota_exceeded(
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": True,
         }
     ]
     payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
@@ -2090,6 +2095,7 @@ async def test_resource_pools_quota_with_no_limits(
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": True,
         }
     ]
     payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
@@ -2211,6 +2217,7 @@ async def test_resource_pools_quota_with_no_costs(
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": True,
         }
     ]
     payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
@@ -2961,3 +2968,201 @@ async def test_resource_pool_members_delete_nonexistent_project(
         headers=admin_headers,
     )
     assert res.status_code == 204
+
+
+# --- Integration Group API Tests (D1-D3) ---
+
+
+async def _complete_oauth_flow(
+    test_client: SanicASGITestClient,
+    provider_id: str,
+    user_headers: dict[str, str],
+) -> None:
+    """Helper to complete a dummy OAuth2 authorization flow for a given provider."""
+    _, res = await test_client.get(f"/api/data/oauth2/providers/{provider_id}/authorize", headers=user_headers)
+    assert res.status_code == 302, res.text
+    location = res.headers["location"]
+    state = parse_qs(urlparse(location).query)["state"][0]
+    _, res = await test_client.get(f"/api/data/oauth2/callback?state={state}")
+    assert res.status_code == 200, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_post_resource_pool_with_remote_grants_connected_users(
+    sanic_client: SanicASGITestClient,
+    app_manager_instance: "DependencyManager",
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    regular_user: UserInfo,
+    cluster: KindCluster,
+) -> None:
+    # Set up dummy OAuth client so the flow works
+    app_manager_instance.oauth_http_client_factory.create_client = create_dummy_oauth_client
+
+    # Create provider
+    provider_payload = {
+        "id": "d1-provider",
+        "kind": "gitlab",
+        "client_id": "cid",
+        "client_secret": "secret",
+        "display_name": "D1 Provider",
+        "scope": "api",
+        "url": "https://example.org",
+        "use_pkce": False,
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=provider_payload)
+    assert res.status_code == 201, res.text
+    provider_id = provider_payload["id"]
+
+    # Regular user connects to provider
+    await _complete_oauth_flow(sanic_client, provider_id, user_headers)
+
+    # Admin creates linked RP
+    rp_payload = {
+        "name": "d1-rp",
+        "classes": [
+            {
+                "cpu": 1.0,
+                "memory": 10,
+                "gpu": 0,
+                "name": "class1",
+                "max_storage": 100,
+                "default_storage": 1,
+                "default": True,
+                "node_affinities": [],
+                "tolerations": [],
+            }
+        ],
+        "quota": {"cpu": 100, "memory": 100, "gpu": 0},
+        "default": False,
+        "public": False,
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": provider_id,
+            "api_url": "https://example.org",
+            "system_name": "sys",
+        },
+    }
+    _, res = await create_rp(rp_payload, sanic_client)
+    assert res.status_code == 201, res.text
+    rp = res.json
+
+    # Regular user can now see the RP
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200, res.text
+    rp_ids = {r["id"] for r in res.json}
+    assert rp["id"] in rp_ids
+
+    # Cleanup
+    _, res = await sanic_client.delete(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers)
+    assert res.status_code == 204, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_resource_pool_remote_change_swaps_access(
+    sanic_client: SanicASGITestClient,
+    app_manager_instance: "DependencyManager",
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    member_1_headers: dict[str, str],
+    regular_user: UserInfo,
+    member_1_user: UserInfo,
+    cluster: KindCluster,
+) -> None:
+    app_manager_instance.oauth_http_client_factory.create_client = create_dummy_oauth_client
+
+    # Create two providers
+    p1_payload = {
+        "id": "d3-p1",
+        "kind": "gitlab",
+        "client_id": "c1",
+        "client_secret": "s1",
+        "display_name": "D3 P1",
+        "scope": "api",
+        "url": "https://example.org",
+        "use_pkce": False,
+    }
+    p2_payload = {
+        "id": "d3-p2",
+        "kind": "gitlab",
+        "client_id": "c2",
+        "client_secret": "s2",
+        "display_name": "D3 P2",
+        "scope": "api",
+        "url": "https://example.org",
+        "use_pkce": False,
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=p1_payload)
+    assert res.status_code == 201, res.text
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=p2_payload)
+    assert res.status_code == 201, res.text
+
+    # Connect regular_user to P1 and member_1 to P2
+    await _complete_oauth_flow(sanic_client, p1_payload["id"], user_headers)
+    await _complete_oauth_flow(sanic_client, p2_payload["id"], member_1_headers)
+
+    # Admin creates RP linked to P1
+    rp_payload = {
+        "name": "d3-rp",
+        "classes": [
+            {
+                "cpu": 1.0,
+                "memory": 10,
+                "gpu": 0,
+                "name": "class1",
+                "max_storage": 100,
+                "default_storage": 1,
+                "default": True,
+                "node_affinities": [],
+                "tolerations": [],
+            }
+        ],
+        "quota": {"cpu": 100, "memory": 100, "gpu": 0},
+        "default": False,
+        "public": False,
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": p1_payload["id"],
+            "api_url": "https://example.org",
+            "system_name": "sys",
+        },
+    }
+    _, res = await create_rp(rp_payload, sanic_client)
+    assert res.status_code == 201, res.text
+    rp = res.json
+
+    # regular_user can see RP; member_1 cannot
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert rp["id"] in {r["id"] for r in res.json}
+
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=member_1_headers)
+    assert res.status_code == 200, res.text
+    assert rp["id"] not in {r["id"] for r in res.json}
+
+    # Admin patches RP to P2
+    patch = {
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": p2_payload["id"],
+            "api_url": "https://example.org",
+            "system_name": "sys2",
+        }
+    }
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+
+    # regular_user can no longer see RP; member_1 can
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert rp["id"] not in {r["id"] for r in res.json}
+
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=member_1_headers)
+    assert res.status_code == 200, res.text
+    assert rp["id"] in {r["id"] for r in res.json}
+
+    # Cleanup
+    _, res = await sanic_client.delete(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers)
+    assert res.status_code == 204, res.text

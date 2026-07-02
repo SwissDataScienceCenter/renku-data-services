@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Final, cast
 
 from kubernetes.client import V1ObjectMeta, V1Secret
 from pydantic import AliasGenerator, BaseModel, ConfigDict, Field, Json
@@ -26,6 +27,45 @@ from renku_data_services.notebooks.crs import (
     SecretRef,
 )
 from renku_data_services.session.models import LauncherType
+
+
+class SubmissionId:
+    """Type for a submission id used to start jobs."""
+
+    __pattern: Final[re.Pattern] = re.compile("^[a-z][-0-9a-z]{3,19}$")
+
+    def __init__(self, value: Any) -> None:
+        msg = self.__check_str(value)
+        if msg is None:
+            self.value: str = value
+        else:
+            raise ValueError(msg)
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __repr__(self) -> str:
+        return self.value
+
+    @classmethod
+    def from_str(cls, v: str) -> SubmissionId | None:
+        """Create a submission id from a str if it validates."""
+        if not cls.__check_str(v):
+            return SubmissionId(v.strip())
+        return None
+
+    @classmethod
+    def __check_str(cls, v: Any) -> str | None:
+        """Validate a string for a submission id.
+
+        Return either an error message or None if the string is valid.
+        """
+        if not isinstance(v, str):
+            return f"Invalid submission id: {v}"
+
+        if not cls.__pattern.fullmatch(v):
+            return f"Invalid submission id: {v}"
+        return None
 
 
 @dataclass
@@ -261,3 +301,6 @@ class SessionLaunchRequest:
     resource_class_id: int | None
     data_connectors_overrides: list[SessionDataConnectorOverride] | None
     env_variable_overrides: list[SessionEnvVar] | None
+    submission_id: SubmissionId | None
+    job_command_overrides: list[str] | None
+    job_args_overrides: list[str] | None

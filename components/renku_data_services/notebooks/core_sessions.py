@@ -98,6 +98,7 @@ from renku_data_services.notebooks.models import (
     SessionExtraResources,
     SessionLaunchRequest,
     SessionType,
+    SubmissionId,
 )
 from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
@@ -105,12 +106,12 @@ from renku_data_services.notebooks.util.kubernetes_ import (
 from renku_data_services.notebooks.utils import (
     node_affinity_from_resource_class,
     node_affinity_patch_from_resource_class,
+    repositories_from_project,
     tolerations_from_resource_class,
 )
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
-from renku_data_services.project.models import Project, SessionSecret
+from renku_data_services.project.models import SessionSecret
 from renku_data_services.repositories.db import GitRepositoriesRepository
-from renku_data_services.repositories.models import Metadata as RepoMetadata
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
@@ -511,19 +512,6 @@ def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
     return Resources(requests=requests, limits=limits if len(limits) > 0 else None)
 
 
-def repositories_from_project(project: Project, git_providers: list[GitProvider]) -> list[Repository]:
-    """Get the list of git repositories from a project."""
-    repositories: list[Repository] = []
-    for repo in project.repositories:
-        found_provider_id: str | None = None
-        for provider in git_providers:
-            if urlparse(provider.url).netloc == urlparse(repo).netloc:
-                found_provider_id = provider.id
-                break
-        repositories.append(Repository(url=repo, provider=found_provider_id))
-    return repositories
-
-
 async def repositories_from_session(
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     session: AmaltheaSessionV1Alpha1,
@@ -681,12 +669,20 @@ def __format_image_pull_secret(secret_name: str, access_token: str, registry_dom
 
 
 async def __get_connected_services_image_pull_secret(
-    secret_name: str, image_check_repo: ImageCheckRepository, image: str, user: APIUser
+    secret_name: str,
+    image_check_repo: ImageCheckRepository,
+    launcher: SessionLauncher,
+    user: APIUser,
 ) -> ExtraSecret | None:
     """Return a secret for accessing the image if one is available for the given user."""
-    image_parsed = Image.from_path(image)
-    image_check_result = await image_check_repo.check_image(user=user, gitlab_user=None, image=image_parsed)
-    logger.debug(f"Set pull secret for {image} to connection {image_check_result.image_provider}")
+    image_check_result = await image_check_repo.check_image(user=user, gitlab_user=None, image_src=launcher)
+
+    if not image_check_result.accessible:
+        return None
+
+    logger.debug(
+        f"Set pull secret for {launcher.environment.container_image} to connection {image_check_result.image_provider}"
+    )
     if not image_check_result.token:
         return None
 
@@ -700,8 +696,29 @@ async def __get_connected_services_image_pull_secret(
     )
 
 
+async def __get_private_image_build_secret(
+    launcher: SessionLauncher, user: APIUser, image_check_repo: ImageCheckRepository, builds_config: BuildsConfig
+) -> ExtraSecret | None:
+    """Get the private image pull secret if user has access to the repository used to build the image."""
+
+    if user.is_anonymous:
+        return None
+
+    try:
+        await image_check_repo.check_built_image_accessibility(user=user, gitlab_user=None, launcher=launcher)
+    except (errors.ValidationError, errors.ProgrammingError, errors.ForbiddenError):
+        return None
+
+    return ExtraSecret(
+        V1Secret(
+            metadata=V1ObjectMeta(name=builds_config.pull_private_image_secret_name),
+        ),
+        adopt=False,
+    )
+
+
 async def get_image_pull_secret(
-    image: str,
+    launcher: SessionLauncher,
     server_name: str,
     nb_config: NotebooksConfig,
     user: APIUser,
@@ -712,21 +729,21 @@ async def get_image_pull_secret(
     """Get an image pull secret."""
 
     v2_secret = await __get_connected_services_image_pull_secret(
-        f"{server_name}-image-secret", image_check_repo, image, user
+        f"{server_name}-image-secret", image_check_repo, launcher, user
     )
     if v2_secret:
         return v2_secret
 
     if (
         builds_config.enabled
-        and builds_config.build_output_private_image_prefix is not None
-        and image.startswith(builds_config.build_output_private_image_prefix)
+        and builds_config.private_builds_enabled
+        and launcher.environment.container_image.startswith(builds_config.build_output_private_image_prefix)
     ):
-        return ExtraSecret(
-            V1Secret(
-                metadata=V1ObjectMeta(name=builds_config.pull_private_image_secret_name),
-            ),
-            adopt=False,
+        return await __get_private_image_build_secret(
+            launcher=launcher,
+            user=user,
+            image_check_repo=image_check_repo,
+            builds_config=builds_config,
         )
 
     if (
@@ -734,7 +751,9 @@ async def get_image_pull_secret(
         and isinstance(user, AuthenticatedAPIUser)
         and internal_gitlab_user.access_token is not None
     ):
-        needs_pull_secret = await __requires_image_pull_secret(nb_config, image, internal_gitlab_user)
+        needs_pull_secret = await __requires_image_pull_secret(
+            nb_config, launcher.environment.container_image, internal_gitlab_user
+        )
         if needs_pull_secret:
             v1_secret = await __get_gitlab_image_pull_secret(
                 nb_config, user, f"{server_name}-image-secret-v1", internal_gitlab_user.access_token
@@ -838,8 +857,15 @@ async def start_session(
     """
     launcher = await session_repo.get_launcher(user=user, launcher_id=launch_request.launcher_id)
     launcher_id = launcher.id
+
     project = await project_repo.get_project(user=user, project_id=launcher.project_id)
     session_type = SessionType.from_launcher_type(launcher.launcher_type)
+
+    if session_type.is_non_interactive and launch_request.submission_id is None:
+        raise errors.ValidationError(message="Job submissions require a submission_id.")
+
+    if session_type.is_interactive and (launch_request.job_args_overrides or launch_request.job_command_overrides):
+        raise errors.ValidationError(message="Interactive sessions don't allow job_args_override.")
 
     # Determine resource_class_id: the class can be overwritten at the user's request
     resource_class_id = launch_request.resource_class_id or launcher.resource_class_id
@@ -847,7 +873,11 @@ async def start_session(
     cluster = await nb_config.k8s_v2_client.cluster_by_class_id(resource_class_id, user)
 
     server_name = renku_2_make_server_name(
-        user=user, project_id=str(launcher.project_id), launcher_id=str(launcher_id), cluster_id=str(cluster.id)
+        user=user,
+        project_id=str(launcher.project_id),
+        launcher_id=str(launcher_id),
+        cluster_id=str(cluster.id),
+        submission_id=launch_request.submission_id,
     )
     existing_session = await nb_config.k8s_v2_client.get_session(name=server_name, safe_username=user.id)
     if existing_session is not None:
@@ -903,21 +933,6 @@ async def start_session(
     data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
-
-    if environment.build_parameters is not None:
-        build_repository = environment.build_parameters.repository
-        if build_repository not in [repository.url for repository in repositories]:
-            raise errors.ValidationError(message="Image was not built from a repository in this project")
-
-        repo_data = await git_repositories_repo.get_repository(
-            repository_url=build_repository, user=user, etag=None, internal_gitlab_user=internal_gitlab_user
-        )
-        if repo_data.is_error:
-            raise errors.ValidationError(message=str(repo_data.error))
-        if isinstance(repo_data.metadata, RepoMetadata):
-            metadata: RepoMetadata = repo_data.metadata
-            if not metadata.pull_permission:
-                raise errors.ValidationError(message="User does not have access to image repository")
 
     # User secrets
     session_extras = SessionExtraResources()
@@ -987,6 +1002,8 @@ async def start_session(
         "renku.io/resource_class_id": str(resource_class.id),
         "renku.io/resource_pool_id": str(resource_pool.id),
     }
+    if launch_request.submission_id:
+        annotations.update({"renku.io/submission_id": str(launch_request.submission_id)})
 
     # Authentication
     if isinstance(user, AuthenticatedAPIUser):
@@ -1010,7 +1027,7 @@ async def start_session(
         authn_extra_volume_mounts.extend(cert_vol_mounts)
 
     image_secret = await get_image_pull_secret(
-        image=image,
+        launcher=launcher,
         server_name=server_name,
         nb_config=nb_config,
         user=user,
@@ -1068,6 +1085,7 @@ async def start_session(
         env.extend(
             [
                 SessionEnvItem(name="RENKU_JOB", value="1"),
+                SessionEnvItem(name="RENKU_SUBMISSION_ID", value=str(launch_request.submission_id)),
             ]
         )
     if session_location == SessionLocation.remote:
@@ -1085,11 +1103,26 @@ async def start_session(
         "renku.io/session-type": str(session_type),
     }
 
+    if session_location == SessionLocation.remote:
+        labels["renku.io/remote-tunnel"] = "allow"
+
     if user.is_anonymous:
         labels["renku.io/anonymous-session"] = "true"
 
     if session_type.is_non_interactive:
         session_extras = session_extras.extra_container_as_sidecars()
+
+    command = environment.command
+    args = environment.args
+    # if non-interactive and built-from-code, we need to wrap the "real" command in a launcher script
+    if session_type.is_non_interactive and launcher.environment.build_parameters_id is not None:
+        command = ["/cnb/lifecycle/launcher", "--"]
+        args = (launch_request.job_command_overrides or environment.command or []) + (
+            launch_request.job_args_overrides or environment.args or []
+        )
+    elif session_type.is_non_interactive:
+        command = launch_request.job_command_overrides or environment.command or []
+        args = launch_request.job_args_overrides or environment.args or []
 
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations, labels=labels),
@@ -1118,13 +1151,13 @@ async def start_session(
                 runAsGroup=environment.gid,
                 resources=resources_from_resource_class(resource_class),
                 extraVolumeMounts=session_extras.volume_mounts,
-                command=environment.command,
-                args=environment.args,
+                command=command,
+                args=args,
                 shmSize=ShmSizeStr("1G"),
                 stripURLPath=environment.strip_path_prefix,
                 env=env,
                 remoteSecretRef=remote_secret.ref() if remote_secret else None,
-                readinessProbe=ReadinessProbe(type=Type.none) if session_type.is_non_interactive else ReadinessProbe(),
+                readinessProbe=_get_readiness_probe(session_type, session_location),
             ),
             ingress=ingress_config.get_k8s_ingress() if session_type.is_interactive else None,
             extraContainers=session_extras.containers,
@@ -1405,9 +1438,8 @@ async def patch_session(
         )
 
     # Patching the image pull secret
-    image = session.spec.session.image
     image_pull_secret = await get_image_pull_secret(
-        image=image,
+        launcher=launcher,
         server_name=server_name,
         nb_config=nb_config,
         image_check_repo=image_check_repo,
@@ -1450,6 +1482,20 @@ async def patch_session(
         return session
 
     return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch_serialized)
+
+
+def _get_readiness_probe(session_type: SessionType, session_location: SessionLocation) -> ReadinessProbe:
+    """Return the readiness probe for a session based on type and location.
+
+    - Non-interactive sessions get no probe (Type.none).
+    - Interactive remote sessions (firecrest/runai) use an HTTP probe.
+    - Interactive local sessions use the default TCP probe.
+    """
+    if session_type.is_non_interactive:
+        return ReadinessProbe(type=Type.none)
+    if session_location == SessionLocation.remote:
+        return ReadinessProbe(type=Type.http)
+    return ReadinessProbe(type=Type.tcp)
 
 
 class _NamedResource(Protocol):
@@ -1504,12 +1550,19 @@ def validate_session_post_request(body: apispec.SessionPostRequest) -> SessionLa
         if body.env_variable_overrides
         else None
     )
+    submission_id: SubmissionId | None = None
+    if body.submission_id:
+        submission_id = SubmissionId(body.submission_id)
+
     return SessionLaunchRequest(
         launcher_id=ULID.from_str(body.launcher_id),
         disk_storage=body.disk_storage,
         resource_class_id=body.resource_class_id,
         data_connectors_overrides=data_connectors_overrides,
         env_variable_overrides=env_variable_overrides,
+        submission_id=submission_id,
+        job_command_overrides=body.job_command_override,
+        job_args_overrides=body.job_args_override,
     )
 
 
