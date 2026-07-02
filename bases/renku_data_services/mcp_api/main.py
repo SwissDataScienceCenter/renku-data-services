@@ -76,8 +76,12 @@ def _load_rnk_token() -> str | None:
     return None
 
 
+class TokenNotFoundError(Exception):
+    """Raised when no Renku token can be found from any source."""
+
+
 def _resolve_token() -> str:
-    """Return the best available token, or raise with a helpful message."""
+    """Return the best available token, or raise TokenNotFoundError with a helpful message."""
     # 1. Environment variables (explicit override)
     for var in ("RENKU_ACCESS_TOKEN", "RENKU_TOKEN", "RENKU_CLI_ACCESS_TOKEN"):
         if t := os.environ.get(var):
@@ -88,7 +92,7 @@ def _resolve_token() -> str:
         return t
 
     rnk_paths = [str(p) for p in _rnk_token_paths()]
-    raise RuntimeError(
+    raise TokenNotFoundError(
         f"Not authenticated for {_base_url()}.\n"
         f"Run: rnk login\n"
         f"rnk token paths searched: {', '.join(rnk_paths)}\n"
