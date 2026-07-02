@@ -45,7 +45,7 @@ def _base_url() -> str:
 def _rnk_token_paths() -> list[Path]:
     """Paths where the official rnk CLI stores its token file (platform-specific)."""
     home = Path.home()
-    token_path =  "io.renku.sdsc.renku-cli" / "token.json"
+    token_path = Path("io.renku.sdsc.renku-cli") / "token.json"
     paths: list[Path] = []
     if sys.platform == "darwin":
         paths.append(home / "Library" / "Application Support" / token_path)
