@@ -40,10 +40,14 @@ def _token(ctx: Context) -> str:
             if t:
                 set_current_token(t)  # cache for this session once found
                 return t
-        except RuntimeError:
-            # _resolve_token raises RuntimeError when no token is available;
-            # return empty string so the tool call proceeds and the API returns 401.
-            pass
+        except Exception as exc:  # noqa: BLE001
+            from renku_data_services.mcp_api.main import TokenNotFoundError
+
+            if isinstance(exc, TokenNotFoundError):
+                # No token available — return empty and let the API return 401.
+                pass
+            else:
+                raise
     return ""
 
 
