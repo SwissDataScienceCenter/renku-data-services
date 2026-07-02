@@ -195,6 +195,7 @@ async def test_user_server_list(
     assert res.status_code == 200, res.text
     assert len(res.json) == 1
     assert res.json[0]["name"] == amalthea_session.metadata.name
+    assert res.json[0]["session_type"] == "interactive"
 
 
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests

@@ -81,6 +81,34 @@ class Filters:
     classic = Filter(name="classic")
     ngram = Filter(name="nGram")
 
+    # Flattens the token graph produced by wordDelimiterGraph so it can be indexed.
+    # Must follow wordDelimiterGraph and is only valid in an *index* analyzer.
+    flatten_graph = Filter(name="flattenGraph")
+
+    @classmethod
+    def word_delimiter_graph(
+        cls, catenate: bool = True, preserve_original: bool = True, split_on_case_change: bool = True
+    ) -> Filter:
+        """Create a wordDelimiterGraph filter.
+
+        It splits tokens on intra-word delimiters (e.g. the hyphen in "test-project"
+        into "test" and "project"), and can additionally emit the catenated form
+        ("testproject") and keep the original token ("test-project") via
+        `preserve_original`. See
+        https://solr.apache.org/guide/solr/latest/indexing-guide/filters.html#word-delimiter-graph-filter
+        """
+        return Filter(
+            name="wordDelimiterGraph",
+            settings={
+                "generateWordParts": "1",
+                "generateNumberParts": "1",
+                "catenateWords": "1" if catenate else "0",
+                "catenateNumbers": "1" if catenate else "0",
+                "preserveOriginal": "1" if preserve_original else "0",
+                "splitOnCaseChange": "1" if split_on_case_change else "0",
+            },
+        )
+
     @classmethod
     def edgeNgram(cls, min_gram_size: int = 3, maxGramSize: int = 6, preserve_original: bool = True) -> Filter:
         """Create a edgeNGram filter with the given settings."""

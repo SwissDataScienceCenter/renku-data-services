@@ -293,6 +293,15 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         if not update.build_parameters:
             return
 
+        if update.args is RESET:
+            environment.args = None
+        elif update.args is not None:
+            environment.args = update.args
+        if update.command is RESET:
+            environment.command = None
+        elif update.command is not None:
+            environment.command = update.command
+
         build_parameters = update.build_parameters
 
         if build_parameters.repository is not None:
@@ -471,6 +480,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                         message=f"Frontend variant {launcher.environment.frontend_variant} is not valid or "
                         "cannot be found."
                     )
+
+                cmd_args = self.__make_cmd_and_args(launcher.launcher_type, launcher.environment)
+                cmd = cmd_args[0] if cmd_args else None
+                args = cmd_args[1] if cmd_args else None
+
                 environment_orm = schemas.EnvironmentORM(
                     name=launcher.name,
                     created_by_id=user.id,
@@ -483,8 +497,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     uid=env.uid,
                     gid=env.gid,
                     environment_kind=env.environment_kind,
-                    command=env.command,
-                    args=env.args,
+                    command=cmd or env.command,
+                    args=args or env.args,
                     creation_date=datetime.now(UTC).replace(microsecond=0),
                     environment_image_source=env.environment_image_source,
                     build_parameters_id=build_parameters_orm.id,
@@ -780,6 +794,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     raise errors.ValidationError(
                         message=f"Frontend variant {frontend_variant} is not valid or cannot be found."
                     )
+
+                cmd_args = self.__make_cmd_and_args(launcher.launcher_type, new_custom_built_environment)
+                cmd = cmd_args[0] if cmd_args else None
+                args = cmd_args[1] if cmd_args else None
+
                 launcher.environment.container_image = build_env.container_image
                 launcher.environment.default_url = build_env.default_url
                 launcher.environment.port = build_env.port
@@ -788,8 +807,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 launcher.environment.uid = build_env.uid
                 launcher.environment.gid = build_env.gid
                 launcher.environment.environment_kind = build_env.environment_kind
-                launcher.environment.command = build_env.command
-                launcher.environment.args = build_env.args
+                launcher.environment.command = cmd or build_env.command
+                launcher.environment.args = args or build_env.args
                 launcher.environment.environment_image_source = build_env.environment_image_source
                 launcher.environment.build_parameters_id = build_parameters_orm.id
                 launcher.environment.build_parameters = build_parameters_orm
@@ -942,21 +961,28 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             build_orm = schemas.BuildORM(
                 environment_id=build.environment_id,
                 status=models.BuildStatus.in_progress,
+                result_repository_url=build_parameters.repository,
             )
+
+            launcher = launcher_orm.dump() if launcher_orm is not None else None
+
+            params: models.ShipwrightBuildRunParams | None = None
+            if self.shipwright_client is not None:
+                params = await self._get_buildrun_params(
+                    user=user, build=build_orm.dump(), build_parameters=build_parameters, launcher=launcher
+                )
+                build_orm.result_image = params.output_image
+            else:
+                logger.error("Shipwright client is None")
+
             session.add(build_orm)
             await session.flush()
             await session.refresh(build_orm)
-
-        result = build_orm.dump()
-        launcher = launcher_orm.dump() if launcher_orm is not None else None
+            result = build_orm.dump()
 
         if self.shipwright_client is not None:
-            params = await self._get_buildrun_params(
-                user=user, build=result, build_parameters=build_parameters, launcher=launcher
-            )
+            assert params is not None
             await self.shipwright_client.create_image_build(params=params, user_id=user.id)
-        else:
-            logger.error("Shipwright client is None")
 
         return result
 
@@ -1023,6 +1049,26 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             authorized = await self._get_environment_authorization(
                 session=session, user=user, environment=build.environment, scope=Scope.WRITE
             )
+
+            # If the output image is private, check that the user can read the source repository
+            if build.result_image is None:
+                authorized = False
+            else:
+                if self.builds_config.private_builds_enabled and build.result_image.startswith(
+                    self.builds_config.build_output_private_image_prefix
+                ):
+                    if build.result_repository_url is None:
+                        authorized = False
+                    else:
+                        repo_data = await self.git_repositories_repo.get_repository(
+                            repository_url=build.result_repository_url,
+                            user=user,
+                            etag=None,
+                            internal_gitlab_user=base_models.APIUser(),
+                        )
+                        if not isinstance(repo_data.metadata, Metadata) or not repo_data.metadata.pull_permission:
+                            authorized = False
+
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_message)
 
@@ -1147,7 +1193,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         )
 
         if result.is_error:
-            raise errors.CannotStartBuildError(message=str(result.error))
+            raise errors.UnauthorizedError(
+                message=f"You do not have the required credentials to clone the code repository {git_repository}."
+            )
 
         authentication_secret: models.AuthenticationSecret | None = None
         output_image_prefix = self.builds_config.build_output_image_prefix
@@ -1160,7 +1208,10 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         if visibility == RepositoryVisibility.private:
             if not self.builds_config.private_builds_enabled:
                 raise errors.CannotStartBuildError(message="Private repository builds are not enabled")
-
+            if isinstance(result.metadata, Metadata) and not result.metadata.pull_permission:
+                raise errors.ForbiddenError(
+                    message=f"You do not have the required permissions to clone the code repository {git_repository}."
+                )
             token: dict[str, Any] | None = await self.git_repositories_repo.get_token(
                 repository_url=git_repository, user=user
             )
@@ -1223,6 +1274,16 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         if launcher:
             authorized = await self.project_authz.has_permission(user, ResourceType.project, launcher.project_id, scope)
         return authorized
+
+    def __make_cmd_and_args(
+        self, launcher_type: models.LauncherType, env: models.UnsavedBuildParameters
+    ) -> tuple[list[str], list[str]] | None:
+        if launcher_type == models.LauncherType.non_interactive:
+            cmd = env.job_command or []
+            args = env.job_args or []
+            return (cmd, args)
+        else:
+            return None
 
     @classmethod
     def make_session_environment_repo(

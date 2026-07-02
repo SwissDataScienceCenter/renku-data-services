@@ -219,7 +219,7 @@ async def test_projects(
     sanic_client_with_solr: SanicASGITestClient,
     app_manager_instance: TestDependencyManager,
 ) -> None:
-    """More occurrences of a word should push results up."""
+    """Test different behaviours of the search scoring for projects."""
     p1 = await create_project_model(
         sanic_client_with_solr, "Project Bike Z", visibility="public", description="a bike with a bike"
     )
@@ -228,8 +228,15 @@ async def test_projects(
     p3 = await create_project_model(sanic_client_with_solr, "Project Bike R", visibility="public", description="a bike")
     await search_reprovision(app_manager_instance)
 
+    # More occurrences of a word should push results up
     result = await search_query(sanic_client_with_solr, "bike")
     assert_search_result(result, [p1, p3, p2], check_order=True)
+
+    # An exact match on the name should be the top result
+    result = await search_query(sanic_client_with_solr, "Project Bike A type:project")
+    assert result.items and len(result.items) == 3
+    assert isinstance(result.items[0].root, SearchProject)
+    assert result.items[0].root.id == p2.id
 
 
 # TODO: figure out how to run search tests fully parallel

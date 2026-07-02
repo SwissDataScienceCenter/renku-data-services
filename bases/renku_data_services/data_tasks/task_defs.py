@@ -31,7 +31,9 @@ from renku_data_services.k8s.models import K8sObject, K8sObjectFilter
 from renku_data_services.namespace.models import NamespaceKind
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.notifications.models import UnsavedAlert
+from renku_data_services.solr.entity_schema import all_migrations
 from renku_data_services.solr.solr_client import DefaultSolrClient
+from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.utils.core import get_effective_quota
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,9 @@ logger = logging.getLogger(__name__)
 
 async def update_search(dm: DependencyManager) -> None:
     """Update the SOLR with data from the search staging table."""
+    migrator = SchemaMigrator(dm.config.solr)
+    logger.info("Running/waiting for solr schema migration")
+    await migrator.migrate(all_migrations)
     while True:
         async with DefaultSolrClient(dm.config.solr) as client:
             await search_core.update_solr(dm.search_updates_repo, client, 20)

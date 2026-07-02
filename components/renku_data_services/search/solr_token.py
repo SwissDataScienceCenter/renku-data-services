@@ -186,10 +186,34 @@ def public_only() -> SolrToken:
 
 
 def content_all(text: str) -> SolrToken:
-    """Search the content_all field with fuzzy searching each term."""
-    terms: list[SolrToken] = list(map(lambda s: SolrToken(__escape_query(s) + "~"), re.split("\\s+", text)))
-    terms_str = "(" + " ".join(terms) + ")"
-    return SolrToken(f"{Fields.content_all}:{terms_str}")
+    """Search free text across several fields, weighting better matches higher.
+
+    The text is fuzzy-matched against the broad ``content_all`` field and, with a
+    higher boost, against ``name``. The whole text is also matched *exactly* (no
+    fuzzy) against ``nameKeyword`` with the highest boost: that field is a
+    ``keyword`` type that keeps the entire title -- including spaces -- as a single,
+    case-insensitive token, so typing a project's exact title reliably matches and
+    ranks it first, regardless of spaces, hyphens or underscores. A single-word
+    query is additionally matched exactly against the untokenized ``slug``. Scores
+    from all matching clauses are summed, so name/title hits rank above generic
+    content matches.
+    """
+    words = [w for w in re.split(r"\s+", text) if w != ""]
+    fuzzy = " ".join(f"{__escape_query(w)}~" for w in words)
+    clauses = [
+        f"{Fields.content_all}:({fuzzy})",
+        f"{Fields.name}:({fuzzy})^2",
+        # Exact, case-insensitive match of the whole title. nameKeyword is
+        # untokenized (it keeps spaces), and its query analyzer lowercases, so we
+        # only need to escape the text. If we use words we will lose the spaces.
+        # But we want the spaces so that we can have a strong score on exact name matches.
+        f"{Fields.name_keyword}:{__escape_query(text.strip())}^10",
+    ]
+    # A slug is a single, untokenized, lowercased token, so only a whitespace-free
+    # query can match it exactly. Lowercase the term since slugs are always lowercase.
+    if len(words) == 1:
+        clauses.append(f"{Fields.slug}:{__escape_query(words[0].lower())}^5")
+    return SolrToken("(" + " OR ".join(clauses) + ")")
 
 
 def created_by_exists() -> SolrToken:
