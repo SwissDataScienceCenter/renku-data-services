@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import secrets
 from abc import abstractmethod
-from collections.abc import AsyncGenerator, Callable, Mapping
+from collections.abc import AsyncGenerator, Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
@@ -132,6 +132,21 @@ class UserRepo(DbUsernameResolver):
         if user.namespace is None:
             raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
         return user.namespace.dump_user()
+
+    @with_db_transaction
+    async def get_users_by_ids(self, ids: Collection[str], session: AsyncSession | None = None) -> list[UserInfo]:
+        """Get users by their keycloak IDs."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
+
+        result = await session.scalars(select(UserORM).where(UserORM.keycloak_id.in_(ids)))
+        users = result.all()
+
+        for user in users:
+            if user.namespace is None:
+                raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {user.keycloak_id}.")
+
+        return [user.dump() for user in users if user.namespace is not None]
 
     async def get_or_create_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
         """Get a specific user from the database and create it potentially if it does not exist.
