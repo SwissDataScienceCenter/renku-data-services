@@ -20,7 +20,9 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.k8s.models import GVK, APIObjectInCluster, K8sObject, K8sObjectFilter
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
+from renku_data_services.notebooks.cr_amalthea_session import SessionType as AmaltheaSessionType
 from renku_data_services.notebooks.crs import State
+from renku_data_services.notebooks.models import SessionType
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +229,12 @@ async def __collect_session_metrics(
             resource_class_id = int(new_obj.obj.metadata.annotations.get("renku.io/resource_class_id"))
             resource_pool = await rp_repo.get_resource_pool_from_class(k8s_watcher_admin_user, resource_class_id)
             resource_class = await rp_repo.get_resource_class(k8s_watcher_admin_user, resource_class_id)
+            session_type_raw: str | None = new_obj.obj.spec.get("sessionType")
+            session_type = (
+                SessionType.from_amalthea(AmaltheaSessionType.from_str(session_type_raw))
+                if session_type_raw
+                else SessionType.interactive
+            )
 
             await metrics.session_started(
                 user=user,
@@ -239,6 +247,7 @@ async def __collect_session_metrics(
                     "resource_pool_id": resource_pool.id or "",
                     "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
                     "session_id": new_obj.meta.name,
+                    "session_type": session_type.value.lower(),
                 },
             )
         case State.Running.value | State.NotReady.value if previous_state == State.Hibernated.value:

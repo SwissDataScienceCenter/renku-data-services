@@ -134,6 +134,7 @@ class SessionLaunchersBP(CustomBlueprint):
                 user,
                 environment_kind=launcher.environment.environment_kind.value,
                 environment_image_source=launcher.environment.environment_image_source.value,
+                session_type=launcher.launcher_type,
             )
             return validated_json(apispec.SessionLauncher, launcher, status=201)
 
