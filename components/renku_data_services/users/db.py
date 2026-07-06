@@ -120,16 +120,18 @@ class UserRepo(DbUsernameResolver):
         )
         return result.new
 
-    async def get_user(self, id: str) -> UserInfo | None:
+    @with_db_transaction
+    async def get_user(self, id: str, session: AsyncSession | None = None) -> UserInfo | None:
         """Get a specific user from the database."""
-        async with self.session_maker() as session:
-            result = await session.scalars(select(UserORM).where(UserORM.keycloak_id == id))
-            user = result.one_or_none()
-            if user is None:
-                return None
-            if user.namespace is None:
-                raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
-            return user.namespace.dump_user()
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
+        result = await session.scalars(select(UserORM).where(UserORM.keycloak_id == id))
+        user = result.one_or_none()
+        if user is None:
+            return None
+        if user.namespace is None:
+            raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
+        return user.namespace.dump_user()
 
     async def get_or_create_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
         """Get a specific user from the database and create it potentially if it does not exist.
