@@ -1,4 +1,5 @@
 from dataclasses import asdict
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -898,6 +899,73 @@ async def test_resource_pool_insert_with_remote_grants_connected_users(
     finally:
         if inserted_rp is not None:
             await app_manager_instance.rp_repo.delete_resource_pool(admin_user, inserted_rp.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_get_resource_pool_users_reuses_session(
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
+) -> None:
+    """Check number of db sessions for `get_resource_pool_users`.
+    `get_resource_pool_users` must not open a separate DB session per user. Before the fix it
+    called `kc_user_repo.get_user` in a loop while already holding a session, which could exhaust
+    the connection pool and deadlock. After the fix it should issue a single batched query on the
+    same session and never call `kc_user_repo.get_user` for the list branch.
+    """
+    run_migrations_for_app("common")
+    member_repo = app_manager_instance.member_repo
+    pool_repo = app_manager_instance.rp_repo
+    kc_user_repo = app_manager_instance.kc_user_repo
+
+    await kc_user_repo._add_api_user(admin_user)
+
+    rp = models.UnsavedResourcePool(
+        name="test-reuse-session-pool",
+        classes=[],
+        quota=models.UnsavedQuota(cpu=10.0, memory=100, gpu=0),
+        public=False,
+        default=False,
+        platform=models.RuntimePlatform.linux_amd64,
+    )
+    inserted_rp = await create_rp(rp, pool_repo, admin_user)
+
+    # Grant the calling admin platform-wide admin access so they can read resource pool permissions.
+    admin_change = app_manager_instance.authz._add_admin(admin_user.id)
+    await app_manager_instance.authz.client.WriteRelationships(admin_change.apply)
+
+    user_id_1 = "pool-user-1"
+    user_id_2 = "pool-user-2"
+    await kc_user_repo._add_api_user(APIUser(id=user_id_1, full_name="User One"))
+    await kc_user_repo._add_api_user(APIUser(id=user_id_2, full_name="User Two"))
+
+    await member_repo.grant_resource_pool_members(
+        admin_user,
+        inserted_rp.id,
+        [
+            models.ResourcePoolMemberIdentifier(member_type=models.MemberType.USER, member_id=user_id_1),
+            models.ResourcePoolMemberIdentifier(member_type=models.MemberType.USER, member_id=user_id_2),
+        ],
+    )
+
+    original_get_user = kc_user_repo.get_user
+    calls: list[tuple[Any, dict[str, Any]]] = []
+
+    async def tracking_get_user(*args: Any, **kwargs: Any) -> Any:
+        calls.append((args, kwargs))
+        return await original_get_user(*args, **kwargs)
+
+    kc_user_repo.get_user = tracking_get_user
+
+    try:
+        res = await member_repo.get_resource_pool_users(api_user=admin_user, resource_pool_id=inserted_rp.id)
+    finally:
+        kc_user_repo.get_user = original_get_user
+
+    allowed_ids = {u.keycloak_id for u in res.allowed}
+    assert allowed_ids == {user_id_1, user_id_2}
+    assert len(calls) == 0
 
 
 @pytest.mark.asyncio
