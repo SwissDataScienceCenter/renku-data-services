@@ -1212,6 +1212,7 @@ async def start_session(
             "resource_pool_id": resource_pool.id or "",
             "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
             "session_id": server_name,
+            "session_type": session_type.value.lower(),
         },
     )
     return session, True
