@@ -226,6 +226,9 @@ async def __collect_session_metrics(
         await metrics.session_stopped(user=user, metadata={"session_id": new_obj.meta.name})
         return
     previous_state = previous_obj.manifest.get("status", {}).get("state", None) if previous_obj else None
+    logger.warning(
+        f"Matching statuses: state={new_obj.obj.raw.get("status", {}).get("state")}, previous_state={previous_state}"
+    )
     match new_obj.obj.raw.get("status", {}).get("state"):
         case State.Running.value if previous_state is None or previous_state == State.NotReady.value:
             # session starting

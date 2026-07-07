@@ -67,6 +67,7 @@ async def send_metrics_to_posthog(dm: DependencyManager) -> None:
 
             processed_ids = []
             async for metric in metrics:
+                logger.warning(f"metrics: {metric}")
                 try:
                     if metric.event == MetricsEvent.identify_user.value:
                         posthog.identify(
