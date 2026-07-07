@@ -415,6 +415,10 @@ class GVK:
             and (self.group.casefold() if self.group else None) == (value.group.casefold() if value.group else None)
         )
 
+    def __hash__(self) -> int:
+        """Override hash to be case-insensitive."""
+        return hash((self.kind.casefold(), self.version.casefold(), self.group.casefold() if self.group else None))
+
 
 @dataclass
 class APIObjectInCluster:
