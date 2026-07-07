@@ -193,9 +193,6 @@ async def collect_metrics(
 ) -> None:
     """Track product metrics."""
     # Dispatch metric collection by kind
-
-    logger.warning(f"Collecting: {new_obj.meta.gvk} {new_obj.meta.name}: {event_type}")
-
     match new_obj.meta.gvk:
         case gvk if gvk == AMALTHEA_SESSION_GVK:
             await __collect_session_metrics(
@@ -226,9 +223,6 @@ async def __collect_session_metrics(
         await metrics.session_stopped(user=user, metadata={"session_id": new_obj.meta.name})
         return
     previous_state = previous_obj.manifest.get("status", {}).get("state", None) if previous_obj else None
-    logger.warning(
-        f"Matching statuses: state={new_obj.obj.raw.get("status", {}).get("state")}, previous_state={previous_state}"
-    )
     match new_obj.obj.raw.get("status", {}).get("state"):
         case State.Running.value if previous_state is None or previous_state == State.NotReady.value:
             # session starting
