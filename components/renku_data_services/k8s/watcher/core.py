@@ -193,6 +193,9 @@ async def collect_metrics(
 ) -> None:
     """Track product metrics."""
     # Dispatch metric collection by kind
+
+    logger.warning(f"Collecting: {new_obj.meta.gvk} {new_obj.meta.name}: {event_type}")
+
     match new_obj.meta.gvk:
         case gvk if gvk == AMALTHEA_SESSION_GVK:
             await __collect_session_metrics(
