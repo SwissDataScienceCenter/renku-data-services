@@ -91,6 +91,15 @@ class UnsavedDataConnector(BaseDataConnector):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedProjectStorage:
+    """Project storage definition."""
+
+    namespace: ProjectNamespace
+    size: int
+    mount_path: str
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class GlobalDataConnector(BaseDataConnector):
     """Global data connector model."""
 

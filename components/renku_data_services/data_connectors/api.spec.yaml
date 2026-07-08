@@ -70,6 +70,26 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
+  /data_connectors/storage:
+    post:
+      summary: Create a new project storage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectStoragePost"
+      responses:
+        "201":
+          description: The data connector was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataConnector"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data_connectors
   /data_connectors/global:
     post:
       summary: Create a new data connector
@@ -744,6 +764,23 @@ components:
             - $ref: "#/components/schemas/CloudStorageUrlV2"
       required:
         - storage
+    ProjectStoragePost:
+      description: |
+        A special data connector for associating a shared read+write
+        volume. There can be exactly one such storage per project.
+      additionalProperties: false
+      properties:
+        namespace:
+          $ref: "#/components/schemas/ProjectSlug"
+        size:
+          type: integer
+          format: int32
+        mountPath:
+          type: string
+      required:
+        - namespace
+        - size
+        - mountPath
     DataConnectorPatch:
       description: |
         Patch of a data connector
@@ -1046,6 +1083,13 @@ components:
       minLength: 1
       maxLength: 200
       pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*(?<!\.git)(?<!\.atom)(?:/[a-z0-9][a-z0-9\-_.]*){0,1}$'
+      example: "user1/project-1"
+    ProjectSlug:
+      description: A slug denoting a project
+      type: string
+      minLength: 1
+      maxLength: 200
+      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*/^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*$'
       example: "user1/project-1"
     CreationDate:
       description: The date and time the resource was created (in UTC and ISO-8601 format)

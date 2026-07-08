@@ -210,6 +210,14 @@ async def validate_unsaved_data_connector(
         keywords=keywords,
     )
 
+async def validate_unsaved_project_storage(body: apispec.ProjectStoragePost) -> models.UnsavedProjectStorage:
+    """Validate the user input for a new project storage definition.
+
+    The namespace must be a project namespace. The project must be
+    enabled for project storages and the user must be an owner.
+    """
+    ...
+
 
 async def prevalidate_unsaved_global_data_connector(
     body: apispec.GlobalDataConnectorPost, validator: RCloneValidator

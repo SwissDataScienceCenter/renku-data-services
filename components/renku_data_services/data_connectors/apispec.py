@@ -253,6 +253,22 @@ class DepositsGetParametersQuery(BaseAPISpec):
     params: PaginationRequest | None = None
 
 
+class ProjectStoragePost(BaseAPISpec):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    namespace: str = Field(
+        ...,
+        description="A slug denoting a project",
+        examples=["user1/project-1"],
+        max_length=200,
+        min_length=1,
+        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*/^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*$",
+    )
+    size: int
+    mountPath: str
+
+
 class CloudStorageCore(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",

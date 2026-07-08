@@ -45,6 +45,7 @@ from renku_data_services.data_connectors.core import (
     validate_deposit_patch,
     validate_deposit_status_change,
     validate_unsaved_data_connector,
+    validate_unsaved_project_storage,
 )
 from renku_data_services.data_connectors.db import (
     DOI,
@@ -139,6 +140,18 @@ class DataConnectorsBP(CustomBlueprint):
             )
 
         return "/data_connectors", ["POST"], _post
+
+    def post_storage(self) -> BlueprintFactoryResponse:
+        """Create a new shared project storage."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.ProjectStoragePost)
+        async def _post_storage(_: Request, user: base_models.APIUser, body: apispec.ProjectStoragePost) -> JSONResponse:
+            dc = await validate_unsaved_project_storage(body)
+            ...
+
+        return "/data_connectors/storage", ["POST"], _post_storage
 
     def post_global(self) -> BlueprintFactoryResponse:
         """Create a new global data connector."""
