@@ -35,7 +35,6 @@ async def git_clone_container_v2(
     repositories: list[Repository],
     git_providers: list[GitProvider],
     workspace_mount_path: PurePosixPath,
-    work_dir: PurePosixPath,
     lfs_auto_fetch: bool = False,
     uid: int = 1000,
     gid: int = 1000,
@@ -56,7 +55,7 @@ async def git_clone_container_v2(
     env = [
         {
             "name": f"{prefix}MOUNT_PATH",
-            "value": work_dir.as_posix(),
+            "value": workspace_mount_path.as_posix(),
         },
         {
             "name": f"{prefix}LFS_AUTO_FETCH",

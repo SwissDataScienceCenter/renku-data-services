@@ -129,7 +129,6 @@ async def get_extra_init_containers(
     repositories: list[Repository],
     git_providers: list[GitProvider],
     storage_mount: PurePosixPath,
-    work_dir: PurePosixPath,
     uid: int = 1000,
     gid: int = 1000,
 ) -> SessionExtraResources:
@@ -144,7 +143,6 @@ async def get_extra_init_containers(
         repositories=repositories,
         git_providers=git_providers,
         workspace_mount_path=storage_mount,
-        work_dir=work_dir,
         uid=uid,
         gid=gid,
     )
@@ -969,7 +967,6 @@ async def start_session(
             repositories,
             git_providers,
             storage_mount,
-            work_dir,
             uid=environment.uid,
             gid=environment.gid,
         )
@@ -1426,7 +1423,6 @@ async def patch_session(
             repositories,
             git_providers,
             storage_mount,
-            work_dir,
             uid=environment.uid,
             gid=environment.gid,
         )
