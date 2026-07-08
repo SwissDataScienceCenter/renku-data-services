@@ -52,19 +52,11 @@ async def git_clone_container_v2(
         read_only_etc_certs=True,
     )
 
-    # Trying to use work_dir as the place to clone is in place for backwards compatibility.
-    # We never had issues because before introducing jobs because we always set the work dir as a child of
-    # the storage mount path. But for running jobs with a custom image, then the work dir is usually not
-    # set to anything and defaults to `/`. In this case the work dir is not a child of the storage
-    # mount path and it is not writable in many cases.
-    git_clone_mount_path = work_dir
-    if not work_dir.relative_to(workspace_mount_path):
-        git_clone_mount_path = workspace_mount_path
     prefix = "GIT_CLONE_"
     env = [
         {
             "name": f"{prefix}MOUNT_PATH",
-            "value": git_clone_mount_path.as_posix(),
+            "value": work_dir.as_posix(),
         },
         {
             "name": f"{prefix}LFS_AUTO_FETCH",
