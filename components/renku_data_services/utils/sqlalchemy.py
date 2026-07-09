@@ -130,11 +130,15 @@ class PurePosixPathType(types.TypeDecorator):
 
 
 class ByteSizeType(types.TypeDecorator):
+    """SQLAlchemy type that maps ByteSize to a BigInteger column."""
+
     impl = types.BigInteger
     cache_ok = True
 
     def process_bind_param(self, value: ByteSize | None, dialect: Dialect) -> int | None:
+        """Convert ByteSize to an integer for storage."""
         return value.to_bytes() if value is not None else None
 
     def process_result_value(self, value: int | None, dialect: Dialect) -> ByteSize | None:
+        """Convert a stored integer back to ByteSize."""
         return ByteSize(value) if value is not None else None

@@ -336,6 +336,8 @@ class DepositORM(BaseORM):
 
 
 class ProjectStorageORM(BaseORM):
+    """ORM model for project storage configuration."""
+
     __tablename__ = "project_storage"
 
     id: Mapped[ULID] = mapped_column(
@@ -371,6 +373,7 @@ class ProjectStorageORM(BaseORM):
     )
 
     def dump(self) -> models.ProjectStorage:
+        """Convert the ORM row to a ProjectStorage model."""
         return models.ProjectStorage(
             id=self.id,
             project_id=self.project_id,

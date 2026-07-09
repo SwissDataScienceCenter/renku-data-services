@@ -1,3 +1,5 @@
+"""Byte size model with unit conversions."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -22,21 +24,27 @@ class ByteSize:
             raise TypeError(f"ByteSize value must be int, got {type(self.value).__name__}")
 
     def to_bytes(self) -> int:
+        """Return the size in bytes."""
         return self.value
 
     def to_kibi(self) -> float:
+        """Return the size in kibibytes (KiB)."""
         return self.value / self.KIBI
 
     def to_mibi(self) -> float:
+        """Return the size in mebibytes (MiB)."""
         return self.value / self.MEBI
 
     def to_gibi(self) -> float:
+        """Return the size in gibibytes (GiB)."""
         return self.value / self.GIBI
 
     def to_tebi(self) -> float:
+        """Return the size in tebibytes (TiB)."""
         return self.value / self.TEBI
 
     def to_human(self) -> str:
+        """Return a human-readable string with the appropriate binary unit."""
         if self.value < self.KIBI:
             return f"{self.value}B"
         elif self.value < self.MEBI:
@@ -71,20 +79,25 @@ class ByteSize:
 
     @classmethod
     def from_bytes(cls, bs: int) -> ByteSize:
+        """Create a ByteSize from a byte count."""
         return ByteSize(value=bs)
 
     @classmethod
     def from_kibi(cls, kb: float) -> ByteSize:
+        """Create a ByteSize from a kibibyte value."""
         return ByteSize(value=int(kb * cls.KIBI))
 
     @classmethod
     def from_mibi(cls, mb: float) -> ByteSize:
+        """Create a ByteSize from a mebibyte value."""
         return ByteSize(value=int(mb * cls.MEBI))
 
     @classmethod
     def from_gibi(cls, gb: float) -> ByteSize:
+        """Create a ByteSize from a gibibyte value."""
         return ByteSize(value=int(gb * cls.GIBI))
 
     @classmethod
     def from_tebi(cls, tib: float) -> ByteSize:
+        """Create a ByteSize from a tebibyte value."""
         return cls(value=round(tib * cls.TEBI))
