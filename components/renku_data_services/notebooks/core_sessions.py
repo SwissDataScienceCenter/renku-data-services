@@ -1090,8 +1090,7 @@ async def start_session(
         SessionEnvItem(name="RENKU_PROJECT_ID", value=str(project.id)),
         SessionEnvItem(name="RENKU_PROJECT_PATH", value=project.path.serialize()),
         SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
-        # NOTE: Without setting CNB_APP_DIR the working directory in jobs is
-        # where the repo used to build the image was cloned
+        # NOTE: CNB_APP_DIR sets the working directory for images built with cloud native buildpacks
         SessionEnvItem(name="CNB_APP_DIR", value=work_dir.as_posix()),
     ]
     if session_type.is_interactive:
