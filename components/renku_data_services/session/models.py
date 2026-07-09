@@ -71,6 +71,11 @@ class FrontendVariant(StrEnum):
     jupyterlab = "jupyterlab"
     ttyd = "ttyd"
     rstudio = "rstudio"
+    # No RenkuLab-provided frontend: the built image runs the user's own web app.
+    # The start command comes from a Procfile ("web:" process) in the repository and
+    # the app must bind to $RENKU_SESSION_PORT. Mapped to the buildpack token "none"
+    # (see BuildParameters.build_frontend) when the build is dispatched.
+    custom = "custom"
 
 
 VALID_BUILDER_FRONTEND_COMBINATIONS: typing.Final[set[tuple[BuilderVariant, FrontendVariant]]] = {
@@ -78,6 +83,8 @@ VALID_BUILDER_FRONTEND_COMBINATIONS: typing.Final[set[tuple[BuilderVariant, Fron
     (BuilderVariant.python, FrontendVariant.vscodium),
     (BuilderVariant.python, FrontendVariant.jupyterlab),
     (BuilderVariant.python, FrontendVariant.ttyd),
+    (BuilderVariant.python, FrontendVariant.custom),
+    (BuilderVariant.r, FrontendVariant.custom),
 }
 
 
@@ -91,6 +98,19 @@ class UnsavedBuildParameters:
     frontend_variant: str
     repository_revision: str | None = None
     context_dir: str | None = None
+
+    @property
+    def build_frontend(self) -> str:
+        """The frontend token passed to the buildpacks via BP_RENKU_FRONTENDS.
+
+        This is the persisted ``frontend_variant`` for every RenkuLab-provided frontend.
+        The "custom" frontend has no built-in UI, so it maps to the buildpack token
+        "none": the buildpacks then produce a runnable image without injecting a
+        frontend and defer the launch process to the repository Procfile.
+        """
+        if self.frontend_variant == FrontendVariant.custom:
+            return "none"
+        return self.frontend_variant
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
@@ -472,5 +492,23 @@ BUILD_ENVIRONMENT_CONFIGS: Final[dict[str, UnsavedEnvironment]] = {
         environment_kind=EnvironmentKind.CUSTOM,
         environment_image_source=EnvironmentImageSource.build,
         strip_path_prefix=False,
+    ),
+    FrontendVariant.custom.value: UnsavedEnvironment(
+        name="custom",
+        default_url="/",
+        # The user's app binds to $RENKU_SESSION_PORT, which the session runtime
+        # sets to this port. Keep it aligned with the other build frontends.
+        port=BUILD_PORT,
+        container_image="image:unknown-at-the-moment",
+        working_directory=BUILD_WORKING_DIRECTORY,
+        mount_directory=BUILD_MOUNT_DIRECTORY,
+        uid=BUILD_UID,
+        gid=BUILD_GID,
+        environment_kind=EnvironmentKind.CUSTOM,
+        environment_image_source=EnvironmentImageSource.build,
+        # A bring-your-own app is unlikely to be aware of the session's URL prefix,
+        # so strip it (like RStudio) and serve the app at "/". Apps that *are*
+        # prefix-aware can read $RENKU_BASE_URL_PATH instead.
+        strip_path_prefix=True,
     ),
 }

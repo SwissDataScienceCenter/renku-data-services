@@ -1230,7 +1230,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             tolerations=tolerations,
             labels=labels,
             annotations=annotations,
-            frontend=build_parameters.frontend_variant,
+            frontend=build_parameters.build_frontend,
             git_repository_revision=git_repository_revision,
             context_dir=context_dir,
             insecure_registries=self.builds_config.build_insecure_registries,
