@@ -828,11 +828,14 @@ async def _check_quota(resource_usage_service: ResourceUsageService, resource_po
         )
 
 
-async def get_mount_work_dir(environment: Environment) -> tuple[PurePosixPath, PurePosixPath]:
+async def get_mount_work_dir(
+    user: APIUser, environment: Environment, image_check_repo: ImageCheckRepository
+) -> tuple[PurePosixPath, PurePosixPath]:
     """Get the storage mount and work directories."""
     work_dir = environment.working_directory
     if not work_dir:
-        image_workdir = await core.docker_image_workdir(environment.container_image)
+        parsed_image = Image.from_path(environment.container_image)
+        image_workdir = await image_check_repo.image_workdir(user, parsed_image)
         work_dir_fallback = PurePosixPath("/home/jovyan/work")
         work_dir = image_workdir or work_dir_fallback
     storage_mount_fallback = work_dir
@@ -945,7 +948,7 @@ async def start_session(
 
     environment = launcher.environment
     image = environment.container_image
-    storage_mount, work_dir = await get_mount_work_dir(environment)
+    storage_mount, work_dir = await get_mount_work_dir(user, environment, image_check_repo)
     secrets_mount_directory = storage_mount / project.secrets_mount_directory
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id
@@ -1395,7 +1398,7 @@ async def patch_session(
     launcher = await session_repo.get_launcher(user, session.launcher_id)
     project = await project_repo.get_project(user=user, project_id=session.project_id)
     environment = launcher.environment
-    storage_mount, work_dir = await get_mount_work_dir(environment)
+    storage_mount, work_dir = await get_mount_work_dir(user, environment, image_check_repo)
     secrets_mount_directory = storage_mount / project.secrets_mount_directory
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id
