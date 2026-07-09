@@ -1106,6 +1106,9 @@ async def start_session(
             [
                 SessionEnvItem(name="RENKU_JOB", value="1"),
                 SessionEnvItem(name="RENKU_SUBMISSION_ID", value=str(launch_request.submission_id)),
+                # NOTE: Without setting CNB_APP_DIR the working directory in jobs is
+                # where the repo used to build the image was cloned
+                SessionEnvItem(name="CNB_APP_DIR", value=work_dir.as_posix()),
             ]
         )
     if session_location == SessionLocation.remote:
