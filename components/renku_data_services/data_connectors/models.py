@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Final
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import (
     DataConnectorInProjectPath,
     DataConnectorPath,
@@ -94,9 +95,23 @@ class UnsavedDataConnector(BaseDataConnector):
 class UnsavedProjectStorage:
     """Project storage definition."""
 
-    namespace: ProjectNamespace
-    size: int
+    namespace_path: ProjectPath
+    size: ByteSize
     mount_path: str
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorage:
+    """Stored project storage information."""
+
+    id: ULID
+    project_id: ULID
+    storage_class: str
+    size: ByteSize
+    mount_path: str
+    created_by: str
+    creation_date: datetime
+    updated_at: datetime
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

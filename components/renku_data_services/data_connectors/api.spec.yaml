@@ -775,12 +775,40 @@ components:
         size:
           type: integer
           format: int32
-        mountPath:
+        mount_path:
           type: string
       required:
         - namespace
         - size
-        - mountPath
+        - mount_path
+    ProjectStorage:
+      description: |
+        A stored shared storage configuration for a project.
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        size:
+          type: integer
+          format: int32
+        mount_path:
+          type: str
+        creation_date:
+          $ref: "#/components/schemas/CreationDate"
+        created_by:
+          $ref: "#/components/schemas/UserId"
+        updated_at:
+          $ref: "#/components/schemas/CreationDate"
+      required:
+        - id
+        - project_id
+        - size
+        - mount_path
+        - creation_date
+        - created_by
+        - updated_at
     DataConnectorPatch:
       description: |
         Patch of a data connector
@@ -1089,7 +1117,7 @@ components:
       type: string
       minLength: 1
       maxLength: 200
-      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*/^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*$'
+      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*(?<!\.git)(?<!\.atom)(/[a-z0-9][a-z0-9\-_.]*){0,1}$'
       example: "user1/project-1"
     CreationDate:
       description: The date and time the resource was created (in UTC and ISO-8601 format)

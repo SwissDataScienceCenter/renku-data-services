@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnExpressionArgument, Select, delete, func, or_, select
+from sqlalchemy import ColumnExpressionArgument, Select, delete, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from ulid import ULID
@@ -371,6 +371,40 @@ class DataConnectorRepository:
         if not isinstance(dc, models.DataConnector):
             raise errors.ProgrammingError(message=f"Expected to get a namespaced data connector ('{dc.id}')")
         return dc
+
+    @with_db_transaction
+    async def insert_project_storage(
+        self, user: base_models.APIUser, input: models.UnsavedProjectStorage, *, session: AsyncSession | None = None
+    ) -> models.ProjectStorage:
+        """Insert a new project storage."""
+
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # there is only one such storage possible for a project
+        project = await self.project_repo.get_project_by_namespace_slug(
+            user, input.namespace_path.first.value, input.namespace_path.second, with_documentation=False
+        )
+
+        existing_storage = await session.execute(
+            select(exists().where(schemas.ProjectStorageORM.project_id == project.id))
+        )
+        existing_storage = existing_storage.scalar()
+        if existing_storage:
+            raise errors.ValidationError(message=f"There is already a project storage for project {project.id}")
+
+        new_storage = schemas.ProjectStorageORM(
+            project_id=project.id,
+            storage_class="azurefile",
+            size_limit=input.size,
+            mount_path=input.mount_path,
+            created_by_id=user.id,
+        )
+        session.add(new_storage)
+        await session.flush()
+        return new_storage.dump()
 
     @with_db_transaction
     async def insert_global_data_connector(

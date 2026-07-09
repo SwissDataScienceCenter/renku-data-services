@@ -147,9 +147,12 @@ class DataConnectorsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.ProjectStoragePost)
-        async def _post_storage(_: Request, user: base_models.APIUser, body: apispec.ProjectStoragePost) -> JSONResponse:
+        async def _post_storage(
+            _: Request, user: base_models.APIUser, body: apispec.ProjectStoragePost
+        ) -> JSONResponse:
             dc = await validate_unsaved_project_storage(body)
-            ...
+            result = await self.data_connector_repo.insert_project_storage(user, dc)
+            return validated_json(apispec.ProjectStorage, self._dump_project_storage(result), status=201)
 
         return "/data_connectors/storage", ["POST"], _post_storage
 
@@ -604,6 +607,18 @@ class DataConnectorsBP(CustomBlueprint):
         return dict(
             name=secret.name,
             secret_id=str(secret.secret_id),
+        )
+
+    @staticmethod
+    def _dump_project_storage(ps: models.ProjectStorage) -> apispec.ProjectStorage:
+        return apispec.ProjectStorage(
+            id=str(ps.id),
+            project_id=str(ps.project_id),
+            size=int(ps.size.to_gibi()),
+            mount_path=ps.mount_path,
+            created_by=ps.created_by,
+            creation_date=ps.creation_date,
+            updated_at=ps.updated_at,
         )
 
     async def __get_zenodo_access_token(self, user: base_models.APIUser) -> str:

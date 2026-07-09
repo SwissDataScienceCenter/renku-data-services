@@ -13,6 +13,7 @@ from sqlalchemy.schema import Index, UniqueConstraint
 from ulid import ULID
 
 from renku_data_services.authz import models as authz_models
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.data_connectors import models
@@ -22,7 +23,7 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.orm import UserORM
-from renku_data_services.utils.sqlalchemy import ULIDType
+from renku_data_services.utils.sqlalchemy import ByteSizeType, ULIDType
 
 if TYPE_CHECKING:
     from renku_data_services.namespace.orm import EntitySlugOldORM, EntitySlugORM
@@ -331,4 +332,52 @@ class DepositORM(BaseORM):
                 creation_date=self.creation_date,
                 updated_at=self.updated_at,
             ),
+        )
+
+
+class ProjectStorageORM(BaseORM):
+    __tablename__ = "project_storage"
+
+    id: Mapped[ULID] = mapped_column(
+        "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
+    )
+    project_id: Mapped[ULID] = mapped_column(
+        ForeignKey(ProjectORM.id, ondelete="CASCADE"), index=True, nullable=False, unique=True
+    )
+    """ID of the project."""
+
+    storage_class: Mapped[str] = mapped_column("storage_class", String(20))
+    """The storage class (e.g. azurefile)."""
+
+    size_limit: Mapped[ByteSize] = mapped_column("size_limit", ByteSizeType())
+    """The storage limit in bytes."""
+
+    mount_path: Mapped[str] = mapped_column("target_path", String())
+    """Folder to mount to."""
+
+    created_by_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
+    """User ID of the creator of the project storage."""
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def dump(self) -> models.ProjectStorage:
+        return models.ProjectStorage(
+            id=self.id,
+            project_id=self.project_id,
+            storage_class=self.storage_class,
+            size=self.size_limit,
+            mount_path=self.mount_path,
+            created_by=self.created_by_id,
+            creation_date=self.creation_date,
+            updated_at=self.updated_at,
         )
