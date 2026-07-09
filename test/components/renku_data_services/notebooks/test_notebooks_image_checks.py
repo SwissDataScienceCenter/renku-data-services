@@ -310,6 +310,15 @@ def create_test_environment(
             PurePosixPath("/home/renku/mount"),
             PurePosixPath("/home/renku/mount"),
         ),
+        (
+            # If you try to mount on / we move it to /work to preven users from wiping out the whole image
+            create_test_environment(
+                "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3",
+                mount_dir=PurePosixPath("/"),
+            ),
+            PurePosixPath("/work"),
+            PurePosixPath("/work"),
+        ),
     ],
 )
 async def test_mount_workdir(
