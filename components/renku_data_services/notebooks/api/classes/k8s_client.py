@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime
 import json
+from datetime import datetime
 from typing import cast
 
 import httpx
@@ -215,7 +215,10 @@ class NotebookK8sClient(SecretClient):
                     sessions,
                 )
             )
-        return sorted(sessions, key=lambda sess: sess.metadata.creationTimestamp or datetime.min, reverse=True)
+        return sorted(
+            sessions,
+            key=lambda sess: (sess.launcher_id, -(sess.metadata.creationTimestamp or datetime.min).timestamp()),
+        )
 
     async def get_session(self, name: str, safe_username: str) -> AmaltheaSessionV1Alpha1 | None:
         """Get a specific session, None is returned if the session does not exist."""
