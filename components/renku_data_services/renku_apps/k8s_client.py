@@ -207,8 +207,25 @@ def _build_app_deployment_manifest(
     }
     if resource_class is not None:
         container["resources"] = _resources_from_resource_class(resource_class)
-    if session_launcher.env_variables:
-        container["env"] = [{"name": var.name, "value": var.value} for var in session_launcher.env_variables]
+
+    # Runtime contract: the app must bind to the same port Knative routes/probes
+    # (``containerPort`` above). We surface it as $RENKU_SESSION_PORT so the app can
+    # read it (e.g. from a Procfile). This mirrors the AmaltheaSession path in
+    # ``notebooks.core_sessions``; without it the buildpack default (8000) wins and
+    # the app binds a port Knative never probes, so the revision never becomes ready.
+    # System-controlled vars come first; user-defined vars are appended and are not
+    # allowed to override them.
+    env: list[dict[str, str]] = [
+        {"name": "RENKU_SESSION_IP", "value": "0.0.0.0"},  # nosec B104
+        {"name": "RENKU_SESSION_PORT", "value": str(environment.port)},
+    ]
+    reserved_names = {var["name"] for var in env}
+    env.extend(
+        {"name": var.name, "value": var.value}
+        for var in session_launcher.env_variables or []
+        if var.name not in reserved_names
+    )
+    container["env"] = env
     if environment.command:
         container["command"] = environment.command
     if environment.args:
