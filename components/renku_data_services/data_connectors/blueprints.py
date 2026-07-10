@@ -332,25 +332,6 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/<data_connector_id:ulid>/permissions", ["GET"], _get_permissions
 
-    def get_one_by_doi(self) -> BlueprintFactoryResponse:
-        """Get data connector by DOI."""
-
-        @authenticate(self.authenticator)
-        @validate(query=apispec.DataConnectorsSearchGetParametersQuery)
-        async def _get_one_by_doi(
-            _: Request,
-            user: base_models.APIUser,
-            query: apispec.DataConnectorsSearchGetParametersQuery,
-            validator: RCloneValidator,
-        ) -> JSONResponse:
-            data_connector = await self.data_connector_repo.get_data_connector_by_doi(user=user, doi=query.doi)
-            return validated_json(
-                apispec.DataConnector,
-                self._dump_data_connector(data_connector, validator=validator),
-            )
-
-        return "/data_connectors/search", ["GET"], _get_one_by_doi
-
     def get_all_project_links(self) -> BlueprintFactoryResponse:
         """List all links from a given data connector to projects."""
 
@@ -531,6 +512,33 @@ class DataConnectorsBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["DELETE"], _delete_secrets
+
+    def get_all_links(self) -> BlueprintFactoryResponse:
+        """Get all data connector links."""
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.DataConnectorLinksGetQuery)
+        @paginate
+        async def _get_all(
+            _: Request,
+            user: base_models.APIUser,
+            pagination: PaginationRequest,
+            query: apispec.DataConnectorLinksGetQuery,
+        ) -> tuple[list[dict[str, Any]], int]:
+            links_iter, total_count = await self.data_connector_repo.get_links(
+                user=user, pagination=pagination, doi=query.doi
+            )
+            links: list[dict[str, Any]] = []
+            async for link in links_iter:
+                links.append(
+                    validate_and_dump(
+                        apispec.DataConnectorToProjectLink,
+                        self._dump_data_connector_to_project_link(link),
+                    )
+                )
+            return links, total_count
+
+        return "/data_connector_links", ["GET"], _get_all
 
     @staticmethod
     def _dump_data_connector(

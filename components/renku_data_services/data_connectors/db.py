@@ -33,7 +33,7 @@ from renku_data_services.data_connectors.core import validate_unsaved_global_dat
 from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.namespace import orm as ns_schemas
-from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.namespace.db import DataConnectorORM, GroupRepository
 from renku_data_services.namespace.models import ProjectNamespace
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project
@@ -1000,6 +1000,55 @@ class DataConnectorRepository:
             await session.flush()
             await session.refresh(res)
         return res.dump()
+
+    async def get_links(
+        self,
+        user: base_models.APIUser,
+        doi: str | None,
+        pagination: PaginationRequest | None,
+    ) -> tuple[AsyncIterator[models.DataConnectorToProjectLink], int]:
+        """Get all links to data connectors the user has READ access to.
+
+        Optionally filter by doi.
+        Also returns the total number of data connector links found in the DB.
+        We check that the user has READ or higher access to both the data connector and the project
+        """
+        dcs = await self.authz.resources_with_permission(user, user.id, ResourceType.data_connector, Scope.READ)
+        projects = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+        stmt = (
+            select(schemas.DataConnectorToProjectLinkORM)
+            .where(
+                schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(dcs),
+            )
+            .where(schemas.DataConnectorToProjectLinkORM.project_id.in_(projects))
+        )
+        stmt_count = (
+            select(func.count())
+            .select_from(schemas.DataConnectorToProjectLinkORM)
+            .where(
+                schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(dcs),
+            )
+            .where(schemas.DataConnectorToProjectLinkORM.project_id.in_(projects))
+        )
+
+        if doi:
+            stmt = stmt.where(schemas.DataConnectorToProjectLinkORM.data_connector.has(DataConnectorORM.doi == doi))
+            stmt_count = stmt_count.where(
+                schemas.DataConnectorToProjectLinkORM.data_connector.has(DataConnectorORM.doi == doi)
+            )
+
+        if pagination:
+            stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
+
+        async with self.session_maker() as session, session.begin():
+            count = await session.scalar(stmt_count) or 0
+            results = await session.stream(stmt)
+
+            async def links() -> AsyncIterator[models.DataConnectorToProjectLink]:
+                async for link in results:
+                    yield link.dump()
+
+            return links(), count
 
 
 class DataConnectorSecretRepository:
