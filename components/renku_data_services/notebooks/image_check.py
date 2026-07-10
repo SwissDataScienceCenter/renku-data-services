@@ -231,7 +231,7 @@ class ImageCheckRepository:
         )
 
     async def image_workdir(self, user: APIUser, image_src: SessionLauncher | Image) -> PurePosixPath | None:
-        """Check access to the image from the given launcher or image and provide image and access details."""
+        """Check access to the image from the given launcher or image and get the working directory."""
 
         if isinstance(image_src, SessionLauncher):
             # image can be "image:unknown-at-the-moment" which is returned until the first
