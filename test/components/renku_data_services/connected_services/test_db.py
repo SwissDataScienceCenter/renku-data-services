@@ -293,6 +293,7 @@ async def test_oauth_connect_adds_user_to_rp(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_oauth_disconnect_removes_user_from_rp(
     app_manager_instance: DependencyManager, admin_user: APIUser, cluster: any
 ) -> None:
@@ -380,6 +381,7 @@ async def test_oauth_connect_with_no_matching_rp_does_nothing(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_two_users_connect_same_integration_both_get_access(
     app_manager_instance: DependencyManager, admin_user: APIUser, cluster: any
 ) -> None:
@@ -491,6 +493,7 @@ async def test_user_disconnect_only_affects_their_rp_access(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_delete_connection_revokes_rp_access(
     app_manager_instance: DependencyManager, admin_user: APIUser, cluster: any
 ) -> None:
