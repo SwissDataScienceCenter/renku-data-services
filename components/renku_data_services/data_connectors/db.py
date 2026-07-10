@@ -1006,12 +1006,12 @@ class DataConnectorRepository:
         user: base_models.APIUser,
         doi: str | None,
         pagination: PaginationRequest | None,
-    ) -> tuple[AsyncIterator[models.DataConnectorToProjectLink], int]:
+    ) -> tuple[list[models.DataConnectorToProjectLink], int]:
         """Get all links to data connectors the user has READ access to.
 
         Optionally filter by doi.
         Also returns the total number of data connector links found in the DB.
-        We check that the user has READ or higher access to both the data connector and the project
+        We check that the user has READ or higher access to both the data connector and the project.
         """
         dcs = await self.authz.resources_with_permission(user, user.id, ResourceType.data_connector, Scope.READ)
         projects = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
@@ -1042,13 +1042,13 @@ class DataConnectorRepository:
 
         async with self.session_maker() as session, session.begin():
             count = await session.scalar(stmt_count) or 0
-            results = await session.stream(stmt)
+            results = await session.stream_scalars(stmt)
 
-            async def links() -> AsyncIterator[models.DataConnectorToProjectLink]:
-                async for link in results:
-                    yield link.dump()
+            links: list[models.DataConnectorToProjectLink] = []
+            async for link in results:
+                links.append(link.dump())
 
-            return links(), count
+            return links, count
 
 
 class DataConnectorSecretRepository:

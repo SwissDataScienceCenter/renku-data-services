@@ -525,18 +525,17 @@ class DataConnectorsBP(CustomBlueprint):
             pagination: PaginationRequest,
             query: apispec.DataConnectorLinksGetQuery,
         ) -> tuple[list[dict[str, Any]], int]:
-            links_iter, total_count = await self.data_connector_repo.get_links(
+            links, total_count = await self.data_connector_repo.get_links(
                 user=user, pagination=pagination, doi=query.doi
             )
-            links: list[dict[str, Any]] = []
-            async for link in links_iter:
-                links.append(
-                    validate_and_dump(
-                        apispec.DataConnectorToProjectLink,
-                        self._dump_data_connector_to_project_link(link),
-                    )
+            serialized_links = [
+                validate_and_dump(
+                    apispec.DataConnectorToProjectLink,
+                    self._dump_data_connector_to_project_link(link),
                 )
-            return links, total_count
+                for link in links
+            ]
+            return serialized_links, total_count
 
         return "/data_connector_links", ["GET"], _get_all
 

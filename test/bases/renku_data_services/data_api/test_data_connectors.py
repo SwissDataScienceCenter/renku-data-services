@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import pytest
+from httpx import Response
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.authz.models import Visibility
@@ -1120,7 +1121,7 @@ async def test_get_data_connector_project_link_pagination(
 
     parameters = {"page": 2, "per_page": 3}
     _, response = await sanic_client.get(
-        f"/api/data/data_connectors/{data_connector["id"]}/project_links", headers=user_headers, params=parameters
+        f"/api/data/data_connectors/{data_connector['id']}/project_links", headers=user_headers, params=parameters
     )
 
     assert response.status_code == 200, response.text
@@ -2704,3 +2705,57 @@ async def test_data_connectors_with_matching_slugs_different_namespaces(
     _, response = await sanic_client.get("/api/data/data_connectors")
     assert response.status_code == 200, response.text
     assert len(response.json) == 3
+async def link_dc_project(
+    sanic_client: SanicASGITestClient, data_connector_id: str, project_id: str, headers: dict
+) -> Response:
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+    return response
+
+
+async def test_get_all_dc_links(
+    sanic_client: SanicASGITestClient,
+    regular_user: UserInfo,
+    member_1_user: UserInfo,
+    member_1_headers: dict,
+    user_headers: dict[str, str],
+    envidat_metadata: DOIMetadata,
+    monkeypatch: "MonkeyPatch",
+    create_project,
+) -> None:
+    # Create projects
+    p1 = await create_project(sanic_client, name="p1", visibility="public")
+    p2 = await create_project(sanic_client, name="p2", visibility="private")
+    p3 = await create_project(sanic_client, name="p3", visibility="public")
+
+    # Create envidat DC
+    _mock_get_envidat_metadata(envidat_metadata, monkeypatch)
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": "10.16904/12"},
+            "source_path": "/",
+            "target_path": "/",
+            "readonly": True,
+        }
+    }
+    _, res = await sanic_client.post("/api/data/data_connectors/global", json=payload, headers=user_headers)
+    assert res.status_code == 201
+    dc_id = res.json["id"]
+
+    # Link dc to projects
+    await link_dc_project(sanic_client, dc_id, p1["id"], user_headers)
+    await link_dc_project(sanic_client, dc_id, p2["id"], user_headers)
+    await link_dc_project(sanic_client, dc_id, p3["id"], user_headers)
+
+    # Search for links
+    _, res = await sanic_client.get("/api/data/data_connector_links", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert len(res.json) == 3
+    # If anonymous users only the 2 links to public project are shown
+    _, res = await sanic_client.get("/api/data/data_connector_links")
+    assert res.status_code == 200, res.text
+    assert len(res.json) == 2
+    assert p2["id"] not in [i["id"] for i in res.json]
