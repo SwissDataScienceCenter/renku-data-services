@@ -215,18 +215,16 @@ class NotebooksNewBP(CustomBlueprint):
     def check_docker_image(self) -> BlueprintFactoryResponse:
         """Return the availability of the docker image."""
 
-        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
+        @authenticate(self.authenticator)
         @validate(query=apispec.SessionsImagesGetParametersQuery)
         async def _check_docker_image(
             request: Request,
             user: AnonymousAPIUser | AuthenticatedAPIUser,
-            internal_gitlab_user: APIUser,
             query: apispec.SessionsImagesGetParametersQuery,
         ) -> JSONResponse:
             image = Image.from_path(query.image_url)
             result = await self.image_check_repo.check_image(
                 user=user,
-                gitlab_user=internal_gitlab_user,
                 image_src=image,
             )
             logger.info(f"Checked image {query.image_url}: {result}")

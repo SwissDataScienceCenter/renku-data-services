@@ -204,7 +204,6 @@ class FakeGitRepositoriesRepository(GitRepositoriesRepository):
         repository_url,
         user,
         etag,
-        internal_gitlab_user,
     ) -> repositories_models.RepositoryDataResult:
         """Get metadata about one repository."""
 
@@ -243,7 +242,7 @@ class FakeGitRepositoriesRepository(GitRepositoriesRepository):
             case "/some/repo":
                 result = result.with_error(GitUrlError.no_git_repo)
             case _:
-                result = await super().get_repository(repository_url, user, etag, internal_gitlab_user)
+                result = await super().get_repository(repository_url, user, etag)
 
         return result
 
