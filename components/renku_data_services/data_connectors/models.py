@@ -113,6 +113,11 @@ class ProjectStorage:
     creation_date: datetime
     updated_at: datetime
 
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project storage object."""
+        return compute_etag_from_fields(self.updated_at, self.project_id, self.storage_class, self.size.to_bytes())
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class GlobalDataConnector(BaseDataConnector):

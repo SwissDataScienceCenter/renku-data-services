@@ -90,6 +90,26 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
+  /data_connectors/storage/{project_id}:
+    get:
+      summary: Get a project storage for a project id.
+      responses:
+        "200":
+          description: The project storage information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStorage"
+        "404":
+          description: The project storage does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data_connectors
   /data_connectors/global:
     post:
       summary: Create a new data connector

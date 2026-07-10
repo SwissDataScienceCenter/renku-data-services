@@ -141,6 +141,28 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors", ["POST"], _post
 
+    def get_one_storage(self) -> BlueprintFactoryResponse:
+        """Get a specific project storage connector."""
+
+        @authenticate(self.authenticator)
+        @extract_if_none_match
+        async def _get_one(_: Request, user: base_models.APIUser, storage_id: ULID, etag: str | None) -> HTTPResponse:
+            project_storage = await self.data_connector_repo.get_project_storage(user=user, project_id=project_id)
+            if project_storage is None:
+                raise errors.MissingResourceError(message=f"No project storage found for project: {project_id}")
+
+            if project_storage.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": project_storage.etag}
+            return validated_json(
+                apispec.DataConnector,
+                self._dump_project_storage(project_storage),
+                headers=headers,
+            )
+
+        return "/data_connectors/storage/<project_id:ulid>", ["GET"], _get_one
+
     def post_storage(self) -> BlueprintFactoryResponse:
         """Create a new shared project storage."""
 
@@ -152,7 +174,10 @@ class DataConnectorsBP(CustomBlueprint):
         ) -> JSONResponse:
             dc = await validate_unsaved_project_storage(body)
             result = await self.data_connector_repo.insert_project_storage(user, dc)
-            return validated_json(apispec.ProjectStorage, self._dump_project_storage(result), status=201)
+            headers = {"ETag": result.etag}
+            return validated_json(
+                apispec.ProjectStorage, self._dump_project_storage(result), headers=headers, status=201
+            )
 
         return "/data_connectors/storage", ["POST"], _post_storage
 
