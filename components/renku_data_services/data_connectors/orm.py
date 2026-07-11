@@ -178,7 +178,7 @@ class DataConnectorToProjectLinkORM(BaseORM):
     )
     """ID of the data connector."""
 
-    data_connector: Mapped["DataConnectorORM"] = relationship(init=False, repr=False, viewonly=True, lazy="joined")
+    data_connector: Mapped[DataConnectorORM] = relationship(init=False, repr=False, viewonly=True, lazy="joined")
     """The data connector this link points to."""
 
     project_id: Mapped[ULID] = mapped_column(ForeignKey(ProjectORM.id, ondelete="CASCADE"), index=True, nullable=False)
@@ -201,7 +201,7 @@ class DataConnectorToProjectLinkORM(BaseORM):
         nullable=False,
     )
 
-    project: Mapped["ProjectORM"] = relationship(init=False, repr=False, viewonly=True, lazy="joined")
+    project: Mapped[ProjectORM] = relationship(init=False, repr=False, viewonly=True, lazy="joined")
     """The project this link points to."""
 
     def dump(self) -> models.DataConnectorToProjectLink:

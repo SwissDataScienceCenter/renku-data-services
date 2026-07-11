@@ -2705,6 +2705,8 @@ async def test_data_connectors_with_matching_slugs_different_namespaces(
     _, response = await sanic_client.get("/api/data/data_connectors")
     assert response.status_code == 200, response.text
     assert len(response.json) == 3
+
+
 async def link_dc_project(
     sanic_client: SanicASGITestClient, data_connector_id: str, project_id: str, headers: dict
 ) -> Response:
