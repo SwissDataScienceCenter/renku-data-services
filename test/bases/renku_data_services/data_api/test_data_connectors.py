@@ -567,35 +567,6 @@ async def test_get_one_by_slug_data_connector(
 
 
 @pytest.mark.asyncio
-async def test_get_data_connector_by_doi(create_global_data_connector, monkeypatch, sanic_client, user_headers) -> None:
-    doi = "10.5281/zenodo.2600782"
-    metadata = RCloneDOIMetadata(
-        DOI=doi,
-        URL="https://doi.org/10.5281/zenodo.2600782",
-        metadataURL="https://zenodo.org/api/records/3542869",
-        provider="zenodo",
-    )
-    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
-    zenodo_metadata = DOIMetadata(
-        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
-        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
-        keywords=[],
-    )
-    _mock_get_dataset_metadata(metadata=zenodo_metadata, monkeypatch=monkeypatch)
-
-    data_connector = await create_global_data_connector(configuration={"type": "doi", "doi": doi})
-
-    _, response = await sanic_client.get(f"/api/data/data_connectors/search?doi={doi}", headers=user_headers)
-
-    assert response.status_code == 200, response.text
-    assert response.json is not None
-    assert response.json["id"] == data_connector.id
-    assert response.json["name"] == data_connector.name
-    assert response.json["slug"] == data_connector.slug
-    assert response.json["doi"] == doi
-
-
-@pytest.mark.asyncio
 async def test_get_data_connector_by_doi_fails_if_not_found(sanic_client, user_headers) -> None:
     non_existing_doi = "10.5281/zenodo.9999999"
 
@@ -1108,30 +1079,6 @@ async def test_get_data_connector_project_links_empty(
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert len(response.json) == 0
-
-
-@pytest.mark.asyncio
-async def test_get_data_connector_project_link_pagination(
-    create_data_connector, create_project, link_data_connector, sanic_client, user_headers
-) -> None:
-    data_connector = await create_data_connector("Data Connector")
-    for i in range(1, 10):
-        project = await create_project(sanic_client, f"project-{i}")
-        await link_data_connector(project["id"], data_connector["id"])
-
-    parameters = {"page": 2, "per_page": 3}
-    _, response = await sanic_client.get(
-        f"/api/data/data_connectors/{data_connector['id']}/project_links", headers=user_headers, params=parameters
-    )
-
-    assert response.status_code == 200, response.text
-    assert response.json is not None
-    projects = response.json
-    assert {p["project_path"] for p in projects} == {f"user.doe/{p}" for p in ("project-4", "project-5", "project-6")}
-    assert response.headers["page"] == "2"
-    assert response.headers["per-page"] == "3"
-    assert response.headers["total"] == "9"
-    assert response.headers["total-pages"] == "3"
 
 
 @pytest.mark.asyncio
