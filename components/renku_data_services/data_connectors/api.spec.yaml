@@ -113,7 +113,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DataConnectorLinksList"
+                $ref: "#/components/schemas/DataConnectorToProjectLinksList"
           headers:
             page:
               description: The index of the current page (starting at 1).
