@@ -257,7 +257,7 @@ class ResourcePoolORM(BaseORM):
     __table_args__ = (
         CheckConstraint(
             "cpu_limit_factor IS NULL OR cpu_limit_factor >= 1.0",
-            name="chk_cpu_limit_factor_positive",
+            name="chk_cpu_limit_factor_gte_1",
         ),
     )
     name: Mapped[str] = mapped_column(String(40), index=True)
