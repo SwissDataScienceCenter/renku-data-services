@@ -481,10 +481,12 @@ async def request_session_secret_creation(
             )
 
 
-def resources_patch_from_resource_class(resource_class: ResourceClass) -> ResourcesPatch:
+def resources_patch_from_resource_class(
+    resource_class: ResourceClass, cpu_limit_factor: float | None = None
+) -> ResourcesPatch:
     """Convert the resource class to a k8s resources spec."""
     gpu_name = GpuKind.NVIDIA.value + "/gpu"
-    resources = resources_from_resource_class(resource_class)
+    resources = resources_from_resource_class(resource_class, cpu_limit_factor)
     requests: Mapping[str, Requests | RequestsStr | ResetType] | ResetType | None = None
     limits: Mapping[str, Limits | LimitsStr | ResetType] | ResetType | None = None
     defaul_requests = {"memory": RESET, "cpu": RESET, gpu_name: RESET}
@@ -496,7 +498,7 @@ def resources_patch_from_resource_class(resource_class: ResourceClass) -> Resour
     return ResourcesPatch(requests=requests, limits=limits)
 
 
-def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
+def resources_from_resource_class(resource_class: ResourceClass, cpu_limit_factor: float | None = None) -> Resources:
     """Convert the resource class to a k8s resources spec."""
     requests: dict[str, Requests | RequestsStr] = {
         "cpu": RequestsStr(str(round(resource_class.cpu * 1000)) + "m"),
@@ -509,6 +511,8 @@ def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
         # NOTE: GPUs have to be set in limits too since GPUs cannot be overcommited, if
         # not on some clusters this will cause the session to fully fail to start.
         limits[gpu_name] = Limits(resource_class.gpu)
+        if cpu_limit_factor is not None and cpu_limit_factor > 1.0:
+            limits["cpu"] = LimitsStr(str(round(resource_class.cpu * cpu_limit_factor * 1000)) + "m")
     return Resources(requests=requests, limits=limits if len(limits) > 0 else None)
 
 
@@ -1329,7 +1333,7 @@ async def patch_session(
         patch.spec.template = TemplatePatch(metadata=TemplateMetadataPatch(annotations=annotations))
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
-        patch.spec.session.resources = resources_patch_from_resource_class(rc)
+        patch.spec.session.resources = resources_patch_from_resource_class(rc, rp.cpu_limit_factor)
         # Tolerations
         patch.spec.tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
         # Affinities

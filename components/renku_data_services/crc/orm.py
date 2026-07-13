@@ -256,7 +256,7 @@ class ResourcePoolORM(BaseORM):
     __tablename__ = "resource_pools"
     __table_args__ = (
         CheckConstraint(
-            "cpu_limit_factor IS NULL OR cpu_limit_factor > 0",
+            "cpu_limit_factor IS NULL OR cpu_limit_factor >= 1.0",
             name="chk_cpu_limit_factor_positive",
         ),
     )
