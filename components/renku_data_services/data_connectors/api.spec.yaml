@@ -853,10 +853,6 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/DataConnectorToProjectLink"
-    ProjectPath:
-      description: The path to the project page
-      type: string
-      example: "namespace/project-slug"
     DataConnectorToProjectLink:
       description: A link from a data connector to a project in Renku 2.0
       type: object
