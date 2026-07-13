@@ -2426,7 +2426,7 @@ components:
       format: float
       minimum: 1
       maximum: 100
-      description: The value used to multiple cpu requests to get the limit. If unset there will be no cpu limits.
+      description: The value used to multiply cpu requests to get the limit. If unset there will be no cpu limits.
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
