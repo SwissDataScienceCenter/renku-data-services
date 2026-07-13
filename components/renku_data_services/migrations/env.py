@@ -11,6 +11,7 @@ from renku_data_services.metrics.orm import BaseORM as metrics
 from renku_data_services.migrations.utils import run_migrations
 from renku_data_services.namespace.orm import BaseORM as namespaces
 from renku_data_services.notifications.orm import BaseORM as notifications
+from renku_data_services.persisted_logs.orm import BaseORM as persisted_logs
 from renku_data_services.platform.orm import BaseORM as platform
 from renku_data_services.project.orm import BaseORM as project
 from renku_data_services.resource_usage.orm import BaseORM as resource_usage
@@ -31,6 +32,7 @@ all_metadata = [
     metrics.metadata,
     namespaces.metadata,
     notifications.metadata,
+    persisted_logs.metadata,
     platform.metadata,
     project.metadata,
     search.metadata,
