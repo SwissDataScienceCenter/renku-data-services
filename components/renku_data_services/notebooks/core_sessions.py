@@ -511,8 +511,8 @@ def resources_from_resource_class(resource_class: ResourceClass, cpu_limit_facto
         # NOTE: GPUs have to be set in limits too since GPUs cannot be overcommited, if
         # not on some clusters this will cause the session to fully fail to start.
         limits[gpu_name] = Limits(resource_class.gpu)
-        if cpu_limit_factor is not None and cpu_limit_factor > 1.0:
-            limits["cpu"] = LimitsStr(str(round(resource_class.cpu * cpu_limit_factor * 1000)) + "m")
+    if cpu_limit_factor is not None and cpu_limit_factor >= 1.0:
+        limits["cpu"] = LimitsStr(str(round(resource_class.cpu * cpu_limit_factor * 1000)) + "m")
     return Resources(requests=requests, limits=limits if len(limits) > 0 else None)
 
 
@@ -1178,7 +1178,7 @@ async def start_session(
                 workingDir=work_dir.as_posix(),
                 runAsUser=environment.uid,
                 runAsGroup=environment.gid,
-                resources=resources_from_resource_class(resource_class),
+                resources=resources_from_resource_class(resource_class, resource_pool.cpu_limit_factor),
                 extraVolumeMounts=session_extras.volume_mounts,
                 command=command,
                 args=args,
