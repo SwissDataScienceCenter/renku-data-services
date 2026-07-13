@@ -1867,6 +1867,8 @@ async def test_resource_pools_quota_with_no_usage(
     assert resource_class["usage_hours_total"] == 4.0
 
 
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pool_members_add_group(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -2011,6 +2013,8 @@ async def test_resource_pools_quota_exceeded(
     assert resource_class["usage_hours_total"] == 2.0
 
 
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_pool_members_add_project(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -2147,6 +2151,8 @@ async def test_resource_pools_quota_with_no_limits(
     assert "usage_hours_total" not in resource_class
 
 
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_pool_members_put_replaces(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -2273,6 +2279,8 @@ async def test_resource_pools_quota_with_no_costs(
     assert "usage_hours_total" not in resource_class
 
 
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_pool_members_delete(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],

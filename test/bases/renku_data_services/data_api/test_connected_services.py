@@ -643,6 +643,7 @@ async def test_get_token_with_internal_token(
 # --- Integration Group Connected Services API Tests (E1-E2) ---
 
 
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 @pytest.mark.asyncio
 async def test_oauth_callback_adds_user_to_rp(
     oauth2_test_client: SanicASGITestClient,
@@ -714,6 +715,7 @@ async def test_oauth_callback_adds_user_to_rp(
     assert res.status_code == 204
 
 
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 @pytest.mark.asyncio
 async def test_delete_oauth_connection_removes_rp_access(
     oauth2_test_client: SanicASGITestClient,
