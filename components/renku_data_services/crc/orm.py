@@ -254,6 +254,12 @@ class ResourcePoolORM(BaseORM):
     """Resource pool specifies a set of resource classes, users that can access them and a quota."""
 
     __tablename__ = "resource_pools"
+    __table_args__ = (
+        CheckConstraint(
+            "cpu_limit_factor IS NULL OR cpu_limit_factor > 0",
+            name="chk_cpu_limit_factor_positive",
+        ),
+    )
     name: Mapped[str] = mapped_column(String(40), index=True)
     quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
     users: Mapped[list[UserORM]] = relationship(
@@ -297,6 +303,11 @@ class ResourcePoolORM(BaseORM):
     platform: Mapped[models.RuntimePlatform] = mapped_column(
         Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=literal("linux_amd64")
     )
+
+    cpu_limit_factor: Mapped[Optional[float]] = mapped_column(Integer, default=None, init=False, nullable=True)
+    """Used to assign cpu limits based on the cpu value in the resource classes in the pool.
+    If the value is zero or unset then cpu limits are not set.
+    """
 
     @classmethod
     def from_unsaved_model(
