@@ -868,8 +868,6 @@ components:
           $ref: "#/components/schemas/Ulid"
         project_id:
           $ref: "#/components/schemas/Ulid"
-        project_path:
-          $ref: "#/components/schemas/ProjectPath"
         creation_date:
           $ref: "#/components/schemas/CreationDate"
         created_by:
@@ -878,7 +876,6 @@ components:
         - id
         - data_connector_id
         - project_id
-        - project_path
         - creation_date
         - created_by
     DataConnectorToProjectLinkPost:

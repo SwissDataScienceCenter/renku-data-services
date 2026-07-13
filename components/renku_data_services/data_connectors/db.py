@@ -967,7 +967,7 @@ class DataConnectorRepository:
     async def get_links(
         self,
         user: base_models.APIUser,
-        doi: str | None,
+        doi: DOI | None,
         pagination: PaginationRequest | None,
     ) -> tuple[list[models.DataConnectorToProjectLink], int]:
         """Get all links to data connectors the user has READ access to.

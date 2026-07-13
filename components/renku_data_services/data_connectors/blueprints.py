@@ -47,6 +47,7 @@ from renku_data_services.data_connectors.core import (
     validate_unsaved_data_connector,
 )
 from renku_data_services.data_connectors.db import (
+    DOI,
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
@@ -521,9 +522,8 @@ class DataConnectorsBP(CustomBlueprint):
             pagination: PaginationRequest,
             query: apispec.DataConnectorLinksGetQuery,
         ) -> tuple[list[dict[str, Any]], int]:
-            links, total_count = await self.data_connector_repo.get_links(
-                user=user, pagination=pagination, doi=query.doi
-            )
+            doi = DOI(query.doi) if query.doi is not None else None
+            links, total_count = await self.data_connector_repo.get_links(user=user, pagination=pagination, doi=doi)
             serialized_links = [
                 validate_and_dump(
                     apispec.DataConnectorToProjectLink,
@@ -579,7 +579,6 @@ class DataConnectorsBP(CustomBlueprint):
             id=str(link.id),
             data_connector_id=str(link.data_connector_id),
             project_id=str(link.project_id),
-            project_path=link.project_path,
             creation_date=link.creation_date,
             created_by=link.created_by,
         )
