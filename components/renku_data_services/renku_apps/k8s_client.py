@@ -85,11 +85,11 @@ class RenkuAppsK8sClient:
             return None
         return _extract_runtime_state(KnativeService.model_validate(obj.manifest))
 
-    async def get_app_deployment_for_project(
-        self, project: Project, session_launcher: SessionLauncher
-    ) -> AppRuntimeState | None:
-        """Get the runtime state for the given project's app, or None if it does not exist."""
-        return await self.get_app_deployment(_generate_app_name(project, session_launcher))
+    async def get_app_deployment_for_project(self, project_id: ULID) -> AppRuntimeState | None:
+        """Get an existing app in the project (matched by project-id label), or None if none exist."""
+        async for runtime_state in self.list_app_deployments(project_id):
+            return runtime_state
+        return None
 
     async def get_app_deployment_for_launcher(self, launcher_id: ULID) -> AppRuntimeState | None:
         """Get the runtime state for the launcher's app via its label, or None if it does not exist."""
