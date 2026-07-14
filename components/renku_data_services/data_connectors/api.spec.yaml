@@ -85,12 +85,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DataConnector"
+                $ref: "#/components/schemas/ProjectStorage"
         default:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
-  /data_connectors/storage/{project_id}:
+  /data_connectors/storage/{storage_id}:
     get:
       summary: Get a project storage for a project id.
       responses:
