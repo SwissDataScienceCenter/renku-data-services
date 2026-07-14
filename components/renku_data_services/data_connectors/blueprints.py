@@ -156,7 +156,7 @@ class DataConnectorsBP(CustomBlueprint):
 
             headers = {"ETag": project_storage.etag}
             return validated_json(
-                apispec.DataConnector,
+                apispec.ProjectStorage,
                 self._dump_project_storage(project_storage),
                 headers=headers,
             )
@@ -436,6 +436,21 @@ class DataConnectorsBP(CustomBlueprint):
             ["DELETE"],
             _delete_project_link,
         )
+
+    def get_storage_to_project(self) -> BlueprintFactoryResponse:
+        """List all project storage to a given project."""
+
+        @authenticate(self.authenticator)
+        async def _get_all_storage_to_project(
+            _: Request,
+            user: base_models.APIUser,
+            project_id: ULID,
+        ) -> JSONResponse:
+            project_storage = await self.data_connector_repo.get_storage_to(user=user, project_id=project_id)
+            result = [self._dump_project_storage(project_storage)] if project_storage else []
+            return validated_json(apispec.ProjectStorageList, result)
+
+        return "/projects/<project_id:ulid>/storage", ["GET"], _get_all_storage_to_project
 
     def get_all_data_connectors_links_to_project(self) -> BlueprintFactoryResponse:
         """List all links from data connectors to a given project."""

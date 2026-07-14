@@ -393,6 +393,27 @@ class DataConnectorRepository:
 
         return result
 
+    async def get_storage_to(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectStorage | None:
+        """Get a project storage to a project if it exists."""
+
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            result_orm = await session.scalars(
+                select(schemas.ProjectStorageORM).where(schemas.ProjectStorageORM.project_id == project_id)
+            )
+            result_orm = result_orm.one_or_none()
+            if not result_orm:
+                return None
+
+        result = result_orm.dump()
+        authorized = await self.authz.has_permission(user, ResourceType.project, result.project_id, Scope.READ)
+        if not authorized:
+            return None
+
+        return result
+
     @with_db_transaction
     async def insert_project_storage(
         self, user: base_models.APIUser, input: models.UnsavedProjectStorage, *, session: AsyncSession | None = None

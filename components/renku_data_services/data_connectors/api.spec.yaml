@@ -522,6 +522,26 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
+  /projects/{project_id}/storage:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    get:
+      summary: Get the project storage for a given project
+      responses:
+        "200":
+          description: The list of project storages (currently either one or empty).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStorage"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
   /projects/{project_id}/data_connector_links:
     parameters:
       - in: path
@@ -938,6 +958,11 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/DataConnectorToProjectLink"
+    ProjectStorageList:
+      description: A list of project storages.
+      type: array
+      items:
+        $ref: "#/components/schemas/ProjectStorage"
     DataConnectorToProjectLink:
       description: A link from a data connector to a project in Renku 2.0
       type: object
