@@ -335,6 +335,30 @@ class DepositORM(BaseORM):
         )
 
 
+class ProjectStorageAllowORM(BaseORM):
+    """ORM model for project storage allow list with size limits."""
+
+    __tablename__ = "project_storage_allow"
+
+    project_id: Mapped[ULID] = mapped_column(
+        "project_id",
+        ForeignKey(ProjectORM.id, ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    """ID of the project."""
+
+    max_size: Mapped[ByteSize] = mapped_column("max_size", ByteSizeType())
+    """Maximum allowed size in bytes."""
+
+    def dump(self) -> models.ProjectStorageAllow:
+        """Convert the ORM row to a ProjectStorageAllow model."""
+        return models.ProjectStorageAllow(
+            project_id=self.project_id,
+            max_size=self.max_size,
+        )
+
+
 class ProjectStorageORM(BaseORM):
     """ORM model for project storage configuration."""
 
@@ -344,9 +368,9 @@ class ProjectStorageORM(BaseORM):
         "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
     )
     project_id: Mapped[ULID] = mapped_column(
-        ForeignKey(ProjectORM.id, ondelete="CASCADE"), index=True, nullable=False, unique=True
+        ForeignKey(ProjectStorageAllowORM.project_id, ondelete="CASCADE"), index=True, nullable=False, unique=True
     )
-    """ID of the project."""
+    """ID of the project (must exist in project_storage_allow)."""
 
     storage_class: Mapped[str] = mapped_column("storage_class", String(20))
     """The storage class (e.g. azurefile)."""

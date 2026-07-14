@@ -120,6 +120,14 @@ class ProjectStorage:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllow:
+    """Allowed project storage with max size."""
+
+    project_id: ULID
+    max_size: ByteSize
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class GlobalDataConnector(BaseDataConnector):
     """Global data connector model."""
 
