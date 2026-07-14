@@ -147,9 +147,9 @@ class DataConnectorsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @extract_if_none_match
         async def _get_one(_: Request, user: base_models.APIUser, storage_id: ULID, etag: str | None) -> HTTPResponse:
-            project_storage = await self.data_connector_repo.get_project_storage(user=user, project_id=project_id)
+            project_storage = await self.data_connector_repo.get_project_storage(user=user, storage_id=storage_id)
             if project_storage is None:
-                raise errors.MissingResourceError(message=f"No project storage found for project: {project_id}")
+                raise errors.MissingResourceError(message=f"No project storage found for storage: {storage_id}")
 
             if project_storage.etag == etag:
                 return HTTPResponse(status=304)

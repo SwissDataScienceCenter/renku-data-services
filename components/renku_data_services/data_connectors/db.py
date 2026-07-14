@@ -382,11 +382,11 @@ class DataConnectorRepository:
             result_orm = await session.scalars(
                 select(schemas.ProjectStorageORM).where(schemas.ProjectStorageORM.id == storage_id)
             )
-            result = result_orm.one_or_none()
-            if not result:
+            result_orm = result_orm.one_or_none()
+            if not result_orm:
                 return None
 
-        result = result.dump()
+        result = result_orm.dump()
         authorized = await self.authz.has_permission(user, ResourceType.project, result.project_id, Scope.READ)
         if not authorized:
             return None
