@@ -110,6 +110,22 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
+  /data_connectors/storage/allow/{project_id}:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    delete:
+      summary: Remove a project from the storage allow list
+      responses:
+        "204":
+          description: The project was removed from the allow list
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data_connectors
   /data_connectors/storage/{storage_id}:
     parameters:
       - in: path

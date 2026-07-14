@@ -205,6 +205,19 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/storage/allow", ["POST"], _post_storage_allow
 
+    def delete_storage_allow(self) -> BlueprintFactoryResponse:
+        """Remove a project from the storage allow list."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _delete_storage_allow(
+            _: Request, user: base_models.APIUser, project_id: ULID
+        ) -> HTTPResponse:
+            await self.data_connector_repo.delete_project_storage_allow(user, project_id)
+            return HTTPResponse(status=204)
+
+        return "/data_connectors/storage/allow/<project_id:ulid>", ["DELETE"], _delete_storage_allow
+
     def post_global(self) -> BlueprintFactoryResponse:
         """Create a new global data connector."""
 

@@ -497,6 +497,23 @@ class DataConnectorRepository:
         await session.delete(storage_orm)
 
     @with_db_transaction
+    async def delete_project_storage_allow(
+        self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None
+    ) -> None:
+        """Delete a project storage allow entry."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        result = await session.scalars(
+            select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project_id)
+        )
+        allow_orm = result.one_or_none()
+        if allow_orm is None:
+            return None
+
+        await session.delete(allow_orm)
+
+    @with_db_transaction
     async def insert_global_data_connector(
         self,
         user: base_models.APIUser,
