@@ -452,6 +452,21 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/projects/<project_id:ulid>/storage", ["GET"], _get_all_storage_to_project
 
+    def delete_storage(self) -> BlueprintFactoryResponse:
+        """Delete a specific project storage."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete_storage(
+            _: Request,
+            user: base_models.APIUser,
+            storage_id: ULID,
+        ) -> HTTPResponse:
+            await self.data_connector_repo.delete_project_storage(user=user, storage_id=storage_id)
+            return HTTPResponse(status=204)
+
+        return "/data_connectors/storage/<storage_id:ulid>", ["DELETE"], _delete_storage
+
     def get_all_data_connectors_links_to_project(self) -> BlueprintFactoryResponse:
         """List all links from data connectors to a given project."""
 

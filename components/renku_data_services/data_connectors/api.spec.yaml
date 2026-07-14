@@ -91,6 +91,12 @@ paths:
       tags:
         - data_connectors
   /data_connectors/storage/{storage_id}:
+    parameters:
+      - in: path
+        name: storage_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
     get:
       summary: Get a project storage for a project id.
       responses:
@@ -106,6 +112,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data_connectors
+    delete:
+      summary: Delete a specific project storage
+      responses:
+        "204":
+          description: The project storage was deleted or did not exist in the first place
         default:
           $ref: "#/components/responses/Error"
       tags:

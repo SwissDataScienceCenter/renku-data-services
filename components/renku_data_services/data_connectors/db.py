@@ -449,6 +449,29 @@ class DataConnectorRepository:
         return new_storage.dump()
 
     @with_db_transaction
+    async def delete_project_storage(
+        self, user: base_models.APIUser, storage_id: ULID, *, session: AsyncSession | None = None
+    ) -> None:
+        """Delete a specific project storage."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        result = await session.scalars(
+            select(schemas.ProjectStorageORM).where(schemas.ProjectStorageORM.id == storage_id)
+        )
+        storage_orm = result.one_or_none()
+        if storage_orm is None:
+            return None
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, storage_orm.project_id, Scope.DELETE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project storage with id '{storage_id}' does not exist or you do not have access to it."
+            )
+
+        await session.delete(storage_orm)
+
+    @with_db_transaction
     async def insert_global_data_connector(
         self,
         user: base_models.APIUser,
