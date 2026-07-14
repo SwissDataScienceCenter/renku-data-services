@@ -1,4 +1,4 @@
-"""SQLAlchemy schemas for the data connectors database."""
+"""SQLAlchemy schemas for the peristed logs database."""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ class AmaltheaSessionLogsORM(BaseORM):
     container: Mapped[str] = mapped_column(nullable=False)
     """The container this log line belongs to."""
 
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
     """The timestamp of the log line."""
 
     log_line: Mapped[str] = mapped_column(nullable=False)
