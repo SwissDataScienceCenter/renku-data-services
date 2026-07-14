@@ -449,6 +449,31 @@ class DataConnectorRepository:
         return new_storage.dump()
 
     @with_db_transaction
+    async def insert_project_storage_allow(
+        self, user: base_models.APIUser, input: models.ProjectStorageAllow, *, session: AsyncSession | None = None
+    ) -> models.ProjectStorageAllow:
+        """Insert a new project storage allow entry."""
+
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        existing = await session.execute(
+            select(exists().where(schemas.ProjectStorageAllowORM.project_id == input.project_id))
+        )
+        if existing.scalar():
+            raise errors.ValidationError(message=f"Project {input.project_id} is already in the allow list.")
+
+        new_allow = schemas.ProjectStorageAllowORM(
+            project_id=input.project_id,
+            max_size=input.max_size,
+        )
+        session.add(new_allow)
+        await session.flush()
+        return new_allow.dump()
+
+    @with_db_transaction
     async def delete_project_storage(
         self, user: base_models.APIUser, storage_id: ULID, *, session: AsyncSession | None = None
     ) -> None:

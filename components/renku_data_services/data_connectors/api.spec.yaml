@@ -90,6 +90,26 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
+  /data_connectors/storage/allow:
+    post:
+      summary: Add a project to the storage allow list
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectStorageAllowPost"
+      responses:
+        "201":
+          description: The project was added to the allow list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStorageAllow"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data_connectors
   /data_connectors/storage/{storage_id}:
     parameters:
       - in: path
@@ -864,6 +884,34 @@ components:
         - creation_date
         - created_by
         - updated_at
+    ProjectStorageAllowPost:
+      description: |
+        A project to be added to the storage allow list.
+      additionalProperties: false
+      properties:
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        max_size:
+          type: integer
+          format: int64
+          description: Maximum size in GB
+      required:
+        - project_id
+        - max_size
+    ProjectStorageAllow:
+      description: |
+        A project in the storage allow list.
+      additionalProperties: false
+      properties:
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        max_size:
+          type: integer
+          format: int64
+          description: Maximum size in GB
+      required:
+        - project_id
+        - max_size
     DataConnectorPatch:
       description: |
         Patch of a data connector

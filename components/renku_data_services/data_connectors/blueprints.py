@@ -9,8 +9,10 @@ from sanic_ext import validate
 from ulid import ULID
 
 from renku_data_services import base_models, errors
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_api.auth import (
     authenticate,
+    only_admins,
     only_authenticated,
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -180,6 +182,28 @@ class DataConnectorsBP(CustomBlueprint):
             )
 
         return "/data_connectors/storage", ["POST"], _post_storage
+
+    def post_storage_allow(self) -> BlueprintFactoryResponse:
+        """Add a project to the storage allow list."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.ProjectStorageAllowPost)
+        async def _post_storage_allow(
+            _: Request, user: base_models.APIUser, body: apispec.ProjectStorageAllowPost
+        ) -> JSONResponse:
+            allow = models.ProjectStorageAllow(
+                project_id=ULID.from_str(body.project_id),
+                max_size=ByteSize.from_gibi(body.max_size),
+            )
+            await self.data_connector_repo.insert_project_storage_allow(user, allow)
+            return validated_json(
+                apispec.ProjectStorageAllow,
+                {"project_id": str(allow.project_id), "max_size": int(allow.max_size.to_gibi())},
+                status=201,
+            )
+
+        return "/data_connectors/storage/allow", ["POST"], _post_storage_allow
 
     def post_global(self) -> BlueprintFactoryResponse:
         """Create a new global data connector."""
