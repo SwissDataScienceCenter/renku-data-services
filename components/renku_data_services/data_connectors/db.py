@@ -537,6 +537,30 @@ class DataConnectorRepository:
             )
             return result.dump() if result else None
 
+    async def get_project_storage_allows(
+        self, user: base_models.APIUser, pagination: PaginationRequest, project_name: str | None = None
+    ) -> tuple[list[models.ProjectStorageAllow], int]:
+        """Get all project storage allow entries, optionally filtered by project name."""
+        if user.id is None or not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.ProjectStorageAllowORM).join(
+                ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id
+            )
+            stmt_count = select(func.count()).select_from(schemas.ProjectStorageAllowORM).join(
+                ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id
+            )
+            if project_name:
+                stmt = stmt.where(ProjectORM.name.ilike(f"%{project_name}%"))
+                stmt_count = stmt_count.where(ProjectORM.name.ilike(f"%{project_name}%"))
+            stmt = stmt.order_by(schemas.ProjectStorageAllowORM.project_id).limit(pagination.per_page).offset(
+                pagination.offset
+            )
+            results = await session.scalars(stmt)
+            total = await session.scalar(stmt_count) or 0
+            return [r.dump() for r in results.all()], total
+
     @with_db_transaction
     async def delete_project_storage_allow(
         self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None

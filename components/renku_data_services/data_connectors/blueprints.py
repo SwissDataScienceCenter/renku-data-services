@@ -183,6 +183,33 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/storage", ["POST"], _post_storage
 
+    def get_all_storage_allows(self) -> BlueprintFactoryResponse:
+        """List all projects in the storage allow list."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_query(query=apispec.ProjectStorageAllowListQuery)
+        @paginate
+        async def _get_all_storage_allows(
+            _: Request,
+            user: base_models.APIUser,
+            pagination: PaginationRequest,
+            query: apispec.ProjectStorageAllowListQuery,
+        ) -> tuple[list[dict[str, Any]], int]:
+            project_name = query.project_name if query.project_name else None
+            allows, total = await self.data_connector_repo.get_project_storage_allows(
+                user, pagination, project_name=project_name
+            )
+            return [
+                validate_and_dump(
+                    apispec.ProjectStorageAllow,
+                    self._dump_project_storage_allow(a),
+                )
+                for a in allows
+            ], total
+
+        return "/data_connectors/storage/allow", ["GET"], _get_all_storage_allows
+
     def post_storage_allow(self) -> BlueprintFactoryResponse:
         """Add a project to the storage allow list."""
 
@@ -199,7 +226,7 @@ class DataConnectorsBP(CustomBlueprint):
             await self.data_connector_repo.insert_project_storage_allow(user, allow)
             return validated_json(
                 apispec.ProjectStorageAllow,
-                {"project_id": str(allow.project_id), "max_size": int(allow.max_size.to_gibi())},
+                self._dump_project_storage_allow(allow),
                 status=201,
             )
 
@@ -216,7 +243,7 @@ class DataConnectorsBP(CustomBlueprint):
                 raise errors.MissingResourceError(message=f"Project {project_id} is not in the storage allow list.")
             return validated_json(
                 apispec.ProjectStorageAllow,
-                {"project_id": str(allow.project_id), "max_size": int(allow.max_size.to_gibi())},
+                self._dump_project_storage_allow(allow),
             )
 
         return "/data_connectors/storage/allow/<project_id:ulid>", ["GET"], _get_storage_allow
@@ -726,6 +753,10 @@ class DataConnectorsBP(CustomBlueprint):
             creation_date=ps.creation_date,
             updated_at=ps.updated_at,
         )
+
+    @staticmethod
+    def _dump_project_storage_allow(ps: models.ProjectStorageAllow) -> apispec.ProjectStorageAllow:
+        return apispec.ProjectStorageAllow(project_id=str(ps.project_id), max_size=int(ps.max_size.to_gibi()))
 
     async def __get_zenodo_access_token(self, user: base_models.APIUser) -> str:
         provider = await self.connected_services_repo.get_provider_for_kind(user, ProviderKind.zenodo)
