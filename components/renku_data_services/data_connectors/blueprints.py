@@ -9,7 +9,6 @@ from sanic_ext import validate
 from ulid import ULID
 
 from renku_data_services import base_models, errors
-from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_api.auth import (
     authenticate,
     only_admins,
@@ -19,6 +18,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import (
     DataConnectorInProjectPath,
     DataConnectorPath,
@@ -210,9 +210,7 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _delete_storage_allow(
-            _: Request, user: base_models.APIUser, project_id: ULID
-        ) -> HTTPResponse:
+        async def _delete_storage_allow(_: Request, user: base_models.APIUser, project_id: ULID) -> HTTPResponse:
             await self.data_connector_repo.delete_project_storage_allow(user, project_id)
             return HTTPResponse(status=204)
 
