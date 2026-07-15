@@ -79,7 +79,7 @@ class Config:
         session_quota_alert_remaining_threshold = int(os.environ.get("SESSION_QUOTA_ALERT_REMAINING_THRESHOLD_P", 20))
         session_quota_alert_critical = int(os.environ.get("SESSION_QUOTA_ALERT_CRITICAL_M", 10))
 
-        k8s_namespace = os.environ.get("KUBERNETES_NAMESPACE", "default")
+        k8s_namespace = os.environ.get("KUBERNETES_NAMESPACE", os.environ.get("K8S_NAMESPACE", "default"))
         k8s_config_root = os.environ.get("K8S_CONFIG_ROOT", "/secrets/kube_configs")
 
         enable_resource_request_tracking = os.environ.get("ENABLE_RESOURCE_REQUEST_TRACKING", "false").lower() == "true"

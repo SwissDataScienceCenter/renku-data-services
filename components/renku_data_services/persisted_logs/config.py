@@ -21,6 +21,6 @@ class PersistedLogsConfig:
 
         return cls(
             enabled=True,
-            loki_read_base_url="http://loki-read.monitoring.cluster.local.svc:3100/",
+            loki_read_base_url="http://loki-read.monitoring.svc.cluster.local:3100/",
             namespace=namespace,
         )
