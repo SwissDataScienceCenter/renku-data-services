@@ -17,7 +17,7 @@ class AmaltheaSessionPersistedLogsRepository:
         stmt = (
             select(schemas.AmaltheaSessionLogsORM.timestamp)
             .select_from(schemas.AmaltheaSessionLogsORM)
-            .order_by(schemas.AmaltheaSessionLogsORM.timestamp.desc)
+            .order_by(schemas.AmaltheaSessionLogsORM.timestamp.desc())
             .limit(1)
         )
         res = await session.scalars(stmt)
