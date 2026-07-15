@@ -1323,7 +1323,15 @@ components:
           $ref: "#/components/schemas/NodeAffinityList"
         quota_enforced:
           $ref: "#/components/schemas/QuotaEnforced"
-    ResourceClass:
+      required:
+        - name
+        - default
+        - cpu
+        - memory
+        - gpu
+        - max_storage
+        - default_storage
+    ResourceClassPropertiesPatch:
       type: object
       additionalProperties: false
       properties:
@@ -1346,19 +1354,33 @@ components:
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
         quota_enforced:
-          allOf:
-            - $ref: "#/components/schemas/QuotaEnforced"
-          default: false
+          $ref: "#/components/schemas/QuotaEnforced"
+    ResourceClass:
+      oneOf:
+        - $ref: "#/components/schemas/LocalResourceClass"
+        - $ref: "#/components/schemas/FirecrestResourceClass"
+        - $ref: "#/components/schemas/RunaiResourceClass"
+      discriminator:
+        propertyName: kind
+        mapping:
+          local: "#/components/schemas/LocalResourceClass"
+          firecrest: "#/components/schemas/FirecrestResourceClass"
+          runai: "#/components/schemas/RunaiResourceClass"
+    LocalResourceClass:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassProperties"
+      properties:
+        kind:
+          type: string
+          enum: ["local"]
+          example: "local"
       required:
-        - name
-        - default
-        - cpu
-        - memory
-        - gpu
-        - max_storage
-        - default_storage
+        - kind
       example:
         name: "resource class"
+        kind: "local"
         default: false
         cpu: 1.5
         memory: 2
@@ -1366,52 +1388,193 @@ components:
         max_storage: 100
         default_storage: 10
         quota_enforced: false
-    ResourceClassPatch:
-      allOf:
-        - $ref: "#/components/schemas/ResourceClassProperties"
-      example:
-        name: "resource class"
-        cpu: 1.5
-    ResourceClassPatchWithId:
-      allOf:
-        - $ref: "#/components/schemas/ResourceClassProperties"
-        - type: object
-          properties:
-            id:
-              $ref: "#/components/schemas/IntegerId"
-      required:
-        - id
-      example:
-        id: 1
-        max_storage: 50
-    ResourceClassWithId:
+    FirecrestResourceClass:
       type: object
       additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassProperties"
       properties:
-        name:
-          $ref: "#/components/schemas/Name"
-        default:
-          $ref: "#/components/schemas/DefaultFlag"
+        kind:
+          type: string
+          enum: ["firecrest"]
+          example: "firecrest"
         cpu:
-          $ref: "#/components/schemas/Cpu"
-        memory:
-          $ref: "#/components/schemas/Memory"
-        gpu:
-          $ref: "#/components/schemas/Gpu"
-        max_storage:
-          $ref: "#/components/schemas/Storage"
-        default_storage:
-          $ref: "#/components/schemas/Storage"
-        tolerations:
-          $ref: "#/components/schemas/K8sLabelList"
-        node_affinities:
-          $ref: "#/components/schemas/NodeAffinityList"
+          $ref: "#/components/schemas/CpuInteger"
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
+      required:
+        - kind
+      example:
+        name: "resource class"
+        kind: "firecrest"
+        default: false
+        cpu: 2
+        memory: 8
+        gpu: 0
+        max_storage: 100
+        default_storage: 10
+        quota_enforced: false
+        remote:
+          system_name: "eiger"
+          partition: "normal"
+    RunaiResourceClass:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassProperties"
+      properties:
+        kind:
+          type: string
+          enum: ["runai"]
+          example: "runai"
+      required:
+        - kind
+      example:
+        name: "resource class"
+        kind: "runai"
+        default: false
+        cpu: 1.5
+        memory: 2
+        gpu: 0
+        max_storage: 100
+        default_storage: 10
+        quota_enforced: false
+    LocalResourceClassPatch:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassPropertiesPatch"
+      properties:
+        kind:
+          type: string
+          enum: ["local"]
+          example: "local"
+      required:
+        - kind
+      example:
+        name: "resource class"
+        kind: "local"
+        cpu: 1.5
+    FirecrestResourceClassPatch:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassPropertiesPatch"
+      properties:
+        kind:
+          type: string
+          enum: ["firecrest"]
+          example: "firecrest"
+        cpu:
+          $ref: "#/components/schemas/CpuInteger"
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
+      required:
+        - kind
+      example:
+        name: "resource class"
+        kind: "firecrest"
+        cpu: 4
+    RunaiResourceClassPatch:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassPropertiesPatch"
+      properties:
+        kind:
+          type: string
+          enum: ["runai"]
+          example: "runai"
+      required:
+        - kind
+    ResourceClassPatch:
+      oneOf:
+        - $ref: "#/components/schemas/LocalResourceClassPatch"
+        - $ref: "#/components/schemas/FirecrestResourceClassPatch"
+        - $ref: "#/components/schemas/RunaiResourceClassPatch"
+      discriminator:
+        propertyName: kind
+        mapping:
+          local: "#/components/schemas/LocalResourceClassPatch"
+          firecrest: "#/components/schemas/FirecrestResourceClassPatch"
+          runai: "#/components/schemas/RunaiResourceClassPatch"
+    LocalResourceClassPatchWithId:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassPropertiesPatch"
+      properties:
         id:
           $ref: "#/components/schemas/IntegerId"
-        quota_enforced:
-          allOf:
-            - $ref: "#/components/schemas/QuotaEnforced"
-          default: false
+        kind:
+          type: string
+          enum: ["local"]
+          example: "local"
+      required:
+        - id
+        - kind
+      example:
+        id: 1
+        name: "resource class"
+        kind: "local"
+        max_storage: 50
+    FirecrestResourceClassPatchWithId:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassPropertiesPatch"
+      properties:
+        id:
+          $ref: "#/components/schemas/IntegerId"
+        kind:
+          type: string
+          enum: ["firecrest"]
+          example: "firecrest"
+        cpu:
+          $ref: "#/components/schemas/CpuInteger"
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
+      required:
+        - id
+        - kind
+    RunaiResourceClassPatchWithId:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassPropertiesPatch"
+      properties:
+        id:
+          $ref: "#/components/schemas/IntegerId"
+        kind:
+          type: string
+          enum: ["runai"]
+          example: "runai"
+      required:
+        - id
+        - kind
+    ResourceClassPatchWithId:
+      oneOf:
+        - $ref: "#/components/schemas/LocalResourceClassPatchWithId"
+        - $ref: "#/components/schemas/FirecrestResourceClassPatchWithId"
+        - $ref: "#/components/schemas/RunaiResourceClassPatchWithId"
+      discriminator:
+        propertyName: kind
+        mapping:
+          local: "#/components/schemas/LocalResourceClassPatchWithId"
+          firecrest: "#/components/schemas/FirecrestResourceClassPatchWithId"
+          runai: "#/components/schemas/RunaiResourceClassPatchWithId"
+    LocalResourceClassWithId:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassProperties"
+      properties:
+        id:
+          $ref: "#/components/schemas/IntegerId"
+        kind:
+          type: string
+          enum: ["local"]
+          example: "local"
       required:
         - name
         - default
@@ -1421,8 +1584,10 @@ components:
         - max_storage
         - default_storage
         - id
+        - kind
       example:
         name: "resource class"
+        kind: "local"
         default: true
         cpu: 1.5
         memory: 2
@@ -1431,19 +1596,121 @@ components:
         default_storage: 10
         quota_enforced: false
         id: 1
-    ResourceClassWithIdFiltered:
+    FirecrestResourceClassWithId:
+      type: object
+      additionalProperties: false
       allOf:
-        - $ref: "#/components/schemas/ResourceClassWithId"
-        - type: object
-          properties:
-            matching:
-              type: boolean
-            usage_hours_remaining:
-              $ref: "#/components/schemas/UsageHoursRemaining"
-            usage_hours_total:
-              $ref: "#/components/schemas/UsageHoursTotal"
+        - $ref: "#/components/schemas/ResourceClassProperties"
+      properties:
+        id:
+          $ref: "#/components/schemas/IntegerId"
+        kind:
+          type: string
+          enum: ["firecrest"]
+          example: "firecrest"
+        cpu:
+          $ref: "#/components/schemas/CpuInteger"
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
+      required:
+        - name
+        - default
+        - cpu
+        - memory
+        - gpu
+        - max_storage
+        - default_storage
+        - id
+        - kind
       example:
         name: "resource class"
+        kind: "firecrest"
+        default: true
+        cpu: 2
+        memory: 8
+        gpu: 0
+        max_storage: 100
+        default_storage: 10
+        quota_enforced: false
+        id: 1
+        remote:
+          system_name: "eiger"
+          partition: "normal"
+    RunaiResourceClassWithId:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassProperties"
+      properties:
+        id:
+          $ref: "#/components/schemas/IntegerId"
+        kind:
+          type: string
+          enum: ["runai"]
+          example: "runai"
+      required:
+        - name
+        - default
+        - cpu
+        - memory
+        - gpu
+        - max_storage
+        - default_storage
+        - id
+        - kind
+      example:
+        name: "resource class"
+        kind: "runai"
+        default: true
+        cpu: 1.5
+        memory: 2
+        gpu: 0
+        max_storage: 100
+        default_storage: 10
+        quota_enforced: false
+        id: 1
+    ResourceClassWithId:
+      oneOf:
+        - $ref: "#/components/schemas/LocalResourceClassWithId"
+        - $ref: "#/components/schemas/FirecrestResourceClassWithId"
+        - $ref: "#/components/schemas/RunaiResourceClassWithId"
+      discriminator:
+        propertyName: kind
+        mapping:
+          local: "#/components/schemas/LocalResourceClassWithId"
+          firecrest: "#/components/schemas/FirecrestResourceClassWithId"
+          runai: "#/components/schemas/RunaiResourceClassWithId"
+    LocalResourceClassWithIdFiltered:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassProperties"
+      properties:
+        id:
+          $ref: "#/components/schemas/IntegerId"
+        kind:
+          type: string
+          enum: ["local"]
+          example: "local"
+        matching:
+          type: boolean
+        usage_hours_remaining:
+          $ref: "#/components/schemas/UsageHoursRemaining"
+        usage_hours_total:
+          $ref: "#/components/schemas/UsageHoursTotal"
+      required:
+        - name
+        - default
+        - cpu
+        - memory
+        - gpu
+        - max_storage
+        - default_storage
+        - id
+        - kind
+      example:
+        name: "resource class"
+        kind: "local"
         default: true
         cpu: 1.5
         memory: 2
@@ -1452,6 +1719,77 @@ components:
         default_storage: 10
         id: 1
         matching: true
+    FirecrestResourceClassWithIdFiltered:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassProperties"
+      properties:
+        id:
+          $ref: "#/components/schemas/IntegerId"
+        kind:
+          type: string
+          enum: ["firecrest"]
+          example: "firecrest"
+        cpu:
+          $ref: "#/components/schemas/CpuInteger"
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
+        matching:
+          type: boolean
+        usage_hours_remaining:
+          $ref: "#/components/schemas/UsageHoursRemaining"
+        usage_hours_total:
+          $ref: "#/components/schemas/UsageHoursTotal"
+      required:
+        - name
+        - default
+        - cpu
+        - memory
+        - gpu
+        - max_storage
+        - default_storage
+        - id
+        - kind
+    RunaiResourceClassWithIdFiltered:
+      type: object
+      additionalProperties: false
+      allOf:
+        - $ref: "#/components/schemas/ResourceClassProperties"
+      properties:
+        id:
+          $ref: "#/components/schemas/IntegerId"
+        kind:
+          type: string
+          enum: ["runai"]
+          example: "runai"
+        matching:
+          type: boolean
+        usage_hours_remaining:
+          $ref: "#/components/schemas/UsageHoursRemaining"
+        usage_hours_total:
+          $ref: "#/components/schemas/UsageHoursTotal"
+      required:
+        - name
+        - default
+        - cpu
+        - memory
+        - gpu
+        - max_storage
+        - default_storage
+        - id
+        - kind
+    ResourceClassWithIdFiltered:
+      oneOf:
+        - $ref: "#/components/schemas/LocalResourceClassWithIdFiltered"
+        - $ref: "#/components/schemas/FirecrestResourceClassWithIdFiltered"
+        - $ref: "#/components/schemas/RunaiResourceClassWithIdFiltered"
+      discriminator:
+        propertyName: kind
+        mapping:
+          local: "#/components/schemas/LocalResourceClassWithIdFiltered"
+          firecrest: "#/components/schemas/FirecrestResourceClassWithIdFiltered"
+          runai: "#/components/schemas/RunaiResourceClassWithIdFiltered"
     ResourceClasses:
       type: array
       items:
@@ -1463,6 +1801,7 @@ components:
       uniqueItems: true
       example:
         - name: "resource class 1"
+          kind: "local"
           default: true
           cpu: 1.5
           memory: 2
@@ -1472,6 +1811,7 @@ components:
           quota_enforced: true
           id: 1
         - name: "resource class 2"
+          kind: "local"
           default: false
           cpu: 4.5
           memory: 10
@@ -1488,6 +1828,7 @@ components:
       uniqueItems: true
       example:
         - name: "resource class 1"
+          kind: "local"
           default: true
           cpu: 1.5
           memory: 2
@@ -1497,6 +1838,7 @@ components:
           quota_enforced: true
           id: 1
         - name: "resource class 2"
+          kind: "local"
           default: false
           cpu: 4.5
           memory: 10
@@ -1513,8 +1855,10 @@ components:
       uniqueItems: true
       example:
         - name: "resource class 1"
+          kind: "local"
           id: 1
         - cpu: 4.5
+          kind: "local"
           max_storage: 10000
           id: 2
     ResourcePool:
@@ -1554,6 +1898,7 @@ components:
         remote: false
         classes:
           - name: "resource class 1"
+            kind: "local"
             cpu: 1.5
             memory: 2
             gpu: 0
@@ -1561,6 +1906,7 @@ components:
             default_storage: 2
             default: true
           - name: "resource class 2"
+            kind: "local"
             cpu: 4.5
             memory: 10
             gpu: 2
@@ -1601,6 +1947,8 @@ components:
           gpu: 10
         classes:
           - name: "resource class 2"
+            kind: "local"
+            id: 1
             cpu: 4.5
             max_storage: 10000
         name: "resource pool name"
@@ -1643,12 +1991,14 @@ components:
         remote: false
         classes:
           - name: "resource class 1"
+            kind: "local"
             cpu: 1.5
             memory: 2
             gpu: 0
             max_storage: 100
             id: 1
           - name: "resource class 2"
+            kind: "local"
             cpu: 4.5
             memory: 10
             gpu: 2
@@ -1702,12 +2052,14 @@ components:
         remote: false
         classes:
           - name: "resource class 1"
+            kind: "local"
             cpu: 1.5
             memory: 2
             gpu: 0
             max_storage: 100
             id: 1
           - name: "resource class 2"
+            kind: "local"
             cpu: 4.5
             memory: 10
             gpu: 2
@@ -1760,6 +2112,7 @@ components:
         remote: false
         classes:
           - name: "resource class 1"
+            kind: "local"
             cpu: 1.5
             memory: 2
             gpu: 0
@@ -1768,6 +2121,7 @@ components:
             id: 1
             matching: false
           - name: "resource class 2"
+            kind: "local"
             cpu: 4.5
             memory: 10
             gpu: 2
@@ -2038,6 +2392,11 @@ components:
       example: 10
       exclusiveMinimum: true
       minimum: 0
+    CpuInteger:
+      type: integer
+      description: Number of CPU cores (integer-only, required for FirecREST Slurm jobs)
+      examples: [4]
+      minimum: 0
     CpuFilter:
       type: number
       format: float
@@ -2174,6 +2533,14 @@ components:
         - kind
         - api_url
         - system_name
+    RemoteClassConfigurationFirecrest:
+      type: object
+      additionalProperties: false
+      properties:
+        system_name:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestSystemName"
+        partition:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestPartition"
     RemoteConfigurationFirecrestProviderId:
       type: string
       description: |
