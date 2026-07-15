@@ -2301,3 +2301,42 @@ async def test_patch_strip_prefix(
     assert "environment" in res.json
     env = res.json["environment"]
     assert env.get("strip_path_prefix")
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+async def test_patch_session_launcher_name(
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    user_headers,
+    create_project,
+    create_resource_pool,
+) -> None:
+    project = await create_project(sanic_client, "Some project 1")
+    resource_pool_data = valid_resource_pool_payload
+    resource_pool = await create_resource_pool(admin=True, **resource_pool_data)
+
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "resource_class_id": resource_pool["classes"][0]["id"],
+        "environment": {
+            "container_image": "some_image:some_tag",
+            "name": "custom_name",
+            "environment_kind": "CUSTOM",
+            "environment_image_source": "image",
+        },
+    }
+
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+
+    assert res.status_code == 201, res.text
+
+    patch_payload = {"name": "New Name"}
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{res.json['id']}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json.get("name") == patch_payload["name"]
