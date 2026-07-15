@@ -344,6 +344,7 @@ class ProjectStorageAllowORM(BaseORM):
         "project_id",
         ForeignKey(ProjectORM.id, ondelete="CASCADE"),
         primary_key=True,
+        unique=True,
         index=True,
     )
     """ID of the project."""
