@@ -117,6 +117,25 @@ paths:
         required: true
         schema:
           $ref: "#/components/schemas/Ulid"
+    get:
+      summary: Get the storage allow entry for a project
+      responses:
+        "200":
+          description: The project storage allow entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStorageAllow"
+        "404":
+          description: The project is not in the storage allow list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data_connectors
     delete:
       summary: Remove a project from the storage allow list
       responses:
