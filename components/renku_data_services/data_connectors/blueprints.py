@@ -163,7 +163,7 @@ class DataConnectorsBP(CustomBlueprint):
                 headers=headers,
             )
 
-        return "/data_connectors/storage/<project_id:ulid>", ["GET"], _get_one
+        return "/data_connectors/storage/<storage_id:ulid>", ["GET"], _get_one
 
     def post_storage(self) -> BlueprintFactoryResponse:
         """Create a new shared project storage."""
