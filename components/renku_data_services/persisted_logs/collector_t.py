@@ -8,6 +8,8 @@ from renku_data_services.app_config import logging
 from renku_data_services.persisted_logs.collector import LokiLogReader
 from renku_data_services.persisted_logs.config import PersistedLogsConfig
 
+logger = logging.getLogger(__name__)
+
 
 def _main() -> None:
     logging.configure_logging()
@@ -18,7 +20,12 @@ def _main() -> None:
         namespace="renku",
     )
     reader = LokiLogReader(config, client=httpx.AsyncClient())
-    asyncio.run(reader.get_amalthea_session_logs())
+
+    async def get_some_logs() -> None:
+        async for log_line in reader.get_amalthea_session_logs():
+            logger.info(log_line)
+
+    asyncio.run(get_some_logs())
 
 
 if __name__ == "__main__":
