@@ -29,7 +29,9 @@ class AmaltheaSessionPersistedLogsRepository:
     ) -> None:
         """Insert sessions logs into the persisted logs database."""
         async for log in logs_stream:
-            existing_log_res = await session.scalars(select(schemas.AmaltheaSessionLogsORM.id))
+            existing_log_res = await session.scalars(
+                select(schemas.AmaltheaSessionLogsORM.id).where(schemas.AmaltheaSessionLogsORM.id == log.id)
+            )
             existing_log_orm = existing_log_res.one_or_none()
             if existing_log_orm:
                 continue
@@ -47,6 +49,7 @@ class AmaltheaSessionPersistedLogsRepository:
                     submission_id=log.submission_id,
                 )
                 session.add(session_run_orm)
+                await session.flush()
 
             log_orm = schemas.AmaltheaSessionLogsORM(
                 id=log.id,
@@ -56,5 +59,4 @@ class AmaltheaSessionPersistedLogsRepository:
                 log_line=log.log_line,
             )
             session.add(log_orm)
-
-        await session.flush()
+            await session.flush()
