@@ -332,6 +332,7 @@ class TestDependencyManager(DependencyManager):
             project_repo=project_repo,
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
+            project_storage_config=config.project_storage_config,
         )
         data_connector_secret_repo = DataConnectorSecretRepository(
             session_maker=config.db.async_session_maker,

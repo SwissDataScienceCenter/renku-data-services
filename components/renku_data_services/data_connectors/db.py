@@ -29,6 +29,7 @@ from renku_data_services.base_models.core import (
 )
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
+from renku_data_services.data_connectors.config import ProjectStorageConfig
 from renku_data_services.data_connectors.core import validate_unsaved_global_data_connector
 from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
@@ -57,12 +58,14 @@ class DataConnectorRepository:
         project_repo: ProjectRepository,
         group_repo: GroupRepository,
         search_updates_repo: SearchUpdatesRepo,
+        project_storage_config: ProjectStorageConfig,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
         self.project_repo = project_repo
         self.group_repo = group_repo
         self.search_updates_repo = search_updates_repo
+        self.project_storage_config = project_storage_config
 
     async def get_data_connectors(
         self,
@@ -430,8 +433,11 @@ class DataConnectorRepository:
             user, input.namespace_path.first.value, input.namespace_path.second, with_documentation=False
         )
 
-        allowed = await session.execute(select(exists().where(schemas.ProjectStorageAllowORM.project_id == project.id)))
-        if not allowed.scalar():
+        allowed = await session.execute(
+            select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project.id)
+        )
+        allowed = allowed.scalar()
+        if not allowed:
             raise errors.ForbiddenError(message=f"Project storage is not enabled for project {project.id}.")
 
         existing_storage = await session.execute(
@@ -441,9 +447,17 @@ class DataConnectorRepository:
         if existing_storage:
             raise errors.ValidationError(message=f"There is already a project storage for project {project.id}")
 
+        if input.size > allowed.max_size:
+            raise errors.ValidationError(
+                message=(
+                    f"The project storage size ({input.size}) for project {project.id} "
+                    f"exceeds the maximum size of {allowed.max_size}"
+                )
+            )
+
         new_storage = schemas.ProjectStorageORM(
             project_id=project.id,
-            storage_class="azurefile",
+            storage_class=self.project_storage_config.storage_class,
             size_limit=input.size,
             mount_path=input.mount_path,
             created_by_id=user.id,
@@ -460,7 +474,7 @@ class DataConnectorRepository:
 
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
-        if user.id is None:
+        if user.id is None or not user.is_admin:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         existing = await session.execute(
@@ -468,6 +482,14 @@ class DataConnectorRepository:
         )
         if existing.scalar():
             raise errors.ValidationError(message=f"Project {input.project_id} is already in the allow list.")
+
+        if input.max_size > self.project_storage_config.maximum_size:
+            raise errors.ValidationError(
+                message=(
+                    f"The maximum size {input.max_size} exceeds the configured "
+                    f"one of {self.project_storage_config.maximum_size}."
+                )
+            )
 
         new_allow = schemas.ProjectStorageAllowORM(
             project_id=input.project_id,
@@ -504,8 +526,6 @@ class DataConnectorRepository:
         self, user: base_models.APIUser, project_id: ULID
     ) -> models.ProjectStorageAllow | None:
         """Get the storage allow entry for a project if it exists."""
-        if user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
@@ -524,6 +544,9 @@ class DataConnectorRepository:
         """Delete a project storage allow entry."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
+
+        if user.id is None or not user.is_admin:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         result = await session.scalars(
             select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project_id)
