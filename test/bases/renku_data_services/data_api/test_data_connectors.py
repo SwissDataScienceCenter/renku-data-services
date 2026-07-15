@@ -3017,6 +3017,57 @@ async def test_delete_storage_allow_requires_admin(
     assert response.status_code == 403, response.text
 
 
+@pytest.mark.asyncio
+async def test_get_storage_allow_success(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str], user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("project_id") == project_id
+    assert response.json.get("max_size") == 10
+
+
+@pytest.mark.asyncio
+async def test_get_storage_allow_not_in_list(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers)
+
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+async def test_get_storage_allow_unauthenticated(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}")
+
+    assert response.status_code == 401, response.text
+
+
 async def test_get_all_dc_links(
     sanic_client: SanicASGITestClient,
     regular_user: UserInfo,

@@ -205,6 +205,22 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/storage/allow", ["POST"], _post_storage_allow
 
+    def get_storage_allow(self) -> BlueprintFactoryResponse:
+        """Get the storage allow entry for a project."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_storage_allow(_: Request, user: base_models.APIUser, project_id: ULID) -> HTTPResponse:
+            allow = await self.data_connector_repo.get_project_storage_allow(user, project_id)
+            if allow is None:
+                raise errors.MissingResourceError(message=f"Project {project_id} is not in the storage allow list.")
+            return validated_json(
+                apispec.ProjectStorageAllow,
+                {"project_id": str(allow.project_id), "max_size": int(allow.max_size.to_gibi())},
+            )
+
+        return "/data_connectors/storage/allow/<project_id:ulid>", ["GET"], _get_storage_allow
+
     def delete_storage_allow(self) -> BlueprintFactoryResponse:
         """Remove a project from the storage allow list."""
 

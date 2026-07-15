@@ -430,9 +430,7 @@ class DataConnectorRepository:
             user, input.namespace_path.first.value, input.namespace_path.second, with_documentation=False
         )
 
-        allowed = await session.execute(
-            select(exists().where(schemas.ProjectStorageAllowORM.project_id == project.id))
-        )
+        allowed = await session.execute(select(exists().where(schemas.ProjectStorageAllowORM.project_id == project.id)))
         if not allowed.scalar():
             raise errors.ForbiddenError(message=f"Project storage is not enabled for project {project.id}.")
 
@@ -501,6 +499,23 @@ class DataConnectorRepository:
             )
 
         await session.delete(storage_orm)
+
+    async def get_project_storage_allow(
+        self, user: base_models.APIUser, project_id: ULID
+    ) -> models.ProjectStorageAllow | None:
+        """Get the storage allow entry for a project if it exists."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+        async with self.session_maker() as session:
+            result = await session.scalar(
+                select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project_id)
+            )
+            return result.dump() if result else None
 
     @with_db_transaction
     async def delete_project_storage_allow(
