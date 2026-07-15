@@ -1,6 +1,7 @@
 """Client for the Envidat deposit status API."""
 
 import os
+from enum import StrEnum, auto
 
 import httpx
 from pydantic import BaseModel
@@ -8,18 +9,26 @@ from pydantic import BaseModel
 from renku_data_services.errors import errors
 
 
+class EnvidatStatus(StrEnum):
+    """Envidat statuses."""
+
+    draft = auto()
+    pending = auto()
+    published = auto()
+
+
 class EnvidatDepositStatus(BaseModel):
     """Status response from the Envidat deposit status endpoint."""
 
     package_id: str
-    status: str  # "draft", "pending", or "published"
+    status: EnvidatStatus
     renku_id: str
     doi: str
 
     @property
     def is_published(self) -> bool:
         """Whether the deposit has been published on Envidat."""
-        return self.status.lower() == "published"
+        return self.status == EnvidatStatus.published
 
 
 class EnvidatClient:
@@ -27,7 +36,7 @@ class EnvidatClient:
 
     def __init__(self) -> None:
         self.__base_url = os.environ.get("ENVIDAT_URL", "https://www.envidat.ch").rstrip("/")
-        self.__client = httpx.AsyncClient()
+        self.__client = httpx.AsyncClient(follow_redirects=True)
 
     async def get_deposit_status(self, renku_id: str) -> EnvidatDepositStatus:
         """Check the publication status of a deposit on Envidat."""
@@ -40,6 +49,6 @@ class EnvidatClient:
         if res.status_code >= 300 or res.status_code < 200:
             raise errors.ThirdPartyAPIError(
                 message=f"Received unexpected status code {res.status_code} when checking Envidat deposit status.",
-                detail=f"Message from Envidat: {res.text[:500]}",
+                detail=f"Message from Envidat: {res.text}",
             )
         return EnvidatDepositStatus.model_validate(res.json())

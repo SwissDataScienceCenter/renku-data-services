@@ -597,9 +597,10 @@ def serialize_deposit(deposit: models.DepositJob, deposit_config: DepositConfig)
     """Create an apispec Deposit from the internal model."""
     match deposit.deposit.source:
         case models.DepositSource.zenodo:
-            external_url = f"https://zenodo.org/uploads/{deposit.deposit.original_id}"
+            base = deposit_config.zenodo_url.rstrip("/")
+            external_url = f"{base}/uploads/{deposit.deposit.original_id}"
         case models.DepositSource.envidat:
-            base = deposit_config.envidat_url.rstrip("/")
+            base = deposit_config.envidat.url.rstrip("/")
             external_url = (
                 f"{base}/#/workflow?importFromRenku=true"
                 f"&titleDataset={deposit.deposit.name}"
@@ -697,7 +698,7 @@ async def create_deposit_upload(
                 if deposit_job.deposit.path.is_absolute()
                 else deposit_job.deposit.path
             )
-        destination = f"envidat:{deposit_config.envidat_s3_bucket}/{deposit_job.deposit.original_id}/"
+        destination = f"envidat:{deposit_config.envidat.s3_bucket}/{deposit_job.deposit.original_id}/"
         return V1Job(
             metadata=V1ObjectMeta(
                 name=deposit_job.name,
@@ -724,13 +725,13 @@ async def create_deposit_upload(
                                     run_as_group=1000,
                                 ),
                                 name="upload-deposit",
-                                image=deposit_config.envidat_rclone_image,
+                                image=deposit_config.envidat.rclone_image,
                                 env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=rclone_secret_name))],
                                 env=[
                                     V1EnvVar(name="RCLONE_CONFIG_ENVIDAT_TYPE", value="s3"),
                                     V1EnvVar(name="RCLONE_CONFIG_ENVIDAT_PROVIDER", value="Other"),
                                     V1EnvVar(
-                                        name="RCLONE_CONFIG_ENVIDAT_ENDPOINT", value=deposit_config.envidat_s3_endpoint
+                                        name="RCLONE_CONFIG_ENVIDAT_ENDPOINT", value=deposit_config.envidat.s3_endpoint
                                     ),
                                 ],
                                 command=["rclone"],
@@ -992,7 +993,7 @@ async def create_deposit_upload(
                 labels=labels,
                 pvc_name=pvc_name,
             )
-        case _:
+        case models.DepositSource.zenodo:
             job = _create_zenodo_upload_job_manifest(
                 deposit_config=deposit_config,
                 deposit_job=deposit_job,
@@ -1002,6 +1003,8 @@ async def create_deposit_upload(
                 labels=labels,
                 pvc_name=pvc_name,
             )
+        case x:
+            raise errors.ValidationError(message=f"Received unknown deposit source {x}")
     created_job = await job_client.create(
         _convert_to_k8s_object(job, cluster_id=deposit_config.cluster_id, user_id=user.id)
     )
@@ -1016,13 +1019,15 @@ async def create_deposit_upload(
         case models.DepositSource.envidat:
             # Use RCLONE_CONFIG_{REMOTE}_{KEY} naming so that rclone auto-configures the Envidat remote
             job_secret_data = {
-                "RCLONE_CONFIG_ENVIDAT_ACCESS_KEY_ID": deposit_config.envidat_s3_access_key_id,
-                "RCLONE_CONFIG_ENVIDAT_SECRET_ACCESS_KEY": deposit_config.envidat_s3_secret_access_key,
+                "RCLONE_CONFIG_ENVIDAT_ACCESS_KEY_ID": deposit_config.envidat.s3_access_key_id,
+                "RCLONE_CONFIG_ENVIDAT_SECRET_ACCESS_KEY": deposit_config.envidat.s3_secret_access_key,
             }
-        case _:
+        case models.DepositSource.zenodo:
             if deposit_api_key is None:
                 raise errors.ProgrammingError(message="A Zenodo deposit requires an API key.")
             job_secret_data = {"ZENODO_API_KEY": deposit_api_key}
+        case x:
+            raise errors.ValidationError(message=f"Received unknown deposit source {x}")
     job_secret = _create_secret_manifest(
         name=base_name,
         namespace=deposit_config.namespace,

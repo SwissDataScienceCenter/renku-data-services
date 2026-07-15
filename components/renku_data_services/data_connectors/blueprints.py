@@ -617,24 +617,6 @@ class DataConnectorsBP(CustomBlueprint):
             )
         return access_token
 
-    def _check_envidat_config(self) -> None:
-        """Check the Envidat S3 config is provided."""
-        cfg = self.deposit_config
-        if (
-            not cfg.envidat_s3_endpoint
-            or not cfg.envidat_s3_bucket
-            or not cfg.envidat_s3_access_key_id
-            or not cfg.envidat_s3_secret_access_key
-        ):
-            # TODO: Is this check required!?
-            # NOTE: For now we disable this for tests to pass
-            pass
-            # raise errors.ConfigurationError(
-            #     message="Envidat S3 is not configured on this Renku instance.",
-            #     detail="Please ask your administrator to set ENVIDAT_S3_ENDPOINT, ENVIDAT_S3_BUCKET, "
-            #     "ENVIDAT_S3_ACCESS_KEY_ID, and ENVIDAT_S3_SECRET_ACCESS_KEY.",
-            # )
-
     def post_deposit(self) -> BlueprintFactoryResponse:
         """Create a deposit."""
 
@@ -657,7 +639,6 @@ class DataConnectorsBP(CustomBlueprint):
 
             match body.provider:
                 case apispec.DepositProvider.envidat:
-                    self._check_envidat_config()
                     # TODO: Should we use the deposit ULID as the directory name!?
                     # NOTE: Each new Envidat deposit gets its own dir, so a failed deposit cannot be resumed and need to
                     # be cleaned up manually on Envidat.
@@ -669,6 +650,11 @@ class DataConnectorsBP(CustomBlueprint):
                     zenodo_dep = await self.zenodo_client.create_deposit(token, body.name)
                     original_id = str(zenodo_dep.id)
                     deposit_api_key = token
+
+                case x:
+                    raise errors.ValidationError(
+                        message=f"Received unknown deposit provider {x} when creating deposit."
+                    )
 
             # The closure below allows us to tie the creation of the db entry to the successful
             # creation of the job in kubernetes. I.e. if the k8s creation fails nothing is saved
@@ -765,6 +751,10 @@ class DataConnectorsBP(CustomBlueprint):
                             raise errors.ValidationError(
                                 message="The deposit needs to be completed and published first before being completed."
                             )
+                    case x:
+                        raise errors.ValidationError(
+                            message=f"Received unknown deposit source {x} when pathing deposit with ID {deposit_id}."
+                        )
             saved_dep = await self.data_connector_repo.update_deposit(user, deposit_id, patch, etag=etag)
             if patch.status == models.DepositStatus.complete:
                 # If the deposit is being completed then we delete it
