@@ -1323,6 +1323,21 @@ components:
           $ref: "#/components/schemas/NodeAffinityList"
         quota_enforced:
           $ref: "#/components/schemas/QuotaEnforced"
+        kind:
+          $ref: "#/components/schemas/RemoteKind"
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
+      if:
+        properties:
+          kind:
+            const: "firecrest"
+      then:
+        properties:
+          cpu:
+            $ref: "#/components/schemas/CpuInteger"
+      else:
+        properties:
+          remote: false
     ResourceClass:
       type: object
       additionalProperties: false
@@ -1349,6 +1364,21 @@ components:
           allOf:
             - $ref: "#/components/schemas/QuotaEnforced"
           default: false
+        kind:
+          $ref: "#/components/schemas/RemoteKind"
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
+      if:
+        properties:
+          kind:
+            const: "firecrest"
+      then:
+        properties:
+          cpu:
+            $ref: "#/components/schemas/CpuInteger"
+      else:
+        properties:
+          remote: false
       required:
         - name
         - default
@@ -1359,6 +1389,7 @@ components:
         - default_storage
       example:
         name: "resource class"
+        kind: "local"
         default: false
         cpu: 1.5
         memory: 2
@@ -1367,18 +1398,72 @@ components:
         default_storage: 10
         quota_enforced: false
     ResourceClassPatch:
-      allOf:
-        - $ref: "#/components/schemas/ResourceClassProperties"
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        max_storage:
+          $ref: "#/components/schemas/Storage"
+        default_storage:
+          $ref: "#/components/schemas/Storage"
+        tolerations:
+          $ref: "#/components/schemas/K8sLabelList"
+        node_affinities:
+          $ref: "#/components/schemas/NodeAffinityList"
+        quota_enforced:
+          $ref: "#/components/schemas/QuotaEnforced"
+        kind:
+          allOf:
+            - $ref: "#/components/schemas/RemoteKind"
+          nullable: true
+          default: null
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
       example:
         name: "resource class"
         cpu: 1.5
     ResourceClassPatchWithId:
-      allOf:
-        - $ref: "#/components/schemas/ResourceClassProperties"
-        - type: object
-          properties:
-            id:
-              $ref: "#/components/schemas/IntegerId"
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        max_storage:
+          $ref: "#/components/schemas/Storage"
+        default_storage:
+          $ref: "#/components/schemas/Storage"
+        tolerations:
+          $ref: "#/components/schemas/K8sLabelList"
+        node_affinities:
+          $ref: "#/components/schemas/NodeAffinityList"
+        quota_enforced:
+          $ref: "#/components/schemas/QuotaEnforced"
+        id:
+          $ref: "#/components/schemas/IntegerId"
+        kind:
+          allOf:
+            - $ref: "#/components/schemas/RemoteKind"
+          nullable: true
+          default: null
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
       required:
         - id
       example:
@@ -1412,6 +1497,21 @@ components:
           allOf:
             - $ref: "#/components/schemas/QuotaEnforced"
           default: false
+        kind:
+          $ref: "#/components/schemas/RemoteKind"
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
+      if:
+        properties:
+          kind:
+            const: "firecrest"
+      then:
+        properties:
+          cpu:
+            $ref: "#/components/schemas/CpuInteger"
+      else:
+        properties:
+          remote: false
       required:
         - name
         - default
@@ -1423,6 +1523,7 @@ components:
         - id
       example:
         name: "resource class"
+        kind: "local"
         default: true
         cpu: 1.5
         memory: 2
@@ -1463,6 +1564,7 @@ components:
       uniqueItems: true
       example:
         - name: "resource class 1"
+          kind: "local"
           default: true
           cpu: 1.5
           memory: 2
@@ -1472,6 +1574,7 @@ components:
           quota_enforced: true
           id: 1
         - name: "resource class 2"
+          kind: "local"
           default: false
           cpu: 4.5
           memory: 10
@@ -1488,6 +1591,7 @@ components:
       uniqueItems: true
       example:
         - name: "resource class 1"
+          kind: "local"
           default: true
           cpu: 1.5
           memory: 2
@@ -1497,6 +1601,7 @@ components:
           quota_enforced: true
           id: 1
         - name: "resource class 2"
+          kind: "local"
           default: false
           cpu: 4.5
           memory: 10
@@ -1513,8 +1618,10 @@ components:
       uniqueItems: true
       example:
         - name: "resource class 1"
+          kind: "local"
           id: 1
         - cpu: 4.5
+          kind: "local"
           max_storage: 10000
           id: 2
     ResourcePool:
@@ -1556,6 +1663,7 @@ components:
         remote: false
         classes:
           - name: "resource class 1"
+            kind: "local"
             cpu: 1.5
             memory: 2
             gpu: 0
@@ -1563,6 +1671,7 @@ components:
             default_storage: 2
             default: true
           - name: "resource class 2"
+            kind: "local"
             cpu: 4.5
             memory: 10
             gpu: 2
@@ -1607,6 +1716,7 @@ components:
           gpu: 10
         classes:
           - name: "resource class 2"
+            kind: "local"
             cpu: 4.5
             max_storage: 10000
         name: "resource pool name"
@@ -1653,12 +1763,14 @@ components:
         remote: false
         classes:
           - name: "resource class 1"
+            kind: "local"
             cpu: 1.5
             memory: 2
             gpu: 0
             max_storage: 100
             id: 1
           - name: "resource class 2"
+            kind: "local"
             cpu: 4.5
             memory: 10
             gpu: 2
@@ -1714,12 +1826,14 @@ components:
         remote: false
         classes:
           - name: "resource class 1"
+            kind: "local"
             cpu: 1.5
             memory: 2
             gpu: 0
             max_storage: 100
             id: 1
           - name: "resource class 2"
+            kind: "local"
             cpu: 4.5
             memory: 10
             gpu: 2
@@ -1774,6 +1888,7 @@ components:
         remote: false
         classes:
           - name: "resource class 1"
+            kind: "local"
             cpu: 1.5
             memory: 2
             gpu: 0
@@ -1782,6 +1897,7 @@ components:
             id: 1
             matching: false
           - name: "resource class 2"
+            kind: "local"
             cpu: 4.5
             memory: 10
             gpu: 2
@@ -2052,6 +2168,11 @@ components:
       example: 10
       exclusiveMinimum: true
       minimum: 0
+    CpuInteger:
+      type: integer
+      description: Number of CPU cores (integer-only, required for FirecREST Slurm jobs)
+      examples: [4]
+      minimum: 0
     CpuFilter:
       type: number
       format: float
@@ -2151,6 +2272,12 @@ components:
       type: boolean
       description: Whether sessions in this resource class should be hibernated when quota is exhausted
       example: true
+    RemoteKind:
+      type: string
+      enum: ["local", "firecrest", "runai"]
+      description: The remote kind of the resource class
+      default: "local"
+      example: "local"
     PublicFlag:
       type: boolean
       description: A resource pool whose classes can be accessed by anyone
@@ -2188,6 +2315,14 @@ components:
         - kind
         - api_url
         - system_name
+    RemoteClassConfigurationFirecrest:
+      type: object
+      additionalProperties: false
+      properties:
+        system_name:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestSystemName"
+        partition:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestPartition"
     RemoteConfigurationFirecrestProviderId:
       type: string
       description: |

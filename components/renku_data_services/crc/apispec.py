@@ -65,6 +65,15 @@ class Version(BaseAPISpec):
     version: str
 
 
+class CpuInteger(RootModel[int]):
+    root: int = Field(
+        ...,
+        description="Number of CPU cores (integer-only, required for FirecREST Slurm jobs)",
+        examples=[4],
+        ge=0,
+    )
+
+
 class IntegerId(RootModel[int]):
     root: int = Field(
         ...,
@@ -76,6 +85,12 @@ class IntegerId(RootModel[int]):
 
 class IntegerIds(RootModel[list[IntegerId]]):
     root: list[IntegerId] = Field(..., examples=[[1, 3, 5]], min_length=1)
+
+
+class RemoteKind(StrEnum):
+    local = "local"
+    firecrest = "firecrest"
+    runai = "runai"
 
 
 class Kind(StrEnum):
@@ -671,6 +686,22 @@ class RemoteConfigurationFirecrest(BaseAPISpec):
     )
 
 
+class RemoteClassConfigurationFirecrest(BaseAPISpec):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    system_name: str | None = Field(
+        None,
+        description="The name of the system to use with the FirecREST API",
+        examples=["eiger"],
+    )
+    partition: str | None = Field(
+        None,
+        description="The partition to use when submitting jobs",
+        examples=["normal"],
+    )
+
+
 class RemoteConfigurationRunai(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
@@ -749,6 +780,8 @@ class ResourceClassProperties(BaseAPISpec):
         description="Whether sessions in this resource class should be hibernated when quota is exhausted",
         examples=[True],
     )
+    kind: RemoteKind | None = RemoteKind.local
+    remote: RemoteClassConfigurationFirecrest | None = None
 
 
 class ResourceClass(BaseAPISpec):
@@ -808,19 +841,140 @@ class ResourceClass(BaseAPISpec):
         description="Whether sessions in this resource class should be hibernated when quota is exhausted",
         examples=[True],
     )
+    kind: RemoteKind | None = RemoteKind.local
+    remote: RemoteClassConfigurationFirecrest | None = None
 
 
-class ResourceClassPatch(ResourceClassProperties):
-    pass
+class ResourceClassPatch(BaseAPISpec):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    name: str | None = Field(
+        None,
+        description="A name for a specific resource",
+        examples=["the name of a resource"],
+        min_length=5,
+    )
+    default: bool | None = Field(
+        None,
+        description="A default selection for resource classes or resource pools",
+        examples=[False],
+    )
+    cpu: float | None = Field(
+        None, description="Number of cpu cores", examples=[10], gt=0.0
+    )
+    memory: int | None = Field(
+        None,
+        description="Number of gigabytes of memory",
+        examples=[4],
+        gt=0,
+        le=9223372036854775807,
+    )
+    gpu: int | None = Field(
+        None, description="Number of GPUs", examples=[8], ge=0, le=9223372036854775807
+    )
+    max_storage: int | None = Field(
+        None,
+        description="Number of gigabytes of storage",
+        examples=[100],
+        gt=0,
+        le=9223372036854775807,
+    )
+    default_storage: int | None = Field(
+        None,
+        description="Number of gigabytes of storage",
+        examples=[100],
+        gt=0,
+        le=9223372036854775807,
+    )
+    tolerations: list[K8sLabel] | None = Field(
+        None,
+        description="A list of k8s labels used for tolerations",
+        examples=[["test-label-1"]],
+        min_length=0,
+    )
+    node_affinities: list[NodeAffinity] | None = Field(
+        None,
+        description="A list of k8s labels used for tolerations and/or node affinity",
+        examples=[[{"key": "test-label-1", "required_during_scheduling": False}]],
+        min_length=0,
+    )
+    quota_enforced: bool | None = Field(
+        None,
+        description="Whether sessions in this resource class should be hibernated when quota is exhausted",
+        examples=[True],
+    )
+    kind: RemoteKind | None = None
+    remote: RemoteClassConfigurationFirecrest | None = None
 
 
-class ResourceClassPatchWithId(ResourceClassProperties):
+class ResourceClassPatchWithId(BaseAPISpec):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    name: str | None = Field(
+        None,
+        description="A name for a specific resource",
+        examples=["the name of a resource"],
+        min_length=5,
+    )
+    default: bool | None = Field(
+        None,
+        description="A default selection for resource classes or resource pools",
+        examples=[False],
+    )
+    cpu: float | None = Field(
+        None, description="Number of cpu cores", examples=[10], gt=0.0
+    )
+    memory: int | None = Field(
+        None,
+        description="Number of gigabytes of memory",
+        examples=[4],
+        gt=0,
+        le=9223372036854775807,
+    )
+    gpu: int | None = Field(
+        None, description="Number of GPUs", examples=[8], ge=0, le=9223372036854775807
+    )
+    max_storage: int | None = Field(
+        None,
+        description="Number of gigabytes of storage",
+        examples=[100],
+        gt=0,
+        le=9223372036854775807,
+    )
+    default_storage: int | None = Field(
+        None,
+        description="Number of gigabytes of storage",
+        examples=[100],
+        gt=0,
+        le=9223372036854775807,
+    )
+    tolerations: list[K8sLabel] | None = Field(
+        None,
+        description="A list of k8s labels used for tolerations",
+        examples=[["test-label-1"]],
+        min_length=0,
+    )
+    node_affinities: list[NodeAffinity] | None = Field(
+        None,
+        description="A list of k8s labels used for tolerations and/or node affinity",
+        examples=[[{"key": "test-label-1", "required_during_scheduling": False}]],
+        min_length=0,
+    )
+    quota_enforced: bool | None = Field(
+        None,
+        description="Whether sessions in this resource class should be hibernated when quota is exhausted",
+        examples=[True],
+    )
     id: int = Field(
         ...,
         description="An integer ID used to identify different resources",
         examples=[1],
         ge=0,
     )
+    kind: RemoteKind | None = None
+    remote: RemoteClassConfigurationFirecrest | None = None
 
 
 class ResourceClassWithId(BaseAPISpec):
@@ -886,6 +1040,8 @@ class ResourceClassWithId(BaseAPISpec):
         description="Whether sessions in this resource class should be hibernated when quota is exhausted",
         examples=[True],
     )
+    kind: RemoteKind | None = RemoteKind.local
+    remote: RemoteClassConfigurationFirecrest | None = None
 
 
 class ResourceClassWithIdFiltered(ResourceClassWithId):
@@ -911,6 +1067,7 @@ class ResourceClassesWithIdResponse(RootModel[list[ResourceClassWithId]]):
             [
                 {
                     "name": "resource class 1",
+                    "kind": "local",
                     "default": True,
                     "cpu": 1.5,
                     "memory": 2,
@@ -922,6 +1079,7 @@ class ResourceClassesWithIdResponse(RootModel[list[ResourceClassWithId]]):
                 },
                 {
                     "name": "resource class 2",
+                    "kind": "local",
                     "default": False,
                     "cpu": 4.5,
                     "memory": 10,
@@ -945,8 +1103,8 @@ class ResourcePoolPatch(BaseAPISpec):
         None,
         examples=[
             [
-                {"name": "resource class 1", "id": 1},
-                {"cpu": 4.5, "max_storage": 10000, "id": 2},
+                {"name": "resource class 1", "kind": "local", "id": 1},
+                {"cpu": 4.5, "kind": "local", "max_storage": 10000, "id": 2},
             ]
         ],
         min_length=1,
@@ -1076,6 +1234,7 @@ class ResourcePoolPut(BaseAPISpec):
             [
                 {
                     "name": "resource class 1",
+                    "kind": "local",
                     "default": True,
                     "cpu": 1.5,
                     "memory": 2,
@@ -1087,6 +1246,7 @@ class ResourcePoolPut(BaseAPISpec):
                 },
                 {
                     "name": "resource class 2",
+                    "kind": "local",
                     "default": False,
                     "cpu": 4.5,
                     "memory": 10,
