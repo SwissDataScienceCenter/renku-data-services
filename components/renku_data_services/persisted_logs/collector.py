@@ -1,9 +1,11 @@
 """Collector for gathering persisted logs."""
 
-from collections.abc import AsyncGenerator
+from abc import abstractmethod
+from collections.abc import AsyncIterator, Callable
 
 import httpx
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services.app_config import logging
@@ -14,6 +16,7 @@ from renku_data_services.persisted_logs.constants import (
     PERSISTED_LOGS_SESSIONS_LABEL_KEY,
     PERSISTED_LOGS_SESSIONS_LABEL_VALUE,
 )
+from renku_data_services.persisted_logs.db import AmaltheaSessionPersistedLogsRepository
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +29,7 @@ class LokiLogReader:
         self.client = client
         self.client.base_url = httpx.URL(config.loki_read_base_url)
 
-    async def get_amalthea_session_logs(self) -> AsyncGenerator[models.UnsavedLogLine, None]:
+    async def get_amalthea_session_logs(self) -> AsyncIterator[models.UnsavedLogLine]:
         """Fetches Amalthea session logs from Loki."""
         params: dict[str, str] = dict()
         params["query"] = (
@@ -71,7 +74,7 @@ class LokiLogReader:
                 log_line_ids.add(log_line_id)
                 yield models.UnsavedLogLine(
                     id=log_line_id,
-                    run_id=stream.renku_io_launcher_id,  # TODO: fix
+                    run_id=launcher_id,  # TODO: fix
                     user_id=stream.renku_io_safe_username,
                     launch_id=stream.renku_io_launcher_id,  # TODO: fix
                     launcher_id=launcher_id,
@@ -83,6 +86,68 @@ class LokiLogReader:
 
 
 class PersistedLogsCollector:
+    """Abstract class for gathering persisted logs."""
+
+    @abstractmethod
+    async def collect_persisted_logs(self) -> None:
+        """Collect persisted logs from Amalthea sessions and image builds."""
+        ...
+
+    @staticmethod
+    def from_config(
+        config: PersistedLogsConfig,
+        session_maker: Callable[..., AsyncSession],
+        http_client: httpx.AsyncClient | None = None,
+    ) -> "PersistedLogsCollector":
+        """Construct a PersistedLogsCollector from a configuration object."""
+        if config.enabled:
+            if http_client is None:
+                http_client = httpx.AsyncClient()
+            reader = LokiLogReader(config=config, client=http_client)
+            return DefaultPersistedLogsCollector(
+                session_maker=session_maker,
+                reader=reader,
+                session_logs_repo=AmaltheaSessionPersistedLogsRepository(),
+            )
+        return NoopPersistedLogsCollector()
+
+
+class NoopPersistedLogsCollector(PersistedLogsCollector):
+    """No-op collector."""
+
+    async def collect_persisted_logs(self) -> None:
+        """Collect persisted logs from Amalthea sessions and image builds."""
+        return None
+
+
+class DefaultPersistedLogsCollector(PersistedLogsCollector):
     """Collector for gathering persisted logs."""
 
-    pass
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        reader: LokiLogReader,
+        session_logs_repo: AmaltheaSessionPersistedLogsRepository,
+    ) -> None:
+        self.session_maker = session_maker
+        self.reader = reader
+        self.session_logs_repo = session_logs_repo
+
+    async def collect_persisted_logs(self) -> None:
+        """Collect persisted logs from Amalthea sessions and image builds."""
+        await self.collect_sessions_persisted_logs()
+        return None
+
+    async def collect_sessions_persisted_logs(self) -> None:
+        """Collect persisted logs from Amalthea sessions."""
+
+        logs_stream = self.reader.get_amalthea_session_logs()
+
+        async with self.session_maker() as session:
+            async with session.begin():
+                await self.session_logs_repo.insert_session_logs(session=session, logs_stream=logs_stream)
+            async with session.begin():
+                ts = await self.session_logs_repo.get_latest_log_timestamp(session=session)
+                logger.info(f"Latest session log timestamp: {ts}")
+
+        return None

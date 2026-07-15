@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from ulid import ULID
 
 
-@dataclass
+@dataclass(eq=True, frozen=True, kw_only=True)
 class UnsavedLogLine:
     """Represents an unsaved log line."""
 
@@ -15,7 +15,7 @@ class UnsavedLogLine:
     This is used to de-duplicate log lines.
     """
 
-    run_id: str
+    run_id: ULID
     user_id: str
     launch_id: str
     launcher_id: ULID

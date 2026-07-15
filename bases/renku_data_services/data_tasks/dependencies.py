@@ -17,6 +17,7 @@ from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.notifications.db import NotificationsRepository
+from renku_data_services.persisted_logs.collector import PersistedLogsCollector
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.resource_usage.core import (
     DefaultResourcesRequestRecorder,
@@ -56,6 +57,7 @@ class DependencyManager:
     notifications_repo: NotificationsRepository
     resource_usage_service: ResourceUsageService
     resource_requests_repo: ResourceRequestsRepo
+    persisted_logs_collector: PersistedLogsCollector
 
     @classmethod
     def from_env(cls, cfg: Config | None = None) -> "DependencyManager":
@@ -151,6 +153,11 @@ class DependencyManager:
                 realm=cfg.keycloak.realm,
             )
 
+        persisted_logs_collector = PersistedLogsCollector.from_config(
+            config=cfg.persisted_logs,
+            session_maker=cfg.db.async_session_maker,
+        )
+
         return cls(
             config=cfg,
             search_updates_repo=search_updates_repo,
@@ -167,4 +174,5 @@ class DependencyManager:
             notifications_repo=notifications_repo,
             resource_usage_service=resource_usage_service,
             resource_requests_repo=resource_requests_repo,
+            persisted_logs_collector=persisted_logs_collector,
         )

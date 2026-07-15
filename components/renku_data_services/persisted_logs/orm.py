@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
-from sqlalchemy import DateTime, ForeignKey, MetaData
+from sqlalchemy import BigInteger, ForeignKey, MetaData
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from ulid import ULID
 
@@ -41,19 +39,13 @@ class SessionRunsORM(BaseORM):
     submission_id: Mapped[str | None] = mapped_column(nullable=True)
     """The submission ID, if the session run corresponds to an offline job."""
 
-    first_log: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    """The timestamp of the first log line."""
-
-    last_log: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    """The timestamp of the last log line."""
-
 
 class AmaltheaSessionLogsORM(BaseORM):
     """A log line from an Amalthea session."""
 
     __tablename__ = "amalthea_session_logs"
 
-    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[str] = mapped_column("id", primary_key=True, nullable=False)
     """ID of the log line."""
 
     run_id: Mapped[ULID] = mapped_column(ForeignKey(SessionRunsORM.id, ondelete="CASCADE"), index=True, nullable=False)
@@ -65,8 +57,8 @@ class AmaltheaSessionLogsORM(BaseORM):
     container: Mapped[str] = mapped_column(nullable=False)
     """The container this log line belongs to."""
 
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
-    """The timestamp of the log line."""
+    timestamp: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
+    """The timestamp of the log line (nanosecond timestamp)."""
 
     log_line: Mapped[str] = mapped_column(nullable=False)
     """The contents of the log line."""

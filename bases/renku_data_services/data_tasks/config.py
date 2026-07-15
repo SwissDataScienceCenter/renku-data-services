@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from renku_data_services.app_config.config import KeycloakConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
+from renku_data_services.persisted_logs.config import PersistedLogsConfig
 from renku_data_services.solr.solr_client import SolrClientConfig
 
 
@@ -42,6 +43,7 @@ class Config:
     posthog: PosthogConfig
     authz: AuthzConfig
     keycloak: KeycloakConfig | None
+    persisted_logs: PersistedLogsConfig
     k8s_config_root: str
     dummy_stores: bool
     max_retry_wait_seconds: int
@@ -77,6 +79,7 @@ class Config:
         session_quota_alert_remaining_threshold = int(os.environ.get("SESSION_QUOTA_ALERT_REMAINING_THRESHOLD_P", 20))
         session_quota_alert_critical = int(os.environ.get("SESSION_QUOTA_ALERT_CRITICAL_M", 10))
 
+        k8s_namespace = os.environ.get("KUBERNETES_NAMESPACE", "default")
         k8s_config_root = os.environ.get("K8S_CONFIG_ROOT", "/secrets/kube_configs")
 
         enable_resource_request_tracking = os.environ.get("ENABLE_RESOURCE_REQUEST_TRACKING", "false").lower() == "true"
@@ -91,6 +94,7 @@ class Config:
             posthog=posthog_config,
             authz=authz,
             keycloak=keycloak,
+            persisted_logs=PersistedLogsConfig.from_env(namespace=k8s_namespace),
             k8s_config_root=k8s_config_root,
             tcp_host=tcp_host,
             tcp_port=tcp_port,
