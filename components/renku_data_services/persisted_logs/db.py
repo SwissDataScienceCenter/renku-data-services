@@ -5,8 +5,11 @@ from collections.abc import AsyncIterator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from renku_data_services.app_config import logging
 from renku_data_services.persisted_logs import models
 from renku_data_services.persisted_logs import orm as schemas
+
+logger = logging.getLogger(__name__)
 
 
 class AmaltheaSessionPersistedLogsRepository:
@@ -34,7 +37,10 @@ class AmaltheaSessionPersistedLogsRepository:
             )
             existing_log_orm = existing_log_res.one_or_none()
             if existing_log_orm:
+                logger.info(f"Skipping log line {log.id}")
                 continue
+
+            logger.info(f"Processing log line {log}")
 
             session_run_res = await session.scalars(
                 select(schemas.SessionRunsORM).where(schemas.SessionRunsORM.id == log.run_id)
