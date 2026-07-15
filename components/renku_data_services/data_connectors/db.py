@@ -430,6 +430,12 @@ class DataConnectorRepository:
             user, input.namespace_path.first.value, input.namespace_path.second, with_documentation=False
         )
 
+        allowed = await session.execute(
+            select(exists().where(schemas.ProjectStorageAllowORM.project_id == project.id))
+        )
+        if not allowed.scalar():
+            raise errors.ForbiddenError(message=f"Project storage is not enabled for project {project.id}.")
+
         existing_storage = await session.execute(
             select(exists().where(schemas.ProjectStorageORM.project_id == project.id))
         )

@@ -2725,7 +2725,7 @@ async def test_post_storage_not_allowed_fails(
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
     _, response = await sanic_client.post("/api/data/data_connectors/storage", json=payload, headers=user_headers)
 
-    assert response.status_code == 401, response.text
+    assert response.status_code == 403, response.text
 
 
 @pytest.mark.asyncio
