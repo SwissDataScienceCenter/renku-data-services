@@ -649,7 +649,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProjectStorage"
+                $ref: "#/components/schemas/ProjectStorageList"
         default:
           $ref: "#/components/responses/Error"
       tags:
