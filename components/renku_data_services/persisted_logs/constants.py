@@ -11,5 +11,5 @@ PERSISTED_LOGS_SESSIONS_LABEL_VALUE: Final[str] = "AmaltheaSession"
 PERSISTED_LOGS_NAMESPACE_LABEL_KEY: Final[str] = "namespace"
 """The loki label key to select logs streams from a specific kubernetes namespace."""
 
-ONE_SECOND_IN_NANOS: Final[int] = int(1e9)
-"""One second as nanoseconds (for Loki)."""
+# ONE_SECOND_IN_NANOS: Final[int] = int(1e9)
+# """One second as nanoseconds (for Loki)."""

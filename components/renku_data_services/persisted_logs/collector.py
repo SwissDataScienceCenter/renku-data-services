@@ -13,7 +13,6 @@ from renku_data_services.app_config import logging
 from renku_data_services.persisted_logs import loki_api, models
 from renku_data_services.persisted_logs.config import PersistedLogsConfig
 from renku_data_services.persisted_logs.constants import (
-    ONE_SECOND_IN_NANOS,
     PERSISTED_LOGS_NAMESPACE_LABEL_KEY,
     PERSISTED_LOGS_SESSIONS_LABEL_KEY,
     PERSISTED_LOGS_SESSIONS_LABEL_VALUE,
@@ -163,7 +162,8 @@ class DefaultPersistedLogsCollector(PersistedLogsCollector):
                 ts = await self.session_logs_repo.get_latest_log_timestamp(session=session)
                 start = _one_hour_ago_in_nanos()
                 if ts is not None and ts > start:
-                    start = ts - ONE_SECOND_IN_NANOS
+                    # start = ts - ONE_SECOND_IN_NANOS
+                    start = ts
             logs_stream = self.reader.get_amalthea_session_logs(start=start)
             async with session.begin():
                 await self.session_logs_repo.insert_session_logs(session=session, logs_stream=logs_stream)
