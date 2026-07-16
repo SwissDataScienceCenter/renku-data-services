@@ -9,13 +9,17 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope, Visibility
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass
+from renku_data_services.data_connectors.db import DataConnectorSecretRepository
+from renku_data_services.k8s.constants import DUMMY_RENKU_APP_USER_ID
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.renku_apps import apispec
 from renku_data_services.renku_apps.core import build_app
+from renku_data_services.renku_apps.data_connectors import select_mountable_connectors
 from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
 from renku_data_services.renku_apps.models import App, AppRuntimeState
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import SessionLauncher
+from renku_data_services.storage.rclone import RCloneValidator
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +39,16 @@ class RenkuAppsRepository:
         rp_repo: ResourcePoolRepository,
         project_repo: ProjectRepository,
         k8s_client: RenkuAppsK8sClient,
+        dc_secret_repo: DataConnectorSecretRepository,
+        validator: RCloneValidator,
     ) -> None:
         self.authz = authz
         self.session_repo = session_repo
         self.rp_repo = rp_repo
         self.project_repo = project_repo
         self.k8s_client = k8s_client
+        self.dc_secret_repo = dc_secret_repo
+        self.validator = validator
 
     async def create_app(self, user: base_models.APIUser, launcher_id: ULID) -> App:
         """Launch a new app from a session launcher."""
@@ -62,7 +70,12 @@ class RenkuAppsRepository:
         project = await self.project_repo.get_project(user, launcher.project_id)
         if await self.k8s_client.get_app_deployment_for_project(launcher.project_id) is not None:
             raise errors.ConflictError(message=f"An app already exists for project '{launcher.project_id}'.")
-        runtime_state = await self.k8s_client.create_app_deployment(launcher, resource_class, project)
+
+        app_user = base_models.AnonymousAPIUser(id=DUMMY_RENKU_APP_USER_ID)
+        data_connectors = await select_mountable_connectors(
+            app_user, launcher.project_id, self.dc_secret_repo, self.validator
+        )
+        runtime_state = await self.k8s_client.create_app_deployment(launcher, resource_class, project, data_connectors)
         return build_app(launcher, runtime_state)
 
     async def get_app(self, user: base_models.APIUser, app_name: str) -> App:

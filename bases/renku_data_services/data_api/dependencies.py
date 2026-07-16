@@ -81,6 +81,7 @@ from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage.db import StorageRepository
+from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
@@ -402,17 +403,6 @@ class DependencyManager:
             builds_config=config.builds,
             git_repositories_repo=git_repositories_repo,
         )
-        apps_k8s_client: RenkuAppsK8sClient | None = None
-        apps_repo: RenkuAppsRepository | None = None
-        if config.apps.enabled:
-            apps_k8s_client = RenkuAppsK8sClient(client=client, cluster_repo=cluster_repo)
-            apps_repo = RenkuAppsRepository(
-                authz=authz,
-                session_repo=session_repo,
-                rp_repo=rp_repo,
-                project_repo=project_repo,
-                k8s_client=apps_k8s_client,
-            )
         project_migration_repo = ProjectMigrationRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
@@ -466,6 +456,24 @@ class DependencyManager:
             oauth_client_factory=oauth_http_client_factory,
             internal_token_mint=internal_token_mint,
         )
+        validator = RCloneValidator()
+        apps_k8s_client: RenkuAppsK8sClient | None = None
+        apps_repo: RenkuAppsRepository | None = None
+        if config.apps.enabled:
+            apps_k8s_client = RenkuAppsK8sClient(
+                client=client,
+                cluster_repo=cluster_repo,
+                storage_class=config.nb_config.cloud_storage.storage_class,
+            )
+            apps_repo = RenkuAppsRepository(
+                authz=authz,
+                session_repo=session_repo,
+                rp_repo=rp_repo,
+                project_repo=project_repo,
+                k8s_client=apps_k8s_client,
+                dc_secret_repo=data_connector_secret_repo,
+                validator=validator,
+            )
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
             connected_services_repo=connected_services_repo,
