@@ -548,14 +548,18 @@ class DataConnectorRepository:
             stmt = select(schemas.ProjectStorageAllowORM).join(
                 ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id
             )
-            stmt_count = select(func.count()).select_from(schemas.ProjectStorageAllowORM).join(
-                ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id
+            stmt_count = (
+                select(func.count())
+                .select_from(schemas.ProjectStorageAllowORM)
+                .join(ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id)
             )
             if project_name:
                 stmt = stmt.where(ProjectORM.name.ilike(f"%{project_name}%"))
                 stmt_count = stmt_count.where(ProjectORM.name.ilike(f"%{project_name}%"))
-            stmt = stmt.order_by(schemas.ProjectStorageAllowORM.project_id).limit(pagination.per_page).offset(
-                pagination.offset
+            stmt = (
+                stmt.order_by(schemas.ProjectStorageAllowORM.project_id)
+                .limit(pagination.per_page)
+                .offset(pagination.offset)
             )
             results = await session.scalars(stmt)
             total = await session.scalar(stmt_count) or 0
