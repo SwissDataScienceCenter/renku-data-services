@@ -253,6 +253,7 @@ async def test_patch_session_environment(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_patch_session_environment_archived(
     sanic_client: SanicASGITestClient,
     admin_headers,
@@ -597,6 +598,7 @@ async def test_post_launcher_invalid_launcher_type(
     ],
 )
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_post_session_launcher_with_environment_build(
     app_manager: DependencyManager,
     sanic_client,
@@ -693,6 +695,7 @@ async def test_post_session_launcher_with_environment_build(
     ],
 )
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_post_job_launcher_with_environment_build(
     app_manager: DependencyManager,
     sanic_client,
@@ -795,6 +798,7 @@ async def test_post_job_launcher_with_environment_build(
     ],
 )
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_post_session_launcher_with_advanced_environment_build(
     app_manager: DependencyManager,
     sanic_client: SanicASGITestClient,
@@ -925,6 +929,7 @@ async def test_delete_session_launcher(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_patch_session_launcher(
     sanic_client: SanicASGITestClient,
     valid_resource_pool_payload: dict[str, Any],
@@ -1136,6 +1141,7 @@ async def test_patch_session_launcher_environment(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_patch_session_launcher_from_code_update_command(
     sanic_client: SanicASGITestClient,
     user_headers,
@@ -1189,6 +1195,7 @@ async def test_patch_session_launcher_from_code_update_command(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_patch_session_launcher_environment_with_build_parameters(
     sanic_client: SanicASGITestClient,
     user_headers,
@@ -1380,6 +1387,7 @@ async def test_patch_session_launcher_environment_with_invalid_build_parameters(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_patch_session_launcher_invalid_env_variables(
     sanic_client: SanicASGITestClient,
     valid_resource_pool_payload: dict[str, Any],
@@ -1521,6 +1529,7 @@ async def test_patch_session_launcher_keeps_unset_values(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_patch_session_launcher_with_advanced_environment_build(
     sanic_client: SanicASGITestClient,
     user_headers: dict[str, str],

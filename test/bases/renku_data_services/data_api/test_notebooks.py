@@ -3,15 +3,20 @@
 import asyncio
 from collections.abc import AsyncIterator, Generator
 from contextlib import suppress
+from datetime import datetime
+from pathlib import PurePosixPath
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from kr8s import NotFoundError
 from sanic_testing.testing import SanicASGITestClient
+from ulid import ULID
 
+from renku_data_services.base_models import AnonymousAPIUser
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.dependencies import DependencyManager
+from renku_data_services.notebooks.core_sessions import get_mount_work_dir
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
@@ -19,6 +24,7 @@ from renku_data_services.notebooks.crs import (
     Session,
     Type,
 )
+from renku_data_services.session.models import Environment, EnvironmentImageSource, EnvironmentKind, Member
 
 
 @pytest.fixture
@@ -397,3 +403,102 @@ async def test_start_server_remote_readiness_probe(
     # Cleanup.
     _, res = await sanic_client.delete(f"/api/data/sessions/{server_name}", headers=admin_headers)
     assert res.status_code == 204, res.text
+
+
+def create_test_environment(
+    container_image: str, work_dir: PurePosixPath | None = None, mount_dir: PurePosixPath | None = None
+) -> Environment:
+    return Environment(
+        name="test",
+        container_image=container_image,
+        default_url="test",
+        id=ULID(),
+        environment_image_source=EnvironmentImageSource.image,
+        port=8888,
+        uid=1000,
+        gid=1000,
+        environment_kind=EnvironmentKind.CUSTOM,
+        creation_date=datetime.now(),
+        created_by=Member(id="id"),
+        build_parameters=None,
+        build_parameters_id=None,
+        mount_directory=mount_dir,
+        working_directory=work_dir,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "environment,expected_mount_dir,expected_work_dir",
+    [
+        (
+            create_test_environment("busybox:1.38"),
+            PurePosixPath("/work"),
+            PurePosixPath("/work"),
+        ),
+        (
+            create_test_environment("ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3"),
+            # The default work dir in the buildpack images is /workspace so we mount there
+            PurePosixPath("/workspace"),
+            PurePosixPath("/workspace"),
+        ),
+        (
+            # If we set only the work dir on the environment that should be used
+            create_test_environment(
+                "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3",
+                work_dir=PurePosixPath("/home/renku/work"),
+            ),
+            PurePosixPath("/home/renku/work"),
+            PurePosixPath("/home/renku/work"),
+        ),
+        (
+            # If we set the work and mount dir on the environment that should be used
+            create_test_environment(
+                "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3",
+                mount_dir=PurePosixPath("/home/renku/work"),
+                work_dir=PurePosixPath("/home/renku/work"),
+            ),
+            PurePosixPath("/home/renku/work"),
+            PurePosixPath("/home/renku/work"),
+        ),
+        (
+            # If the work dir is not inside the mount dir, the work dir will be set to the mount dir
+            create_test_environment(
+                "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3",
+                mount_dir=PurePosixPath("/home/renku/mount"),
+                work_dir=PurePosixPath("/home/renku/work"),
+            ),
+            PurePosixPath("/home/renku/mount"),
+            PurePosixPath("/home/renku/mount"),
+        ),
+        (
+            create_test_environment(
+                "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3",
+                mount_dir=PurePosixPath("/home/renku/mount"),
+            ),
+            PurePosixPath("/home/renku/mount"),
+            PurePosixPath("/home/renku/mount"),
+        ),
+        (
+            # If you try to mount on / we move it to /work to preven users from wiping out the whole image
+            create_test_environment(
+                "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3",
+                mount_dir=PurePosixPath("/"),
+            ),
+            PurePosixPath("/work"),
+            PurePosixPath("/work"),
+        ),
+    ],
+)
+async def test_mount_workdir(
+    environment: Environment,
+    expected_mount_dir: PurePosixPath,
+    expected_work_dir: PurePosixPath,
+    app_manager_instance: DependencyManager,
+    sanic_client: SanicASGITestClient,
+) -> None:
+    mount_dir, work_dir = await get_mount_work_dir(
+        AnonymousAPIUser(id="anon-user"), environment, app_manager_instance.image_check_repo
+    )
+    assert mount_dir == expected_mount_dir
+    assert work_dir == expected_work_dir

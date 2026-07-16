@@ -47,6 +47,7 @@ from renku_data_services.data_connectors.core import (
     validate_unsaved_data_connector,
 )
 from renku_data_services.data_connectors.db import (
+    DOI,
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
@@ -508,6 +509,31 @@ class DataConnectorsBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["DELETE"], _delete_secrets
+
+    def get_all_links(self) -> BlueprintFactoryResponse:
+        """Get all data connector links."""
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.DataConnectorLinksGetQuery)
+        @paginate
+        async def _get_all(
+            _: Request,
+            user: base_models.APIUser,
+            pagination: PaginationRequest,
+            query: apispec.DataConnectorLinksGetQuery,
+        ) -> tuple[list[dict[str, Any]], int]:
+            doi = DOI(query.doi) if query.doi is not None else None
+            links, total_count = await self.data_connector_repo.get_links(user=user, pagination=pagination, doi=doi)
+            serialized_links = [
+                validate_and_dump(
+                    apispec.DataConnectorToProjectLink,
+                    self._dump_data_connector_to_project_link(link),
+                )
+                for link in links
+            ]
+            return serialized_links, total_count
+
+        return "/data_connector_links", ["GET"], _get_all
 
     @staticmethod
     def _dump_data_connector(

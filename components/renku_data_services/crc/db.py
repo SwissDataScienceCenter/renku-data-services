@@ -1053,6 +1053,7 @@ class MemberRepository(_Base):
         self.group_repo = group_repo
         self.project_repo = project_repo
 
+    @with_db_transaction
     @_only_admins
     async def get_resource_pool_users(
         self,
@@ -1060,70 +1061,73 @@ class MemberRepository(_Base):
         api_user: base_models.APIUser,
         resource_pool_id: int,
         keycloak_id: Optional[str] = None,
+        session: AsyncSession | None = None,
     ) -> Repository2Users:
         """Get users of a specific resource pool using Authzed as the source of truth."""
-        async with self.session_maker() as session:
-            rp = await session.scalar(
-                select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
-            )
-            if rp is None:
-                raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} does not exist")
+        if session is None:
+            raise errors.ProgrammingError(message="A session must be set to query the database")
 
-            specific_user: base_models.User | None = None
-            if keycloak_id is not None:
-                specific_user_res = (
-                    await session.execute(select(schemas.UserORM).where(schemas.UserORM.keycloak_id == keycloak_id))
-                ).scalar_one_or_none()
-                specific_user = None if not specific_user_res else specific_user_res.dump()
+        rp = await session.scalar(select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id))
+        if rp is None:
+            raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} does not exist")
 
-            if rp.default:
-                # Default pools use the no_default_access flag; preserve this behaviour
-                # so that update_resource_pool_users can find disallowed users.
-                disallowed_stmt = select(schemas.UserORM).where(schemas.UserORM.no_default_access == true())
-                if keycloak_id:
-                    disallowed_stmt = disallowed_stmt.where(schemas.UserORM.keycloak_id == keycloak_id)
-                disallowed_res = await session.execute(disallowed_stmt)
-                disallowed = [user.dump() for user in disallowed_res.scalars().all()]
-                allowed: list[base_models.User] = []
-                if specific_user and specific_user not in disallowed:
-                    allowed = [specific_user]
-                return Repository2Users(rp.id, allowed, disallowed)
+        specific_user: base_models.User | None = None
+        if keycloak_id is not None:
+            specific_user_res = (
+                await session.execute(select(schemas.UserORM).where(schemas.UserORM.keycloak_id == keycloak_id))
+            ).scalar_one_or_none()
+            specific_user = None if not specific_user_res else specific_user_res.dump()
 
-            if rp.public and not rp.default:
-                allowed = []
-                if specific_user:
-                    allowed = [specific_user]
-                return Repository2Users(rp.id, allowed, [])
-
-            # Non-default, non-public pools: resolve from Authzed.
-            user_ids = await self.authz.users_with_permission(
-                api_user, ResourceType.resource_pool, resource_pool_id, Scope.READ
-            )
-
-            # Filter out platform admins; they have access via resource_pool_platform->is_admin
-            # but should not appear in the user list.
-            admin_ids = set(await self.authz._get_admin_user_ids())
-            user_ids = [uid for uid in user_ids if uid not in admin_ids]
-
+        if rp.default:
+            # Default pools use the no_default_access flag; preserve this behaviour
+            # so that update_resource_pool_users can find disallowed users.
+            disallowed_stmt = select(schemas.UserORM).where(schemas.UserORM.no_default_access == true())
             if keycloak_id:
-                if keycloak_id not in user_ids:
-                    return Repository2Users(resource_pool_id, allowed=[], disallowed=[])
-                user = await self.kc_user_repo.get_user(id=keycloak_id)
-                if user is None:
-                    raise errors.MissingResourceError(message=f"The user with id {keycloak_id} cannot be found.")
-                return Repository2Users(
-                    resource_pool_id,
-                    allowed=[base_models.User(keycloak_id=keycloak_id, no_default_access=False)],
-                    disallowed=[],
-                )
+                disallowed_stmt = disallowed_stmt.where(schemas.UserORM.keycloak_id == keycloak_id)
+            disallowed_res = await session.execute(disallowed_stmt)
+            disallowed = [user.dump() for user in disallowed_res.scalars().all()]
+            allowed: list[base_models.User] = []
+            if specific_user and specific_user not in disallowed:
+                allowed = [specific_user]
+            return Repository2Users(rp.id, allowed, disallowed)
 
+        if rp.public and not rp.default:
             allowed = []
-            for uid in user_ids:
-                user = await self.kc_user_repo.get_user(id=uid)
-                if user is not None:
-                    allowed.append(base_models.User(keycloak_id=user.id, no_default_access=False))
+            if specific_user:
+                allowed = [specific_user]
+            return Repository2Users(rp.id, allowed, [])
 
-            return Repository2Users(resource_pool_id, allowed=allowed, disallowed=[])
+        # Non-default, non-public pools: resolve from Authzed.
+        user_ids = await self.authz.users_with_permission(
+            api_user, ResourceType.resource_pool, resource_pool_id, Scope.READ
+        )
+
+        # Filter out platform admins; they have access via resource_pool_platform->is_admin
+        # but should not appear in the user list.
+        admin_ids = set(await self.authz._get_admin_user_ids())
+        user_ids = [uid for uid in user_ids if uid not in admin_ids]
+
+        if keycloak_id:
+            if keycloak_id not in user_ids:
+                return Repository2Users(resource_pool_id, allowed=[], disallowed=[])
+            user = await self.kc_user_repo.get_user(id=keycloak_id, session=session)
+            if user is None:
+                raise errors.MissingResourceError(message=f"The user with id {keycloak_id} cannot be found.")
+            return Repository2Users(
+                resource_pool_id,
+                allowed=[base_models.User(keycloak_id=keycloak_id, no_default_access=False)],
+                disallowed=[],
+            )
+
+        # Batch-check which Authz-returned users still exist locally, reusing the same session
+        # instead of opening a new DB session per user.
+        existing_users = await self.kc_user_repo.get_users_by_ids(user_ids, session=session)
+        existing_user_ids = {u.id for u in existing_users}
+        allowed = [
+            base_models.User(keycloak_id=uid, no_default_access=False) for uid in user_ids if uid in existing_user_ids
+        ]
+
+        return Repository2Users(resource_pool_id, allowed=allowed, disallowed=[])
 
     async def get_user_resource_pools(
         self,
@@ -1320,7 +1324,7 @@ class MemberRepository(_Base):
                 # NOTE: If the resource pool is default just check if any users are prevented from having
                 # default resource pool access - and remove the restriction.
                 all_existing_users = await self.get_resource_pool_users(
-                    api_user=api_user, resource_pool_id=resource_pool_id
+                    api_user=api_user, resource_pool_id=resource_pool_id, session=session
                 )
                 users_to_modify = [user for user in all_existing_users.disallowed if user.keycloak_id in user_ids]
                 re_allowed_ids = [u.keycloak_id for u in users_to_modify]

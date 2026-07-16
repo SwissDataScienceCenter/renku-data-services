@@ -40,7 +40,7 @@ from renku_data_services.data_connectors.db import (
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import ValidationError, errors
 from renku_data_services.k8s.models import ClusterConnection, K8sSecret, sanitizer
-from renku_data_services.notebooks import apispec, core
+from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_extras
 from renku_data_services.notebooks.api.classes.image import Image
@@ -116,7 +116,7 @@ from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.models import SessionLauncher
+from renku_data_services.session.models import Environment, SessionLauncher
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import get_effective_quota
 
@@ -675,7 +675,7 @@ async def __get_connected_services_image_pull_secret(
     user: APIUser,
 ) -> ExtraSecret | None:
     """Return a secret for accessing the image if one is available for the given user."""
-    image_check_result = await image_check_repo.check_image(user=user, gitlab_user=None, image_src=launcher)
+    image_check_result = await image_check_repo.check_image(user=user, image_src=launcher)
 
     if not image_check_result.accessible:
         return None
@@ -705,7 +705,7 @@ async def __get_private_image_build_secret(
         return None
 
     try:
-        await image_check_repo.check_built_image_accessibility(user=user, gitlab_user=None, launcher=launcher)
+        await image_check_repo.check_built_image_accessibility(user=user, launcher=launcher)
     except (errors.ValidationError, errors.ProgrammingError, errors.ForbiddenError):
         return None
 
@@ -828,6 +828,35 @@ async def _check_quota(resource_usage_service: ResourceUsageService, resource_po
         )
 
 
+async def get_mount_work_dir(
+    user: APIUser, environment: Environment, image_check_repo: ImageCheckRepository
+) -> tuple[PurePosixPath, PurePosixPath]:
+    """Get the storage mount and work directories."""
+    work_dir = environment.working_directory
+    if not work_dir:
+        parsed_image = Image.from_path(environment.container_image)
+        image_workdir = await image_check_repo.image_workdir(user, parsed_image)
+        work_dir_fallback = PurePosixPath("/home/jovyan/work")
+        work_dir = image_workdir or work_dir_fallback
+    storage_mount_fallback = work_dir
+    storage_mount = environment.mount_directory or storage_mount_fallback
+    if storage_mount == PurePosixPath("/"):
+        # NOTE: Mounting the volume for the session at / will essentially wipe everything out from the image
+        storage_mount = PurePosixPath("/work")
+    if not work_dir.is_relative_to(storage_mount):
+        # NOTE: The work dir is where the repos are cloned to. So if the repositories
+        # are not cloned in the storage mount or in a sub directory then
+        # they may not carry over into the session container from the init container or
+        # the location where they need to be cloned may not be writable.
+        logger.warning(
+            f"Setting work_dir {work_dir} to the storage mount directory {storage_mount} "
+            f"for environment ID {environment.id} "
+            "because the work directory is not a child or equal to the mount directory"
+        )
+        work_dir = storage_mount
+    return storage_mount, work_dir
+
+
 async def start_session(
     request: Request,
     launch_request: SessionLaunchRequest,
@@ -919,13 +948,7 @@ async def start_session(
 
     environment = launcher.environment
     image = environment.container_image
-    work_dir = environment.working_directory
-    if not work_dir:
-        image_workdir = await core.docker_image_workdir(nb_config, environment.container_image, internal_gitlab_user)
-        work_dir_fallback = PurePosixPath("/home/jovyan")
-        work_dir = image_workdir or work_dir_fallback
-    storage_mount_fallback = work_dir / "work"
-    storage_mount = launcher.environment.mount_directory or storage_mount_fallback
+    storage_mount, work_dir = await get_mount_work_dir(user, environment, image_check_repo)
     secrets_mount_directory = storage_mount / project.secrets_mount_directory
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id
@@ -1070,6 +1093,8 @@ async def start_session(
         SessionEnvItem(name="RENKU_PROJECT_ID", value=str(project.id)),
         SessionEnvItem(name="RENKU_PROJECT_PATH", value=project.path.serialize()),
         SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
+        # NOTE: CNB_APP_DIR sets the working directory for images built with cloud native buildpacks
+        SessionEnvItem(name="CNB_APP_DIR", value=work_dir.as_posix()),
     ]
     if session_type.is_interactive:
         env.extend(
@@ -1212,6 +1237,7 @@ async def start_session(
             "resource_pool_id": resource_pool.id or "",
             "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
             "session_id": server_name,
+            "session_type": session_type.value.lower(),
         },
     )
     return session, True
@@ -1372,13 +1398,7 @@ async def patch_session(
     launcher = await session_repo.get_launcher(user, session.launcher_id)
     project = await project_repo.get_project(user=user, project_id=session.project_id)
     environment = launcher.environment
-    work_dir = environment.working_directory
-    if not work_dir:
-        image_workdir = await core.docker_image_workdir(nb_config, environment.container_image, internal_gitlab_user)
-        work_dir_fallback = PurePosixPath("/home/jovyan")
-        work_dir = image_workdir or work_dir_fallback
-    storage_mount_fallback = work_dir / "work"
-    storage_mount = launcher.environment.mount_directory or storage_mount_fallback
+    storage_mount, work_dir = await get_mount_work_dir(user, environment, image_check_repo)
     secrets_mount_directory = storage_mount / project.secrets_mount_directory
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id

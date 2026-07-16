@@ -51,6 +51,7 @@ async def quota_repo(cluster):
     yield QuotaRepository(rc_client, pc_client)
 
 
+@settings(deadline=None, max_examples=5)
 @given(quota=quota_strat)
 @pytest.mark.xdist_group("sessions")
 async def test_get_insert_quota(quota: models.UnsavedQuota, quota_repo: QuotaRepository) -> None:

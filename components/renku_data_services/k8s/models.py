@@ -405,6 +405,20 @@ class GVK:
             version=version,
         )
 
+    def __eq__(self, value: object) -> bool:
+        """Override equality to be case-insensitive."""
+        if not isinstance(value, GVK):
+            return False
+        return (
+            self.kind.casefold() == value.kind.casefold()
+            and self.version.casefold() == value.version.casefold()
+            and (self.group.casefold() if self.group else None) == (value.group.casefold() if value.group else None)
+        )
+
+    def __hash__(self) -> int:
+        """Override hash to be case-insensitive."""
+        return hash((self.kind.casefold(), self.version.casefold(), self.group.casefold() if self.group else None))
+
 
 @dataclass
 class APIObjectInCluster:

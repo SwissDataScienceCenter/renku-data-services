@@ -71,13 +71,18 @@ class FrontendVariant(StrEnum):
     jupyterlab = "jupyterlab"
     ttyd = "ttyd"
     rstudio = "rstudio"
+    infer = "infer"
+    none = "none"
 
 
 VALID_BUILDER_FRONTEND_COMBINATIONS: typing.Final[set[tuple[BuilderVariant, FrontendVariant]]] = {
     (BuilderVariant.r, FrontendVariant.rstudio),
+    (BuilderVariant.r, FrontendVariant.none),
     (BuilderVariant.python, FrontendVariant.vscodium),
     (BuilderVariant.python, FrontendVariant.jupyterlab),
     (BuilderVariant.python, FrontendVariant.ttyd),
+    (BuilderVariant.python, FrontendVariant.infer),
+    (BuilderVariant.python, FrontendVariant.none),
 }
 
 
@@ -464,6 +469,32 @@ BUILD_ENVIRONMENT_CONFIGS: Final[dict[str, UnsavedEnvironment]] = {
     ),
     FrontendVariant.vscodium.value: UnsavedEnvironment(
         name="vscodium",
+        default_url="/",
+        port=BUILD_PORT,
+        container_image="image:unknown-at-the-moment",
+        working_directory=BUILD_WORKING_DIRECTORY,
+        mount_directory=BUILD_MOUNT_DIRECTORY,
+        uid=BUILD_UID,
+        gid=BUILD_GID,
+        environment_kind=EnvironmentKind.CUSTOM,
+        environment_image_source=EnvironmentImageSource.build,
+        strip_path_prefix=False,
+    ),
+    FrontendVariant.infer.value: UnsavedEnvironment(
+        name="inferred-frontend",
+        default_url="/",
+        port=BUILD_PORT,
+        container_image="image:unknown-at-the-moment",
+        working_directory=BUILD_WORKING_DIRECTORY,
+        mount_directory=BUILD_MOUNT_DIRECTORY,
+        uid=BUILD_UID,
+        gid=BUILD_GID,
+        environment_kind=EnvironmentKind.CUSTOM,
+        environment_image_source=EnvironmentImageSource.build,
+        strip_path_prefix=False,
+    ),
+    FrontendVariant.none.value: UnsavedEnvironment(
+        name="no-implicit-frontend",
         default_url="/",
         port=BUILD_PORT,
         container_image="image:unknown-at-the-moment",

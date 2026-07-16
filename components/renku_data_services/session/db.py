@@ -1064,7 +1064,6 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                             repository_url=build.result_repository_url,
                             user=user,
                             etag=None,
-                            internal_gitlab_user=base_models.APIUser(),
                         )
                         if not isinstance(repo_data.metadata, Metadata) or not repo_data.metadata.pull_permission:
                             authorized = False
@@ -1189,7 +1188,6 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             repository_url=git_repository,
             user=user,
             etag=None,
-            internal_gitlab_user=base_models.APIUser(),
         )
 
         if result.is_error:
