@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from datetime import datetime
+from hashlib import md5
+from pathlib import PurePosixPath
 from typing import Any
 
 from ulid import ULID
 
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.crc.models import ResourceClass
+from renku_data_services.data_connectors.models import DataConnectorWithSecrets
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, DUMMY_RENKU_APP_USER_ID, ClusterId
-from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObjectFilter, K8sObjectMeta, sanitizer
+from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.project.models import Project
 from renku_data_services.renku_apps.cr_knative_service import Condition
 from renku_data_services.renku_apps.crs import KnativeService
@@ -20,6 +25,10 @@ from renku_data_services.renku_apps.models import AppRuntimeState
 from renku_data_services.session.models import SessionLauncher
 
 KNATIVE_SERVICE_GVK = GVK(kind="Service", group="serving.knative.dev", version="v1")
+_SECRET_GVK = GVK(kind="Secret", version="v1")
+_PVC_GVK = GVK(kind="PersistentVolumeClaim", version="v1")
+
+_DEFAULT_WORK_DIR = PurePosixPath("/home/jovyan")
 
 _MAX_SCALE_ANNOTATION = "autoscaling.knative.dev/max-scale"
 _MAX_SCALE_RUNNING = "3"
@@ -38,6 +47,59 @@ def _generate_app_name(project: Project, session_launcher: SessionLauncher) -> s
     return f"{project.slug.lower()[:54]}-{launcher_id_slice}"
 
 
+def _data_source_base_name(app_name: str) -> str:
+    """Bounded, DNS-1123-safe base for an app's data-connector resource names."""
+    digest = md5(app_name.encode(), usedforsecurity=False).hexdigest()
+    return f"{app_name[:12].rstrip('-')}-{digest[:12]}"
+
+
+@dataclass
+class _AppDataConnectorResources:
+    """The k8s manifests needed to mount one data connector into an app."""
+
+    name: str
+    secret: dict[str, Any]
+    pvc: dict[str, Any]
+    volume: dict[str, Any]
+    volume_mount: dict[str, Any]
+
+
+def _build_data_connector_resources(
+    data_connectors: list[DataConnectorWithSecrets],
+    base_name: str,
+    namespace: str,
+    work_dir: PurePosixPath,
+    storage_class: str,
+    labels: dict[str, str],
+) -> list[_AppDataConnectorResources]:
+    """Build the csi-rclone Secret/PVC/volume manifests for each mountable connector."""
+    resources: list[_AppDataConnectorResources] = []
+    for dc_with_secrets in data_connectors:
+        dc = dc_with_secrets.data_connector
+        resource_name = f"{base_name}-ds-{str(dc.id).lower()}"
+        target_path = PurePosixPath(dc.storage.target_path)
+        mount_folder = target_path.as_posix() if target_path.is_absolute() else (work_dir / target_path).as_posix()
+        storage = RCloneStorage(
+            source_path=dc.storage.source_path,
+            configuration=dict(dc.storage.configuration),
+            readonly=True,
+            mount_folder=mount_folder,
+            name=dc.name,
+            secrets={},
+            storage_class=storage_class,
+        )
+        resources.append(
+            _AppDataConnectorResources(
+                name=resource_name,
+                secret=sanitizer(storage.secret(resource_name, namespace, labels=labels)),
+                pvc=sanitizer(storage.pvc(resource_name, namespace, labels=labels)),
+                volume=sanitizer(storage.volume(resource_name)),
+                volume_mount=sanitizer(storage.volume_mount(resource_name)),
+            )
+        )
+    return resources
+
+
 class RenkuAppsK8sClient:
     """K8s client for Renku apps operations."""
 
@@ -45,19 +107,45 @@ class RenkuAppsK8sClient:
         self,
         client: K8sClusterClientsPool,
         cluster_repo: ClusterRepository,
+        storage_class: str,
         cluster_id: ClusterId = DEFAULT_K8S_CLUSTER,
     ) -> None:
         self.__client = client
         self.__cluster_repo = cluster_repo
+        self.__storage_class = storage_class
         self.__cluster_id = cluster_id
 
     async def create_app_deployment(
-        self, session_launcher: SessionLauncher, resource_class: ResourceClass | None, project: Project
+        self,
+        session_launcher: SessionLauncher,
+        resource_class: ResourceClass | None,
+        project: Project,
+        data_connectors: list[DataConnectorWithSecrets],
     ) -> AppRuntimeState:
         """Create a deployment for the given app and return its observed runtime state."""
         cluster = await self.__client.cluster_by_id(self.__cluster_id)
         app_name = _generate_app_name(project, session_launcher)
-        manifest = _build_app_deployment_manifest(session_launcher, app_name, resource_class, project)
+        labels = _app_labels(session_launcher, project)
+
+        work_dir = session_launcher.environment.working_directory or _DEFAULT_WORK_DIR
+        dc_resources = _build_data_connector_resources(
+            data_connectors,
+            base_name=_data_source_base_name(app_name),
+            namespace=cluster.namespace,
+            work_dir=work_dir,
+            storage_class=self.__storage_class,
+            labels=labels,
+        )
+
+        manifest = _build_app_deployment_manifest(
+            session_launcher,
+            app_name,
+            resource_class,
+            project,
+            labels=labels,
+            volumes=[r.volume for r in dc_resources],
+            volume_mounts=[r.volume_mount for r in dc_resources],
+        )
         meta = K8sObjectMeta(
             name=app_name,
             namespace=cluster.namespace,
@@ -68,7 +156,32 @@ class RenkuAppsK8sClient:
         created = await self.__client.create(
             meta.with_manifest(manifest.model_dump(exclude_none=True, mode="json")), refresh=True
         )
+
+        owner_reference = _service_owner_reference(app_name, str(created.manifest.metadata.uid))
+        for resource in dc_resources:
+            await self._create_owned(resource.secret, _SECRET_GVK, resource.name, cluster, owner_reference)
+            await self._create_owned(resource.pvc, _PVC_GVK, resource.name, cluster, owner_reference)
+
         return _extract_runtime_state(KnativeService.model_validate(created.manifest))
+
+    async def _create_owned(
+        self,
+        manifest: dict[str, Any],
+        gvk: GVK,
+        name: str,
+        cluster: ClusterConnection,
+        owner_reference: dict[str, Any],
+    ) -> None:
+        """Create a Service-owned resource (its PVC/Secret) with the owner reference set."""
+        manifest.setdefault("metadata", {})["ownerReferences"] = [owner_reference]
+        meta = K8sObjectMeta(
+            name=name,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            gvk=gvk,
+            user_id=DUMMY_RENKU_APP_USER_ID,
+        )
+        await self.__client.create(meta.with_manifest(manifest), refresh=False)
 
     async def get_app_deployment(self, app_name: str) -> AppRuntimeState | None:
         """Get the runtime state for the given app name, or None if it does not exist."""
@@ -191,8 +304,38 @@ def _resources_from_resource_class(resource_class: ResourceClass) -> dict[str, A
     }
 
 
+def _app_labels(session_launcher: SessionLauncher, project: Project) -> dict[str, str]:
+    """Labels shared by an app's Knative Service and its owned data-connector resources."""
+    return {
+        "renku.io/safe-username": DUMMY_RENKU_APP_USER_ID,
+        "renku.io/project-slug": project.slug.lower(),
+        "renku.io/project-namespace": project.namespace.path.serialize().replace("/", "-").lower(),
+        "renku.io/project-id": str(project.id),
+        "renku.io/project-id-slug": str(project.id)[18:26].lower(),
+        "renku.io/launcher-id": str(session_launcher.id),
+    }
+
+
+def _service_owner_reference(app_name: str, uid: str) -> dict[str, Any]:
+    """Owner reference making the app's Knative Service the owner of its PVC/Secret."""
+    return {
+        "apiVersion": KNATIVE_SERVICE_GVK.group_version,
+        "kind": KNATIVE_SERVICE_GVK.kind,
+        "name": app_name,
+        "uid": uid,
+        "controller": True,
+        "blockOwnerDeletion": True,
+    }
+
+
 def _build_app_deployment_manifest(
-    session_launcher: SessionLauncher, app_name: str, resource_class: ResourceClass | None, project: Project
+    session_launcher: SessionLauncher,
+    app_name: str,
+    resource_class: ResourceClass | None,
+    project: Project,
+    labels: dict[str, str],
+    volumes: list[dict[str, Any]],
+    volume_mounts: list[dict[str, Any]],
 ) -> KnativeService:
     """Build a Knative Service manifest derived from the session launcher."""
     environment = session_launcher.environment
@@ -221,7 +364,7 @@ def _build_app_deployment_manifest(
     ]
     reserved_names = {var["name"] for var in env}
     env.extend(
-        {"name": var.name, "value": var.value}
+        {"name": var.name, "value": var.value or ""}
         for var in session_launcher.env_variables or []
         if var.name not in reserved_names
     )
@@ -232,15 +375,12 @@ def _build_app_deployment_manifest(
         container["args"] = environment.args
     if environment.working_directory is not None:
         container["workingDir"] = str(environment.working_directory)
+    if volume_mounts:
+        container["volumeMounts"] = volume_mounts
 
-    labels = {
-        "renku.io/safe-username": DUMMY_RENKU_APP_USER_ID,
-        "renku.io/project-slug": project.slug.lower(),
-        "renku.io/project-namespace": project.namespace.path.serialize().replace("/", "-").lower(),
-        "renku.io/project-id": str(project.id),
-        "renku.io/project-id-slug": str(project.id)[18:26].lower(),
-        "renku.io/launcher-id": str(session_launcher.id),
-    }
+    pod_spec: dict[str, Any] = {"containers": [container]}
+    if volumes:
+        pod_spec["volumes"] = volumes
 
     return KnativeService.model_validate(
         {
@@ -256,7 +396,7 @@ def _build_app_deployment_manifest(
                         "labels": labels,
                         "annotations": _APP_AUTOSCALING_ANNOTATIONS,
                     },
-                    "spec": {"containers": [container]},
+                    "spec": pod_spec,
                 },
             },
         }
