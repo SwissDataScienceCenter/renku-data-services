@@ -2,6 +2,7 @@
 
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Callable
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from pydantic import ValidationError
@@ -12,6 +13,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.persisted_logs import loki_api, models
 from renku_data_services.persisted_logs.config import PersistedLogsConfig
 from renku_data_services.persisted_logs.constants import (
+    ONE_SECOND_IN_NANOS,
     PERSISTED_LOGS_NAMESPACE_LABEL_KEY,
     PERSISTED_LOGS_SESSIONS_LABEL_KEY,
     PERSISTED_LOGS_SESSIONS_LABEL_VALUE,
@@ -29,9 +31,19 @@ class LokiLogReader:
         self.client = client
         self.client.base_url = httpx.URL(config.loki_read_base_url)
 
-    async def get_amalthea_session_logs(self) -> AsyncIterator[models.UnsavedLogLine]:
-        """Fetches Amalthea session logs from Loki."""
-        params: dict[str, str] = dict()
+    async def get_amalthea_session_logs(
+        self, limit: int = 1000, start: int | None = None, end: int | None = None
+    ) -> AsyncIterator[models.UnsavedLogLine]:
+        """Fetches Amalthea session logs from Loki.
+
+        Parameters:
+        - limit: max number of entries to return
+        - start: start timestamp as a Unix nano timestamp
+        - end: end timestamp as a Unix nano timestamp
+
+        See also https://grafana.com/docs/loki/latest/reference/loki-http-api/#query-logs-within-a-range-of-time
+        """
+        params: dict[str, str | int] = dict()
         params["query"] = (
             "{"
             f'{PERSISTED_LOGS_SESSIONS_LABEL_KEY}="{PERSISTED_LOGS_SESSIONS_LABEL_VALUE}",'
@@ -39,6 +51,11 @@ class LokiLogReader:
             "}"
         )
         params["direction"] = "forward"
+        params["limit"] = limit
+        if start:
+            params["start"] = str(start)
+        if end:
+            params["end"] = str(end)
         logger.info(params)
         res = await self.client.get("loki/api/v1/query_range", params=params)
         res.raise_for_status()
@@ -141,9 +158,13 @@ class DefaultPersistedLogsCollector(PersistedLogsCollector):
     async def collect_sessions_persisted_logs(self) -> None:
         """Collect persisted logs from Amalthea sessions."""
 
-        logs_stream = self.reader.get_amalthea_session_logs()
-
         async with self.session_maker() as session:
+            async with session.begin():
+                ts = await self.session_logs_repo.get_latest_log_timestamp(session=session)
+                start = _one_hour_ago_in_nanos()
+                if ts is not None and ts > start:
+                    start = ts - ONE_SECOND_IN_NANOS
+            logs_stream = self.reader.get_amalthea_session_logs(start=start)
             async with session.begin():
                 await self.session_logs_repo.insert_session_logs(session=session, logs_stream=logs_stream)
             async with session.begin():
@@ -151,3 +172,9 @@ class DefaultPersistedLogsCollector(PersistedLogsCollector):
                 logger.info(f"Latest session log timestamp: {ts}")
 
         return None
+
+
+def _one_hour_ago_in_nanos() -> int:
+    """Returns the Unix nano timestamp corresponding to one hour ago."""
+    dt = datetime.now(tz=UTC) - timedelta(hours=1)
+    return int(dt.timestamp() * 1e6) * 1000
