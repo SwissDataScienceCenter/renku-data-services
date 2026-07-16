@@ -23,3 +23,11 @@ class UnsavedLogLine:
     container: str
     timestamp: int
     log_line: str
+
+
+@dataclass(eq=True, frozen=True, kw_only=True)
+class InsertLogsResult:
+    """Result of inserting a log stream in the database."""
+
+    log_count: int
+    last_timestamp: int

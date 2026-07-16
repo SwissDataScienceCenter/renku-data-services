@@ -29,9 +29,15 @@ class AmaltheaSessionPersistedLogsRepository:
 
     async def insert_session_logs(
         self, session: AsyncSession, logs_stream: AsyncIterator[models.UnsavedLogLine]
-    ) -> None:
+    ) -> models.InsertLogsResult:
         """Insert sessions logs into the persisted logs database."""
+        log_count = 0
+        last_timestamp = 0
         async for log in logs_stream:
+            log_count += 1
+            if log.timestamp > last_timestamp:
+                last_timestamp = log.timestamp
+
             existing_log_res = await session.scalars(
                 select(schemas.AmaltheaSessionLogsORM.id).where(schemas.AmaltheaSessionLogsORM.id == log.id)
             )
@@ -66,3 +72,4 @@ class AmaltheaSessionPersistedLogsRepository:
             )
             session.add(log_orm)
             await session.flush()
+        return models.InsertLogsResult(log_count=log_count, last_timestamp=last_timestamp)
