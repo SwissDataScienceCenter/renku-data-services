@@ -464,6 +464,8 @@ class DependencyManager:
                 client=client,
                 cluster_repo=cluster_repo,
                 storage_class=config.nb_config.cloud_storage.storage_class,
+                default_affinity=config.nb_config.sessions.affinity_model,
+                default_tolerations=config.nb_config.sessions.tolerations_model,
             )
             apps_repo = RenkuAppsRepository(
                 authz=authz,

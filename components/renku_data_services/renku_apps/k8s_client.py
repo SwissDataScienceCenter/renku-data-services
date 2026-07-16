@@ -18,6 +18,11 @@ from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, DUMMY_RENKU_APP_USER_ID, ClusterId
 from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObjectFilter, K8sObjectMeta, sanitizer
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
+from renku_data_services.notebooks.crs import Affinity, Toleration
+from renku_data_services.notebooks.utils import (
+    node_affinity_from_resource_class,
+    tolerations_from_resource_class,
+)
 from renku_data_services.project.models import Project
 from renku_data_services.renku_apps.cr_knative_service import Condition
 from renku_data_services.renku_apps.crs import KnativeService
@@ -108,11 +113,15 @@ class RenkuAppsK8sClient:
         client: K8sClusterClientsPool,
         cluster_repo: ClusterRepository,
         storage_class: str,
+        default_affinity: Affinity,
+        default_tolerations: list[Toleration],
         cluster_id: ClusterId = DEFAULT_K8S_CLUSTER,
     ) -> None:
         self.__client = client
         self.__cluster_repo = cluster_repo
         self.__storage_class = storage_class
+        self.__default_affinity = default_affinity
+        self.__default_tolerations = default_tolerations
         self.__cluster_id = cluster_id
 
     async def create_app_deployment(
@@ -137,6 +146,9 @@ class RenkuAppsK8sClient:
             labels=labels,
         )
 
+        affinity, tolerations = _scheduling_from_resource_class(
+            resource_class, self.__default_affinity, self.__default_tolerations
+        )
         manifest = _build_app_deployment_manifest(
             session_launcher,
             app_name,
@@ -145,6 +157,8 @@ class RenkuAppsK8sClient:
             labels=labels,
             volumes=[r.volume for r in dc_resources],
             volume_mounts=[r.volume_mount for r in dc_resources],
+            affinity=affinity,
+            tolerations=tolerations,
         )
         meta = K8sObjectMeta(
             name=app_name,
@@ -328,6 +342,24 @@ def _service_owner_reference(app_name: str, uid: str) -> dict[str, Any]:
     }
 
 
+def _scheduling_from_resource_class(
+    resource_class: ResourceClass | None,
+    default_affinity: Affinity,
+    default_tolerations: list[Toleration],
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """Derive the app pod's node affinity and tolerations from the resource class, mirroring sessions."""
+    if resource_class is not None:
+        affinity = node_affinity_from_resource_class(resource_class, default_affinity)
+        tolerations = tolerations_from_resource_class(resource_class, default_tolerations)
+    else:
+        affinity = default_affinity
+        tolerations = default_tolerations
+
+    affinity_dict = None if affinity.is_empty else affinity.model_dump(exclude_none=True, mode="json")
+    toleration_dicts = [tol.model_dump(exclude_none=True, mode="json") for tol in tolerations]
+    return affinity_dict, toleration_dicts
+
+
 def _build_app_deployment_manifest(
     session_launcher: SessionLauncher,
     app_name: str,
@@ -336,6 +368,8 @@ def _build_app_deployment_manifest(
     labels: dict[str, str],
     volumes: list[dict[str, Any]],
     volume_mounts: list[dict[str, Any]],
+    affinity: dict[str, Any] | None,
+    tolerations: list[dict[str, Any]],
 ) -> KnativeService:
     """Build a Knative Service manifest derived from the session launcher."""
     environment = session_launcher.environment
@@ -381,6 +415,10 @@ def _build_app_deployment_manifest(
     pod_spec: dict[str, Any] = {"containers": [container]}
     if volumes:
         pod_spec["volumes"] = volumes
+    if affinity:
+        pod_spec["affinity"] = affinity
+    if tolerations:
+        pod_spec["tolerations"] = tolerations
 
     return KnativeService.model_validate(
         {
