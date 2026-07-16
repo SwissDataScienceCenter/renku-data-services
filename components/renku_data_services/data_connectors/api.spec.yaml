@@ -1312,13 +1312,6 @@ components:
       maxLength: 200
       pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*(?<!\.git)(?<!\.atom)(?:/[a-z0-9][a-z0-9\-_.]*){0,1}$'
       example: "user1/project-1"
-    ProjectSlug:
-      description: A slug denoting a project
-      type: string
-      minLength: 1
-      maxLength: 200
-      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*(?<!\.git)(?<!\.atom)(/[a-z0-9][a-z0-9\-_.]*){0,1}$'
-      example: "user1/project-1"
     CreationDate:
       description: The date and time the resource was created (in UTC and ISO-8601 format)
       type: string
