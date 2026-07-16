@@ -195,9 +195,6 @@ def validate_resource_pool_post(body: apispec.ResourcePool) -> models.UnsavedRes
     remote = validate_remote(body=body.remote) if body.remote else None
     platform = __validate_runtime_platform(body=body.platform)
 
-    if body.cpu_limit_factor is not None and body.cpu_limit_factor < 1:
-        raise errors.ValidationError(message="The cpu limit factor has to be >= 1.")
-
     return models.UnsavedResourcePool(
         name=body.name,
         classes=classes,
@@ -239,8 +236,14 @@ def validate_resource_pool_put_or_patch(
         body.hibernation_threshold, body.hibernation_warning_period
     )
 
-    if body.cpu_limit_factor is not None and body.cpu_limit_factor < 1:
-        raise errors.ValidationError(message="The cpu limit factor has to be >= 1.")
+    cpu_limit_factorrr: None | ResetType | float = None
+    match method, body.cpu_limit_factor:
+        case _, apispec.RemoveCpuLimitFactor():
+            cpu_limit_factorrr = RESET
+        case "PUT", None:
+            cpu_limit_factorrr = RESET
+        case _, apispec.CpuLimitFactor():
+            cpu_limit_factorrr = body.cpu_limit_factor.root
 
     return models.ResourcePoolPatch(
         name=body.name,
@@ -254,9 +257,7 @@ def validate_resource_pool_put_or_patch(
         remote=remote,
         cluster_id=ULID.from_str(body.cluster_id) if body.cluster_id else None,
         platform=platform,
-        cpu_limit_factor=RESET
-        if body.cpu_limit_factor is None or body.cpu_limit_factor == 0
-        else body.cpu_limit_factor,
+        cpu_limit_factor=cpu_limit_factorrr,
     )
 
 

@@ -499,7 +499,14 @@ def resources_patch_from_resource_class(
 
 
 def resources_from_resource_class(resource_class: ResourceClass, cpu_limit_factor: float | None = None) -> Resources:
-    """Convert the resource class to a k8s resources spec."""
+    """Convert the resource class to a k8s resources spec.
+
+    The cpu limit factor is optional beacuse cpu is burstable in Kubernetes with
+    low risk of oversubscription causing problems to the node. We always apply
+    limits for memory beacuse it can cause problems on the node and affect other pods
+    when the node is oversubscribed. And for GPUs the limits simply have to be defined
+    and equal to the requests, oversubscription is not possible for GPUs.
+    """
     requests: dict[str, Requests | RequestsStr] = {
         "cpu": RequestsStr(str(round(resource_class.cpu * 1000)) + "m"),
         "memory": RequestsStr(f"{resource_class.memory}Gi"),

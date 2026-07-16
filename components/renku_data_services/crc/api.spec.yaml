@@ -1598,7 +1598,9 @@ components:
         platform:
           $ref: "#/components/schemas/RuntimePlatform"
         cpu_limit_factor:
-          $ref: "#/components/schemas/CpuLimitFactor"
+          oneOf:
+            - $ref: "#/components/schemas/CpuLimitFactor"
+            - $ref: "#/components/schemas/RemoveCpuLimitFactor"
       example:
         quota:
           cpu: 50
@@ -1636,7 +1638,9 @@ components:
         platform:
           $ref: "#/components/schemas/RuntimePlatform"
         cpu_limit_factor:
-          $ref: "#/components/schemas/CpuLimitFactor"
+          oneOf:
+            - $ref: "#/components/schemas/CpuLimitFactor"
+            - $ref: "#/components/schemas/RemoveCpuLimitFactor"
       required: ["classes", "name", "public", "default", "platform"]
       example:
         quota:
@@ -2427,6 +2431,12 @@ components:
       minimum: 1
       maximum: 100
       description: The value used to multiply cpu requests to get the limit. If unset there will be no cpu limits.
+    RemoveCpuLimitFactor:
+      type: number
+      minimum: 0
+      maximum: 0
+      description: Indicates that the cpu limits should not be set and if a limit is set it should be removed
+      format: float
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
