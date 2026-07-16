@@ -579,11 +579,13 @@ async def monitor_session_quota_and_send_alerts(dm: DependencyManager) -> None:
 
 async def collect_persisted_logs(dm: DependencyManager) -> None:
     """Collect persisted logs from Loki."""
-    # NOTE: just run once (testing)
-    try:
-        await dm.persisted_logs_collector.collect_persisted_logs()
-    except Exception as e:
-        logger.warning(f"Failed to collect persisted logs: {e}", exc_info=True)
+    while True:
+        try:
+            await dm.persisted_logs_collector.collect_persisted_logs()
+        except Exception as e:
+            logger.warning(f"Failed to collect persisted logs: {e}", exc_info=True)
+        else:
+            await asyncio.sleep(1)
 
 
 def all_tasks(dm: DependencyManager) -> TaskDefininions:
