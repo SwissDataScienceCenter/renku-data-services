@@ -12,7 +12,6 @@ from box import Box
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import Pod, Secret, StatefulSet
 
-from kubernetes.client import V1PersistentVolumeClaimSpec, V1ResourceRequirements
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository

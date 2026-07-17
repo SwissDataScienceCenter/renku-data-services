@@ -13,10 +13,10 @@ from typing import Protocol, TypeVar, cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from kr8s.asyncio.objects import PersistentVolume
-from kubernetes.client import V1ObjectMeta, V1PersistentVolumeClaim, V1PersistentVolumeClaimSpec, V1ResourceRequirements, V1Secret
-from renku_data_services.base_models.bytesize import ByteSize
-from renku_data_services.notebooks.cr_amalthea_session import PersistentVolumeClaim
+from kubernetes.client import (
+    V1ObjectMeta,
+    V1Secret,
+)
 from sanic import Request
 from toml import dumps
 from ulid import ULID
@@ -25,6 +25,7 @@ from yaml import safe_dump
 from renku_data_services.app_config import logging
 from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.crc.models import (
@@ -49,6 +50,7 @@ from renku_data_services.notebooks.api.amalthea_patches.init_containers import u
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
+from renku_data_services.notebooks.cr_amalthea_session import PersistentVolumeClaim
 from renku_data_services.notebooks.crs import (
     AmaltheaMetadata,
     AmaltheaSessionSpec,
@@ -186,10 +188,10 @@ async def get_extra_containers(
 async def get_project_storage(
     user: AuthenticatedAPIUser,
     nb_config: NotebooksConfig,
-    data_source_repo: DataSourceRepository,
-    project_id: str
-):
-    """If applicable, fetch the project storage and return it as SessionExtras"""
+    project_id: ULID,
+    cluster: ClusterConnection,
+) -> SessionExtraResources:
+    """If applicable, fetch the project storage and return it as SessionExtras."""
     project_storage = ProjectStorage(
         id=ULID(),
         project_id=project_id,
@@ -201,7 +203,7 @@ async def get_project_storage(
         updated_at=datetime.now(),
     )
 
-    volume_name = await nb_config.k8s_v2_client.create_persistent_volume(project_storage)
+    volume_name = await nb_config.k8s_v2_client.create_persistent_volume(user, project_storage, cluster)
 
     return SessionExtraResources(
         volume_mounts=[
@@ -1055,7 +1057,8 @@ async def start_session(
     )
 
     # project storage
-    session_extras = session_extras.concat(await get_project_storage(user, data_source_repo, project.id, cluster))
+    if isinstance(user, AuthenticatedAPIUser):
+        session_extras = session_extras.concat(await get_project_storage(user, nb_config, project.id, cluster))
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings
