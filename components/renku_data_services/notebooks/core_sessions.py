@@ -14,6 +14,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
+from renku_data_services.notebooks.cr_amalthea_session import PersistentVolumeClaim
 from sanic import Request
 from toml import dumps
 from ulid import ULID
@@ -1012,6 +1013,24 @@ async def start_session(
     # Extra containers
     session_extras = session_extras.concat(
         await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
+    )
+
+    session_extras = session_extras.concat(
+        SessionExtraResources(
+            volume_mounts=[
+                ExtraVolumeMount(
+                    mountPath="/mnt",
+                    name="stovo1",
+                    readOnly=False,
+                )
+            ],
+            volumes=[
+                ExtraVolume(
+                    name="stovo1",
+                    persistentVolumeClaim=PersistentVolumeClaim(claimName="storage-01kxfyxkche1srjt0mgyhshra2"),
+                )
+            ],
+        )
     )
 
     # Cluster settings (ingress, storage class, etc)
