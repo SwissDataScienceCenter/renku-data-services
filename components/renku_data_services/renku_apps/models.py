@@ -36,13 +36,16 @@ class AppRuntimeState:
     Carries the primitives that the K8s adapter extracts from a Knative Service
     so that domain logic can compose an App without depending on K8s types.
     The ready_status field holds the raw Kubernetes Ready-condition status value
-    ("True", "False", "Unknown", or None if the condition is absent).
+    ("True", "False", "Unknown", or None if the condition is absent); ready_reason
+    holds that condition's reason, needed to tell a terminal failure from a
+    transient not-ready (e.g. a pod waiting for a node to scale up).
     """
 
     name: str
     launcher_id: ULID
     project_id: ULID
     ready_status: str | None
+    ready_reason: str | None
     is_hibernated: bool
     image: str | None
     url: str | None

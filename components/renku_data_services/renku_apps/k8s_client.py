@@ -496,6 +496,7 @@ def _extract_runtime_state(knative_service: KnativeService) -> AppRuntimeState:
         launcher_id=knative_service.launcher_id,
         project_id=knative_service.project_id,
         ready_status=ready.status if ready is not None else None,
+        ready_reason=ready.reason if ready is not None else None,
         is_hibernated=_is_hibernated(knative_service),
         image=_container_image(knative_service),
         url=_url(knative_service),
