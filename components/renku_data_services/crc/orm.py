@@ -10,6 +10,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     Enum,
+    Float,
     Identity,
     Integer,
     MetaData,
@@ -304,7 +305,7 @@ class ResourcePoolORM(BaseORM):
         Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=literal("linux_amd64")
     )
 
-    cpu_limit_factor: Mapped[Optional[float]] = mapped_column(Integer, default=None, nullable=True)
+    cpu_limit_factor: Mapped[Optional[float]] = mapped_column("cpu_limit_factor", Float, default=None, nullable=True)
     """Used to assign cpu limits based on the cpu value in the resource classes in the pool.
     If the value is zero or unset then cpu limits are not set.
     """
