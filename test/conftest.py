@@ -165,18 +165,31 @@ async def db_instance(monkeysession, worker_id, app_manager, event_loop) -> Asyn
         password=password,
         template_dbname="renku_template",
     ):
-        db = DBConfig.from_env()
-        app_manager.config.db.push(db)
+        # The app (and every repository it built) is constructed once per session and holds a
+        # single, long-lived DBConfig. Point that instance at this test's fresh database in
+        # place rather than swapping the object, so the session factory captured by the
+        # repositories sees the change. Disposing the connection clears the cached engine so the
+        # next session is opened against this database; we restore and dispose again on teardown.
+        db = app_manager.config.db
+        previous_db_name = db.db_name
+        db.db_name = db_name
+        await DBConfig.dispose_connection()
         yield db
-        await app_manager.config.db.pop()
+        db.db_name = previous_db_name
+        await DBConfig.dispose_connection()
 
 
 @pytest_asyncio.fixture
 async def authz_instance(app_manager: TestDependencyManager, monkeypatch) -> AsyncGenerator[AuthzConfig]:
     monkeypatch.setenv("AUTHZ_DB_KEY", f"renku-{uuid4().hex}")
-    app_manager.config.authz_config.push(AuthzConfig.from_env())
-    yield app_manager.config.authz_config
-    app_manager.config.authz_config.pop()
+    # As with the database, the app holds a single AuthzConfig for the whole session. Mutate its
+    # key in place so the (non-caching) authz clients used by the repositories pick up this
+    # test's key; restore the previous key on teardown.
+    authz_config = app_manager.config.authz_config
+    previous_key = authz_config.key
+    authz_config.key = AuthzConfig.from_env().key
+    yield authz_config
+    authz_config.key = previous_key
 
 
 @pytest_asyncio.fixture(scope="session")
