@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-import secrets
 import socket
 import stat
 import subprocess
@@ -30,7 +29,6 @@ from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.doi.models import DOIMetadata, SchemaOrgDataset
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager
 from renku_data_services.session import constants
 from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import SolrClientConfig
@@ -124,29 +122,6 @@ async def authz_setup(monkeysession) -> AsyncGenerator[None, None]:
 
 
 @pytest_asyncio.fixture
-async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBConfig, None]:
-    db_name = "R_" + str(ULID()).lower() + "_" + worker_id
-    user = os.getenv("DB_USER", "renku")
-    host = os.getenv("DB_HOST", "127.0.0.1")
-    port = os.getenv("DB_PORT", "5432")
-    password = os.getenv("DB_PASSWORD", "renku")  # nosec: B105
-
-    monkeypatch.setenv("DUMMY_STORES", "true")
-    monkeypatch.setenv("DB_NAME", db_name)
-    with DatabaseJanitor(
-        user=user,
-        host=host,
-        port=port,
-        dbname=db_name,
-        version="16.2",
-        password=password,
-        template_dbname="renku_template",
-    ):
-        yield DBConfig.from_env()
-        await DBConfig.dispose_connection()
-
-
-@pytest_asyncio.fixture
 async def db_instance(monkeysession, worker_id, app_manager, event_loop) -> AsyncGenerator[DBConfig, None]:
     db_name = "R_" + str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
@@ -182,7 +157,7 @@ async def db_instance(monkeysession, worker_id, app_manager, event_loop) -> Asyn
 @pytest_asyncio.fixture
 async def authz_instance(app_manager: TestDependencyManager, monkeypatch) -> AsyncGenerator[AuthzConfig]:
     monkeypatch.setenv("AUTHZ_DB_KEY", f"renku-{uuid4().hex}")
-    # As with the database, the app holds a single AuthzConfig for the whole session. Mutate its
+    # As with the database above, the app holds a single AuthzConfig for the whole session. Mutate its
     # key in place so the (non-caching) authz clients used by the repositories pick up this
     # test's key; restore the previous key on teardown.
     authz_config = app_manager.config.authz_config
@@ -273,23 +248,6 @@ async def app_manager(
 async def app_manager_instance(app_manager, db_instance, authz_instance) -> AsyncGenerator[DependencyManager, None]:
     app_manager.metrics.reset_mock()
     yield app_manager
-
-
-@pytest_asyncio.fixture
-async def secrets_storage_app_manager(
-    db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path, kubeconfig_path: Path
-) -> AsyncGenerator[SecretsDependencyManager, None]:
-    encryption_key_path = tmp_path / "encryption-key"
-    encryption_key_path.write_bytes(secrets.token_bytes(32))
-
-    monkeypatch.setenv("ENCRYPTION_KEY_PATH", encryption_key_path.as_posix())
-    monkeypatch.setenv("DUMMY_STORES", "true")
-    monkeypatch.setenv("DB_NAME", db_config.db_name)
-    monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
-    monkeypatch.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())
-
-    dm = SecretsDependencyManager.from_env()
-    yield dm
 
 
 @pytest_asyncio.fixture
