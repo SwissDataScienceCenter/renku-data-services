@@ -498,9 +498,16 @@ class NotebookK8sClient(SecretClient):
         else:
             logger.debug(f"Creating persistent volume to implement project storage {name}")
             pvc = {
-                "access_modes": ["ReadWriteMany"],
-                "storage_class_name": storage.storage_class,
-                "resources": {"requests": {"storage": f"{storage.size.to_gibi()}Gi"}},
+                "metadata": {
+                    "namespace": cluster.namespace,
+                    "name": name,
+                    "labels": {"io.renku/project_id": str(project_id)},
+                },
+                "spec": {
+                    "access_modes": ["ReadWriteMany"],
+                    "storage_class_name": storage.storage_class,
+                    "resources": {"requests": {"storage": f"{storage.size.to_gibi()}Gi"}},
+                },
             }
             obj = K8sObject(
                 name=name,
