@@ -486,7 +486,7 @@ class NotebookK8sClient(SecretClient):
 
         pvc_gvk = GVK(kind="PersistentVolumeClaim", version="v1")
         project_id = storage.project_id
-        name = name = f"prosto-{project_id}-0"
+        name = name = f"prosto-{project_id}-0".lower()
 
         logger.debug(f"Search for project storage volume: {name}")
         result = await self.__client.get(
