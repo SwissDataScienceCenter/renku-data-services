@@ -12,9 +12,11 @@ from box import Box
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import Pod, Secret, StatefulSet
 
+from kubernetes.client import V1PersistentVolumeClaimSpec, V1ResourceRequirements
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.data_connectors.models import ProjectStorage
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.k8s.clients import K8sClusterClientsPool
@@ -470,3 +472,44 @@ class NotebookK8sClient(SecretClient):
             logger.debug(f"Patching secret {secret.namespace}/{secret.name}")
             result = await self.patch_secret(secret, secret.to_patch())
         return result
+
+    async def create_persistent_volume(
+        self, api_user: APIUser, storage: ProjectStorage, cluster: ClusterConnection
+    ) -> str:
+        """Create a persistent volume for the given project storage."""
+
+        if storage.storage_class != "azurefile":
+            raise errors.ValidationError(
+                message=f"Currently only azurefile is supported as a storage class, got: {storage.storage_class}"
+            )
+
+        logger = logging.getLogger(NotebookK8sClient.__name__)
+
+        pvc_gvk = GVK(kind="PersistentVolumeClaim", version="v1")
+        project_id = storage.project_id
+        name = name = f"prosto-{project_id}-0"
+
+        logger.debug(f"Search for project storage volume: {name}")
+        result = await self.__client.get(
+            K8sObjectMeta(name=name, namespace=cluster.namespace, cluster=cluster.id, gvk=pvc_gvk)
+        )
+
+        if result:
+            logger.debug(f"Volume for storage {name} already exists.")
+        else:
+            logger.debug(f"Creating persistent volume to implement project storage {name}")
+            pvc = {
+                "access_modes": ["ReadWriteMany"],
+                "storage_class_name": storage.storage_class,
+                "resources": {"requests": {"storage": f"{storage.size.to_gibi()}Gi"}},
+            }
+            obj = K8sObject(
+                name=name,
+                namespace=cluster.namespace,
+                cluster=cluster.id,
+                gvk=pvc_gvk,
+                user_id=api_user.id,
+                manifest=Box(pvc),
+            )
+            await self.__client.create(obj, True)
+        return name

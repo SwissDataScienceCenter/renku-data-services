@@ -13,7 +13,9 @@ from typing import Protocol, TypeVar, cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from kubernetes.client import V1ObjectMeta, V1Secret
+from kr8s.asyncio.objects import PersistentVolume
+from kubernetes.client import V1ObjectMeta, V1PersistentVolumeClaim, V1PersistentVolumeClaimSpec, V1ResourceRequirements, V1Secret
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.notebooks.cr_amalthea_session import PersistentVolumeClaim
 from sanic import Request
 from toml import dumps
@@ -38,7 +40,7 @@ from renku_data_services.crc.models import (
 from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
-from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
+from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets, ProjectStorage
 from renku_data_services.errors import ValidationError, errors
 from renku_data_services.k8s.models import ClusterConnection, K8sSecret, sanitizer
 from renku_data_services.notebooks import apispec
@@ -179,6 +181,43 @@ async def get_extra_containers(
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
     return SessionExtraResources(containers=conts)
+
+
+async def get_project_storage(
+    user: AuthenticatedAPIUser,
+    nb_config: NotebooksConfig,
+    data_source_repo: DataSourceRepository,
+    project_id: str
+):
+    """If applicable, fetch the project storage and return it as SessionExtras"""
+    project_storage = ProjectStorage(
+        id=ULID(),
+        project_id=project_id,
+        storage_class="azurefile",
+        size=ByteSize.from_gibi(3),
+        mount_path="/mnt",
+        created_by="bla",
+        creation_date=datetime.now(),
+        updated_at=datetime.now(),
+    )
+
+    volume_name = await nb_config.k8s_v2_client.create_persistent_volume(project_storage)
+
+    return SessionExtraResources(
+        volume_mounts=[
+            ExtraVolumeMount(
+                mountPath=project_storage.mount_path,
+                name=f"stovo-{project_id}-0",
+                readOnly=False,
+            )
+        ],
+        volumes=[
+            ExtraVolume(
+                name=f"stovo-{project_id}-0",
+                persistentVolumeClaim=PersistentVolumeClaim(claimName=volume_name),
+            )
+        ],
+    )
 
 
 async def get_auth_secret_authenticated(
@@ -1015,23 +1054,8 @@ async def start_session(
         await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
     )
 
-    session_extras = session_extras.concat(
-        SessionExtraResources(
-            volume_mounts=[
-                ExtraVolumeMount(
-                    mountPath="/mnt",
-                    name="stovo1",
-                    readOnly=False,
-                )
-            ],
-            volumes=[
-                ExtraVolume(
-                    name="stovo1",
-                    persistentVolumeClaim=PersistentVolumeClaim(claimName="storage-01kxfyxkche1srjt0mgyhshra2"),
-                )
-            ],
-        )
-    )
+    # project storage
+    session_extras = session_extras.concat(await get_project_storage(user, data_source_repo, project.id, cluster))
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings
