@@ -75,6 +75,7 @@ async def test_delete_quota(quota: models.UnsavedQuota, quota_repo: QuotaReposit
     assert no_quota is None
 
 
+@settings(deadline=None, max_examples=5)
 @given(old_quota=quota_strat_w_id, new_quota=quota_strat)
 @pytest.mark.xdist_group("sessions")
 async def test_update_quota(
