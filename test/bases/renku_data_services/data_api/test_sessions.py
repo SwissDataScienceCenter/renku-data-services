@@ -881,8 +881,8 @@ async def test_post_session_launcher_with_advanced_environment_build(
         assert error.get("message") == "no_git_repo"
 
 
-@pytest.mark.xdist_group("sessions")
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_post_session_launcher_unauthorized(
     sanic_client: SanicASGITestClient,
     valid_resource_pool_payload: dict[str, Any],
