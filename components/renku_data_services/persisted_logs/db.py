@@ -46,7 +46,7 @@ class AmaltheaSessionPersistedLogsReadRepository:
 
         logs_per_container = await self._get_logs_per_container(session=session, run_id=session_run.id)
         containers = logs_per_container.keys()
-        logger.info(f"containers = {list(*containers)}")
+        logger.info(f"containers = {list(containers)}")
         logger.info(f"logs_per_container = {logs_per_container}")
 
         # TODO
