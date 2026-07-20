@@ -7,6 +7,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from ulid import ULID
 
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
+from renku_data_services.persisted_logs import models
 from renku_data_services.session.orm import SessionLauncherORM
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
@@ -38,6 +39,16 @@ class SessionRunsORM(BaseORM):
 
     submission_id: Mapped[str | None] = mapped_column(nullable=True)
     """The submission ID, if the session run corresponds to an offline job."""
+
+    def dump(self) -> models.SessionRun:
+        """Create a session run model from the SessionRunsORM."""
+        return models.SessionRun(
+            id=self.id,
+            user_id=self.user_id,
+            launch_id=self.launch_id,
+            launcher_id=self.launcher_id,
+            submission_id=self.submission_id,
+        )
 
 
 class AmaltheaSessionLogsORM(BaseORM):

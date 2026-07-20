@@ -1,6 +1,6 @@
 """Adapters for persisted logs database classes."""
 
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.persisted_logs import models
 from renku_data_services.persisted_logs import orm as schemas
+from renku_data_services.persisted_logs.constants import SESSION_MAIN_CONTAINER
 from renku_data_services.session import orm as session_schemas
 
 logger = logging.getLogger(__name__)
@@ -23,22 +24,30 @@ class AmaltheaSessionPersistedLogsReadRepository:
     def __init__(self, authz: Authz) -> None:
         self.authz: Authz = authz
 
-    async def get_session_logs(self, session: AsyncSession, user: base_models.APIUser, launcher_id: ULID) -> None:
+    async def get_session_logs(
+        self, session: AsyncSession, user: base_models.APIUser, launcher_id: ULID, run_id: ULID | None = None
+    ) -> None:
         """Returns persisted session logs for the given launcher."""
         if not user.is_authenticated or not user.id:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
         await self._check_session_launcher(session=session, user=user, launcher_id=launcher_id)
-        latest_run = await self._get_session_run(session=session, user_id=user.id, launcher_id=launcher_id)
+        session_run = await self._get_session_run(
+            session=session, user_id=user.id, launcher_id=launcher_id, run_id=run_id
+        )
 
         # TODO
-        if latest_run is None:
+        if session_run is None:
             return
 
-        logger.info(f"latest_run = {str(latest_run)}")
+        logger.info(f"session_run = {str(session_run)}")
 
-        containers = await self._get_containers(session=session, run_id=latest_run)
+        # containers = await self._get_containers(session=session, run_id=session_run.id)
+        # logger.info(f"containers = {str(containers)}")
 
-        logger.info(f"containers = {str(containers)}")
+        logs_per_container = await self._get_logs_per_container(session=session, run_id=session_run.id)
+        containers = logs_per_container.keys()
+        logger.info(f"containers = {list(*containers)}")
+        logger.info(f"logs_per_container = {logs_per_container}")
 
         # TODO
         pass
@@ -60,8 +69,13 @@ class AmaltheaSessionPersistedLogsReadRepository:
                 message=f"Session launcher with id '{launcher_id}' does not exist or you do not have access to it."
             )
 
-    async def _get_session_run(self, session: AsyncSession, user_id: str, launcher_id: ULID) -> ULID | None:
-        """Get a specific session run from the persisted logs database."""
+    async def _get_session_run(
+        self, session: AsyncSession, user_id: str, launcher_id: ULID, run_id: ULID | None = None
+    ) -> models.SessionRun | None:
+        """Get a specific session run from the persisted logs database.
+
+        If no `run_id` is specified, then return the latest session run.
+        """
         stmt = (
             select(schemas.SessionRunsORM)
             .where(schemas.SessionRunsORM.user_id == user_id)
@@ -69,24 +83,42 @@ class AmaltheaSessionPersistedLogsReadRepository:
             .order_by(schemas.SessionRunsORM.id.desc())
             .limit(1)
         )
+        if run_id:
+            stmt = stmt.where(schemas.SessionRunsORM.id == run_id)
         res = await session.scalars(stmt)
-        session_run = res.one_or_none()
-        if session_run is None:
+        session_run_orm = res.one_or_none()
+        if session_run_orm is None:
             return None
-        # TODO: return a model instance with .dump()
-        return session_run.id
+        return session_run_orm.dump()
 
-    async def _get_containers(self, session: AsyncSession, run_id: ULID) -> Sequence[str]:
-        """Get the list of pod containers from the persisted logs database."""
+    async def _get_logs_per_container(self, session: AsyncSession, run_id: ULID) -> models.SessionRunLogs:
+        """Get the logs of a specific session run, organized by container."""
+        # TODO: handle pagination?
         stmt = (
-            select(schemas.AmaltheaSessionLogsORM.container.distinct())
-            .select_from(schemas.AmaltheaSessionLogsORM)
+            select(schemas.AmaltheaSessionLogsORM)
             .where(schemas.AmaltheaSessionLogsORM.run_id == run_id)
-            .order_by(schemas.AmaltheaSessionLogsORM.container)
+            .order_by(schemas.AmaltheaSessionLogsORM.id.asc())
         )
-        res = await session.scalars(stmt)
-        containers = res.all()
-        return containers
+        res = await session.stream_scalars(stmt)
+        logs_per_container: dict[str, list[models.LogLine]] = dict()
+        async for log_entry in res:
+            container = log_entry.container
+            logs = logs_per_container.get(container)
+            if logs is None:
+                logs = list[models.LogLine]()
+                logs_per_container[container] = logs
+            logs.append(models.LogLine(timestamp=log_entry.timestamp, log_line=log_entry.log_line))
+        # Sort container by name, forcing "amalthea-session" to be the first item (main container)
+        containers_set = set(logs_per_container.keys())
+        containers: list[str] = list()
+        if SESSION_MAIN_CONTAINER in containers_set:
+            containers.append(SESSION_MAIN_CONTAINER)
+            containers_set.remove(SESSION_MAIN_CONTAINER)
+        containers.extend(sorted(containers_set))
+        result: dict[str, list[models.LogLine]] = dict()
+        for container in containers:
+            result[container] = logs_per_container[container]
+        return result
 
 
 class AmaltheaSessionPersistedLogsRepository:
