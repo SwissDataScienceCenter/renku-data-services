@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from sanic import Request
 from sanic.response import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from ulid import ULID
 
 from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
@@ -28,7 +29,9 @@ class PersistedLogsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_session_logs(_: Request, user: base_models.APIUser) -> JSONResponse:
+        async def _get_session_logs(_: Request, user: base_models.APIUser, launcher_id: ULID) -> JSONResponse:
+            async with self.session_maker() as session, session.begin():
+                await self.session_logs_repo.get_session_logs(session=session, user=user, launcher_id=launcher_id)
             return validated_json(apispec.PersistedSessionLogs, {})
 
         return "/persisted_logs/sessions/<launcher_id:ulid>", ["GET"], _get_session_logs
