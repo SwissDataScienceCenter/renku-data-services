@@ -67,7 +67,7 @@ class PersistedLogsBP(CustomBlueprint):
                     result.append(item)
             return validated_json(apispec.SessionRuns, result)
 
-        return "/persisted_logs/sessions/<launcher_id:ulid>/runs:", ["GET"], _get_session_runs
+        return "/persisted_logs/sessions/<launcher_id:ulid>/runs", ["GET"], _get_session_runs
 
     @staticmethod
     def _dump_persisted_session_logs(session_log: models.PersistedSessionLogs) -> dict[str, Any]:
