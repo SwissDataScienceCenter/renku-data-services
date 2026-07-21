@@ -5,22 +5,20 @@ import json
 import os
 import subprocess
 import typing
-from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Self
+from typing import Any
 from unittest.mock import MagicMock
 
 import yaml
-from authzed.api.v1 import AsyncClient, SyncClient
+from authzed.api.v1 import AsyncClient
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
 from kubernetes import watch
 from kubernetes.client import V1ObjectMeta
 from sanic import Request
 from sanic_testing.testing import ASGI_HOST, ASGI_PORT, SanicASGITestClient, TestingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services.authn.api.core import ScopeVerifier
@@ -82,107 +80,6 @@ from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI
-
-
-class StackSessionMaker:
-    def __init__(self, parent: DBConfigStack) -> None:
-        self.parent = parent
-
-    def __call__(self, *args: Any, **kwargs: Any) -> AsyncSession:
-        return self.parent.current.async_session_maker()
-
-
-class DBConfigStack:
-    stack: list[DBConfig] = list()
-
-    @property
-    def current(self) -> DBConfig:
-        return self.stack[-1]
-
-    @property
-    def password(self) -> str:
-        return self.current.password
-
-    @property
-    def host(self) -> str:
-        return self.current.host
-
-    @property
-    def user(self) -> str:
-        return self.current.user
-
-    @property
-    def port(self) -> str:
-        return self.current.port
-
-    @property
-    def db_name(self) -> str:
-        return self.current.db_name
-
-    def conn_url(self, async_client: bool = True) -> str:
-        return self.current.conn_url(async_client)
-
-    @property
-    def async_session_maker(self) -> Callable[..., AsyncSession]:
-        return StackSessionMaker(self)
-
-    @classmethod
-    def from_env(cls) -> Self:
-        db = DBConfig.from_env()
-        this = cls()
-        this.push(db)
-        return this
-
-    def push(self, config: DBConfig) -> None:
-        self.stack.append(config)
-
-    async def pop(self) -> DBConfig:
-        config = self.stack.pop()
-        await DBConfig.dispose_connection()
-        return config
-
-
-class AuthzConfigStack:
-    stack: list[AuthzConfig] = list()
-
-    @property
-    def host(self) -> str:
-        return self.current.host
-
-    @property
-    def grpc_port(self) -> int:
-        return self.current.grpc_port
-
-    @property
-    def key(self) -> str:
-        return self.current.key
-
-    @property
-    def no_tls_connection(self) -> bool:
-        return self.current.no_tls_connection
-
-    @property
-    def current(self) -> AuthzConfig:
-        return self.stack[-1]
-
-    @classmethod
-    def from_env(cls) -> Self:
-        config = AuthzConfig.from_env()
-        this = cls()
-        this.push(config)
-        return this
-
-    def authz_client(self) -> SyncClient:
-        return self.current.authz_client()
-
-    def authz_async_client(self) -> AsyncClient:
-        return self.current.authz_async_client()
-
-    def push(self, config: AuthzConfig):
-        self.stack.append(config)
-
-    def pop(self) -> AuthzConfig:
-        return self.stack.pop()
 
 
 @dataclass
@@ -256,13 +153,13 @@ class TestDependencyManager(DependencyManager):
         cls, dummy_users: list[user_preferences_models.UnsavedUserInfo], prefix: str = ""
     ) -> DependencyManager:
         """Create a config from environment variables."""
-        db = DBConfigStack.from_env()
+        db = DBConfig.from_env()
         config = Config.from_env(db)
         user_store: base_models.UserStore
         authenticator: base_models.Authenticator
         gitlab_authenticator: base_models.Authenticator
         gitlab_client: base_models.GitlabAPIProtocol
-        config.authz_config = AuthzConfigStack.from_env()
+        config.authz_config = AuthzConfig.from_env()
         nb_authz = NonCachingAuthz(config.authz_config)
         # Monkey patching authz to non caching authz in rp_repo.
         config.nb_config.k8s_v2_client._NotebookK8sClient__rp_repo.authz = nb_authz
