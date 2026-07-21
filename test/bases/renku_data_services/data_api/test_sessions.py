@@ -882,6 +882,7 @@ async def test_post_session_launcher_with_advanced_environment_build(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_post_session_launcher_unauthorized(
     sanic_client: SanicASGITestClient,
     valid_resource_pool_payload: dict[str, Any],
@@ -988,6 +989,7 @@ async def test_patch_session_launcher(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_patch_session_launcher_environment(
     sanic_client: SanicASGITestClient,
     valid_resource_pool_payload: dict[str, Any],
@@ -1433,6 +1435,7 @@ async def test_patch_session_launcher_invalid_env_variables(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_patch_session_launcher_reset_fields(
     sanic_client: SanicASGITestClient,
     valid_resource_pool_payload: dict[str, Any],
@@ -1485,6 +1488,7 @@ async def test_patch_session_launcher_reset_fields(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_patch_session_launcher_keeps_unset_values(
     sanic_client,
     user_headers,

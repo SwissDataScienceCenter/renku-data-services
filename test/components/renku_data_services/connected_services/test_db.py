@@ -242,6 +242,7 @@ async def test_get_provider_for_image_unsupported_provider(app_manager_instance)
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_oauth_connect_adds_user_to_rp(
     app_manager_instance: DependencyManager, admin_user: APIUser, cluster: any
 ) -> None:
@@ -436,6 +437,7 @@ async def test_two_users_connect_same_integration_both_get_access(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_user_disconnect_only_affects_their_rp_access(
     app_manager_instance: DependencyManager, admin_user: APIUser, cluster: any
 ) -> None:
