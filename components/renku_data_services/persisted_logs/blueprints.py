@@ -35,7 +35,7 @@ class PersistedLogsBP(CustomBlueprint):
         async def _get_session_logs(
             _: Request, user: base_models.APIUser, launcher_id: ULID, query: apispec.PersistedLogsGetQuery
         ) -> JSONResponse:
-            run_id = ULID.from_str(query.run_id)
+            run_id = ULID.from_str(query.run_id) if query.run_id else None
             async with self.session_maker() as session, session.begin():
                 result = await self.session_logs_repo.get_session_logs(
                     session=session,
