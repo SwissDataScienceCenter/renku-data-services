@@ -48,6 +48,26 @@ class AmaltheaSessionPersistedLogsReadRepository:
             logs=logs_per_container,
         )
 
+    async def get_session_runs(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        launcher_id: ULID,
+    ) -> AsyncIterator[models.SessionRun]:
+        """Returns the session runs for the given launcher."""
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        await self._check_session_launcher(session=session, user=user, launcher_id=launcher_id)
+        stmt = (
+            select(schemas.SessionRunsORM)
+            .where(schemas.SessionRunsORM.user_id == user.id)
+            .where(schemas.SessionRunsORM.launcher_id == launcher_id)
+            .order_by(schemas.SessionRunsORM.id.desc())
+        )
+        res = await session.stream_scalars(stmt)
+        async for session_run_orm in res:
+            yield session_run_orm.dump()
+
     async def _check_session_launcher(
         self, session: AsyncSession, user: base_models.APIUser, launcher_id: ULID
     ) -> None:

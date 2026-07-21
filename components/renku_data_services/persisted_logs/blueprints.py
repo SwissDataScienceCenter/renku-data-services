@@ -52,6 +52,23 @@ class PersistedLogsBP(CustomBlueprint):
 
         return "/persisted_logs/sessions/<launcher_id:ulid>", ["GET"], _get_session_logs
 
+    def get_session_runs(self) -> BlueprintFactoryResponse:
+        """Get the session runs for a given session launcher."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_session_runs(_: Request, user: base_models.APIUser, launcher_id: ULID) -> JSONResponse:
+            async with self.session_maker() as session, session.begin():
+                session_runs = self.session_logs_repo.get_session_runs(
+                    session=session, user=user, launcher_id=launcher_id
+                )
+                result: list[models.SessionRun] = []
+                async for item in session_runs:
+                    result.append(item)
+            return validated_json(apispec.SessionRuns, result)
+
+        return "/persisted_logs/sessions/<launcher_id:ulid>/runs:", ["GET"], _get_session_runs
+
     @staticmethod
     def _dump_persisted_session_logs(session_log: models.PersistedSessionLogs) -> dict[str, Any]:
         """Dump persisted session logs for API responses."""
