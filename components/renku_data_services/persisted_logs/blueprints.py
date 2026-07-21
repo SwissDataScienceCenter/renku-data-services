@@ -46,7 +46,10 @@ class PersistedLogsBP(CustomBlueprint):
     @staticmethod
     def _dump_persisted_session_logs(session_log: models.PersistedSessionLogs) -> dict[str, Any]:
         """Dump persisted session logs for API responses."""
-        return dict(run=PersistedLogsBP._dump_session_run(session_log.run), logs=list(session_log.logs.items()))
+        return dict(
+            run=PersistedLogsBP._dump_session_run(session_log.run),
+            logs=PersistedLogsBP._dump_session_run_logs(session_log.logs),
+        )
 
     @staticmethod
     def _dump_session_run(session_run: models.SessionRun) -> dict[str, Any]:
@@ -58,3 +61,8 @@ class PersistedLogsBP(CustomBlueprint):
             launcher_id=session_run.launcher_id,
             submission_id=session_run.submission_id,
         )
+
+    @staticmethod
+    def _dump_session_run_logs(logs: models.SessionRunLogs) -> list[dict[str, Any]]:
+        """Dump the logs of a session run, organized by pod container, for API responses."""
+        return list(dict(container=container, logs=log_lines) for container, log_lines in logs.items())
