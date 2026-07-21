@@ -26,7 +26,7 @@ class AmaltheaSessionPersistedLogsReadRepository:
 
     async def get_session_logs(
         self, session: AsyncSession, user: base_models.APIUser, launcher_id: ULID, run_id: ULID | None = None
-    ) -> models.GetSessionLogsResult | None:
+    ) -> models.PersistedSessionLogs | None:
         """Returns persisted session logs for the given launcher."""
         if not user.is_authenticated or not user.id:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
@@ -38,7 +38,7 @@ class AmaltheaSessionPersistedLogsReadRepository:
             return None
 
         logs_per_container = await self._get_logs_per_container(session=session, run_id=session_run.id)
-        return models.GetSessionLogsResult(
+        return models.PersistedSessionLogs(
             run=session_run,
             logs=logs_per_container,
         )

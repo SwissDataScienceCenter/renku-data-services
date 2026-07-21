@@ -1,9 +1,10 @@
 """Persisted logs blueprints."""
 
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
+from typing import Any
 
-from sanic import Request, json
+from sanic import Request
 from sanic.response import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
@@ -11,6 +12,8 @@ from ulid import ULID
 from renku_data_services import base_models, errors
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_models.validation import validated_json
+from renku_data_services.persisted_logs import apispec, models
 from renku_data_services.persisted_logs.db import AmaltheaSessionPersistedLogsReadRepository
 
 
@@ -36,7 +39,22 @@ class PersistedLogsBP(CustomBlueprint):
                 raise errors.MissingResourceError(
                     message=f"Session launcher with id '{launcher_id}' does not have logs yet."
                 )
-            return json(asdict(result), status=200, content_type="application/json")
-            # return validated_json(apispec.PersistedSessionLogs, asdict(result))
+            return validated_json(apispec.PersistedSessionLogs, self._dump_persisted_session_logs(result))
 
         return "/persisted_logs/sessions/<launcher_id:ulid>", ["GET"], _get_session_logs
+
+    @staticmethod
+    def _dump_persisted_session_logs(session_log: models.PersistedSessionLogs) -> dict[str, Any]:
+        """Dump persisted session logs for API responses."""
+        return dict(run=PersistedLogsBP._dump_session_run(session_log.run), logs=list(session_log.logs.items()))
+
+    @staticmethod
+    def _dump_session_run(session_run: models.SessionRun) -> dict[str, Any]:
+        """Dump a session run for API responses."""
+        # NOTE: omit the "user_id" field
+        return dict(
+            id=session_run.id,
+            launch_id=session_run.launch_id,
+            launcher_id=session_run.launcher_id,
+            submission_id=session_run.submission_id,
+        )

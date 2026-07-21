@@ -32,6 +32,8 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
             $ref: "#/components/responses/Error"
+      tags:
+        - persisted_logs
   /persisted_logs/sessions/{launcher_id}/runs:
     get:
       parameters:
@@ -56,22 +58,77 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
             $ref: "#/components/responses/Error"
+      tags:
+        - persisted_logs
 components:
   schemas:
     PersistedSessionLogs:
       description: Logs for a session
       type: object
-      additionalProperties: true
+      properties:
+        run:
+          $ref: "#/components/schemas/SessionRun"
+        logs:
+          $ref: "#/components/schemas/SessionRunLogs"
+      required:
+        - run
+        - logs
     SessionRuns:
+      description: A list of session runs
+      type: array
+      items:
+        $ref: "#/components/schemas/SessionRun"
+    SessionRun:
       description: A session run
       type: object
-      additionalProperties: true
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        launch_id:
+          type: string
+        launcher_id:
+          $ref: "#/components/schemas/Ulid"
+        submission_id:
+          type: string
+      required:
+        - id
+        - launch_id
+        - launcher_id
+    SessionRunLogs:
+      description: Logs of a session run, organized by pod container.
+      type: array
+      items:
+        $ref: "#/components/schemas/SessionRunLogsItem"
+    SessionRunLogsItem:
+      type: object
+      properties:
+        container:
+          type: string
+        logs:
+          $ref: "#/components/schemas/PersistedLogLines"
+      required:
+        - container
+        - logs
+    PersistedLogLines:
+      type: object
+      properties:
+        timestamp:
+          $ref: "#/components/schemas/NanoTimestamp"
+        log_line:
+          type: string
+      required:
+        - timestamp
+        - log_line
     Ulid:
       description: ULID identifier
       type: string
       minLength: 26
       maxLength: 26
       pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
+    NanoTimestamp:
+      description: UNIX timestamp in nanoseconds
+      type: string
+      pattern: "[0-9]+"
     ErrorResponse:
       type: object
       properties:

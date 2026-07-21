@@ -50,7 +50,7 @@ type SessionRunLogs = Mapping[str, Sequence[LogLine]]
 
 
 @dataclass(eq=True, frozen=True, kw_only=True)
-class GetSessionLogsResult:
+class PersistedSessionLogs:
     """Result of getting session logs from the database."""
 
     run: SessionRun
