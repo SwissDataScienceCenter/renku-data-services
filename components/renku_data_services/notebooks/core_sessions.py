@@ -205,17 +205,18 @@ async def get_project_storage(
 
     volume_name = await nb_config.k8s_v2_client.create_persistent_volume(user, project_storage, cluster)
 
+    mount_name = f"pvc-{str(project_id).lower()}-0"
     return SessionExtraResources(
         volume_mounts=[
             ExtraVolumeMount(
                 mountPath=project_storage.mount_path,
-                name=f"stovo-{project_id}-0",
+                name=mount_name,
                 readOnly=False,
             )
         ],
         volumes=[
             ExtraVolume(
-                name=f"stovo-{project_id}-0",
+                name=mount_name,
                 persistentVolumeClaim=PersistentVolumeClaim(claimName=volume_name),
             )
         ],
