@@ -10,6 +10,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     Enum,
+    Float,
     Identity,
     Integer,
     MetaData,
@@ -254,6 +255,12 @@ class ResourcePoolORM(BaseORM):
     """Resource pool specifies a set of resource classes, users that can access them and a quota."""
 
     __tablename__ = "resource_pools"
+    __table_args__ = (
+        CheckConstraint(
+            "cpu_limit_factor IS NULL OR cpu_limit_factor >= 1.0",
+            name="chk_cpu_limit_factor_gte_1",
+        ),
+    )
     name: Mapped[str] = mapped_column(String(40), index=True)
     quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
     users: Mapped[list[UserORM]] = relationship(
@@ -298,6 +305,11 @@ class ResourcePoolORM(BaseORM):
         Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=literal("linux_amd64")
     )
 
+    cpu_limit_factor: Mapped[Optional[float]] = mapped_column("cpu_limit_factor", Float, default=None, nullable=True)
+    """Used to assign cpu limits based on the cpu value in the resource classes in the pool.
+    If the value is zero or unset then cpu limits are not set.
+    """
+
     @classmethod
     def from_unsaved_model(
         cls,
@@ -329,6 +341,7 @@ class ResourcePoolORM(BaseORM):
             remote_json=remote_json,
             cluster_id=cluster.id if cluster else None,
             platform=new_resource_pool.platform,
+            cpu_limit_factor=new_resource_pool.cpu_limit_factor,
         )
 
     def dump(
@@ -366,6 +379,7 @@ class ResourcePoolORM(BaseORM):
             cluster=cluster,
             platform=self.platform,
             credits_used=credits_used.value if credits_used else None,
+            cpu_limit_factor=self.cpu_limit_factor,
         )
 
     def _dump_remote(self) -> models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | None:

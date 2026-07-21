@@ -235,6 +235,16 @@ def validate_resource_pool_put_or_patch(
     hibernation_warning_period = validate_hibernation_warning_period(
         body.hibernation_threshold, body.hibernation_warning_period
     )
+
+    cpu_limit_factorrr: None | ResetType | float = None
+    match method, body.cpu_limit_factor:
+        case _, apispec.RemoveCpuLimitFactor():
+            cpu_limit_factorrr = RESET
+        case "PUT", None:
+            cpu_limit_factorrr = RESET
+        case _, apispec.CpuLimitFactor():
+            cpu_limit_factorrr = body.cpu_limit_factor.root
+
     return models.ResourcePoolPatch(
         name=body.name,
         classes=classes,
@@ -247,6 +257,7 @@ def validate_resource_pool_put_or_patch(
         remote=remote,
         cluster_id=ULID.from_str(body.cluster_id) if body.cluster_id else None,
         platform=platform,
+        cpu_limit_factor=cpu_limit_factorrr,
     )
 
 

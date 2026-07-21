@@ -333,6 +333,10 @@ class UnsavedResourcePool:
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = None
     cluster_id: ClusterId | None = None
     platform: RuntimePlatform
+    cpu_limit_factor: float | None = None
+    """Used to assign cpu limits based on the cpu value in the resource classes in the pool.
+    If the value is zero or unset then cpu limits are not set.
+    """
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -352,6 +356,10 @@ class ResourcePool:
     cluster: SavedClusterSettings | None = None
     platform: RuntimePlatform
     credits_used: int | None = None
+    cpu_limit_factor: float | None = None
+    """Used to assign cpu limits based on the cpu value in the resource classes in the pool.
+    If the value is zero or unset then cpu limits are not set.
+    """
 
     def get_resource_class(self, resource_class_id: int) -> ResourceClass | None:
         """Find a specific resource class in the resource pool by the resource class id."""
@@ -389,6 +397,7 @@ class ResourcePoolPatch:
     remote: RemoteConfigurationPatch | None = None
     cluster_id: ClusterId | ResetType | None = None
     platform: RuntimePlatform | None = None
+    cpu_limit_factor: float | None | ResetType = None
 
 
 class RemoteConfigurationKind(StrEnum):

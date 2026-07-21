@@ -622,6 +622,10 @@ class ResourcePoolRepository(_Base):
                 rp.hibernation_warning_period = update.hibernation_warning_period
             if update.platform is not None:
                 rp.platform = update.platform
+            if update.cpu_limit_factor == 0 or update.cpu_limit_factor is RESET:
+                rp.cpu_limit_factor = None
+            elif update.cpu_limit_factor is not None:
+                rp.cpu_limit_factor = update.cpu_limit_factor
 
             match (update.cluster_id, rp.cluster_id):
                 case ResetType.Reset, x if x is not None:
