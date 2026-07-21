@@ -12,6 +12,7 @@ from ulid import ULID
 from renku_data_services import base_models, errors
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.persisted_logs import apispec, models
 from renku_data_services.persisted_logs.db import AmaltheaSessionPersistedLogsReadRepository
@@ -30,10 +31,18 @@ class PersistedLogsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_session_logs(_: Request, user: base_models.APIUser, launcher_id: ULID) -> JSONResponse:
+        @validate_query(query=apispec.PersistedLogsGetQuery)
+        async def _get_session_logs(
+            _: Request, user: base_models.APIUser, launcher_id: ULID, query: apispec.PersistedLogsGetQuery
+        ) -> JSONResponse:
+            run_id = ULID.from_str(query.run_id)
             async with self.session_maker() as session, session.begin():
                 result = await self.session_logs_repo.get_session_logs(
-                    session=session, user=user, launcher_id=launcher_id
+                    session=session,
+                    user=user,
+                    launcher_id=launcher_id,
+                    run_id=run_id,
+                    submission_id=query.submission_id,
                 )
             if result is None:
                 raise errors.MissingResourceError(

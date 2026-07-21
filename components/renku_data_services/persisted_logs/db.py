@@ -25,14 +25,19 @@ class AmaltheaSessionPersistedLogsReadRepository:
         self.authz: Authz = authz
 
     async def get_session_logs(
-        self, session: AsyncSession, user: base_models.APIUser, launcher_id: ULID, run_id: ULID | None = None
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        launcher_id: ULID,
+        run_id: ULID | None = None,
+        submission_id: str | None = None,
     ) -> models.PersistedSessionLogs | None:
         """Returns persisted session logs for the given launcher."""
         if not user.is_authenticated or not user.id:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
         await self._check_session_launcher(session=session, user=user, launcher_id=launcher_id)
         session_run = await self._get_session_run(
-            session=session, user_id=user.id, launcher_id=launcher_id, run_id=run_id
+            session=session, user_id=user.id, launcher_id=launcher_id, run_id=run_id, submission_id=submission_id
         )
         if session_run is None:
             return None
@@ -61,7 +66,12 @@ class AmaltheaSessionPersistedLogsReadRepository:
             )
 
     async def _get_session_run(
-        self, session: AsyncSession, user_id: str, launcher_id: ULID, run_id: ULID | None = None
+        self,
+        session: AsyncSession,
+        user_id: str,
+        launcher_id: ULID,
+        run_id: ULID | None = None,
+        submission_id: str | None = None,
     ) -> models.SessionRun | None:
         """Get a specific session run from the persisted logs database.
 
@@ -76,6 +86,8 @@ class AmaltheaSessionPersistedLogsReadRepository:
         )
         if run_id:
             stmt = stmt.where(schemas.SessionRunsORM.id == run_id)
+        if submission_id:
+            stmt = stmt.where(schemas.SessionRunsORM.submission_id == submission_id)
         res = await session.scalars(stmt)
         session_run_orm = res.one_or_none()
         if session_run_orm is None:
