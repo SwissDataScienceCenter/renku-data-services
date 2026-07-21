@@ -50,6 +50,14 @@ type SessionRunLogs = Mapping[str, Sequence[LogLine]]
 
 
 @dataclass(eq=True, frozen=True, kw_only=True)
+class GetSessionLogsResult:
+    """Result of getting session logs from the database."""
+
+    run: SessionRun
+    logs: SessionRunLogs
+
+
+@dataclass(eq=True, frozen=True, kw_only=True)
 class InsertLogsResult:
     """Result of inserting a log stream in the database."""
 

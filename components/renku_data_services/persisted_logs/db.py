@@ -26,7 +26,7 @@ class AmaltheaSessionPersistedLogsReadRepository:
 
     async def get_session_logs(
         self, session: AsyncSession, user: base_models.APIUser, launcher_id: ULID, run_id: ULID | None = None
-    ) -> None:
+    ) -> models.GetSessionLogsResult | None:
         """Returns persisted session logs for the given launcher."""
         if not user.is_authenticated or not user.id:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
@@ -34,23 +34,14 @@ class AmaltheaSessionPersistedLogsReadRepository:
         session_run = await self._get_session_run(
             session=session, user_id=user.id, launcher_id=launcher_id, run_id=run_id
         )
-
-        # TODO
         if session_run is None:
-            return
-
-        logger.info(f"session_run = {str(session_run)}")
-
-        # containers = await self._get_containers(session=session, run_id=session_run.id)
-        # logger.info(f"containers = {str(containers)}")
+            return None
 
         logs_per_container = await self._get_logs_per_container(session=session, run_id=session_run.id)
-        containers = logs_per_container.keys()
-        logger.info(f"containers = {list(containers)}")
-        logger.info(f"logs_per_container = {logs_per_container}")
-
-        # TODO
-        pass
+        return models.GetSessionLogsResult(
+            run=session_run,
+            logs=logs_per_container,
+        )
 
     async def _check_session_launcher(
         self, session: AsyncSession, user: base_models.APIUser, launcher_id: ULID
