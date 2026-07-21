@@ -95,11 +95,12 @@ components:
         - launch_id
         - launcher_id
     SessionRunLogs:
-      description: Logs of a session run, organized by pod container.
+      description: Logs of a session run, organized by pod container
       type: array
       items:
-        $ref: "#/components/schemas/SessionRunLogsItem"
-    SessionRunLogsItem:
+        $ref: "#/components/schemas/SessionRunLog"
+    SessionRunLog:
+      description: Logs of a single container
       type: object
       properties:
         container:
@@ -110,6 +111,12 @@ components:
         - container
         - logs
     PersistedLogLines:
+      description: Stream of log lines
+      type: array
+      items:
+        $ref: "#/components/schemas/PersistedLogLine"
+    PersistedLogLine:
+      description: A timestamped log line
       type: object
       properties:
         timestamp:
