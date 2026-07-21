@@ -65,4 +65,12 @@ class PersistedLogsBP(CustomBlueprint):
     @staticmethod
     def _dump_session_run_logs(logs: models.SessionRunLogs) -> list[dict[str, Any]]:
         """Dump the logs of a session run, organized by pod container, for API responses."""
-        return list(dict(container=container, logs=log_lines) for container, log_lines in logs.items())
+        return [
+            dict(container=container, logs=[PersistedLogsBP._dump_log_line(log_line) for log_line in log_lines])
+            for container, log_lines in logs.items()
+        ]
+
+    @staticmethod
+    def _dump_log_line(log_line: models.LogLine) -> dict[str, str]:
+        """Dump a log line for API responses."""
+        return dict(timestamp=str(log_line.timestamp), log_line=log_line.log_line)
