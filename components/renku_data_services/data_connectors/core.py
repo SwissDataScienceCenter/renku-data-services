@@ -11,6 +11,7 @@ from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlencode
 
 import httpx
 import kubernetes
@@ -601,11 +602,14 @@ def serialize_deposit(deposit: models.DepositJob, deposit_config: DepositConfig)
             external_url = f"{base}/uploads/{deposit.deposit.original_id}"
         case models.DepositSource.envidat:
             base = deposit_config.envidat.url.rstrip("/")
-            external_url = (
-                f"{base}/#/workflow?importFromRenku=true"
-                f"&titleDataset={deposit.deposit.name}"
-                f"&renkuId={deposit.deposit.original_id}"
+            query_str = urlencode(
+                {
+                    "importFromRenku": "true",
+                    "titleDataset": deposit.deposit.name,
+                    "renkuId": deposit.deposit.original_id,
+                }
             )
+            external_url = f"{base}/#/workflow?{query_str}"
         case _:
             external_url = ""
     return dict(

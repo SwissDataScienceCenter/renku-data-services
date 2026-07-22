@@ -40,7 +40,7 @@ class EnvidatClient:
 
     async def get_deposit_status(self, renku_id: str) -> EnvidatDepositStatus:
         """Check the publication status of a deposit on Envidat."""
-        url = f"{self.__base_url}/api/action/renku/{renku_id}/"
+        url = f"{self.__base_url}/api/renku/{renku_id}/"
         res = await self.__client.get(url)
         if res.status_code == 404:
             raise errors.MissingResourceError(
