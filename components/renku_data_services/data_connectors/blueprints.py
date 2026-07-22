@@ -744,12 +744,12 @@ class DataConnectorsBP(CustomBlueprint):
                         zenodo_dep = await self.zenodo_client.get_deposit(token, saved_dep.deposit.original_id)
                         if not zenodo_dep:
                             raise errors.MissingResourceError(
-                                message=f"The deposit with id {saved_dep.deposit.original_id} "
-                                "cannot be found from the provider."
+                                message=f"The Zenodo deposit with id {saved_dep.deposit.original_id} cannot be found."
                             )
                         if not zenodo_dep.submitted:
                             raise errors.ValidationError(
-                                message="The deposit needs to be completed and published first before being completed."
+                                message="The Zenodo deposit needs to be completed and published first "
+                                "before being completed."
                             )
                     case x:
                         raise errors.ValidationError(
