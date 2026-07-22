@@ -120,6 +120,10 @@ class ProjectStorage:
             self.updated_at, self.project_id, self.storage_class, self.size.to_bytes(), self.mount_path.as_posix()
         )
 
+    def pvc_name(self) -> str:
+        """Return the name used for the PVC."""
+        return f"pv-{self.project_id}-0".lower()
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class ProjectStorageAllow:
