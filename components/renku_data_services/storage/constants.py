@@ -4,8 +4,7 @@ from dataclasses import dataclass
 from typing import Final
 
 ENVIDAT_V1_PROVIDER: Final[str] = "envidat_v1"
-# TODO: where is this constants used?
-# SCICAT_V1_PROVIDER: Final[str] = "scicat_v1"
+SCICAT_V1_PROVDER: Final[str] = "scicat_v1"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
