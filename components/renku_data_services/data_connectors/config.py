@@ -11,6 +11,7 @@ from typing import Final
 from kubernetes.client import ApiClient, V1Toleration
 
 from renku_data_services.app_config import logging
+from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class DepositConfig:
     namespace: str
     renku_url: str
     zenodo_url: str
+    envidat: EnvidatConfig
     node_selector: dict[str, str] | None = None
     tolerations: list[V1Toleration] | None = None
     cluster_id: Final[ClusterId] = DEFAULT_K8S_CLUSTER
@@ -64,4 +66,47 @@ class DepositConfig:
             namespace=os.environ["KUBERNETES_NAMESPACE"],
             cluster_id=DEFAULT_K8S_CLUSTER,
             zenodo_url=os.environ.get("ZENODO_URL", "https://zenodo.org").rstrip("/"),
+            envidat=EnvidatConfig.from_env(),
         )
+
+
+@dataclass
+class EnvidatConfig:
+    """Configuration for envidat data exports and imports."""
+
+    exports_enabled: bool
+    url: str
+    rclone_image: str
+    s3_endpoint: str
+    s3_bucket: str
+    s3_access_key_id: str
+    s3_secret_access_key: str
+
+    @classmethod
+    def from_env(cls) -> EnvidatConfig:
+        """Generate the config from environment variables."""
+        exports_enabled = os.environ.get("ENVIDAT_EXPORTS_ENABLED", "false").lower() == "true"
+        output = cls(
+            exports_enabled=exports_enabled,
+            url=os.environ.get("ENVIDAT_URL", "https://www.envidat.ch").rstrip("/"),
+            rclone_image=os.environ.get("ENVIDAT_RCLONE_IMAGE", "rclone/rclone:1"),
+            s3_endpoint=os.environ.get("ENVIDAT_S3_ENDPOINT", ""),
+            s3_bucket=os.environ.get("ENVIDAT_S3_BUCKET", ""),
+            s3_access_key_id=os.environ.get("ENVIDAT_S3_ACCESS_KEY_ID", ""),
+            s3_secret_access_key=os.environ.get("ENVIDAT_S3_SECRET_ACCESS_KEY", ""),
+        )
+        if exports_enabled and any(
+            [
+                i == ""
+                for i in [
+                    output.s3_endpoint,
+                    output.s3_bucket,
+                    output.s3_access_key_id,
+                    output.s3_secret_access_key,
+                ]
+            ]
+        ):
+            raise errors.ConfigurationError(
+                message="Envidat exports are enabled but not all required parameters are provided."
+            )
+        return output

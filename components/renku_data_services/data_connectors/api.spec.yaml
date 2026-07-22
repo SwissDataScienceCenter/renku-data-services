@@ -1195,6 +1195,7 @@ components:
       type: string
       enum:
         - zenodo
+        - envidat
     DepositStatus:
       type: string
       enum:

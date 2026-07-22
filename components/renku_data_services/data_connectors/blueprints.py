@@ -51,6 +51,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
+from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
@@ -69,6 +70,7 @@ class DataConnectorsBP(CustomBlueprint):
     job_client: DepositUploadJobClient
     secret_client: SecretClient
     zenodo_client: ZenodoAPIClient
+    envidat_client: EnvidatClient
     connected_services_repo: ConnectedServicesRepository
     data_source_repo: DataSourceRepository
     dc_storage_class: str
@@ -599,19 +601,19 @@ class DataConnectorsBP(CustomBlueprint):
             )
         if not provider.connected_user:
             raise errors.UnauthorizedError(
-                message="You need to connect and autheticate with the zenodo provider to do this"
+                message="You need to connect and authenticate with the zenodo provider to do this"
             )
         token_set = await self.connected_services_repo.get_token_set(
             user=user, connection_id=provider.connected_user.connection.id
         )
         if not token_set:
             raise errors.UnauthorizedError(
-                message="You need to connect and autheticate with the zenodo provider to do this"
+                message="You need to connect and authenticate with the zenodo provider to do this"
             )
         access_token = token_set.access_token
         if not access_token:
             raise errors.UnauthorizedError(
-                message="You need to connect and autheticate with the zenodo provider to do this"
+                message="You need to connect and authenticate with the zenodo provider to do this"
             )
         return access_token
 
@@ -626,15 +628,33 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.AuthenticatedAPIUser,
             body: apispec.DepositPost,
         ) -> JSONResponse:
-            existing_deposits, _ = await self.data_connector_repo.get_deposits(
-                user, ULID.from_str(body.data_connector_id)
-            )
+            dc_id = ULID.from_str(body.data_connector_id)
+            await self.data_connector_repo.get_data_connector(user=user, data_connector_id=dc_id)
+            existing_deposits, _ = await self.data_connector_repo.get_deposits(user, dc_id)
             if len(existing_deposits) != 0:
                 raise errors.ValidationError(
                     message="Cannot have more than 1 deposit for the same user and data connector.",
                     detail="Please delete your existing deposit and make a new one afterward.",
                 )
-            token = await self.__get_zenodo_access_token(user)
+
+            match body.provider:
+                case apispec.DepositProvider.envidat:
+                    # TODO: Should we use the deposit ULID as the directory name!?
+                    # NOTE: Each new Envidat deposit gets its own dir, so a failed deposit cannot be resumed and need to
+                    # be cleaned up manually on Envidat.
+                    original_id = str(ULID())
+                    deposit_api_key: str | None = None
+
+                case apispec.DepositProvider.zenodo:
+                    token = await self.__get_zenodo_access_token(user)
+                    zenodo_dep = await self.zenodo_client.create_deposit(token, body.name)
+                    original_id = str(zenodo_dep.id)
+                    deposit_api_key = token
+
+                case x:
+                    raise errors.ValidationError(
+                        message=f"Received unknown deposit provider {x} when creating deposit."
+                    )
 
             # The closure below allows us to tie the creation of the db entry to the successful
             # creation of the job in kubernetes. I.e. if the k8s creation fails nothing is saved
@@ -654,13 +674,12 @@ class DataConnectorsBP(CustomBlueprint):
                     job_client=self.job_client,
                     data_connector_secret_repo=self.data_connector_secret_repo,
                     data_source_repo=self.data_source_repo,
-                    deposit_api_key=token,
+                    deposit_api_key=deposit_api_key,
                 )
 
-            zenodo_dep = await self.zenodo_client.create_deposit(token, body.name)
-            unsaved_dep = validate_deposit(body, str(zenodo_dep.id))
+            unsaved_dep = validate_deposit(body, original_id)
             saved_dep = await self.data_connector_repo.create_deposit(user, unsaved_dep, in_transaction_ops)
-            return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
+            return validated_json(apispec.Deposit, serialize_deposit(saved_dep, self.deposit_config))
 
         return "/deposits", ["POST"], _post_deposit
 
@@ -684,7 +703,7 @@ class DataConnectorsBP(CustomBlueprint):
                 return HTTPResponse(status=304)
 
             headers = {"ETag": saved_dep.etag}
-            return validated_json(apispec.Deposit, serialize_deposit(saved_dep), headers=headers)
+            return validated_json(apispec.Deposit, serialize_deposit(saved_dep, self.deposit_config), headers=headers)
 
         return "/deposits/<deposit_id:ulid>", ["GET"], _get_deposit
 
@@ -713,23 +732,35 @@ class DataConnectorsBP(CustomBlueprint):
             if patch.status:
                 validate_deposit_status_change(saved_dep.deposit.status, patch.status)
             if patch.status == models.DepositStatus.complete:
-                token = await self.__get_zenodo_access_token(user)
-                zenodo_dep = await self.zenodo_client.get_deposit(token, saved_dep.deposit.original_id)
-                if not zenodo_dep:
-                    raise errors.MissingResourceError(
-                        message=f"The deposit with id {saved_dep.deposit.original_id} "
-                        "cannot be found from the provider."
-                    )
-                if not zenodo_dep.submitted:
-                    raise errors.ValidationError(
-                        message="The deposit needs to be completed and published first before being completed."
-                    )
+                match saved_dep.deposit.source:
+                    case models.DepositSource.envidat:
+                        envidat_status = await self.envidat_client.get_deposit_status(saved_dep.deposit.original_id)
+                        if not envidat_status.is_published:
+                            raise errors.ValidationError(
+                                message="The deposit needs to be published on Envidat before being marked complete."
+                            )
+                    case models.DepositSource.zenodo:
+                        token = await self.__get_zenodo_access_token(user)
+                        zenodo_dep = await self.zenodo_client.get_deposit(token, saved_dep.deposit.original_id)
+                        if not zenodo_dep:
+                            raise errors.MissingResourceError(
+                                message=f"The Zenodo deposit with id {saved_dep.deposit.original_id} cannot be found."
+                            )
+                        if not zenodo_dep.submitted:
+                            raise errors.ValidationError(
+                                message="The Zenodo deposit needs to be completed and published first "
+                                "before being completed."
+                            )
+                    case x:
+                        raise errors.ValidationError(
+                            message=f"Received unknown deposit source {x} when pathing deposit with ID {deposit_id}."
+                        )
             saved_dep = await self.data_connector_repo.update_deposit(user, deposit_id, patch, etag=etag)
             if patch.status == models.DepositStatus.complete:
                 # If the deposit is being completed then we delete it
                 # We leave it to the user to create a new data connector and link it
                 await self.data_connector_repo.delete_deposit(user, saved_dep.deposit.id)
-            return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
+            return validated_json(apispec.Deposit, serialize_deposit(saved_dep, self.deposit_config))
 
         return "/deposits/<deposit_id:ulid>", ["PATCH"], _patch_deposit
 
@@ -741,7 +772,6 @@ class DataConnectorsBP(CustomBlueprint):
         async def _post_deposit_job(
             request: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID
         ) -> HTTPResponse:
-            token = await self.__get_zenodo_access_token(user)
             saved_dep = await update_deposit_status(
                 user,
                 job=deposit_id,
@@ -749,6 +779,15 @@ class DataConnectorsBP(CustomBlueprint):
                 job_client=self.job_client,
                 namespace=self.deposit_config.namespace,
             )
+            if saved_dep.deposit.source == models.DepositSource.envidat:
+                raise errors.ValidationError(
+                    message="Envidat deposits cannot be retried. Please delete this deposit and create a new one.",
+                    detail="Each Envidat deposit uploads to a unique S3 directory identified by the deposit ID. "
+                    "Starting over with a new deposit ensures a clean upload without mixing partial files.",
+                )
+            if saved_dep.deposit.status == models.DepositStatus.in_progress:
+                raise errors.ValidationError(message="Cannot rerun a deposit job that is currently in progress.")
+            token = await self.__get_zenodo_access_token(user)
             await self.job_client.delete(saved_dep.to_meta(user.id, self.deposit_config.namespace))
             new_job_name = "deposit-" + str(ULID()).lower()
             saved_dep = await self.data_connector_repo.update_deposit(
@@ -817,7 +856,9 @@ class DataConnectorsBP(CustomBlueprint):
                 job_client=self.job_client,
                 namespace=self.deposit_config.namespace,
             )
-            return [validate_and_dump(apispec.Deposit, serialize_deposit(i)) for i in deposits], total_num
+            return [
+                validate_and_dump(apispec.Deposit, serialize_deposit(i, self.deposit_config)) for i in deposits
+            ], total_num
 
         return "/deposits", ["GET"], _get_deposits
 
@@ -838,7 +879,9 @@ class DataConnectorsBP(CustomBlueprint):
                 job_client=self.job_client,
                 namespace=self.deposit_config.namespace,
             )
-            return [validate_and_dump(apispec.Deposit, serialize_deposit(i)) for i in deposits], total_num
+            return [
+                validate_and_dump(apispec.Deposit, serialize_deposit(i, self.deposit_config)) for i in deposits
+            ], total_num
 
         return "/data_connectors/<data_connector_id:ulid>/deposits", ["GET"], _get_dc_deposits
 
