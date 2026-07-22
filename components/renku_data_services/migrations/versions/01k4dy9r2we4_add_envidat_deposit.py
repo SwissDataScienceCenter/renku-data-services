@@ -1,7 +1,7 @@
 """add envidat deposit source
 
 Revision ID: 01k4dy9r2we4
-Revises: f2d4841e924b
+Revises: 5cb5a8d5663b
 Create Date: 2026-05-21 11:44:51.439287
 
 """
@@ -10,7 +10,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "01k4dy9r2we4"
-down_revision = "f2d4841e924b"
+down_revision = "5cb5a8d5663b"
 branch_labels = None
 depends_on = None
 
