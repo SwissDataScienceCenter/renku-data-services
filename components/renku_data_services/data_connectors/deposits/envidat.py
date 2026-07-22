@@ -20,7 +20,7 @@ class EnvidatStatus(StrEnum):
 class EnvidatDepositStatus(BaseModel):
     """Status response from the Envidat deposit status endpoint."""
 
-    package_id: str
+    id: str
     status: EnvidatStatus
     renku_id: str
     doi: str
@@ -40,6 +40,7 @@ class EnvidatClient:
 
     async def get_deposit_status(self, renku_id: str) -> EnvidatDepositStatus:
         """Check the publication status of a deposit on Envidat."""
+        # NOTE: You have to have a '/' at the end of the url, otherwise you always get a 404
         url = f"{self.__base_url}/api/renku/{renku_id}/"
         res = await self.__client.get(url)
         if res.status_code == 404:
