@@ -66,6 +66,8 @@ class AmaltheaSessionStream(Base):
     pod: str
     renku_io_launcher_id: str
     renku_io_project_id: str | None = None
+    renku_io_run_id: str
     renku_io_safe_username: str
     renku_io_session_type: str | None = None
+    renku_io_session_uid: str | None = None
     renku_io_submission_id: str | None = None

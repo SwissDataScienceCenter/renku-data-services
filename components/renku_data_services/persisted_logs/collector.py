@@ -72,10 +72,19 @@ class LokiLogReader:
                 continue
 
             try:
-                launcher_id = ULID.from_str(stream.renku_io_launcher_id)
+                launcher_id = ULID.from_str(stream.renku_io_launcher_id.upper())
             except ValueError as err:
                 logger.warning(
                     f"Skipping entry {entry.stream} because renku_io_launcher_id='{stream.renku_io_launcher_id}' "
+                    f"is not a valid ULID: {err}"
+                )
+                continue
+
+            try:
+                run_id = ULID.from_str(stream.renku_io_run_id.upper())
+            except ValueError as err:
+                logger.warning(
+                    f"Skipping entry {entry.stream} because renku_io_run_id='{stream.renku_io_run_id}' "
                     f"is not a valid ULID: {err}"
                 )
                 continue
@@ -85,15 +94,14 @@ class LokiLogReader:
                 log_line_id = f"{nano_ts.root}::{stream.container}::{stream.pod}"
 
                 if log_line_id in log_line_ids:
-                    # logger.info(f"Already saw: {log_line_id}")
                     continue
 
                 log_line_ids.add(log_line_id)
                 yield models.UnsavedLogLine(
                     id=log_line_id,
-                    run_id=launcher_id,  # TODO: fix
                     user_id=stream.renku_io_safe_username,
-                    launch_id=stream.renku_io_launcher_id,  # TODO: fix
+                    run_id=run_id,
+                    session_uid=stream.renku_io_session_uid,
                     launcher_id=launcher_id,
                     submission_id=stream.renku_io_submission_id,
                     container=stream.container,

@@ -16,9 +16,9 @@ class UnsavedLogLine:
     This is used to de-duplicate log lines.
     """
 
-    run_id: ULID
     user_id: str
-    launch_id: str
+    run_id: ULID
+    session_uid: str | None
     launcher_id: ULID
     submission_id: str | None
     container: str
@@ -32,7 +32,7 @@ class SessionRun:
 
     id: ULID
     user_id: str
-    launch_id: str
+    session_uid: str | None
     launcher_id: ULID
     submission_id: str | None
 

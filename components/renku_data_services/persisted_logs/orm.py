@@ -31,8 +31,8 @@ class SessionRunsORM(BaseORM):
     user_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
     """User ID of the owner of the session."""
 
-    launch_id: Mapped[str] = mapped_column(nullable=False)
-    """The launch ID for this session run."""
+    session_uid: Mapped[str | None] = mapped_column(nullable=True)
+    """The session UID for this session run."""
 
     launcher_id: Mapped[ULID] = mapped_column(ULIDType, ForeignKey(SessionLauncherORM.id), index=True, nullable=False)
     """The session launcher ID of the session."""
@@ -45,7 +45,7 @@ class SessionRunsORM(BaseORM):
         return models.SessionRun(
             id=self.id,
             user_id=self.user_id,
-            launch_id=self.launch_id,
+            session_uid=self.session_uid,
             launcher_id=self.launcher_id,
             submission_id=self.submission_id,
         )

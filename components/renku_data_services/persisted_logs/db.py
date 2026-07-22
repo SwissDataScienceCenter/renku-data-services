@@ -174,47 +174,24 @@ class AmaltheaSessionPersistedLogsRepository:
             if existing_log_orm:
                 continue
 
-            # NOTE: temporary code for finding a session run for jobs (one per submission)
-            run_id = log.run_id
-            if log.submission_id:
-                session_run_res = await session.scalars(
-                    select(schemas.SessionRunsORM)
-                    .where(schemas.SessionRunsORM.user_id == log.user_id)
-                    .where(schemas.SessionRunsORM.submission_id == log.submission_id)
+            session_run_res = await session.scalars(
+                select(schemas.SessionRunsORM).where(schemas.SessionRunsORM.id == log.run_id)
+            )
+            session_run_orm = session_run_res.one_or_none()
+            if session_run_orm is None:
+                session_run_orm = schemas.SessionRunsORM(
+                    id=log.run_id,
+                    user_id=log.user_id,
+                    session_uid=log.session_uid,
+                    launcher_id=log.launcher_id,
+                    submission_id=log.submission_id,
                 )
-                session_run_orm = session_run_res.one_or_none()
-                if session_run_orm is None:
-                    run_id = ULID()
-                    session_run_orm = schemas.SessionRunsORM(
-                        id=run_id,
-                        user_id=log.user_id,
-                        launch_id=log.launch_id,
-                        launcher_id=log.launcher_id,
-                        submission_id=log.submission_id,
-                    )
-                    session.add(session_run_orm)
-                    await session.flush()
-                else:
-                    run_id = session_run_orm.id
-            else:
-                session_run_res = await session.scalars(
-                    select(schemas.SessionRunsORM).where(schemas.SessionRunsORM.id == log.run_id)
-                )
-                session_run_orm = session_run_res.one_or_none()
-                if session_run_orm is None:
-                    session_run_orm = schemas.SessionRunsORM(
-                        id=log.run_id,
-                        user_id=log.user_id,
-                        launch_id=log.launch_id,
-                        launcher_id=log.launcher_id,
-                        submission_id=log.submission_id,
-                    )
-                    session.add(session_run_orm)
-                    await session.flush()
+                session.add(session_run_orm)
+                await session.flush()
 
             log_orm = schemas.AmaltheaSessionLogsORM(
                 id=log.id,
-                run_id=run_id,
+                run_id=log.run_id,
                 container=log.container,
                 timestamp=log.timestamp,
                 log_line=log.log_line,

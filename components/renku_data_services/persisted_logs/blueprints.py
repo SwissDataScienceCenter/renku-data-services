@@ -83,7 +83,7 @@ class PersistedLogsBP(CustomBlueprint):
         # NOTE: omit the "user_id" field
         return dict(
             id=session_run.id,
-            launch_id=session_run.launch_id,
+            session_uid=session_run.session_uid,
             launcher_id=session_run.launcher_id,
             submission_id=session_run.submission_id,
         )
