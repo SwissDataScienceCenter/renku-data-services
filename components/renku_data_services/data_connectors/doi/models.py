@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Self
 from urllib.parse import urlparse
 
@@ -149,6 +150,8 @@ class SchemaOrgDistribution(BaseModel):
     model_config = ConfigDict(extra="ignore")
     type: str = Field(alias="@type")
     content_url: str = Field(alias="contentUrl")
+    name: str | None = None
+    expires: datetime | None = None
 
 
 class SchemaOrgDataset(BaseModel):

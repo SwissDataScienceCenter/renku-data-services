@@ -124,6 +124,11 @@ def create_envidat_metadata_url(doi: models.DOI) -> str:
     return f"{url}?{params}"
 
 
+def create_scicat_metadata_url(doi: models.DOI) -> str:
+    """Create the metadata url for envidat from a DOI."""
+    return f"https://doi.psi.ch/detail/{doi}"
+
+
 async def _get_envidat_metadata(metadata_url: str) -> models.DOIMetadata | None:
     """Get metadata about the envidat dataset."""
     clnt = httpx.AsyncClient(follow_redirects=True, timeout=5)

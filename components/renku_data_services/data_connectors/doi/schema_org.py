@@ -13,6 +13,7 @@ class DatasetProvider(StrEnum):
     """The provider for the dataset."""
 
     envidat = "envidat"
+    scicat = "scicat"
 
 
 @dataclass
@@ -35,7 +36,8 @@ def get_rclone_config(dataset: SchemaOrgDataset, provider: DatasetProvider) -> S
     match provider:
         case DatasetProvider.envidat:
             return __get_rclone_s3_config_envidat(dataset)
-        # TODO: Add scicat here
+        case DatasetProvider.scicat:
+            return __get_rclone_s3_config_scicat(dataset)
         case _:
             raise errors.ValidationError(message=f"Got an unknown dataset provider {provider}")
 
@@ -75,3 +77,34 @@ def __get_rclone_s3_config_envidat(dataset: SchemaOrgDataset) -> S3Config:
         bucket,
         prefix,
     )
+
+
+def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
+    """Get the S3 rclone configuration and source path from a dataset returned by scicat.
+
+    A single dataset may contain more than one S3 url.
+    The S3 information is encoded in the distribution, in fields where the name is 'S3 URI'.
+    """
+    output: list[S3Config] = []
+    for dist in dataset.distribution:
+        if dist.name and dist.name == "S3 URI":
+            parsed = urlparse(dist.content_url)
+            query_parsed = parse_qs(parsed.query)
+            bucket = parsed.path
+            prefix = query_parsed.get("prefix", [None])[0]
+            if not bucket:
+                raise errors.ValidationError(message="The S3 bucket from scicat metadata cannot be found")
+            if not prefix:
+                raise errors.ValidationError(message="The S3 prefix from scicat metadata cannot be found")
+            output.append(
+                S3Config(
+                    rclone_config={
+                        "type": "s3",
+                        "provider": "Other",
+                        "endpoint": f"{parsed.scheme}://{parsed.hostname}",
+                    },
+                    bucket=bucket,
+                    prefix=prefix,
+                )
+            )
+    return output[0]
