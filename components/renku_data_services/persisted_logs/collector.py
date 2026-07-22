@@ -80,12 +80,12 @@ class LokiLogReader:
                 )
                 continue
 
-            logger.info(stream)
+            # logger.info(stream)
             for nano_ts, log_line in entry.values:
                 log_line_id = f"{nano_ts.root}::{stream.container}::{stream.pod}"
 
                 if log_line_id in log_line_ids:
-                    logger.info(f"Already saw: {log_line_id}")
+                    # logger.info(f"Already saw: {log_line_id}")
                     continue
 
                 log_line_ids.add(log_line_id)

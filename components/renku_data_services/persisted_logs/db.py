@@ -7,15 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services import base_models, errors
-from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.persisted_logs import models
 from renku_data_services.persisted_logs import orm as schemas
 from renku_data_services.persisted_logs.constants import SESSION_MAIN_CONTAINER
 from renku_data_services.session import orm as session_schemas
-
-logger = logging.getLogger(__name__)
 
 
 class AmaltheaSessionPersistedLogsReadRepository:
@@ -175,10 +172,7 @@ class AmaltheaSessionPersistedLogsRepository:
             )
             existing_log_orm = existing_log_res.one_or_none()
             if existing_log_orm:
-                logger.info(f"Skipping log line {log.id}")
                 continue
-
-            logger.info(f"Processing log line {log}")
 
             # NOTE: temporary code for finding a session run for jobs (one per submission)
             run_id = log.run_id
