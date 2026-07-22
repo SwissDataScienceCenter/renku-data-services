@@ -148,7 +148,7 @@ class SessionLaunchersBP(CustomBlueprint):
         async def _patch(request: Request, user: base_models.APIUser, launcher_id: ULID) -> JSONResponse:
             async with self.session_repo.session_maker() as session, session.begin():
                 current_launcher = await self.session_repo.get_launcher(user, launcher_id)
-                body = apispec.SessionLauncherPatch.model_validate(request.json)
+                body = apispec_extras.SessionLauncherPatch.model_validate(request.json)
 
                 # NOTE: This is required to deal with the multiple possible types for the environment field: If some
                 # random fields are passed then the validation chooses the environment type to be EnvironmentIdOnlyPatch

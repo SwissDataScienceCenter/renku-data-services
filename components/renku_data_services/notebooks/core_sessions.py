@@ -481,10 +481,12 @@ async def request_session_secret_creation(
             )
 
 
-def resources_patch_from_resource_class(resource_class: ResourceClass) -> ResourcesPatch:
+def resources_patch_from_resource_class(
+    resource_class: ResourceClass, cpu_limit_factor: float | None = None
+) -> ResourcesPatch:
     """Convert the resource class to a k8s resources spec."""
     gpu_name = GpuKind.NVIDIA.value + "/gpu"
-    resources = resources_from_resource_class(resource_class)
+    resources = resources_from_resource_class(resource_class, cpu_limit_factor)
     requests: Mapping[str, Requests | RequestsStr | ResetType] | ResetType | None = None
     limits: Mapping[str, Limits | LimitsStr | ResetType] | ResetType | None = None
     defaul_requests = {"memory": RESET, "cpu": RESET, gpu_name: RESET}
@@ -496,8 +498,15 @@ def resources_patch_from_resource_class(resource_class: ResourceClass) -> Resour
     return ResourcesPatch(requests=requests, limits=limits)
 
 
-def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
-    """Convert the resource class to a k8s resources spec."""
+def resources_from_resource_class(resource_class: ResourceClass, cpu_limit_factor: float | None = None) -> Resources:
+    """Convert the resource class to a k8s resources spec.
+
+    The cpu limit factor is optional beacuse cpu is burstable in Kubernetes with
+    low risk of oversubscription causing problems to the node. We always apply
+    limits for memory beacuse it can cause problems on the node and affect other pods
+    when the node is oversubscribed. And for GPUs the limits simply have to be defined
+    and equal to the requests, oversubscription is not possible for GPUs.
+    """
     requests: dict[str, Requests | RequestsStr] = {
         "cpu": RequestsStr(str(round(resource_class.cpu * 1000)) + "m"),
         "memory": RequestsStr(f"{resource_class.memory}Gi"),
@@ -509,6 +518,8 @@ def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
         # NOTE: GPUs have to be set in limits too since GPUs cannot be overcommited, if
         # not on some clusters this will cause the session to fully fail to start.
         limits[gpu_name] = Limits(resource_class.gpu)
+    if cpu_limit_factor is not None and cpu_limit_factor >= 1.0:
+        limits["cpu"] = LimitsStr(str(round(resource_class.cpu * cpu_limit_factor * 1000)) + "m")
     return Resources(requests=requests, limits=limits if len(limits) > 0 else None)
 
 
@@ -1174,7 +1185,7 @@ async def start_session(
                 workingDir=work_dir.as_posix(),
                 runAsUser=environment.uid,
                 runAsGroup=environment.gid,
-                resources=resources_from_resource_class(resource_class),
+                resources=resources_from_resource_class(resource_class, resource_pool.cpu_limit_factor),
                 extraVolumeMounts=session_extras.volume_mounts,
                 command=command,
                 args=args,
@@ -1329,7 +1340,7 @@ async def patch_session(
         patch.spec.template = TemplatePatch(metadata=TemplateMetadataPatch(annotations=annotations))
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
-        patch.spec.session.resources = resources_patch_from_resource_class(rc)
+        patch.spec.session.resources = resources_patch_from_resource_class(rc, rp.cpu_limit_factor)
         # Tolerations
         patch.spec.tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
         # Affinities
