@@ -23,7 +23,7 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.orm import UserORM
-from renku_data_services.utils.sqlalchemy import ByteSizeType, ULIDType
+from renku_data_services.utils.sqlalchemy import ByteSizeType, PurePosixPathType, ULIDType
 
 if TYPE_CHECKING:
     from renku_data_services.namespace.orm import EntitySlugOldORM, EntitySlugORM
@@ -379,7 +379,7 @@ class ProjectStorageORM(BaseORM):
     size_limit: Mapped[ByteSize] = mapped_column("size_limit", ByteSizeType())
     """The storage limit in bytes."""
 
-    mount_path: Mapped[str] = mapped_column("target_path", String())
+    mount_path: Mapped[PurePosixPath] = mapped_column("target_path", PurePosixPathType())
     """Folder to mount to."""
 
     created_by_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)

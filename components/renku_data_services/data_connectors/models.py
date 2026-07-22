@@ -97,7 +97,7 @@ class UnsavedProjectStorage:
 
     namespace_path: ProjectPath
     size: ByteSize
-    mount_path: str
+    mount_path: PurePosixPath
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -108,7 +108,7 @@ class ProjectStorage:
     project_id: ULID
     storage_class: str
     size: ByteSize
-    mount_path: str
+    mount_path: PurePosixPath
     created_by: str
     creation_date: datetime
     updated_at: datetime
@@ -116,7 +116,9 @@ class ProjectStorage:
     @property
     def etag(self) -> str:
         """Entity tag value for this project storage object."""
-        return compute_etag_from_fields(self.updated_at, self.project_id, self.storage_class, self.size.to_bytes())
+        return compute_etag_from_fields(
+            self.updated_at, self.project_id, self.storage_class, self.size.to_bytes(), self.mount_path.as_posix()
+        )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

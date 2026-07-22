@@ -227,7 +227,7 @@ async def validate_unsaved_project_storage(body: apispec.ProjectStoragePost) -> 
 
     namespace_path = ProjectPath.from_strings(namespace_split[0], namespace_split[1])
     return models.UnsavedProjectStorage(
-        namespace_path=namespace_path, size=ByteSize.from_gibi(body.size), mount_path=body.mount_path
+        namespace_path=namespace_path, size=ByteSize.from_gibi(body.size), mount_path=PurePosixPath(body.mount_path)
     )
 
 

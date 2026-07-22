@@ -25,7 +25,6 @@ from yaml import safe_dump
 from renku_data_services.app_config import logging
 from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
-from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.crc.models import (
@@ -39,9 +38,10 @@ from renku_data_services.crc.models import (
     SessionProtocol,
 )
 from renku_data_services.data_connectors.db import (
+    DataConnectorRepository,
     DataConnectorSecretRepository,
 )
-from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets, ProjectStorage
+from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import ValidationError, errors
 from renku_data_services.k8s.models import ClusterConnection, K8sSecret, sanitizer
 from renku_data_services.notebooks import apispec
@@ -188,20 +188,21 @@ async def get_extra_containers(
 async def get_project_storage(
     user: AuthenticatedAPIUser,
     nb_config: NotebooksConfig,
+    data_connector_repo: DataConnectorRepository,
     project_id: ULID,
+    storage_mount: PurePosixPath,
     cluster: ClusterConnection,
 ) -> SessionExtraResources:
     """If applicable, fetch the project storage and return it as SessionExtras."""
-    project_storage = ProjectStorage(
-        id=ULID(),
-        project_id=project_id,
-        storage_class="azurefile",
-        size=ByteSize.from_gibi(3),
-        mount_path="/mnt",
-        created_by="bla",
-        creation_date=datetime.now(),
-        updated_at=datetime.now(),
-    )
+    project_storage = await data_connector_repo.get_storage_to(user, project_id)
+    if not project_storage:
+        logger.debug(f"Project {project_id} has no project storage.")
+        return SessionExtraResources()
+
+    logger.debug(f"Configuring project storage for {project_id}: {project_storage}")
+    mount_path = project_storage.mount_path
+    if not mount_path.is_absolute():
+        mount_path = storage_mount / mount_path
 
     volume_name = await nb_config.k8s_v2_client.create_persistent_volume(user, project_storage, cluster)
 
@@ -209,7 +210,7 @@ async def get_project_storage(
     return SessionExtraResources(
         volume_mounts=[
             ExtraVolumeMount(
-                mountPath=project_storage.mount_path,
+                mountPath=mount_path.as_posix(),
                 name=mount_name,
                 readOnly=False,
             )
@@ -919,6 +920,7 @@ async def start_session(
     nb_config: NotebooksConfig,
     git_provider_helper: GitProviderHelperProto,
     cluster_repo: ClusterRepository,
+    data_connector_repo: DataConnectorRepository,
     data_connector_secret_repo: DataConnectorSecretRepository,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
@@ -1059,7 +1061,9 @@ async def start_session(
 
     # project storage
     if isinstance(user, AuthenticatedAPIUser):
-        session_extras = session_extras.concat(await get_project_storage(user, nb_config, project.id, cluster))
+        session_extras = session_extras.concat(
+            await get_project_storage(user, nb_config, data_connector_repo, project.id, storage_mount, cluster)
+        )
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings

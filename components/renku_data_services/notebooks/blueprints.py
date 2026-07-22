@@ -93,6 +93,7 @@ class NotebooksNewBP(CustomBlueprint):
                 git_provider_helper=self.git_provider_helper,
                 cluster_repo=self.cluster_repo,
                 data_connector_secret_repo=self.data_connector_secret_repo,
+                data_connector_repo=self.data_connector_repo,
                 project_repo=self.project_repo,
                 project_session_secret_repo=self.project_session_secret_repo,
                 rp_repo=self.rp_repo,
