@@ -11,8 +11,8 @@ from typing import Final
 from kubernetes.client import ApiClient, V1Toleration
 
 from renku_data_services.app_config import logging
-from renku_data_services.errors import errors
 from renku_data_services.base_models.bytesize import ByteSize
+from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 
 logger = logging.getLogger(__name__)
