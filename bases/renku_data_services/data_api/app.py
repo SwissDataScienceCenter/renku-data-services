@@ -32,6 +32,7 @@ from renku_data_services.notebooks.blueprints import NotebooksNewBP
 from renku_data_services.notifications.blueprints import NotificationsBP
 from renku_data_services.platform.blueprints import PlatformConfigBP, PlatformUrlRedirectBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
+from renku_data_services.renku_apps.blueprints import RenkuAppBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.resource_usage.blueprints import ResourceUsageBP
 from renku_data_services.search.blueprints import SearchBP
@@ -176,6 +177,16 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         session_repo=dm.session_repo,
         authenticator=dm.authenticator,
         metrics=dm.metrics,
+    )
+    renku_apps = (
+        RenkuAppBP(
+            name="renku_apps",
+            url_prefix=url_prefix,
+            apps_repo=dm.apps_repo,
+            authenticator=dm.authenticator,
+        )
+        if dm.config.apps.enabled and dm.apps_repo is not None
+        else None
     )
     builds = (
         BuildsBP(
@@ -351,6 +362,8 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     )
     if builds is not None:
         app.blueprint(builds.blueprint())
+    if renku_apps is not None:
+        app.blueprint(renku_apps.blueprint())
 
     # We need to patch sanic_ext as since version 24.12 they only send a string representation of errors
     import sanic_ext.extras.validation.setup

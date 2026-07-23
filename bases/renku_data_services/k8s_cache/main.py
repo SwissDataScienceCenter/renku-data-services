@@ -13,6 +13,7 @@ from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.k8s_cache.dependencies import DependencyManager
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
+from renku_data_services.renku_apps.k8s_client import KNATIVE_SERVICE_GVK
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,8 @@ async def main() -> None:
         kinds.append(JUPYTER_SESSION_GVK)
     if dm.config.image_builders.enabled:
         kinds.extend([BUILD_RUN_GVK, TASK_RUN_GVK])
+    if dm.config.apps.enabled:
+        kinds.append(KNATIVE_SERVICE_GVK)
     logger.info(f"Resources: {kinds}")
     watcher = K8sWatcher(
         handler=k8s_object_handler(dm.k8s_cache(), dm.metrics(), rp_repo=dm.rp_repo()),
