@@ -7,7 +7,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any, NamedTuple
 
 from pydantic import BaseModel, Field
@@ -17,6 +17,17 @@ from renku_data_services.base_models import errors
 from renku_data_services.namespace.models import UserNamespace
 
 logger = logging.getLogger(__name__)
+
+
+class KeycloakEventSource(StrEnum):
+    """The Keycloak event source; can be either "realm_events" or "realm_admin_events".
+
+    - "realm_events" represents events from the `GET /admin/realms/{realm}/events` API endpoint
+    - "realm_admin_events" represents events from the `GET /admin/realms/{realm}/admin-events` API endpoint
+    """
+
+    realm_events = "realm_events"
+    realm_admin_events = "realm_admin_events"
 
 
 class KeycloakEvent(Enum):
