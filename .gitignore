@@ -1,3 +1,5 @@
+uv.lock
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 .pytest_cache/
@@ -100,3 +102,6 @@ result
 # VScode local config
 .vscode/*
 !.vscode/settings.json
+
+# AI
+.claude
