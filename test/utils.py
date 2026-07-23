@@ -37,6 +37,7 @@ from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
 from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
+from renku_data_services.data_connectors.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
 from renku_data_services.k8s.clients import (
@@ -373,6 +374,7 @@ class TestDependencyManager(DependencyManager):
         occurrence_repo = OccurrenceRepository(session_maker=config.db.async_session_maker)
         resource_requests_repo = ResourceRequestsRepo(session_maker=config.db.async_session_maker)
         resource_usage_service = ResourceUsageService(resource_requests_repo)
+        project_storage_k8s = ProjectStorageK8s(config.nb_config.k8s_v2_client)
 
         return cls(
             config=config,
@@ -426,6 +428,7 @@ class TestDependencyManager(DependencyManager):
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,
             internal_scope_verifier=internal_scope_verifier,
+            project_storage_k8s=project_storage_k8s,
         )
 
     def __post_init__(self) -> None:
