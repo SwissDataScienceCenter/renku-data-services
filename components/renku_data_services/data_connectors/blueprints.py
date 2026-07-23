@@ -752,7 +752,7 @@ class DataConnectorsBP(CustomBlueprint):
             id=str(ps.id),
             project_id=str(ps.project_id),
             size=int(ps.size.to_gibi()),
-            mount_path=ps.mount_path,
+            mount_path=ps.mount_path.as_posix(),
             created_by=ps.created_by,
             creation_date=ps.creation_date,
             updated_at=ps.updated_at,

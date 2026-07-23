@@ -946,7 +946,7 @@ components:
           type: integer
           format: int32
         mount_path:
-          type: str
+          type: string
         creation_date:
           $ref: "#/components/schemas/CreationDate"
         created_by:
