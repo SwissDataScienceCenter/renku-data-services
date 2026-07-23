@@ -577,6 +577,17 @@ async def monitor_session_quota_and_send_alerts(dm: DependencyManager) -> None:
             await asyncio.sleep(dm.config.session_quota_alert_check_interval_s)
 
 
+async def collect_persisted_logs(dm: DependencyManager) -> None:
+    """Collect persisted logs from Loki."""
+    while True:
+        try:
+            await dm.persisted_logs_collector.collect_persisted_logs()
+        except Exception as e:
+            logger.warning(f"Failed to collect persisted logs: {e}", exc_info=True)
+        else:
+            await asyncio.sleep(1)
+
+
 def all_tasks(dm: DependencyManager) -> TaskDefininions:
     """A dict of task factories to be managed in main."""
     # Impl. note: We pass the entire config to the coroutines, because
@@ -603,5 +614,6 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
             "cleanup_orphaned_capacity_reservations": lambda: cleanup_orphaned_capacity_reservations(dm),
             "record_resource_requests": lambda: record_resource_requests(dm),
             "monitor_session_quota_and_send_alerts": lambda: monitor_session_quota_and_send_alerts(dm),
+            "collect_persisted_logs": lambda: collect_persisted_logs(dm),
         }
     )
