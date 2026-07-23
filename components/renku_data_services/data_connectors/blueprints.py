@@ -56,6 +56,7 @@ from renku_data_services.data_connectors.db import (
 )
 from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
+from renku_data_services.data_connectors.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.notebooks.data_sources import DataSourceRepository
@@ -80,6 +81,7 @@ class DataConnectorsBP(CustomBlueprint):
     data_service_base_url: str
     k8s_client: K8sClient
     deposit_config: DepositConfig
+    project_storage_k8s: ProjectStorageK8s
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List data connectors."""
@@ -254,7 +256,9 @@ class DataConnectorsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _delete_storage_allow(_: Request, user: base_models.APIUser, project_id: ULID) -> HTTPResponse:
-            await self.data_connector_repo.delete_project_storage_allow(user, project_id)
+            deleted = await self.data_connector_repo.delete_project_storage_allow(user, project_id)
+            if deleted:
+                await self.project_storage_k8s.delete_volume(deleted)
             return HTTPResponse(status=204)
 
         return "/data_connectors/storage/allow/<project_id:ulid>", ["DELETE"], _delete_storage_allow

@@ -150,6 +150,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         session_repo=dm.session_repo,
         session_secret_repo=dm.project_session_secret_repo,
         metrics=dm.metrics,
+        project_storage_k8s=dm.project_storage_k8s,
     )
     project_session_secrets = ProjectSessionSecretBP(
         name="project_session_secrets",
@@ -285,6 +286,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         data_service_base_url=dm.config.nb_config.data_service_url,
         k8s_client=dm.k8s_client,
         deposit_config=dm.config.deposit_config,
+        project_storage_k8s=dm.project_storage_k8s,
     )
     notifications = NotificationsBP(
         name="notifications",

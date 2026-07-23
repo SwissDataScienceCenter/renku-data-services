@@ -23,6 +23,7 @@ from renku_data_services.base_models.core import Slug
 from renku_data_services.base_models.metrics import MetricsService, ProjectCreationType
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.data_connectors.db import DataConnectorRepository
+from renku_data_services.data_connectors.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
 from renku_data_services.project import models as project_models
@@ -57,6 +58,7 @@ class ProjectsBP(CustomBlueprint):
     session_repo: SessionRepository
     session_secret_repo: ProjectSessionSecretRepository
     metrics: MetricsService
+    project_storage_k8s: ProjectStorageK8s
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all projects."""
@@ -277,7 +279,9 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         async def _delete(_: Request, user: base_models.APIUser, project_id: ULID) -> HTTPResponse:
-            await self.project_repo.delete_project(user=user, project_id=project_id)
+            deleted = await self.project_repo.delete_project(user=user, project_id=project_id)
+            if deleted:
+                await self.project_storage_k8s.delete_volume(deleted.id)
             return HTTPResponse(status=204)
 
         return "/projects/<project_id:ulid>", ["DELETE"], _delete

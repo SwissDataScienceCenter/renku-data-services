@@ -42,8 +42,9 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
+from renku_data_services.data_connectors.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.errors import ValidationError, errors
-from renku_data_services.k8s.models import ClusterConnection, K8sPersistentVolumeClaim, K8sSecret, sanitizer
+from renku_data_services.k8s.models import ClusterConnection, K8sSecret, sanitizer
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_extras
@@ -187,7 +188,7 @@ async def get_extra_containers(
 
 async def get_project_storage(
     user: AuthenticatedAPIUser,
-    nb_config: NotebooksConfig,
+    project_storage_k8s: ProjectStorageK8s,
     data_connector_repo: DataConnectorRepository,
     project_id: ULID,
     storage_mount: PurePosixPath,
@@ -199,21 +200,7 @@ async def get_project_storage(
         logger.debug(f"Project {project_id} has no project storage.")
         return SessionExtraResources()
 
-    obj = await nb_config.k8s_v2_client.get_persistent_volume_claim(project_storage.pvc_name())
-    if not obj:
-        logger.debug(f"Create project storage for project: {project_id} with name {project_storage.pvc_name()}")
-        pvc = K8sPersistentVolumeClaim.new(
-            cluster=cluster.id,
-            name=project_storage.pvc_name(),
-            namespace=cluster.namespace,
-            accessModes=["ReadWriteMany"],
-            storage_class=project_storage.storage_class,
-            size=project_storage.size,
-            labels={"renku.io/project_id": str(project_id)},
-        )
-        await nb_config.k8s_v2_client.create_persistent_volume(pvc)
-    else:
-        logger.debug(f"There is already a project storage volume with name: {project_storage.pvc_name()}")
+    pvc = await project_storage_k8s.get_or_create_volume(project_storage, cluster)
 
     logger.debug(f"Configuring project storage for {project_id}: {project_storage}")
     mount_path = project_storage.mount_path
@@ -232,7 +219,7 @@ async def get_project_storage(
         volumes=[
             ExtraVolume(
                 name=mount_name,
-                persistentVolumeClaim=PersistentVolumeClaim(claimName=project_storage.pvc_name()),
+                persistentVolumeClaim=PersistentVolumeClaim(claimName=pvc.name),
             )
         ],
     )
@@ -1075,8 +1062,11 @@ async def start_session(
 
     # project storage
     if isinstance(user, AuthenticatedAPIUser):
+        project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
         session_extras = session_extras.concat(
-            await get_project_storage(user, nb_config, data_connector_repo, project.id, storage_mount, cluster)
+            await get_project_storage(
+                user, project_storage_k8s, data_connector_repo, project.id, storage_mount, cluster
+            )
         )
 
     # Cluster settings (ingress, storage class, etc)

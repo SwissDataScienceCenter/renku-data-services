@@ -502,7 +502,7 @@ class DataConnectorRepository:
     @with_db_transaction
     async def delete_project_storage(
         self, user: base_models.APIUser, storage_id: ULID, *, session: AsyncSession | None = None
-    ) -> None:
+    ) -> models.DeletedProjectStorage | None:
         """Delete a specific project storage."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
@@ -521,6 +521,8 @@ class DataConnectorRepository:
             )
 
         await session.delete(storage_orm)
+        ps = storage_orm.dump()
+        return models.DeletedProjectStorage(project_id=ps.project_id)
 
     async def get_project_storage_allow(
         self, user: base_models.APIUser, project_id: ULID
@@ -568,7 +570,7 @@ class DataConnectorRepository:
     @with_db_transaction
     async def delete_project_storage_allow(
         self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None
-    ) -> None:
+    ) -> models.DeletedProjectStorage | None:
         """Delete a project storage allow entry."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
@@ -576,14 +578,17 @@ class DataConnectorRepository:
         if user.id is None or not user.is_admin:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
+        storage = await self.get_storage_to(user, project_id)
         result = await session.scalars(
             select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project_id)
         )
         allow_orm = result.one_or_none()
-        if allow_orm is None:
-            return None
+        if not allow_orm:
+            await session.delete(allow_orm)
 
-        await session.delete(allow_orm)
+        if storage:
+            return models.DeletedProjectStorage(project_id=storage.project_id)
+        return None
 
     @with_db_transaction
     async def insert_global_data_connector(
