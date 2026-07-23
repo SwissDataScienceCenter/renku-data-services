@@ -14,7 +14,7 @@ from renku_data_services.app_config.config import (
 )
 from renku_data_services.app_config.logging import Config as LoggingConfig
 from renku_data_services.authz.config import AuthzConfig
-from renku_data_services.data_connectors.config import DepositConfig
+from renku_data_services.data_connectors.config import DepositConfig, ProjectStorageConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.secrets.config import PublicSecretsConfig
@@ -48,6 +48,7 @@ class Config:
     version: str
     alertmanager_webhook_role: str
     deposit_config: DepositConfig
+    project_storage_config: ProjectStorageConfig
 
     @classmethod
     def from_env(cls, db: DBConfig | None = None) -> Self:
@@ -95,4 +96,5 @@ class Config:
             log_cfg=LoggingConfig.from_env(),
             alertmanager_webhook_role=os.environ.get("ALERTMANAGER_WEBHOOK_ROLE", "alertmanager-webhook"),
             deposit_config=DepositConfig.from_env(nb_config.sessions.renku_url),
+            project_storage_config=ProjectStorageConfig.from_env(),
         )

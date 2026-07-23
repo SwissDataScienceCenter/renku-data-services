@@ -10,7 +10,7 @@ from typing import cast
 import httpx
 from box import Box
 from kr8s import NotFoundError, ServerError
-from kr8s.asyncio.objects import Pod, Secret, StatefulSet
+from kr8s.asyncio.objects import PersistentVolumeClaim, Pod, Secret, StatefulSet
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
@@ -26,6 +26,7 @@ from renku_data_services.k8s.models import (
     K8sObjectFilter,
     K8sObjectMeta,
     K8sPatches,
+    K8sPersistentVolumeClaim,
     K8sSecret,
 )
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
@@ -33,6 +34,8 @@ from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
 from renku_data_services.notebooks.models import SessionType
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
+
+logger = logging.getLogger(__name__)
 
 
 class NotebookK8sClient(SecretClient):
@@ -470,3 +473,32 @@ class NotebookK8sClient(SecretClient):
             logger.debug(f"Patching secret {secret.namespace}/{secret.name}")
             result = await self.patch_secret(secret, secret.to_patch())
         return result
+
+    async def get_persistent_volume_claim(self, name: str) -> K8sPersistentVolumeClaim | None:
+        """Get a persistent volume claim by name."""
+
+        obj = await self._get(name, GVK.from_kr8s_object(PersistentVolumeClaim), None)
+        if not obj:
+            return None
+
+        cluster = await self.__client.cluster_by_id(obj.cluster)
+        return K8sPersistentVolumeClaim(
+            name=obj.name, namespace=cluster.namespace, cluster=obj.cluster, manifest=obj.manifest
+        )
+
+    async def delete_persistent_volume(self, name: str) -> None:
+        """Delete a persistent volume."""
+
+        obj = await self.get_persistent_volume_claim(name)
+        if obj:
+            await self.__client.delete(obj)
+
+    async def create_persistent_volume(self, pvc: K8sPersistentVolumeClaim) -> None:
+        """Create a persistent volume for the given project storage."""
+
+        if pvc.get_storage_class() != "azurefile":
+            raise errors.ValidationError(
+                message=f"Currently only azurefile is supported as a storage class, got: {pvc.get_storage_class()}"
+            )
+
+        await self.__client.create(pvc, True)

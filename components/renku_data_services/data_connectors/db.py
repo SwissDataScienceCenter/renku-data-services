@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnExpressionArgument, Select, delete, func, or_, select
+from sqlalchemy import ColumnExpressionArgument, Select, delete, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from ulid import ULID
@@ -29,6 +29,7 @@ from renku_data_services.base_models.core import (
 )
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
+from renku_data_services.data_connectors.config import ProjectStorageConfig
 from renku_data_services.data_connectors.core import validate_unsaved_global_data_connector
 from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
@@ -57,12 +58,14 @@ class DataConnectorRepository:
         project_repo: ProjectRepository,
         group_repo: GroupRepository,
         search_updates_repo: SearchUpdatesRepo,
+        project_storage_config: ProjectStorageConfig,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
         self.project_repo = project_repo
         self.group_repo = group_repo
         self.search_updates_repo = search_updates_repo
+        self.project_storage_config = project_storage_config
 
     async def get_data_connectors(
         self,
@@ -371,6 +374,221 @@ class DataConnectorRepository:
         if not isinstance(dc, models.DataConnector):
             raise errors.ProgrammingError(message=f"Expected to get a namespaced data connector ('{dc.id}')")
         return dc
+
+    async def get_project_storage(self, user: base_models.APIUser, storage_id: ULID) -> models.ProjectStorage | None:
+        """Get a project storage to a project if it exists."""
+
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            result_orm = await session.scalars(
+                select(schemas.ProjectStorageORM).where(schemas.ProjectStorageORM.id == storage_id)
+            )
+            result_orm = result_orm.one_or_none()
+            if not result_orm:
+                return None
+
+        result = result_orm.dump()
+        authorized = await self.authz.has_permission(user, ResourceType.project, result.project_id, Scope.READ)
+        if not authorized:
+            return None
+
+        return result
+
+    async def get_storage_to(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectStorage | None:
+        """Get a project storage to a project if it exists."""
+
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            result_orm = await session.scalars(
+                select(schemas.ProjectStorageORM).where(schemas.ProjectStorageORM.project_id == project_id)
+            )
+            result_orm = result_orm.one_or_none()
+            if not result_orm:
+                return None
+
+        result = result_orm.dump()
+        authorized = await self.authz.has_permission(user, ResourceType.project, result.project_id, Scope.READ)
+        if not authorized:
+            return None
+
+        return result
+
+    @with_db_transaction
+    async def insert_project_storage(
+        self, user: base_models.APIUser, input: models.UnsavedProjectStorage, *, session: AsyncSession | None = None
+    ) -> models.ProjectStorage:
+        """Insert a new project storage."""
+
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # there is only one such storage possible for a project
+        project = await self.project_repo.get_project_by_namespace_slug(
+            user, input.namespace_path.first.value, input.namespace_path.second, with_documentation=False
+        )
+
+        allowed = await session.execute(
+            select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project.id)
+        )
+        allowed = allowed.scalar()
+        if not allowed:
+            raise errors.ForbiddenError(message=f"Project storage is not enabled for project {project.id}.")
+
+        existing_storage = await session.execute(
+            select(exists().where(schemas.ProjectStorageORM.project_id == project.id))
+        )
+        existing_storage = existing_storage.scalar()
+        if existing_storage:
+            raise errors.ValidationError(message=f"There is already a project storage for project {project.id}")
+
+        if input.size > allowed.max_size:
+            raise errors.ValidationError(
+                message=(
+                    f"The project storage size ({input.size}) for project {project.id} "
+                    f"exceeds the maximum size of {allowed.max_size}"
+                )
+            )
+
+        new_storage = schemas.ProjectStorageORM(
+            project_id=project.id,
+            storage_class=self.project_storage_config.storage_class,
+            size_limit=input.size,
+            mount_path=input.mount_path,
+            created_by_id=user.id,
+        )
+        session.add(new_storage)
+        await session.flush()
+        return new_storage.dump()
+
+    @with_db_transaction
+    async def insert_project_storage_allow(
+        self, user: base_models.APIUser, input: models.ProjectStorageAllow, *, session: AsyncSession | None = None
+    ) -> models.ProjectStorageAllow:
+        """Insert a new project storage allow entry."""
+
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+        if user.id is None or not user.is_admin:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        existing = await session.execute(
+            select(exists().where(schemas.ProjectStorageAllowORM.project_id == input.project_id))
+        )
+        if existing.scalar():
+            raise errors.ValidationError(message=f"Project {input.project_id} is already in the allow list.")
+
+        if input.max_size > self.project_storage_config.maximum_size:
+            raise errors.ValidationError(
+                message=(
+                    f"The maximum size {input.max_size} exceeds the configured "
+                    f"one of {self.project_storage_config.maximum_size}."
+                )
+            )
+
+        new_allow = schemas.ProjectStorageAllowORM(
+            project_id=input.project_id,
+            max_size=input.max_size,
+        )
+        session.add(new_allow)
+        await session.flush()
+        return new_allow.dump()
+
+    @with_db_transaction
+    async def delete_project_storage(
+        self, user: base_models.APIUser, storage_id: ULID, *, session: AsyncSession | None = None
+    ) -> models.DeletedProjectStorage | None:
+        """Delete a specific project storage."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        result = await session.scalars(
+            select(schemas.ProjectStorageORM).where(schemas.ProjectStorageORM.id == storage_id)
+        )
+        storage_orm = result.one_or_none()
+        if storage_orm is None:
+            return None
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, storage_orm.project_id, Scope.DELETE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project storage with id '{storage_id}' does not exist or you do not have access to it."
+            )
+
+        await session.delete(storage_orm)
+        ps = storage_orm.dump()
+        return models.DeletedProjectStorage(project_id=ps.project_id)
+
+    async def get_project_storage_allow(
+        self, user: base_models.APIUser, project_id: ULID
+    ) -> models.ProjectStorageAllow | None:
+        """Get the storage allow entry for a project if it exists."""
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+        async with self.session_maker() as session:
+            result = await session.scalar(
+                select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project_id)
+            )
+            return result.dump() if result else None
+
+    async def get_project_storage_allows(
+        self, user: base_models.APIUser, pagination: PaginationRequest, project_name: str | None = None
+    ) -> tuple[list[models.ProjectStorageAllow], int]:
+        """Get all project storage allow entries, optionally filtered by project name."""
+        if user.id is None or not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.ProjectStorageAllowORM).join(
+                ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id
+            )
+            stmt_count = (
+                select(func.count())
+                .select_from(schemas.ProjectStorageAllowORM)
+                .join(ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id)
+            )
+            if project_name:
+                stmt = stmt.where(ProjectORM.name.ilike(f"%{project_name}%"))
+                stmt_count = stmt_count.where(ProjectORM.name.ilike(f"%{project_name}%"))
+            stmt = (
+                stmt.order_by(schemas.ProjectStorageAllowORM.project_id)
+                .limit(pagination.per_page)
+                .offset(pagination.offset)
+            )
+            results = await session.scalars(stmt)
+            total = await session.scalar(stmt_count) or 0
+            return [r.dump() for r in results.all()], total
+
+    @with_db_transaction
+    async def delete_project_storage_allow(
+        self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None
+    ) -> models.DeletedProjectStorage | None:
+        """Delete a project storage allow entry."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        if user.id is None or not user.is_admin:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        storage = await self.get_storage_to(user, project_id)
+        result = await session.scalars(
+            select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project_id)
+        )
+        allow_orm = result.one_or_none()
+        if not allow_orm:
+            await session.delete(allow_orm)
+
+        if storage:
+            return models.DeletedProjectStorage(project_id=storage.project_id)
+        return None
 
     @with_db_transaction
     async def insert_global_data_connector(

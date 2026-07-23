@@ -13,7 +13,10 @@ from typing import Protocol, TypeVar, cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from kubernetes.client import V1ObjectMeta, V1Secret
+from kubernetes.client import (
+    V1ObjectMeta,
+    V1Secret,
+)
 from sanic import Request
 from toml import dumps
 from ulid import ULID
@@ -35,9 +38,11 @@ from renku_data_services.crc.models import (
     SessionProtocol,
 )
 from renku_data_services.data_connectors.db import (
+    DataConnectorRepository,
     DataConnectorSecretRepository,
 )
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
+from renku_data_services.data_connectors.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.errors import ValidationError, errors
 from renku_data_services.k8s.models import ClusterConnection, K8sSecret, sanitizer
 from renku_data_services.notebooks import apispec
@@ -46,6 +51,7 @@ from renku_data_services.notebooks.api.amalthea_patches.init_containers import u
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
+from renku_data_services.notebooks.cr_amalthea_session import PersistentVolumeClaim
 from renku_data_services.notebooks.crs import (
     AmaltheaMetadata,
     AmaltheaSessionSpec,
@@ -178,6 +184,45 @@ async def get_extra_containers(
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
     return SessionExtraResources(containers=conts)
+
+
+async def get_project_storage(
+    user: AuthenticatedAPIUser,
+    project_storage_k8s: ProjectStorageK8s,
+    data_connector_repo: DataConnectorRepository,
+    project_id: ULID,
+    storage_mount: PurePosixPath,
+    cluster: ClusterConnection,
+) -> SessionExtraResources:
+    """If applicable, fetch the project storage and return it as SessionExtras."""
+    project_storage = await data_connector_repo.get_storage_to(user, project_id)
+    if not project_storage:
+        logger.debug(f"Project {project_id} has no project storage.")
+        return SessionExtraResources()
+
+    pvc = await project_storage_k8s.get_or_create_volume(project_storage, cluster)
+
+    logger.debug(f"Configuring project storage for {project_id}: {project_storage}")
+    mount_path = project_storage.mount_path
+    if not mount_path.is_absolute():
+        mount_path = storage_mount / mount_path
+
+    mount_name = f"ps-{project_id}-0".lower()
+    return SessionExtraResources(
+        volume_mounts=[
+            ExtraVolumeMount(
+                mountPath=mount_path.as_posix(),
+                name=mount_name,
+                readOnly=False,
+            )
+        ],
+        volumes=[
+            ExtraVolume(
+                name=mount_name,
+                persistentVolumeClaim=PersistentVolumeClaim(claimName=pvc.name),
+            )
+        ],
+    )
 
 
 async def get_auth_secret_authenticated(
@@ -876,6 +921,7 @@ async def start_session(
     nb_config: NotebooksConfig,
     git_provider_helper: GitProviderHelperProto,
     cluster_repo: ClusterRepository,
+    data_connector_repo: DataConnectorRepository,
     data_connector_secret_repo: DataConnectorSecretRepository,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
@@ -1013,6 +1059,15 @@ async def start_session(
     session_extras = session_extras.concat(
         await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
     )
+
+    # project storage
+    if isinstance(user, AuthenticatedAPIUser):
+        project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
+        session_extras = session_extras.concat(
+            await get_project_storage(
+                user, project_storage_k8s, data_connector_repo, project.id, storage_mount, cluster
+            )
+        )
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings

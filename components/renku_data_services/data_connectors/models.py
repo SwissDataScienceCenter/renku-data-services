@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Final
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import (
     DataConnectorInProjectPath,
     DataConnectorPath,
@@ -88,6 +89,51 @@ class UnsavedDataConnector(BaseDataConnector):
     def path(self) -> DataConnectorPath | DataConnectorInProjectPath:
         """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
         return self.namespace / DataConnectorSlug(self.slug)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedProjectStorage:
+    """Project storage definition."""
+
+    namespace_path: ProjectPath
+    size: ByteSize
+    mount_path: PurePosixPath
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorage:
+    """Stored project storage information."""
+
+    id: ULID
+    project_id: ULID
+    storage_class: str
+    size: ByteSize
+    mount_path: PurePosixPath
+    created_by: str
+    creation_date: datetime
+    updated_at: datetime
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project storage object."""
+        return compute_etag_from_fields(
+            self.updated_at, self.project_id, self.storage_class, self.size.to_bytes(), self.mount_path.as_posix()
+        )
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class DeletedProjectStorage:
+    """A project storage that has been deleted."""
+
+    project_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllow:
+    """Allowed project storage with max size."""
+
+    project_id: ULID
+    max_size: ByteSize
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

@@ -43,6 +43,7 @@ from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import (
     NamespacePath,
     ProjectPath,
@@ -208,6 +209,25 @@ async def validate_unsaved_data_connector(
         storage=storage,
         description=body.description,
         keywords=keywords,
+    )
+
+
+async def validate_unsaved_project_storage(body: apispec.ProjectStoragePost) -> models.UnsavedProjectStorage:
+    """Validate the user input for a new project storage definition.
+
+    The namespace must be a project namespace. The project must be
+    enabled for project storages and the user must be an owner.
+    """
+    namespace_split = body.namespace.split("/")
+    if len(namespace_split) != 2:
+        raise errors.ValidationError(message=f"The namespace must be a project path: {body.namespace}")
+
+    if body.mount_path == "":
+        raise errors.ValidationError(message="The mount path must not be empty")
+
+    namespace_path = ProjectPath.from_strings(namespace_split[0], namespace_split[1])
+    return models.UnsavedProjectStorage(
+        namespace_path=namespace_path, size=ByteSize.from_gibi(body.size), mount_path=PurePosixPath(body.mount_path)
     )
 
 

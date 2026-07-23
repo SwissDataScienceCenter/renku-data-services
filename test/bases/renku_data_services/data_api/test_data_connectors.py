@@ -2665,6 +2665,409 @@ async def link_dc_project(
     return response
 
 
+@pytest.mark.asyncio
+async def test_post_storage_success(
+    sanic_client: SanicASGITestClient,
+    create_project,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+    project_id = project["id"]
+
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    storage = response.json
+    assert storage.get("project_id") == project["id"]
+    assert storage.get("size") == 10
+    assert storage.get("mount_path") == "/data"
+    assert storage.get("created_by") == "user"
+    assert "ETag" in response.headers
+
+
+@pytest.mark.asyncio
+async def test_post_storage_unauthenticated_fails(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/data_connectors/storage", json=payload)
+
+    assert response.status_code == 401, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_storage_not_allowed_fails(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/data_connectors/storage", json=payload, headers=user_headers)
+
+    assert response.status_code == 403, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_storage_duplicate_fails(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status == 201
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.asyncio
+async def test_get_one_storage_success(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/{storage_id}", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    storage = response.json
+    assert storage.get("id") == storage_id
+    assert storage.get("project_id") == project["id"]
+    assert storage.get("size") == 10
+    assert storage.get("mount_path") == "/data"
+
+
+@pytest.mark.asyncio
+async def test_get_one_storage_not_found(sanic_client: SanicASGITestClient, user_headers: dict[str, str]) -> None:
+    from ulid import ULID
+
+    non_existent_id = str(ULID())
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/{non_existent_id}", headers=user_headers)
+
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+async def test_get_one_storage_etag(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+    etag = response.headers["ETag"]
+
+    headers = merge_headers(user_headers, {"If-None-Match": etag})
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/{storage_id}", headers=headers)
+
+    assert response.status_code == 304, response.text
+
+
+@pytest.mark.asyncio
+async def test_get_storage_to_project_for_no_storage(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project['id']}/storage", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json == []
+
+
+@pytest.mark.asyncio
+async def test_get_storage_to_project_success(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status == 201
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project['id']}/storage", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+    storage = response.json[0]
+    assert storage.get("project_id") == project["id"]
+    assert storage.get("size") == 10
+    assert storage.get("mount_path") == "/data"
+
+
+@pytest.mark.asyncio
+async def test_delete_storage_success(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+
+    _, response = await sanic_client.delete(f"/api/data/data_connectors/storage/{storage_id}", headers=user_headers)
+    assert response.status_code == 204, response.text
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project['id']}/storage", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json == []
+
+
+@pytest.mark.asyncio
+async def test_delete_storage_unauthenticated_fails(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+
+    _, response = await sanic_client.delete(f"/api/data/data_connectors/storage/{storage_id}")
+
+    assert response.status_code == 401, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_storage_allow_success(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    allow = response.json
+    assert allow.get("project_id") == project_id
+    assert allow.get("max_size") == 10
+
+
+@pytest.mark.asyncio
+async def test_post_storage_allow_requires_admin(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+
+    payload = {"project_id": project["id"], "max_size": 10}
+    _, response = await sanic_client.post("/api/data/data_connectors/storage/allow", headers=user_headers, json=payload)
+
+    assert response.status_code == 403, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_storage_allow_unauthenticated_fails(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+
+    payload = {"project_id": project["id"], "max_size": 10}
+    _, response = await sanic_client.post("/api/data/data_connectors/storage/allow", json=payload)
+
+    assert response.status_code == 401, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_storage_allow_duplicate_fails(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.asyncio
+async def test_delete_storage_allow_success(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.delete(
+        f"/api/data/data_connectors/storage/allow/{project_id}", headers=admin_headers
+    )
+
+    assert response.status_code == 204, response.text
+
+    # Re-adding after deletion should succeed
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.asyncio
+async def test_delete_storage_allow_requires_admin(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str], user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.delete(
+        f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers
+    )
+
+    assert response.status_code == 403, response.text
+
+
+@pytest.mark.asyncio
+async def test_get_storage_allow_success(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str], user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("project_id") == project_id
+    assert response.json.get("max_size") == 10
+
+
+@pytest.mark.asyncio
+async def test_get_storage_allow_not_in_list(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers)
+
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+async def test_get_storage_allow_unauthenticated(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}")
+
+    assert response.status_code == 401, response.text
+
+
 async def test_get_all_dc_links(
     sanic_client: SanicASGITestClient,
     regular_user: UserInfo,
