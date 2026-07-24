@@ -116,6 +116,11 @@ class PersistedLogsCollector:
         """Collect persisted logs from Amalthea sessions and image builds."""
         ...
 
+    @abstractmethod
+    async def purge_expired_logs(self) -> None:
+        """Purge expired persisted logs from the database."""
+        ...
+
     @staticmethod
     def from_config(
         config: PersistedLogsConfig,
@@ -129,6 +134,7 @@ class PersistedLogsCollector:
             reader = LokiLogReader(config=config, client=http_client)
             return DefaultPersistedLogsCollector(
                 session_maker=session_maker,
+                config=config,
                 reader=reader,
                 session_logs_repo=AmaltheaSessionPersistedLogsRepository(),
             )
@@ -142,6 +148,10 @@ class NoopPersistedLogsCollector(PersistedLogsCollector):
         """Collect persisted logs from Amalthea sessions and image builds."""
         return None
 
+    async def purge_expired_logs(self) -> None:
+        """Purge expired persisted logs from the database."""
+        return None
+
 
 class DefaultPersistedLogsCollector(PersistedLogsCollector):
     """Collector for gathering persisted logs."""
@@ -149,10 +159,12 @@ class DefaultPersistedLogsCollector(PersistedLogsCollector):
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
+        config: PersistedLogsConfig,
         reader: LokiLogReader,
         session_logs_repo: AmaltheaSessionPersistedLogsRepository,
     ) -> None:
         self.session_maker = session_maker
+        self.config = config
         self.reader = reader
         self.session_logs_repo = session_logs_repo
 
@@ -180,6 +192,19 @@ class DefaultPersistedLogsCollector(PersistedLogsCollector):
                     result = await self.session_logs_repo.insert_session_logs(session=session, logs_stream=logs_stream)
                     current_start = result.last_timestamp + 1
                     has_more = result.log_count > 1
+
+        return None
+
+    async def purge_expired_logs(self) -> None:
+        """Purge expired persisted logs from the database."""
+        await self.purge_expired_session_logs()
+        return None
+
+    async def purge_expired_session_logs(self) -> None:
+        """Purge expired session logs from the database."""
+        now = datetime.now(tz=UTC)
+        async with self.session_maker() as session, session.begin():
+            await self.session_logs_repo.delete_expired_session_logs(session=session, before=now)
 
         return None
 

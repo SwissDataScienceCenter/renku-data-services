@@ -1,18 +1,22 @@
 """Adapters for persisted logs database classes."""
 
 from collections.abc import AsyncIterator
+from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services import base_models, errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
-from renku_data_services.persisted_logs import models
+from renku_data_services.persisted_logs import core, models
 from renku_data_services.persisted_logs import orm as schemas
 from renku_data_services.persisted_logs.constants import SESSION_MAIN_CONTAINER
 from renku_data_services.session import orm as session_schemas
+
+logger = logging.getLogger(__name__)
 
 
 class AmaltheaSessionPersistedLogsReadRepository:
@@ -199,3 +203,29 @@ class AmaltheaSessionPersistedLogsRepository:
             session.add(log_orm)
             await session.flush()
         return models.InsertLogsResult(log_count=log_count, last_timestamp=last_timestamp)
+
+    async def delete_expired_session_logs(self, session: AsyncSession, before: datetime) -> int:
+        """Remove expired session logs from the database."""
+        nano_ts = core.NanoTimestamp.from_datetime(before)
+        delete_logs_stmt = delete(schemas.AmaltheaSessionLogsORM).where(
+            schemas.AmaltheaSessionLogsORM.timestamp < nano_ts
+        )
+        res = await session.execute(delete_logs_stmt)
+        deleted_logs_count = res.rowcount
+        logger.info(f"deleted_logs_count = {type(deleted_logs_count)} {deleted_logs_count}")
+
+        # Remove orphaned session runs
+        stmt = (
+            select(schemas.SessionRunsORM)
+            .join(
+                schemas.AmaltheaSessionLogsORM,
+                schemas.SessionRunsORM.id == schemas.AmaltheaSessionLogsORM.run_id,
+                isouter=True,  # isouter makes it a left-join, not an outer join
+            )
+            .where(schemas.AmaltheaSessionLogsORM.id.is_(None))
+        )
+        session_runs_res = await session.stream_scalars(stmt)
+        async for session_run in session_runs_res:
+            logger.info(f"Orphaned session run: {session_run.dump()}")
+
+        return 0

@@ -588,6 +588,17 @@ async def collect_persisted_logs(dm: DependencyManager) -> None:
             await asyncio.sleep(1)
 
 
+async def purge_expired_persisted_logs(dm: DependencyManager) -> None:
+    """Purge expired persisted logs from the database."""
+    while True:
+        try:
+            await dm.persisted_logs_collector.purge_expired_logs()
+        except Exception as e:
+            logger.warning(f"Failed to purge expired persisted logs: {e}", exc_info=True)
+        else:
+            await asyncio.sleep(dm.config.long_task_period_s)
+
+
 def all_tasks(dm: DependencyManager) -> TaskDefininions:
     """A dict of task factories to be managed in main."""
     # Impl. note: We pass the entire config to the coroutines, because
@@ -615,5 +626,6 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
             "record_resource_requests": lambda: record_resource_requests(dm),
             "monitor_session_quota_and_send_alerts": lambda: monitor_session_quota_and_send_alerts(dm),
             "collect_persisted_logs": lambda: collect_persisted_logs(dm),
+            "purge_expired_persisted_logs": lambda: purge_expired_persisted_logs(dm),
         }
     )

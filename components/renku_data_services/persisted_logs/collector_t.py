@@ -1,6 +1,7 @@
 """Temp: for testing with local port-forwarding..."""
 
 import asyncio
+from datetime import timedelta
 
 import httpx
 
@@ -18,6 +19,7 @@ def _main() -> None:
         # loki_read_base_url="http://host.docker.internal:3100/",
         loki_read_base_url="http://10.6.0.96:3100/",
         namespace="renku",
+        logs_ttl=timedelta(days=1),
     )
     reader = LokiLogReader(config, client=httpx.AsyncClient())
 
