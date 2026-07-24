@@ -56,10 +56,8 @@ class LokiLogReader:
             params["start"] = str(start)
         if end:
             params["end"] = str(end)
-        logger.info(params)
         res = await self.client.get("loki/api/v1/query_range", params=params)
         res.raise_for_status()
-        logger.info(res)
         result = loki_api.LokiQueryRangeResponse.model_validate_json(res.content)
         log_line_ids: set[str] = set()
 
@@ -182,10 +180,6 @@ class DefaultPersistedLogsCollector(PersistedLogsCollector):
                     result = await self.session_logs_repo.insert_session_logs(session=session, logs_stream=logs_stream)
                     current_start = result.last_timestamp + 1
                     has_more = result.log_count > 1
-
-            async with session.begin():
-                ts = await self.session_logs_repo.get_latest_log_timestamp(session=session)
-                logger.info(f"Latest session log timestamp: {ts}")
 
         return None
 
