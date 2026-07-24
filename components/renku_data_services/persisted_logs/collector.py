@@ -203,9 +203,9 @@ class DefaultPersistedLogsCollector(PersistedLogsCollector):
     async def purge_expired_session_logs(self) -> None:
         """Purge expired session logs from the database."""
         now = datetime.now(tz=UTC)
+        cutoff = now - self.config.logs_ttl
         async with self.session_maker() as session, session.begin():
-            await self.session_logs_repo.delete_expired_session_logs(session=session, before=now)
-
+            await self.session_logs_repo.delete_expired_session_logs(session=session, before=cutoff)
         return None
 
 
