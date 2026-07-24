@@ -14,5 +14,8 @@ PERSISTED_LOGS_NAMESPACE_LABEL_KEY: Final[str] = "namespace"
 ONE_SECOND_IN_NANOS: Final[int] = 1_000_000_000
 """One second as nanoseconds (for Loki)."""
 
+ONE_MINUTE_IN_NANOS: Final[int] = 60 * ONE_SECOND_IN_NANOS
+"""One minute as nanoseconds (for Loki)."""
+
 SESSION_MAIN_CONTAINER: Final[str] = "amalthea-session"
 """The name of the main pod container for Amalthea sessions."""

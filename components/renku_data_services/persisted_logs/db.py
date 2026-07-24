@@ -212,11 +212,10 @@ class AmaltheaSessionPersistedLogsRepository:
         )
         res = await session.execute(delete_logs_stmt)
         deleted_logs_count = res.rowcount
-        logger.info(f"deleted_logs_count = {type(deleted_logs_count)} {deleted_logs_count}")
 
         # Remove orphaned session runs
         stmt = (
-            select(schemas.SessionRunsORM)
+            select(schemas.SessionRunsORM.id)
             .join(
                 schemas.AmaltheaSessionLogsORM,
                 schemas.SessionRunsORM.id == schemas.AmaltheaSessionLogsORM.run_id,
@@ -224,8 +223,8 @@ class AmaltheaSessionPersistedLogsRepository:
             )
             .where(schemas.AmaltheaSessionLogsORM.id.is_(None))
         )
-        session_runs_res = await session.stream_scalars(stmt)
-        async for session_run in session_runs_res:
-            logger.info(f"Orphaned session run: {session_run.dump()}")
+        session_runs_res = await session.scalars(stmt)
+        session_run_ids = session_runs_res.all()
+        await session.execute(delete(schemas.SessionRunsORM).where(schemas.SessionRunsORM.id.in_(session_run_ids)))
 
-        return 0
+        return deleted_logs_count
