@@ -1,7 +1,7 @@
 """add_project_storage
 
 Revision ID: fa511acd4581
-Revises: 0a6cee40fe0d
+Revises: 01k4dy9r2we4
 Create Date: 2026-07-09 14:10:42.701383
 
 """
@@ -13,7 +13,7 @@ from renku_data_services.utils.sqlalchemy import ByteSizeType, ULIDType
 
 # revision identifiers, used by Alembic.
 revision = "fa511acd4581"
-down_revision = "0a6cee40fe0d"
+down_revision = "01k4dy9r2we4"
 branch_labels = None
 depends_on = None
 
