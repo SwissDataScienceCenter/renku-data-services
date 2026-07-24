@@ -471,7 +471,6 @@ class DataConnectorRepository:
         self, user: base_models.APIUser, input: models.ProjectStorageAllow, *, session: AsyncSession | None = None
     ) -> models.ProjectStorageAllow:
         """Insert a new project storage allow entry."""
-
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
         if user.id is None or not user.is_admin:
@@ -583,7 +582,7 @@ class DataConnectorRepository:
             select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project_id)
         )
         allow_orm = result.one_or_none()
-        if not allow_orm:
+        if allow_orm:
             await session.delete(allow_orm)
 
         if storage:
