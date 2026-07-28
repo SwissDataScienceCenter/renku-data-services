@@ -45,7 +45,7 @@ from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.models import SecretKind
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.db import UserRepo
-from renku_data_services.utils.core import with_db_transaction
+from renku_data_services.utils.core import with_db_session, with_db_transaction
 
 
 class DataConnectorRepository:
@@ -523,36 +523,43 @@ class DataConnectorRepository:
         ps = storage_orm.dump()
         return models.DeletedProjectStorage(project_id=ps.project_id)
 
+    @with_db_session
     async def get_project_storage_allow(
-        self, user: base_models.APIUser, project_id: ULID
+        self,
+        user: base_models.APIUser,
+        project_id: ULID,
+        *,
+        session: AsyncSession | None = None,
     ) -> models.ProjectStorageAllowDetail | None:
         """Get the storage allow entry for a project if it exists."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
-        async with self.session_maker() as session:
-            stmt = (
-                select(
-                    schemas.ProjectStorageAllowORM.project_id,
-                    schemas.ProjectStorageAllowORM.max_size,
-                    ProjectORM.name,
-                    ns_schemas.NamespaceORM.slug.label("namespace_slug"),
-                    ns_schemas.EntitySlugORM.slug.label("project_slug"),
-                )
-                .join(ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id)
-                .join(
-                    ns_schemas.EntitySlugORM,
-                    ns_schemas.EntitySlugORM.project_id == schemas.ProjectStorageAllowORM.project_id,
-                )
-                .join(ns_schemas.NamespaceORM, ns_schemas.NamespaceORM.id == ns_schemas.EntitySlugORM.namespace_id)
-                .where(schemas.ProjectStorageAllowORM.project_id == project_id)
+        stmt = (
+            select(
+                schemas.ProjectStorageAllowORM.project_id,
+                schemas.ProjectStorageAllowORM.max_size,
+                ProjectORM.name,
+                ns_schemas.NamespaceORM.slug.label("namespace_slug"),
+                ns_schemas.EntitySlugORM.slug.label("project_slug"),
             )
-            result = (await session.execute(stmt)).one_or_none()
-            if result:
-                return models.ProjectStorageAllowDetail.create(**result._mapping)
-            return None
+            .join(ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id)
+            .join(
+                ns_schemas.EntitySlugORM,
+                ns_schemas.EntitySlugORM.project_id == schemas.ProjectStorageAllowORM.project_id,
+            )
+            .join(ns_schemas.NamespaceORM, ns_schemas.NamespaceORM.id == ns_schemas.EntitySlugORM.namespace_id)
+            .where(schemas.ProjectStorageAllowORM.project_id == project_id)
+        )
+        result = (await session.execute(stmt)).one_or_none()
+        if result:
+            return models.ProjectStorageAllowDetail.create(**result._mapping)
+        return None
 
     async def get_project_storage_allows(
         self, user: base_models.APIUser, pagination: PaginationRequest, project_name: str | None = None
@@ -591,6 +598,52 @@ class DataConnectorRepository:
             results = [models.ProjectStorageAllowDetail.create(**row._mapping) for row in rows]
             total = await session.scalar(stmt_count) or 0
             return results, total
+
+    @with_db_transaction
+    async def update_project_storage_allow(
+        self,
+        user: base_models.APIUser,
+        project_id: ULID,
+        patch: models.ProjectStorageAllowPatch,
+        etag: str,
+        *,
+        session: AsyncSession | None = None,
+    ) -> models.ProjectStorageAllowUpdate:
+        """Update some properties of a project storage allow entry."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        old = await self.get_project_storage_allow(user, project_id, session=session)
+        ps_orm = await session.scalars(
+            select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project_id)
+        )
+        ps_orm = ps_orm.one_or_none()
+        if not old or not ps_orm or not isinstance(user, base_models.AuthenticatedAPIUser) or not user.is_admin:
+            raise errors.MissingResourceError(
+                message=(
+                    f"Project storage allow entry for project '{project_id}' "
+                    "does not exist or you do not have access to it."
+                )
+            )
+
+        current_etag = old.etag
+        if current_etag != etag:
+            raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
+        if patch.max_size:
+            ps_orm.max_size = patch.max_size
+
+        await session.flush()
+        await session.refresh(ps_orm)
+
+        new = models.ProjectStorageAllowDetail(
+            project_id=project_id,
+            max_size=ps_orm.max_size,
+            name=old.name,
+            namespace_path=old.namespace_path,
+            updated_at=ps_orm.updated_at,
+        )
+        return models.ProjectStorageAllowUpdate(old=old, new=new)
 
     @with_db_transaction
     async def delete_project_storage_allow(

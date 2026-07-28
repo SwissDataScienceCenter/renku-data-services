@@ -240,7 +240,7 @@ def _validate_mount_path(path: str | None) -> None:
             raise errors.ValidationError(message=f"The mount path is invalid: '{path}'")
 
 
-async def validate_unsaved_project_storage(body: apispec.ProjectStoragePost) -> models.UnsavedProjectStorage:
+def validate_unsaved_project_storage(body: apispec.ProjectStoragePost) -> models.UnsavedProjectStorage:
     """Validate the user input for a new project storage definition.
 
     The namespace must be a project namespace. The project must be
@@ -256,6 +256,27 @@ async def validate_unsaved_project_storage(body: apispec.ProjectStoragePost) -> 
     return models.UnsavedProjectStorage(
         namespace_path=namespace_path, size=ByteSize.from_gibi(body.size), mount_path=PurePosixPath(body.mount_path)
     )
+
+
+def validate_project_storage_allow_post(body: apispec.ProjectStorageAllowPost) -> models.ProjectStorageAllow:
+    """Validate."""
+    allow = models.ProjectStorageAllow(
+        project_id=ULID.from_str(body.project_id), max_size=ByteSize.from_gibi(body.max_size), updated_at=datetime.now()
+    )
+    if allow.max_size < ByteSize.from_gibi(1):
+        raise errors.ValidationError(message=f"The maximum size must be at least 1GB, but {allow.max_size} was given.")
+    return allow
+
+
+def validate_project_storage_allow_patch(
+    existing: models.ProjectStorageAllowDetail, body: apispec.ProjectStorageAllowPatch
+) -> models.ProjectStorageAllowPatch:
+    """Validate a patch of a project storage allow entry."""
+
+    size = ByteSize.from_gibi(body.max_size) if body.max_size else None
+    if size and size < ByteSize.from_gibi(1):
+        raise errors.ValidationError(message="The maximum size must be at least 1GB")
+    return models.ProjectStorageAllowPatch(max_size=size)
 
 
 async def prevalidate_unsaved_global_data_connector(

@@ -24,6 +24,7 @@ def upgrade() -> None:
         "project_storage_allow",
         sa.Column("project_id", ULIDType(), nullable=False),
         sa.Column("max_size", ByteSizeType(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["project_id"], ["projects.projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("project_id"),
         schema="storage",

@@ -18,7 +18,6 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
-from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import (
     DataConnectorInProjectPath,
     DataConnectorPath,
@@ -46,6 +45,8 @@ from renku_data_services.data_connectors.core import (
     validate_deposit,
     validate_deposit_patch,
     validate_deposit_status_change,
+    validate_project_storage_allow_patch,
+    validate_project_storage_allow_post,
     validate_unsaved_data_connector,
     validate_unsaved_project_storage,
 )
@@ -176,7 +177,7 @@ class DataConnectorsBP(CustomBlueprint):
         async def _post_storage(
             _: Request, user: base_models.APIUser, body: apispec.ProjectStoragePost
         ) -> JSONResponse:
-            dc = await validate_unsaved_project_storage(body)
+            dc = validate_unsaved_project_storage(body)
             result = await self.data_connector_repo.insert_project_storage(user, dc)
             headers = {"ETag": result.etag}
             return validated_json(
@@ -221,15 +222,7 @@ class DataConnectorsBP(CustomBlueprint):
         async def _post_storage_allow(
             _: Request, user: base_models.APIUser, body: apispec.ProjectStorageAllowPost
         ) -> JSONResponse:
-            allow = models.ProjectStorageAllow(
-                project_id=ULID.from_str(body.project_id),
-                max_size=ByteSize.from_gibi(body.max_size),
-            )
-            if allow.max_size < ByteSize.from_gibi(1):
-                raise errors.ValidationError(
-                    message=f"The maximum size must be at least 1GB, but {allow.max_size} was given."
-                )
-
+            allow = validate_project_storage_allow_post(body)
             inserted = await self.data_connector_repo.insert_project_storage_allow(user, allow)
             return validated_json(
                 apispec.ProjectStorageAllowPost,
@@ -238,6 +231,36 @@ class DataConnectorsBP(CustomBlueprint):
             )
 
         return "/data_connectors/storage/allow", ["POST"], _post_storage_allow
+
+    def patch_storage_allow(self) -> BlueprintFactoryResponse:
+        """Partially update a project storage allow entry."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @if_match_required
+        @validate(json=apispec.ProjectStorageAllowPatch)
+        async def _patch(
+            _: Request,
+            user: base_models.APIUser,
+            project_id: ULID,
+            body: apispec.ProjectStorageAllowPatch,
+            etag: str,
+        ) -> JSONResponse:
+            existing_entry = await self.data_connector_repo.get_project_storage_allow(user=user, project_id=project_id)
+            if not existing_entry:
+                raise errors.MissingResourceError(message=f"No project storage allow entry for project {project_id}")
+
+            pse_patch = validate_project_storage_allow_patch(existing_entry, body)
+            pse_update = await self.data_connector_repo.update_project_storage_allow(
+                user=user, project_id=project_id, patch=pse_patch, etag=etag
+            )
+
+            return validated_json(
+                apispec.ProjectStorageAllow,
+                self._dump_project_storage_allow_detail(pse_update.new),
+            )
+
+        return "/data_connectors/storage/allow/<project_id:ulid>", ["PATCH"], _patch
 
     def get_storage_allow(self) -> BlueprintFactoryResponse:
         """Get the storage allow entry for a project."""

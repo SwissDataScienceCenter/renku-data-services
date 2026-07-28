@@ -134,6 +134,12 @@ class ProjectStorageAllow:
 
     project_id: ULID
     max_size: ByteSize
+    updated_at: datetime
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project storage allow object."""
+        return compute_etag_from_fields(self.updated_at, self.project_id, self.max_size.to_bytes())
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -144,14 +150,43 @@ class ProjectStorageAllowDetail:
     max_size: ByteSize
     name: str
     namespace_path: ProjectPath
+    updated_at: datetime
 
     @classmethod
     def create(
-        cls, project_id: ULID, max_size: ByteSize, name: str, namespace_slug: str, project_slug: str
+        cls,
+        project_id: ULID,
+        max_size: ByteSize,
+        name: str,
+        namespace_slug: str,
+        project_slug: str,
+        updated_at: datetime,
     ) -> ProjectStorageAllowDetail:
         """Create an instance with the project path given as two strings."""
         np = ProjectPath.from_strings(namespace_slug, project_slug)
-        return ProjectStorageAllowDetail(project_id=project_id, max_size=max_size, name=name, namespace_path=np)
+        return ProjectStorageAllowDetail(
+            project_id=project_id, max_size=max_size, name=name, namespace_path=np, updated_at=updated_at
+        )
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project storage allow object."""
+        return compute_etag_from_fields(self.updated_at, self.project_id, self.max_size.to_bytes())
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllowPatch:
+    """Model for changes requested on a project storage allow entry."""
+
+    max_size: ByteSize | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllowUpdate:
+    """Return data when updating an allow entry."""
+
+    old: ProjectStorageAllowDetail
+    new: ProjectStorageAllowDetail
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

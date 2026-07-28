@@ -352,11 +352,21 @@ class ProjectStorageAllowORM(BaseORM):
     max_size: Mapped[ByteSize] = mapped_column("max_size", ByteSizeType())
     """Maximum allowed size in bytes."""
 
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
     def dump(self) -> models.ProjectStorageAllow:
         """Convert the ORM row to a ProjectStorageAllow model."""
         return models.ProjectStorageAllow(
             project_id=self.project_id,
             max_size=self.max_size,
+            updated_at=self.updated_at,
         )
 
 
