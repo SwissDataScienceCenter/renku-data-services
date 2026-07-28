@@ -225,6 +225,11 @@ class DataConnectorsBP(CustomBlueprint):
                 project_id=ULID.from_str(body.project_id),
                 max_size=ByteSize.from_gibi(body.max_size),
             )
+            if allow.max_size < ByteSize.from_gibi(1):
+                raise errors.ValidationError(
+                    message=f"The maximum size must be at least 1GB, but {allow.max_size} was given."
+                )
+
             await self.data_connector_repo.insert_project_storage_allow(user, allow)
             return validated_json(
                 apispec.ProjectStorageAllow,

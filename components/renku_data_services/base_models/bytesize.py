@@ -101,3 +101,8 @@ class ByteSize:
     def from_tebi(cls, tib: float) -> ByteSize:
         """Create a ByteSize from a tebibyte value."""
         return cls(value=round(tib * cls.TEBI))
+
+    @classmethod
+    def zero(cls) -> ByteSize:
+        """Create a byte size with value 0."""
+        return ByteSize(0)
