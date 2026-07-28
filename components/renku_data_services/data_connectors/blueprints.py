@@ -205,7 +205,7 @@ class DataConnectorsBP(CustomBlueprint):
             return [
                 validate_and_dump(
                     apispec.ProjectStorageAllow,
-                    self._dump_project_storage_allow(a),
+                    self._dump_project_storage_allow_detail(a),
                 )
                 for a in allows
             ], total
@@ -230,10 +230,10 @@ class DataConnectorsBP(CustomBlueprint):
                     message=f"The maximum size must be at least 1GB, but {allow.max_size} was given."
                 )
 
-            await self.data_connector_repo.insert_project_storage_allow(user, allow)
+            inserted = await self.data_connector_repo.insert_project_storage_allow(user, allow)
             return validated_json(
-                apispec.ProjectStorageAllow,
-                self._dump_project_storage_allow(allow),
+                apispec.ProjectStorageAllowPost,
+                self._dump_project_storage_allow_post(inserted),
                 status=201,
             )
 
@@ -250,7 +250,7 @@ class DataConnectorsBP(CustomBlueprint):
                 raise errors.MissingResourceError(message=f"Project {project_id} is not in the storage allow list.")
             return validated_json(
                 apispec.ProjectStorageAllow,
-                self._dump_project_storage_allow(allow),
+                self._dump_project_storage_allow_detail(allow),
             )
 
         return "/data_connectors/storage/allow/<project_id:ulid>", ["GET"], _get_storage_allow
@@ -550,6 +550,7 @@ class DataConnectorsBP(CustomBlueprint):
             storage_id: ULID,
         ) -> HTTPResponse:
             await self.data_connector_repo.delete_project_storage(user=user, storage_id=storage_id)
+            # REMOVE VOLUME
             return HTTPResponse(status=204)
 
         return "/data_connectors/storage/<storage_id:ulid>", ["DELETE"], _delete_storage
@@ -764,8 +765,20 @@ class DataConnectorsBP(CustomBlueprint):
         )
 
     @staticmethod
-    def _dump_project_storage_allow(ps: models.ProjectStorageAllow) -> apispec.ProjectStorageAllow:
-        return apispec.ProjectStorageAllow(project_id=str(ps.project_id), max_size=int(ps.max_size.to_gibi()))
+    def _dump_project_storage_allow_detail(ps: models.ProjectStorageAllowDetail) -> apispec.ProjectStorageAllow:
+        return apispec.ProjectStorageAllow(
+            project_id=str(ps.project_id),
+            max_size=int(ps.max_size.to_gibi()),
+            name=ps.name,
+            namespace=ps.namespace_path.serialize(),
+        )
+
+    @staticmethod
+    def _dump_project_storage_allow_post(ps: models.ProjectStorageAllow) -> apispec.ProjectStorageAllowPost:
+        return apispec.ProjectStorageAllowPost(
+            project_id=str(ps.project_id),
+            max_size=int(ps.max_size.to_gibi()),
+        )
 
     async def __get_zenodo_access_token(self, user: base_models.APIUser) -> str:
         provider = await self.connected_services_repo.get_provider_for_kind(user, ProviderKind.zenodo)

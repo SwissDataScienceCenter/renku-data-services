@@ -137,6 +137,24 @@ class ProjectStorageAllow:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllowDetail:
+    """Allowed project storage with max size."""
+
+    project_id: ULID
+    max_size: ByteSize
+    name: str
+    namespace_path: ProjectPath
+
+    @classmethod
+    def create(
+        cls, project_id: ULID, max_size: ByteSize, name: str, namespace_slug: str, project_slug: str
+    ) -> ProjectStorageAllowDetail:
+        """Create an instance with the project path given as two strings."""
+        np = ProjectPath.from_strings(namespace_slug, project_slug)
+        return ProjectStorageAllowDetail(project_id=project_id, max_size=max_size, name=name, namespace_path=np)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class GlobalDataConnector(BaseDataConnector):
     """Global data connector model."""
 

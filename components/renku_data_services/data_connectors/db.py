@@ -525,7 +525,7 @@ class DataConnectorRepository:
 
     async def get_project_storage_allow(
         self, user: base_models.APIUser, project_id: ULID
-    ) -> models.ProjectStorageAllow | None:
+    ) -> models.ProjectStorageAllowDetail | None:
         """Get the storage allow entry for a project if it exists."""
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
@@ -533,27 +533,52 @@ class DataConnectorRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
         async with self.session_maker() as session:
-            result = await session.scalar(
-                select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project_id)
+            stmt = (
+                select(
+                    schemas.ProjectStorageAllowORM.project_id,
+                    schemas.ProjectStorageAllowORM.max_size,
+                    ProjectORM.name,
+                    ns_schemas.NamespaceORM.slug.label("namespace_slug"),
+                    ns_schemas.EntitySlugORM.slug.label("project_slug"),
+                )
+                .join(ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id)
+                .join(
+                    ns_schemas.EntitySlugORM,
+                    ns_schemas.EntitySlugORM.project_id == schemas.ProjectStorageAllowORM.project_id,
+                )
+                .join(ns_schemas.NamespaceORM, ns_schemas.NamespaceORM.id == ns_schemas.EntitySlugORM.namespace_id)
+                .where(schemas.ProjectStorageAllowORM.project_id == project_id)
             )
-            return result.dump() if result else None
+            result = (await session.execute(stmt)).one_or_none()
+            if result:
+                return models.ProjectStorageAllowDetail.create(**result._mapping)
+            return None
 
     async def get_project_storage_allows(
         self, user: base_models.APIUser, pagination: PaginationRequest, project_name: str | None = None
-    ) -> tuple[list[models.ProjectStorageAllow], int]:
+    ) -> tuple[list[models.ProjectStorageAllowDetail], int]:
         """Get all project storage allow entries, optionally filtered by project name."""
         if user.id is None or not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session:
-            stmt = select(schemas.ProjectStorageAllowORM).join(
-                ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id
-            )
-            stmt_count = (
-                select(func.count())
-                .select_from(schemas.ProjectStorageAllowORM)
+            stmt = (
+                select(
+                    schemas.ProjectStorageAllowORM.project_id,
+                    schemas.ProjectStorageAllowORM.max_size,
+                    ProjectORM.name,
+                    ns_schemas.NamespaceORM.slug.label("namespace_slug"),
+                    ns_schemas.EntitySlugORM.slug.label("project_slug"),
+                )
                 .join(ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id)
+                .join(
+                    ns_schemas.EntitySlugORM,
+                    ns_schemas.EntitySlugORM.project_id == schemas.ProjectStorageAllowORM.project_id,
+                )
+                .join(ns_schemas.NamespaceORM, ns_schemas.NamespaceORM.id == ns_schemas.EntitySlugORM.namespace_id)
             )
+
+            stmt_count = select(func.count()).select_from(schemas.ProjectStorageAllowORM)
             if project_name:
                 stmt = stmt.where(ProjectORM.name.ilike(f"%{project_name}%"))
                 stmt_count = stmt_count.where(ProjectORM.name.ilike(f"%{project_name}%"))
@@ -562,9 +587,10 @@ class DataConnectorRepository:
                 .limit(pagination.per_page)
                 .offset(pagination.offset)
             )
-            results = await session.scalars(stmt)
+            rows = await session.execute(stmt)
+            results = [models.ProjectStorageAllowDetail.create(**row._mapping) for row in rows]
             total = await session.scalar(stmt_count) or 0
-            return [r.dump() for r in results.all()], total
+            return results, total
 
     @with_db_transaction
     async def delete_project_storage_allow(

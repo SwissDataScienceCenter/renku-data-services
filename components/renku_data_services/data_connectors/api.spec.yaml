@@ -147,7 +147,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProjectStorageAllow"
+                $ref: "#/components/schemas/ProjectStorageAllowPost"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -828,7 +828,7 @@ paths:
         - deposit
 components:
   schemas:
-    ProjectSlugForStorage:
+    ProjectSlug:
       type: string
       description: The slug used to identify a project
       minLength: 3
@@ -931,7 +931,7 @@ components:
       additionalProperties: false
       properties:
         namespace:
-          $ref: "#/components/schemas/ProjectSlugForStorage"
+          $ref: "#/components/schemas/ProjectSlug"
         size:
           type: integer
           format: int32
@@ -990,6 +990,10 @@ components:
       properties:
         project_id:
           $ref: "#/components/schemas/Ulid"
+        name:
+          type: string
+        namespace:
+          type: string
         max_size:
           type: integer
           format: int64
@@ -997,6 +1001,8 @@ components:
       required:
         - project_id
         - max_size
+        - name
+        - namespace
     ProjectStorageAllowList:
       description: |
         A list of project storage allow entries.
