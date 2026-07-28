@@ -42,8 +42,8 @@ class ProjectStorageK8s:
             await self.__k8s_client.create_persistent_volume(pvc)
         return pvc
 
-    async def delete_volume(self, storage: DeletedProjectStorage | ULID) -> None:
+    async def delete_volume(self, project: DeletedProjectStorage | ULID) -> None:
         """Delete a persistent volume associated to the project."""
 
-        name = self.__pvc_name(storage)
+        name = self.__pvc_name(project)
         await self.__k8s_client.delete_persistent_volume(name)

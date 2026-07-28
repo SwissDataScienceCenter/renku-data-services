@@ -549,8 +549,9 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             storage_id: ULID,
         ) -> HTTPResponse:
-            await self.data_connector_repo.delete_project_storage(user=user, storage_id=storage_id)
-            # REMOVE VOLUME
+            deleted = await self.data_connector_repo.delete_project_storage(user=user, storage_id=storage_id)
+            if deleted:
+                await self.project_storage_k8s.delete_volume(deleted)
             return HTTPResponse(status=204)
 
         return "/data_connectors/storage/<storage_id:ulid>", ["DELETE"], _delete_storage
