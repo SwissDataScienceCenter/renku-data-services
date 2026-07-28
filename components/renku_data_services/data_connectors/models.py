@@ -101,6 +101,14 @@ class UnsavedProjectStorage:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStoragePatch:
+    """Model for changes requested on a project storage."""
+
+    size: ByteSize | None
+    mount_path: PurePosixPath | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class ProjectStorage:
     """Stored project storage information."""
 

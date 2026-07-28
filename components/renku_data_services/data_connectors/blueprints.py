@@ -47,6 +47,7 @@ from renku_data_services.data_connectors.core import (
     validate_deposit_status_change,
     validate_project_storage_allow_patch,
     validate_project_storage_allow_post,
+    validate_project_storage_patch,
     validate_unsaved_data_connector,
     validate_unsaved_project_storage,
 )
@@ -185,6 +186,37 @@ class DataConnectorsBP(CustomBlueprint):
             )
 
         return "/data_connectors/storage", ["POST"], _post_storage
+
+    def patch_storage(self) -> BlueprintFactoryResponse:
+        """Partially update a project storage entry."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @if_match_required
+        @validate(json=apispec.ProjectStoragePatch)
+        async def _patch_storage(
+            _: Request,
+            user: base_models.APIUser,
+            storage_id: ULID,
+            body: apispec.ProjectStoragePatch,
+            etag: str,
+        ) -> JSONResponse:
+            existing_storage = await self.data_connector_repo.get_project_storage(user=user, storage_id=storage_id)
+            if existing_storage is None:
+                raise errors.MissingResourceError(message=f"No project storage found for storage: {storage_id}")
+
+            storage_patch = validate_project_storage_patch(existing_storage, body)
+            updated_storage = await self.data_connector_repo.update_project_storage(
+                user=user, storage_id=storage_id, patch=storage_patch, etag=etag
+            )
+            headers = {"ETag": updated_storage.etag}
+            return validated_json(
+                apispec.ProjectStorage,
+                self._dump_project_storage(updated_storage),
+                headers=headers,
+            )
+
+        return "/data_connectors/storage/<storage_id:ulid>", ["PATCH"], _patch_storage
 
     def get_all_storage_allows(self) -> BlueprintFactoryResponse:
         """List all projects in the storage allow list."""

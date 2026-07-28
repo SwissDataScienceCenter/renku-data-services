@@ -240,6 +240,33 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
+    patch:
+      summary: Change the size or mount path of a project storage
+      parameters:
+        - $ref: "#/components/parameters/If-Match"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectStoragePatch"
+      responses:
+        "200":
+          description: The patched project storage entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStorage"
+        "404":
+          description: The project storage does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data_connectors
     delete:
       summary: Delete a specific project storage
       responses:
@@ -996,6 +1023,19 @@ components:
         - creation_date
         - created_by
         - updated_at
+    ProjectStoragePatch:
+      description: |
+        Data that can be updated on a project storage entry
+      type: object
+      additionalProperties: false
+      properties:
+        size:
+          type: integer
+          format: int64
+          description: The maximum size in GB
+        mount_path:
+          type: string
+          description: The mount path for the storage
     ProjectStorageAllowPatch:
       description: |
         Data that can be updated on a project storage allow entry

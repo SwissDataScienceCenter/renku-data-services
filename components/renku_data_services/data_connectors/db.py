@@ -5,6 +5,7 @@ import string
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
+from pathlib import PurePosixPath
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -465,6 +466,66 @@ class DataConnectorRepository:
         session.add(new_storage)
         await session.flush()
         return new_storage.dump()
+
+    @with_db_transaction
+    async def update_project_storage(
+        self,
+        user: base_models.APIUser,
+        storage_id: ULID,
+        patch: models.ProjectStoragePatch,
+        etag: str,
+        *,
+        session: AsyncSession | None = None,
+    ) -> models.ProjectStorage:
+        """Update some properties of a project storage entry."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        result = await session.scalars(
+            select(schemas.ProjectStorageORM).where(schemas.ProjectStorageORM.id == storage_id)
+        )
+        storage_orm = result.one_or_none()
+        if storage_orm is None:
+            raise errors.MissingResourceError(message=f"Project storage with id '{storage_id}' does not exist.")
+
+        # Check authorization - user must have write access to the project
+        authorized = await self.authz.has_permission(
+            user, ResourceType.project, storage_orm.project_id, Scope.WRITE
+        )
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project storage with id '{storage_id}' does not exist or you do not have access to it."
+            )
+
+        current_storage = storage_orm.dump()
+        current_etag = current_storage.etag
+        if current_etag != etag:
+            raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
+        # Check if size would exceed the allowed maximum
+        new_size = patch.size if patch.size else current_storage.size
+        allowed = await session.execute(
+            select(schemas.ProjectStorageAllowORM).where(
+                schemas.ProjectStorageAllowORM.project_id == storage_orm.project_id
+            )
+        )
+        allowed = allowed.scalar()
+        if allowed and new_size > allowed.max_size:
+            raise errors.ValidationError(
+                message=(
+                    f"The project storage size ({new_size}) for project {storage_orm.project_id} "
+                    f"exceeds the maximum size of {allowed.max_size}"
+                )
+            )
+
+        if patch.size is not None:
+            storage_orm.size_limit = patch.size
+        if patch.mount_path is not None:
+            storage_orm.mount_path = patch.mount_path
+
+        await session.flush()
+        await session.refresh(storage_orm)
+        return storage_orm.dump()
 
     @with_db_transaction
     async def insert_project_storage_allow(
