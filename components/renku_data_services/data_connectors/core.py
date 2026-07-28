@@ -212,6 +212,34 @@ async def validate_unsaved_data_connector(
     )
 
 
+def _validate_mount_path(path: str | None) -> None:
+    invalid_prefixes = [
+        "/",
+        "/bin",
+        "/sbin",
+        "/usr",
+        "/lib",
+        "/lib64",
+        "/boot",
+        "/etc",
+        "/proc",
+        "/sys",
+        "/dev",
+        "/run",
+        "/sys",
+        "/var",
+        "/tmp",
+        "/home",
+        "/root",
+    ]
+    if not path or path == "":
+        raise errors.ValidationError(message="The mount path must not be empty")
+
+    for prefix in invalid_prefixes:
+        if path == prefix or path.startswith(f"{prefix}/"):
+            raise errors.ValidationError(message=f"The mount path is invalid: '{path}'")
+
+
 async def validate_unsaved_project_storage(body: apispec.ProjectStoragePost) -> models.UnsavedProjectStorage:
     """Validate the user input for a new project storage definition.
 
@@ -222,8 +250,7 @@ async def validate_unsaved_project_storage(body: apispec.ProjectStoragePost) -> 
     if len(namespace_split) != 2:
         raise errors.ValidationError(message=f"The namespace must be a project path: {body.namespace}")
 
-    if body.mount_path == "":
-        raise errors.ValidationError(message="The mount path must not be empty")
+    _validate_mount_path(body.mount_path)
 
     namespace_path = ProjectPath.from_strings(namespace_split[0], namespace_split[1])
     return models.UnsavedProjectStorage(
