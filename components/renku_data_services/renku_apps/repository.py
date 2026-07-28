@@ -6,17 +6,16 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
-from renku_data_services.authz.models import Scope, Visibility
+from renku_data_services.authz.models import Scope
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.data_connectors.db import DataConnectorSecretRepository
 from renku_data_services.k8s.constants import DUMMY_RENKU_APP_USER_ID
 from renku_data_services.project.db import ProjectRepository
-from renku_data_services.renku_apps import apispec
 from renku_data_services.renku_apps.core import build_app
 from renku_data_services.renku_apps.data_connectors import select_mountable_connectors
 from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
-from renku_data_services.renku_apps.models import App, AppRuntimeState
+from renku_data_services.renku_apps.models import App
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import SessionLauncher
 from renku_data_services.storage.rclone import RCloneValidator
@@ -115,45 +114,10 @@ class RenkuAppsRepository:
         await self.delete_app(user, runtime_state.name)
         return None
 
-    async def update_app(
-        self,
-        user: base_models.APIUser,
-        app_name: str,
-        state: apispec.AppState | None = None,
-    ) -> App:
-        """Update an app."""
-        if not user.is_authenticated or user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-
-        runtime_state = await self.k8s_client.get_app_deployment(app_name)
-        if runtime_state is None:
-            raise errors.MissingResourceError(message=_app_not_found_message(app_name))
-
-        launcher = await self.session_repo.get_launcher(user, runtime_state.launcher_id)
-
-        authorized = await self.authz.has_permission(user, ResourceType.project, launcher.project_id, Scope.WRITE)
-        if not authorized:
-            raise errors.MissingResourceError(message=_app_not_found_message(app_name))
-
-        latest: AppRuntimeState = runtime_state
-        if state == apispec.AppState.hibernated and not runtime_state.is_hibernated:
-            latest = await self.k8s_client.hibernate_app_deployment(app_name)
-        elif state == apispec.AppState.running and runtime_state.is_hibernated:
-            project = await self.project_repo.get_project(user, launcher.project_id)
-            if project.visibility != Visibility.PUBLIC:
-                raise errors.ValidationError(message="This app cannot be resumed because its project is not public.")
-            if launcher.resource_class_id is not None:
-                resource_class = await self.rp_repo.get_resource_class(user, launcher.resource_class_id)
-                await self.k8s_client.set_app_deployment_resources(app_name, resource_class)
-            latest = await self.k8s_client.resume_app_deployment(app_name)
-
-        return build_app(launcher, latest)
-
-    async def hibernate_apps_for_project(self, project_id: ULID) -> None:
-        """Hibernate every running app belonging to the given project."""
+    async def delete_apps_for_project(self, project_id: ULID) -> None:
+        """Delete every app belonging to the given project (e.g. when it becomes private)."""
         async for runtime_state in self.k8s_client.list_app_deployments(project_id):
-            if not runtime_state.is_hibernated:
-                await self.k8s_client.hibernate_app_deployment(runtime_state.name)
+            await self.k8s_client.delete_app_deployment(runtime_state.name)
 
     async def list_apps(self, user: base_models.APIUser, project_id: ULID | None = None) -> list[App]:
         """List all apps, optionally filtered by project."""

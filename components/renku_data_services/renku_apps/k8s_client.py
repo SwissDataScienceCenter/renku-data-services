@@ -24,6 +24,7 @@ from renku_data_services.notebooks.utils import (
     tolerations_from_resource_class,
 )
 from renku_data_services.project.models import Project
+from renku_data_services.renku_apps.core import generate_app_name
 from renku_data_services.renku_apps.cr_knative_service import Condition
 from renku_data_services.renku_apps.crs import KnativeService
 from renku_data_services.renku_apps.models import AppRuntimeState
@@ -37,19 +38,12 @@ _DEFAULT_WORK_DIR = PurePosixPath("/home/jovyan")
 
 _MAX_SCALE_ANNOTATION = "autoscaling.knative.dev/max-scale"
 _MAX_SCALE_RUNNING = "3"
-_MAX_SCALE_HIBERNATED = "0"
 
 _APP_AUTOSCALING_ANNOTATIONS = {
     "autoscaling.knative.dev/min-scale": "0",
     _MAX_SCALE_ANNOTATION: _MAX_SCALE_RUNNING,
     "autoscaling.knative.dev/scale-to-zero-pod-retention-period": "2m",
 }
-
-
-def _generate_app_name(project: Project, session_launcher: SessionLauncher) -> str:
-    """Generate a DNS-1035 label name for an app."""
-    launcher_id_slice = str(session_launcher.id)[18:26].lower()
-    return f"{project.slug.lower()[:54]}-{launcher_id_slice}"
 
 
 def _data_source_base_name(app_name: str) -> str:
@@ -133,7 +127,7 @@ class RenkuAppsK8sClient:
     ) -> AppRuntimeState:
         """Create a deployment for the given app and return its observed runtime state."""
         cluster = await self.__client.cluster_by_id(self.__cluster_id)
-        app_name = _generate_app_name(project, session_launcher)
+        app_name = generate_app_name(project.slug, session_launcher.id)
         labels = _app_labels(session_launcher, project)
 
         work_dir = session_launcher.environment.working_directory or _DEFAULT_WORK_DIR
@@ -258,53 +252,6 @@ class RenkuAppsK8sClient:
         )
         async for obj in self.__client.list(obj_filter):
             yield _extract_runtime_state(KnativeService.model_validate(obj.manifest))
-
-    async def hibernate_app_deployment(self, app_name: str) -> AppRuntimeState:
-        """Hibernate the app by patching its max-scale annotation to zero."""
-        return await self._patch_max_scale(app_name, _MAX_SCALE_HIBERNATED)
-
-    async def resume_app_deployment(self, app_name: str) -> AppRuntimeState:
-        """Resume the app by restoring the default max-scale annotation."""
-        return await self._patch_max_scale(app_name, _MAX_SCALE_RUNNING)
-
-    async def set_app_deployment_resources(self, app_name: str, resource_class: ResourceClass) -> AppRuntimeState:
-        """Update the container resources of the app to match the given resource class."""
-        cluster = await self.__client.cluster_by_id(self.__cluster_id)
-        meta = K8sObjectMeta(
-            name=app_name,
-            namespace=cluster.namespace,
-            cluster=cluster.id,
-            gvk=KNATIVE_SERVICE_GVK,
-            user_id=DUMMY_RENKU_APP_USER_ID,
-        )
-        # TODO: This JSON patch targets the container by position (containers/0). Once apps run more
-        # than one container this becomes fragile and should be a strategic merge patch keyed on the
-        # container name. Our kr8s wrapper only emits json/merge patches (never strategic merge), so
-        # switching requires extending the wrapper first.
-        patch_body: list[dict[str, Any]] = [
-            {
-                "op": "replace",
-                "path": "/spec/template/spec/containers/0/resources",
-                "value": _resources_from_resource_class(resource_class),
-            }
-        ]
-        updated = await self.__client.patch(meta, patch_body)
-        return _extract_runtime_state(KnativeService.model_validate(updated.manifest))
-
-    async def _patch_max_scale(self, app_name: str, max_scale: str) -> AppRuntimeState:
-        cluster = await self.__client.cluster_by_id(self.__cluster_id)
-        meta = K8sObjectMeta(
-            name=app_name,
-            namespace=cluster.namespace,
-            cluster=cluster.id,
-            gvk=KNATIVE_SERVICE_GVK,
-            user_id=DUMMY_RENKU_APP_USER_ID,
-        )
-        patch_body: dict[str, Any] = {
-            "spec": {"template": {"metadata": {"annotations": {_MAX_SCALE_ANNOTATION: max_scale}}}}
-        }
-        updated = await self.__client.patch(meta, patch_body)
-        return _extract_runtime_state(KnativeService.model_validate(updated.manifest))
 
 
 def _resources_from_resource_class(resource_class: ResourceClass) -> dict[str, Any]:
@@ -463,19 +410,6 @@ def _started_at(knative_service: KnativeService) -> datetime | None:
     return datetime.fromisoformat(ready.lastTransitionTime)
 
 
-def _is_hibernated(knative_service: KnativeService) -> bool:
-    """Determine if the Knative service is hibernated based on its annotations."""
-    if (
-        knative_service.spec is None
-        or knative_service.spec.template is None
-        or knative_service.spec.template.metadata is None
-        or knative_service.spec.template.metadata.annotations is None
-    ):
-        return False
-    max_scale = knative_service.spec.template.metadata.annotations.get(_MAX_SCALE_ANNOTATION)
-    return max_scale == _MAX_SCALE_HIBERNATED
-
-
 def _container_image(knative_service: KnativeService) -> str | None:
     """Get the container image actually configured on the Knative service, or None if absent."""
     if (
@@ -497,7 +431,6 @@ def _extract_runtime_state(knative_service: KnativeService) -> AppRuntimeState:
         project_id=knative_service.project_id,
         ready_status=ready.status if ready is not None else None,
         ready_reason=ready.reason if ready is not None else None,
-        is_hibernated=_is_hibernated(knative_service),
         image=_container_image(knative_service),
         url=_url(knative_service),
         started_at=_started_at(knative_service),

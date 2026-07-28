@@ -16,12 +16,6 @@ class AppStatus(Enum):
     pending = "pending"
     ready = "ready"
     failed = "failed"
-    hibernated = "hibernated"
-
-
-class AppState(Enum):
-    running = "running"
-    hibernated = "hibernated"
 
 
 class AppResponse(BaseAPISpec):
@@ -64,10 +58,6 @@ class AppPostRequest(BaseAPISpec):
         min_length=26,
         pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
     )
-
-
-class AppPatchRequest(BaseAPISpec):
-    state: Optional[AppState] = None
 
 
 class Error(BaseAPISpec):

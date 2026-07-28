@@ -310,7 +310,7 @@ class ProjectsBP(CustomBlueprint):
                 )
 
             if project_patch.visibility == Visibility.PRIVATE and self.apps_repo is not None:
-                await self.apps_repo.hibernate_apps_for_project(project_id=project_id)
+                await self.apps_repo.delete_apps_for_project(project_id=project_id)
 
             if len(project_update.new.repositories) > len(project_update.old.repositories):
                 await self.metrics.code_repo_linked_to_project(user)

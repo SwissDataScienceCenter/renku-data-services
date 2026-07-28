@@ -70,24 +70,6 @@ class RenkuAppBP(CustomBlueprint):
 
         return "/apps/<app_name>", ["DELETE"], _delete_one
 
-    def patch_one(self) -> BlueprintFactoryResponse:
-        """Patch an app."""
-
-        @authenticate(self.authenticator)
-        @only_authenticated
-        @validate(json=apispec.AppPatchRequest)
-        async def _patch_one(
-            _: Request, user: base_models.APIUser, body: apispec.AppPatchRequest, app_name: str
-        ) -> JSONResponse:
-            app = await self.apps_repo.update_app(
-                user=user,
-                app_name=app_name,
-                state=body.state,
-            )
-            return validated_json(apispec.AppResponse, self._dump_app(app))
-
-        return "/apps/<app_name>", ["PATCH"], _patch_one
-
     def get_all(self) -> BlueprintFactoryResponse:
         """Get all apps, optionally filtered by project ID."""
 
