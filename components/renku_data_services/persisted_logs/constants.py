@@ -25,3 +25,6 @@ ONE_MINUTE_IN_NANOS: Final[int] = 60 * ONE_SECOND_IN_NANOS
 
 SESSION_MAIN_CONTAINER: Final[str] = "amalthea-session"
 """The name of the main pod container for Amalthea sessions."""
+
+BUILD_MAIN_CONTAINER: Final[str] = "step-build-and-push"
+"""The name of the main pod container for image builds."""

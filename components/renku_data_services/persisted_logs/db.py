@@ -13,7 +13,8 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.persisted_logs import core, models
 from renku_data_services.persisted_logs import orm as schemas
-from renku_data_services.persisted_logs.constants import SESSION_MAIN_CONTAINER
+from renku_data_services.persisted_logs.constants import BUILD_MAIN_CONTAINER, SESSION_MAIN_CONTAINER
+from renku_data_services.session import models as session_models
 from renku_data_services.session import orm as session_schemas
 
 logger = logging.getLogger(__name__)
@@ -228,6 +229,88 @@ class AmaltheaSessionPersistedLogsRepository:
         await session.execute(delete(schemas.SessionRunsORM).where(schemas.SessionRunsORM.id.in_(session_run_ids)))
 
         return deleted_logs_count
+
+
+class ImageBuildPersistedLogsReadRepository:
+    """Repository for persisted logs of image builds."""
+
+    def __init__(self, authz: Authz) -> None:
+        self.authz: Authz = authz
+
+    async def get_build_logs(
+        self, session: AsyncSession, user: base_models.APIUser, build_id: ULID
+    ) -> models.SessionRunLogs:
+        """Returns persisted session logs for the given image build."""
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        await self._check_build(session=session, user=user, build_id=build_id)
+        logs_per_container = await self._get_logs_per_container(session=session, build_id=build_id)
+        return logs_per_container
+
+    async def _check_build(self, session: AsyncSession, user: base_models.APIUser, build_id: ULID) -> None:
+        """Check that the image build exists and the user has access to it."""
+        stmt = select(session_schemas.BuildORM).where(session_schemas.BuildORM.id == build_id)
+        res = await session.scalars(stmt)
+        build_orm = res.one_or_none()
+        authorized = (
+            await self._check_environment(
+                session=session, user=user, environment=build_orm.environment, scope=Scope.READ
+            )
+            if build_orm is not None
+            else False
+        )
+        if not authorized or build_orm is None:
+            raise errors.MissingResourceError(
+                message=f"Build with id '{build_id}' does not exist or you do not have access to it."
+            )
+
+    async def _check_environment(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        environment: session_schemas.EnvironmentORM,
+        scope: Scope,
+    ) -> bool:
+        """Checks whether the provided user has a specific permission on a session environment."""
+        if environment.environment_kind == session_models.EnvironmentKind.GLOBAL:
+            return scope == Scope.READ or user.is_admin
+
+        launcher = await session.scalar(
+            select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.environment_id == environment.id)
+        )
+        authorized = False
+        if launcher:
+            authorized = await self.authz.has_permission(user, ResourceType.project, launcher.project_id, scope)
+        return authorized
+
+    async def _get_logs_per_container(self, session: AsyncSession, build_id: ULID) -> models.SessionRunLogs:
+        """Get the logs of a specific image build, organized by container."""
+        # TODO: handle pagination?
+        stmt = (
+            select(schemas.ImageBuildLogsORM)
+            .where(schemas.ImageBuildLogsORM.build_id == build_id)
+            .order_by(schemas.ImageBuildLogsORM.id.asc())
+        )
+        res = await session.stream_scalars(stmt)
+        logs_per_container: dict[str, list[models.LogLine]] = dict()
+        async for log_entry in res:
+            container = log_entry.container
+            logs = logs_per_container.get(container)
+            if logs is None:
+                logs = list[models.LogLine]()
+                logs_per_container[container] = logs
+            logs.append(models.LogLine(timestamp=log_entry.timestamp, log_line=log_entry.log_line))
+        # Sort container by name, forcing "step-build-and-push" to be the first item (main container)
+        containers_set = set(logs_per_container.keys())
+        containers: list[str] = list()
+        if BUILD_MAIN_CONTAINER in containers_set:
+            containers.append(BUILD_MAIN_CONTAINER)
+            containers_set.remove(BUILD_MAIN_CONTAINER)
+        containers.extend(sorted(containers_set))
+        result: dict[str, list[models.LogLine]] = dict()
+        for container in containers:
+            result[container] = logs_per_container[container]
+        return result
 
 
 class ImageBuildPersistedLogsWriteRepository:

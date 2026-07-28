@@ -312,6 +312,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         name="persisted_logs",
         url_prefix=url_prefix,
         session_logs_repo=dm.session_logs_repo,
+        build_logs_repo=dm.build_logs_repo,
         authenticator=dm.authenticator,
         session_maker=dm.config.db.async_session_maker,
     )

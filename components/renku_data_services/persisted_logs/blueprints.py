@@ -15,7 +15,10 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.persisted_logs import apispec, models
-from renku_data_services.persisted_logs.db import AmaltheaSessionPersistedLogsReadRepository
+from renku_data_services.persisted_logs.db import (
+    AmaltheaSessionPersistedLogsReadRepository,
+    ImageBuildPersistedLogsReadRepository,
+)
 
 
 @dataclass(kw_only=True)
@@ -23,6 +26,7 @@ class PersistedLogsBP(CustomBlueprint):
     """Handlers for querying persisted logs."""
 
     session_logs_repo: AmaltheaSessionPersistedLogsReadRepository
+    build_logs_repo: ImageBuildPersistedLogsReadRepository
     authenticator: base_models.Authenticator
     session_maker: Callable[..., AsyncSession]
 
@@ -69,6 +73,18 @@ class PersistedLogsBP(CustomBlueprint):
 
         return "/persisted_logs/sessions/<launcher_id:ulid>/runs", ["GET"], _get_session_runs
 
+    def get_build_logs(self) -> BlueprintFactoryResponse:
+        """Get persisted image build logs."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_build_logs(_: Request, user: base_models.APIUser, build_id: ULID) -> JSONResponse:
+            async with self.session_maker() as session, session.begin():
+                result = await self.build_logs_repo.get_build_logs(session=session, user=user, build_id=build_id)
+            return validated_json(apispec.PersistedBuildLogs, self._dump_persisted_build_logs(result))
+
+        return "/persisted_logs/builds/<build_id:ulid>", ["GET"], _get_build_logs
+
     @staticmethod
     def _dump_persisted_session_logs(session_log: models.PersistedSessionLogs) -> dict[str, Any]:
         """Dump persisted session logs for API responses."""
@@ -100,3 +116,10 @@ class PersistedLogsBP(CustomBlueprint):
     def _dump_log_line(log_line: models.LogLine) -> dict[str, str]:
         """Dump a log line for API responses."""
         return dict(timestamp=str(log_line.timestamp), log_line=log_line.log_line)
+
+    @staticmethod
+    def _dump_persisted_build_logs(build_logs: models.SessionRunLogs) -> dict[str, Any]:
+        """Dump persisted session logs for API responses."""
+        return dict(
+            logs=PersistedLogsBP._dump_session_run_logs(build_logs),
+        )
