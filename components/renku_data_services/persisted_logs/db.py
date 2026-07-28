@@ -228,3 +228,56 @@ class AmaltheaSessionPersistedLogsRepository:
         await session.execute(delete(schemas.SessionRunsORM).where(schemas.SessionRunsORM.id.in_(session_run_ids)))
 
         return deleted_logs_count
+
+
+class ImageBuildPersistedLogsWriteRepository:
+    """Repository for writing persisted logs of image builds."""
+
+    async def get_latest_log_timestamp(self, session: AsyncSession) -> int | None:
+        """Returns the latest log timestamp."""
+        stmt = (
+            select(schemas.ImageBuildLogsORM.timestamp)
+            .select_from(schemas.ImageBuildLogsORM)
+            .order_by(schemas.ImageBuildLogsORM.timestamp.desc())
+            .limit(1)
+        )
+        res = await session.scalars(stmt)
+        timestamp = res.one_or_none()
+        return timestamp
+
+    async def insert_build_logs(
+        self, session: AsyncSession, logs_stream: AsyncIterator[models.UnsavedBuildLogLine]
+    ) -> models.InsertLogsResult:
+        """Insert sessions logs into the persisted logs database."""
+        log_count = 0
+        last_timestamp = 0
+        async for log in logs_stream:
+            log_count += 1
+            if log.timestamp > last_timestamp:
+                last_timestamp = log.timestamp
+
+            existing_log_res = await session.scalars(
+                select(schemas.ImageBuildLogsORM.id).where(schemas.ImageBuildLogsORM.id == log.id)
+            )
+            existing_log_orm = existing_log_res.one_or_none()
+            if existing_log_orm:
+                continue
+
+            log_orm = schemas.ImageBuildLogsORM(
+                id=log.id,
+                build_id=log.build_id,
+                container=log.container,
+                timestamp=log.timestamp,
+                log_line=log.log_line,
+            )
+            session.add(log_orm)
+            await session.flush()
+        return models.InsertLogsResult(log_count=log_count, last_timestamp=last_timestamp)
+
+    async def delete_expired_build_logs(self, session: AsyncSession, before: datetime) -> int:
+        """Remove expired build logs from the database."""
+        nano_ts = core.NanoTimestamp.from_datetime(before)
+        delete_logs_stmt = delete(schemas.ImageBuildLogsORM).where(schemas.ImageBuildLogsORM.timestamp < nano_ts)
+        res = await session.execute(delete_logs_stmt)
+        deleted_logs_count = res.rowcount
+        return deleted_logs_count

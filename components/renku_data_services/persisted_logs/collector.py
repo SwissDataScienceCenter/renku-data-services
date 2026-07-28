@@ -1,5 +1,6 @@
 """Collector for gathering persisted logs."""
 
+import asyncio
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
@@ -20,7 +21,10 @@ from renku_data_services.persisted_logs.constants import (
     PERSISTED_LOGS_SESSIONS_LABEL_KEY,
     PERSISTED_LOGS_SESSIONS_LABEL_VALUE,
 )
-from renku_data_services.persisted_logs.db import AmaltheaSessionPersistedLogsRepository
+from renku_data_services.persisted_logs.db import (
+    AmaltheaSessionPersistedLogsRepository,
+    ImageBuildPersistedLogsWriteRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +211,7 @@ class PersistedLogsCollector:
                 config=config,
                 reader=reader,
                 session_logs_repo=AmaltheaSessionPersistedLogsRepository(),
+                build_logs_repo=ImageBuildPersistedLogsWriteRepository(),
             )
         return NoopPersistedLogsCollector()
 
@@ -232,15 +237,17 @@ class DefaultPersistedLogsCollector(PersistedLogsCollector):
         config: PersistedLogsConfig,
         reader: LokiLogReader,
         session_logs_repo: AmaltheaSessionPersistedLogsRepository,
+        build_logs_repo: ImageBuildPersistedLogsWriteRepository,
     ) -> None:
         self.session_maker = session_maker
         self.config = config
         self.reader = reader
         self.session_logs_repo = session_logs_repo
+        self.build_logs_repo = build_logs_repo
 
     async def collect_persisted_logs(self) -> None:
         """Collect persisted logs from Amalthea sessions and image builds."""
-        await self.collect_sessions_persisted_logs()
+        await asyncio.gather(self.collect_sessions_persisted_logs(), self.collect_build_persisted_logs())
         return None
 
     async def collect_sessions_persisted_logs(self) -> None:
@@ -265,9 +272,31 @@ class DefaultPersistedLogsCollector(PersistedLogsCollector):
 
         return None
 
+    async def collect_build_persisted_logs(self) -> None:
+        """Collect persisted logs from image builds."""
+
+        async with self.session_maker() as session:
+            async with session.begin():
+                ts = await self.build_logs_repo.get_latest_log_timestamp(session=session)
+                start = _one_hour_ago_in_nanos()
+                if ts is not None and ts > start:
+                    start = ts - ONE_MINUTE_IN_NANOS
+
+            # Loop to collect all logs, including late entries
+            has_more = True
+            current_start = start
+            while has_more:
+                logs_stream = self.reader.get_image_build_logs(start=current_start)
+                async with session.begin():
+                    result = await self.build_logs_repo.insert_build_logs(session=session, logs_stream=logs_stream)
+                    current_start = result.last_timestamp + 1
+                    has_more = result.log_count > 1
+
+        return None
+
     async def purge_expired_logs(self) -> None:
         """Purge expired persisted logs from the database."""
-        await self.purge_expired_session_logs()
+        await asyncio.gather(self.purge_expired_session_logs(), self.purge_expired_build_logs())
         return None
 
     async def purge_expired_session_logs(self) -> None:
@@ -276,6 +305,14 @@ class DefaultPersistedLogsCollector(PersistedLogsCollector):
         cutoff = now - self.config.logs_ttl
         async with self.session_maker() as session, session.begin():
             await self.session_logs_repo.delete_expired_session_logs(session=session, before=cutoff)
+        return None
+
+    async def purge_expired_build_logs(self) -> None:
+        """Purge expired image build logs from the database."""
+        now = datetime.now(tz=UTC)
+        cutoff = now - self.config.logs_ttl
+        async with self.session_maker() as session, session.begin():
+            await self.build_logs_repo.delete_expired_build_logs(session=session, before=cutoff)
         return None
 
 
