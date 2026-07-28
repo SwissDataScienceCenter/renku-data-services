@@ -828,6 +828,14 @@ paths:
         - deposit
 components:
   schemas:
+    ProjectSlugForStorage:
+      type: string
+      description: The slug used to identify a project
+      minLength: 3
+      example: "user/my-project"
+      # limitations based on allowed characters in project slugs from Gitlab from here:
+      # https://docs.gitlab.com/ee/user/reserved_names.html
+      pattern: "^[a-zA-Z0-9]+([_.\\-/][a-zA-Z0-9]+)*[_.\\-/]?[a-zA-Z0-9]$"
     DataConnectorsList:
       description: A list of data connectors
       type: array
@@ -923,7 +931,7 @@ components:
       additionalProperties: false
       properties:
         namespace:
-          $ref: "#/components/schemas/ProjectSlug"
+          $ref: "#/components/schemas/ProjectSlugForStorage"
         size:
           type: integer
           format: int32
