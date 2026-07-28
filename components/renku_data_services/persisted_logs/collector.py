@@ -14,6 +14,8 @@ from renku_data_services.persisted_logs import loki_api, models
 from renku_data_services.persisted_logs.config import PersistedLogsConfig
 from renku_data_services.persisted_logs.constants import (
     ONE_MINUTE_IN_NANOS,
+    PERSISTED_LOGS_BUILD_LABEL_KEY,
+    PERSISTED_LOGS_BUILD_LABEL_VALUE,
     PERSISTED_LOGS_NAMESPACE_LABEL_KEY,
     PERSISTED_LOGS_SESSIONS_LABEL_KEY,
     PERSISTED_LOGS_SESSIONS_LABEL_VALUE,
@@ -43,25 +45,16 @@ class LokiLogReader:
 
         See also https://grafana.com/docs/loki/latest/reference/loki-http-api/#query-logs-within-a-range-of-time
         """
-        params: dict[str, str | int] = dict()
-        params["query"] = (
+        query = (
             "{"
             f'{PERSISTED_LOGS_SESSIONS_LABEL_KEY}="{PERSISTED_LOGS_SESSIONS_LABEL_VALUE}",'
             f'{PERSISTED_LOGS_NAMESPACE_LABEL_KEY}="{self.config.namespace}"'
             "}"
         )
-        params["direction"] = "forward"
-        params["limit"] = limit
-        if start:
-            params["start"] = str(start)
-        if end:
-            params["end"] = str(end)
-        res = await self.client.get("loki/api/v1/query_range", params=params)
-        res.raise_for_status()
-        result = loki_api.LokiQueryRangeResponse.model_validate_json(res.content)
+        response = await self._get_logs(query=query, limit=limit, start=start, end=end)
         log_line_ids: set[str] = set()
 
-        for entry in result.data.result:
+        for entry in response.data.result:
             stream: loki_api.AmaltheaSessionStream | None = None
             try:
                 stream = loki_api.AmaltheaSessionStream.model_validate(entry.stream)
@@ -87,7 +80,6 @@ class LokiLogReader:
                 )
                 continue
 
-            # logger.info(stream)
             for nano_ts, log_line in entry.values:
                 log_line_id = f"{nano_ts.root}::{stream.container}::{stream.pod}"
 
@@ -106,6 +98,84 @@ class LokiLogReader:
                     timestamp=nano_ts.get_value(),
                     log_line=log_line,
                 )
+
+    async def get_image_build_logs(
+        self, limit: int = 1000, start: int | None = None, end: int | None = None
+    ) -> AsyncIterator[models.UnsavedBuildLogLine]:
+        """Fetchesimage build logs from Loki.
+
+        Parameters:
+        - limit: max number of entries to return
+        - start: start timestamp as a Unix nano timestamp
+        - end: end timestamp as a Unix nano timestamp
+
+        See also https://grafana.com/docs/loki/latest/reference/loki-http-api/#query-logs-within-a-range-of-time
+        """
+        query = (
+            "{"
+            f'{PERSISTED_LOGS_BUILD_LABEL_KEY}="{PERSISTED_LOGS_BUILD_LABEL_VALUE}",'
+            f'{PERSISTED_LOGS_NAMESPACE_LABEL_KEY}="{self.config.namespace}"'
+            "}"
+        )
+        response = await self._get_logs(query=query, limit=limit, start=start, end=end)
+        log_line_ids: set[str] = set()
+
+        for entry in response.data.result:
+            stream: loki_api.ShipwrightBuildRunStream | None = None
+            try:
+                stream = loki_api.ShipwrightBuildRunStream.model_validate(entry.stream)
+            except ValidationError as err:
+                logger.warning(f"Skipping entry {entry.stream} because of validation error: {err}")
+                continue
+
+            try:
+                build_id = ULID.from_str(stream.renku_io_buildrun_name.upper().removeprefix("RENKU-"))
+            except ValueError as err:
+                logger.warning(
+                    f"Skipping entry {entry.stream} because renku_io_buildrun_name='{stream.renku_io_buildrun_name}' "
+                    f"does not contain a valid ULID: {err}"
+                )
+                continue
+
+            for nano_ts, log_line in entry.values:
+                log_line_id = f"{nano_ts.root}::{stream.container}::{stream.pod}"
+
+                if log_line_id in log_line_ids:
+                    continue
+
+                log_line_ids.add(log_line_id)
+                yield models.UnsavedBuildLogLine(
+                    id=log_line_id,
+                    build_id=build_id,
+                    container=stream.container,
+                    timestamp=nano_ts.get_value(),
+                    log_line=log_line,
+                )
+
+    async def _get_logs(
+        self, query: str, limit: int = 1000, start: int | None = None, end: int | None = None
+    ) -> loki_api.LokiQueryRangeResponse:
+        """Fetches logs from Loki, using the passed in query.
+
+        Parameters:
+        - query: the Loki query
+        - limit: max number of entries to return
+        - start: start timestamp as a Unix nano timestamp
+        - end: end timestamp as a Unix nano timestamp
+
+        See also https://grafana.com/docs/loki/latest/reference/loki-http-api/#query-logs-within-a-range-of-time
+        """
+        params: dict[str, str | int] = dict()
+        params["query"] = query
+        params["direction"] = "forward"
+        params["limit"] = limit
+        if start:
+            params["start"] = str(start)
+        if end:
+            params["end"] = str(end)
+        res = await self.client.get("loki/api/v1/query_range", params=params)
+        res.raise_for_status()
+        return loki_api.LokiQueryRangeResponse.model_validate_json(res.content)
 
 
 class PersistedLogsCollector:

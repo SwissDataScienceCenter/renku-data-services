@@ -8,7 +8,7 @@ from ulid import ULID
 
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.persisted_logs import models
-from renku_data_services.session.orm import SessionLauncherORM
+from renku_data_services.session.orm import BuildORM, SessionLauncherORM
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
 
@@ -64,6 +64,27 @@ class AmaltheaSessionLogsORM(BaseORM):
 
     session_run: Mapped[SessionRunsORM] = relationship(lazy="select", init=False, repr=False, viewonly=True)
     """The session run this log line belongs to."""
+
+    container: Mapped[str] = mapped_column(nullable=False)
+    """The container this log line belongs to."""
+
+    timestamp: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
+    """The timestamp of the log line (nanosecond timestamp)."""
+
+    log_line: Mapped[str] = mapped_column(nullable=False)
+    """The contents of the log line."""
+
+
+class ImageBuildLogsORM(BaseORM):
+    """A log line from an image build."""
+
+    __tablename__ = "image_build_logs"
+
+    id: Mapped[str] = mapped_column("id", primary_key=True, nullable=False)
+    """ID of the log line."""
+
+    build_id: Mapped[ULID] = mapped_column(ForeignKey(BuildORM.id, ondelete="CASCADE"), index=True, nullable=False)
+    """ID of the image build."""
 
     container: Mapped[str] = mapped_column(nullable=False)
     """The container this log line belongs to."""

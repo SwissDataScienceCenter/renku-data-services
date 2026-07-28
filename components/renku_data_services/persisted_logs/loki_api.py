@@ -71,3 +71,11 @@ class AmaltheaSessionStream(Base):
     renku_io_session_type: str | None = None
     renku_io_session_uid: str | None = None
     renku_io_submission_id: str | None = None
+
+
+class ShipwrightBuildRunStream(Base):
+    """Loki stream labels for logs extracted from a Shipwright build run."""
+
+    container: str
+    pod: str
+    renku_io_buildrun_name: str

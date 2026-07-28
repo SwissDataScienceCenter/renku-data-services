@@ -8,6 +8,12 @@ PERSISTED_LOGS_SESSIONS_LABEL_KEY: Final[str] = "app"
 PERSISTED_LOGS_SESSIONS_LABEL_VALUE: Final[str] = "AmaltheaSession"
 """The loki label value to select session logs streams."""
 
+PERSISTED_LOGS_BUILD_LABEL_KEY: Final[str] = "app"
+"""The loki label key to select build logs streams."""
+
+PERSISTED_LOGS_BUILD_LABEL_VALUE: Final[str] = "ShipwrightBuildRun"
+"""The loki label value to select build logs streams."""
+
 PERSISTED_LOGS_NAMESPACE_LABEL_KEY: Final[str] = "namespace"
 """The loki label key to select logs streams from a specific kubernetes namespace."""
 
