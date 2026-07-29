@@ -189,7 +189,7 @@ async def get_extra_containers(
 
 
 async def get_project_storage(
-    user: AuthenticatedAPIUser,
+    user: APIUser,
     project_storage_k8s: ProjectStorageK8s,
     data_connector_repo: DataConnectorRepository,
     project_id: ULID,
@@ -1066,13 +1066,12 @@ async def start_session(
     )
 
     # project storage
-    if isinstance(user, AuthenticatedAPIUser):
-        project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
-        session_extras = session_extras.concat(
-            await get_project_storage(
-                user, project_storage_k8s, data_connector_repo, project.id, storage_mount, cluster, authz
-            )
+    project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
+    session_extras = session_extras.concat(
+        await get_project_storage(
+            user, project_storage_k8s, data_connector_repo, project.id, storage_mount, cluster, authz
         )
+    )
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings

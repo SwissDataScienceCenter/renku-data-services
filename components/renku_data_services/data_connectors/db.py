@@ -411,9 +411,9 @@ class DataConnectorRepository:
                 return None
 
         result = result_orm.dump()
-        # authorized = await self.authz.has_permission(user, ResourceType.project, result.project_id, Scope.READ)
-        # if not authorized:
-        #     return None
+        authorized = await self.authz.has_permission(user, ResourceType.project, result.project_id, Scope.READ)
+        if not authorized:
+            return None
 
         return result
 
