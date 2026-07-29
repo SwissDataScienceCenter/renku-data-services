@@ -286,7 +286,7 @@ def validate_project_storage_allow_patch(
 ) -> models.ProjectStorageAllowPatch:
     """Validate a patch of a project storage allow entry."""
 
-    size = ByteSize.from_gibi(body.max_size) if body.max_size else None
+    size = ByteSize.from_gibi(body.max_size) if body.max_size is not None else None
     if size and size < ByteSize.from_gibi(1):
         raise errors.ValidationError(message="The maximum size must be at least 1GB")
     return models.ProjectStorageAllowPatch(max_size=size)

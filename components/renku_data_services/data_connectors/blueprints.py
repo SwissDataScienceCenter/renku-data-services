@@ -268,7 +268,7 @@ class DataConnectorsBP(CustomBlueprint):
         """Partially update a project storage allow entry."""
 
         @authenticate(self.authenticator)
-        @only_authenticated
+        @only_admins
         @if_match_required
         @validate(json=apispec.ProjectStorageAllowPatch)
         async def _patch(
@@ -287,9 +287,9 @@ class DataConnectorsBP(CustomBlueprint):
                 user=user, project_id=project_id, patch=pse_patch, etag=etag
             )
 
+            headers = {"ETag": pse_update.new.etag}
             return validated_json(
-                apispec.ProjectStorageAllow,
-                self._dump_project_storage_allow_detail(pse_update.new),
+                apispec.ProjectStorageAllow, self._dump_project_storage_allow_detail(pse_update.new), headers=headers
             )
 
         return "/data_connectors/storage/allow/<project_id:ulid>", ["PATCH"], _patch
@@ -303,9 +303,10 @@ class DataConnectorsBP(CustomBlueprint):
             allow = await self.data_connector_repo.get_project_storage_allow(user, project_id)
             if allow is None:
                 raise errors.MissingResourceError(message=f"Project {project_id} is not in the storage allow list.")
+
+            headers = {"ETag": allow.etag}
             return validated_json(
-                apispec.ProjectStorageAllow,
-                self._dump_project_storage_allow_detail(allow),
+                apispec.ProjectStorageAllow, self._dump_project_storage_allow_detail(allow), headers=headers
             )
 
         return "/data_connectors/storage/allow/<project_id:ulid>", ["GET"], _get_storage_allow

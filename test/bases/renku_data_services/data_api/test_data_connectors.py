@@ -2859,7 +2859,11 @@ async def test_get_storage_to_project_success(
 
 @pytest.mark.asyncio
 async def test_delete_storage_success(
-    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+    sanic_client: SanicASGITestClient,
+    create_project,
+    user_headers: dict[str, str],
+    admin_headers: dict[str, str],
+    cluster,
 ) -> None:
     project = await create_project(sanic_client, "Test Project")
     namespace = f"{project['namespace']}/{project['slug']}"
@@ -3068,54 +3072,6 @@ async def test_get_storage_allow_unauthenticated(
     assert response.status_code == 401, response.text
 
 
-async def test_get_all_dc_links(
-    sanic_client: SanicASGITestClient,
-    regular_user: UserInfo,
-    member_1_user: UserInfo,
-    member_1_headers: dict,
-    user_headers: dict[str, str],
-    envidat_metadata: DOIMetadata,
-    monkeypatch: "MonkeyPatch",
-    create_project,
-) -> None:
-    # Create projects
-    p1 = await create_project(sanic_client, name="p1", visibility="public")
-    p2 = await create_project(sanic_client, name="p2", visibility="private")
-    p3 = await create_project(sanic_client, name="p3", visibility="public")
-
-    # Create envidat DC
-    _mock_get_envidat_metadata(envidat_metadata, monkeypatch)
-    payload = {
-        "storage": {
-            "configuration": {"type": "doi", "doi": "10.16904/12"},
-            "source_path": "/",
-            "target_path": "/",
-            "readonly": True,
-        }
-    }
-    _, res = await sanic_client.post("/api/data/data_connectors/global", json=payload, headers=user_headers)
-    assert res.status_code == 201
-    dc_id = res.json["id"]
-
-    # Link dc to projects
-    await link_dc_project(sanic_client, dc_id, p1["id"], user_headers)
-    await link_dc_project(sanic_client, dc_id, p2["id"], user_headers)
-    await link_dc_project(sanic_client, dc_id, p3["id"], user_headers)
-
-    # Search for links
-    _, res = await sanic_client.get("/api/data/data_connector_links", headers=user_headers)
-    assert res.status_code == 200, res.text
-    assert len(res.json) == 3
-    # If anonymous users only the 2 links to public project are shown
-    _, res = await sanic_client.get("/api/data/data_connector_links")
-    assert res.status_code == 200, res.text
-    assert len(res.json) == 2
-    assert p2["id"] not in [i["id"] for i in res.json]
-
-
-# --- PATCH Project Storage Tests ---
-
-
 @pytest.mark.asyncio
 async def test_patch_storage_success(
     sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
@@ -3292,9 +3248,7 @@ async def test_patch_storage_with_invalid_etag(
 
 
 @pytest.mark.asyncio
-async def test_patch_storage_not_found(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str]
-) -> None:
+async def test_patch_storage_not_found(sanic_client: SanicASGITestClient, user_headers: dict[str, str]) -> None:
     from ulid import ULID
 
     non_existent_id = str(ULID())
@@ -3327,9 +3281,7 @@ async def test_patch_storage_unauthenticated_fails(
     storage_id = response.json["id"]
 
     # Patch without authentication
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/{storage_id}", json={"size": 8}
-    )
+    _, response = await sanic_client.patch(f"/api/data/data_connectors/storage/{storage_id}", json={"size": 8})
 
     assert response.status_code == 401, response.text
 
@@ -3392,6 +3344,51 @@ async def test_patch_storage_invalid_mount_path(
     assert response.status_code == 422, response.text
 
 
+async def test_get_all_dc_links(
+    sanic_client: SanicASGITestClient,
+    regular_user: UserInfo,
+    member_1_user: UserInfo,
+    member_1_headers: dict,
+    user_headers: dict[str, str],
+    envidat_metadata: DOIMetadata,
+    monkeypatch: "MonkeyPatch",
+    create_project,
+) -> None:
+    # Create projects
+    p1 = await create_project(sanic_client, name="p1", visibility="public")
+    p2 = await create_project(sanic_client, name="p2", visibility="private")
+    p3 = await create_project(sanic_client, name="p3", visibility="public")
+
+    # Create envidat DC
+    _mock_get_envidat_metadata(envidat_metadata, monkeypatch)
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": "10.16904/12"},
+            "source_path": "/",
+            "target_path": "/",
+            "readonly": True,
+        }
+    }
+    _, res = await sanic_client.post("/api/data/data_connectors/global", json=payload, headers=user_headers)
+    assert res.status_code == 201
+    dc_id = res.json["id"]
+
+    # Link dc to projects
+    await link_dc_project(sanic_client, dc_id, p1["id"], user_headers)
+    await link_dc_project(sanic_client, dc_id, p2["id"], user_headers)
+    await link_dc_project(sanic_client, dc_id, p3["id"], user_headers)
+
+    # Search for links
+    _, res = await sanic_client.get("/api/data/data_connector_links", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert len(res.json) == 3
+    # If anonymous users only the 2 links to public project are shown
+    _, res = await sanic_client.get("/api/data/data_connector_links")
+    assert res.status_code == 200, res.text
+    assert len(res.json) == 2
+    assert p2["id"] not in [i["id"] for i in res.json]
+
+
 # --- PATCH Project Storage Allow Tests ---
 
 
@@ -3409,9 +3406,7 @@ async def test_patch_storage_allow_success(
     assert response.status_code == 201, response.text
 
     # Get the allow entry to retrieve the etag (use user_headers as admin may not have read access)
-    _, response = await sanic_client.get(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers
-    )
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers)
     assert response.status_code == 200, response.text
     etag = response.headers["ETag"]
 
@@ -3443,9 +3438,7 @@ async def test_patch_storage_allow_requires_admin(
     assert response.status_code == 201, response.text
 
     # Get the allow entry to retrieve the etag (use user_headers as admin may not have read access)
-    _, response = await sanic_client.get(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers
-    )
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=admin_headers)
     assert response.status_code == 200, response.text
     etag = response.headers["ETag"]
 
@@ -3456,7 +3449,7 @@ async def test_patch_storage_allow_requires_admin(
         f"/api/data/data_connectors/storage/allow/{project_id}", headers=headers, json=patch
     )
 
-    assert response.status_code == 404, response.text
+    assert response.status_code == 403, response.text
 
 
 @pytest.mark.asyncio
@@ -3496,9 +3489,7 @@ async def test_patch_storage_allow_with_invalid_etag(
     assert response.status_code == 201, response.text
 
     # Get the allow entry to retrieve the etag (use user_headers as admin may not have read access)
-    _, response = await sanic_client.get(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers
-    )
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers)
     assert response.status_code == 200, response.text
     correct_etag = response.headers["ETag"]
 
@@ -3573,9 +3564,7 @@ async def test_patch_storage_allow_min_size(
     assert response.status_code == 201, response.text
 
     # Get the allow entry to retrieve the etag (use user_headers as admin may not have read access)
-    _, response = await sanic_client.get(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers
-    )
+    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers)
     assert response.status_code == 200, response.text
     etag = response.headers["ETag"]
 

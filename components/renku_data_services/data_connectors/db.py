@@ -5,7 +5,6 @@ import string
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
-from pathlib import PurePosixPath
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -489,9 +488,7 @@ class DataConnectorRepository:
             raise errors.MissingResourceError(message=f"Project storage with id '{storage_id}' does not exist.")
 
         # Check authorization - user must have write access to the project
-        authorized = await self.authz.has_permission(
-            user, ResourceType.project, storage_orm.project_id, Scope.WRITE
-        )
+        authorized = await self.authz.has_permission(user, ResourceType.project, storage_orm.project_id, Scope.WRITE)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project storage with id '{storage_id}' does not exist or you do not have access to it."
@@ -608,6 +605,7 @@ class DataConnectorRepository:
                 ProjectORM.name,
                 ns_schemas.NamespaceORM.slug.label("namespace_slug"),
                 ns_schemas.EntitySlugORM.slug.label("project_slug"),
+                schemas.ProjectStorageAllowORM.updated_at,
             )
             .join(ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id)
             .join(
