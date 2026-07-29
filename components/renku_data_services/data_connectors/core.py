@@ -213,6 +213,7 @@ async def validate_unsaved_data_connector(
 
 
 def _validate_mount_path(path: str | None) -> None:
+    #
     invalid_prefixes = [
         "/",
         "/bin",
@@ -228,7 +229,7 @@ def _validate_mount_path(path: str | None) -> None:
         "/run",
         "/sys",
         "/var",
-        "/tmp",
+        "/tmp", # nosec B108
         "/home",
         "/root",
     ]
