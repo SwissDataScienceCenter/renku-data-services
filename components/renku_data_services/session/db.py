@@ -1132,7 +1132,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 environment.args = build_env.args
             else:
                 logger.error(
-                    f"Could not find frontend variant {frontend_var} in the preset configurations and "
+                    f"Build {build.id}: could not find frontend variant '{frontend_var}' "
+                    "in the preset configurations and "
                     "have skipped updating the launcher environment configuration. "
                     "This may lead to a failing session. The frontend variant should be added to the code."
                 )
