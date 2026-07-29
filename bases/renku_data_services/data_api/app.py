@@ -237,6 +237,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         internal_token_mint=dm.internal_token_mint,
         resource_usage_service=dm.resource_usage_service,
         resource_requests_repo=dm.resource_requests_repo,
+        authz=dm.authz,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",

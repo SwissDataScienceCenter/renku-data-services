@@ -433,6 +433,12 @@ class DataConnectorRepository:
             user, input.namespace_path.first.value, input.namespace_path.second, with_documentation=False
         )
 
+        authorized = await self.authz.has_permission(user, ResourceType.project, project.id, Scope.DELETE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project.id}' does not exist or you do not have access to it."
+            )
+
         allowed = await session.execute(
             select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project.id)
         )
@@ -487,8 +493,8 @@ class DataConnectorRepository:
         if storage_orm is None:
             raise errors.MissingResourceError(message=f"Project storage with id '{storage_id}' does not exist.")
 
-        # Check authorization - user must have write access to the project
-        authorized = await self.authz.has_permission(user, ResourceType.project, storage_orm.project_id, Scope.WRITE)
+        # Check authorization - user must be "owner", meaning allowed to delete the project
+        authorized = await self.authz.has_permission(user, ResourceType.project, storage_orm.project_id, Scope.DELETE)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project storage with id '{storage_id}' does not exist or you do not have access to it."

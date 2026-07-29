@@ -229,7 +229,7 @@ def _validate_mount_path(path: str | None) -> None:
         "/run",
         "/sys",
         "/var",
-        "/tmp", # nosec B108
+        "/tmp",  # nosec B108
         "/home",
         "/root",
     ]

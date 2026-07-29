@@ -24,6 +24,8 @@ from yaml import safe_dump
 
 from renku_data_services.app_config import logging
 from renku_data_services.authn.renku import RenkuSelfTokenMint
+from renku_data_services.authz.authz import Authz
+from renku_data_services.authz.models import ResourceType, Scope
 from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
@@ -193,6 +195,7 @@ async def get_project_storage(
     project_id: ULID,
     storage_mount: PurePosixPath,
     cluster: ClusterConnection,
+    authz: Authz,
 ) -> SessionExtraResources:
     """If applicable, fetch the project storage and return it as SessionExtras."""
     project_storage = await data_connector_repo.get_storage_to(user, project_id)
@@ -208,12 +211,13 @@ async def get_project_storage(
         mount_path = storage_mount / mount_path
 
     mount_name = f"ps-{project_id}-0".lower()
+    can_write = await authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
     return SessionExtraResources(
         volume_mounts=[
             ExtraVolumeMount(
                 mountPath=mount_path.as_posix(),
                 name=mount_name,
-                readOnly=False,
+                readOnly=not can_write,
             )
         ],
         volumes=[
@@ -935,6 +939,7 @@ async def start_session(
     builds_config: BuildsConfig,
     internal_token_mint: RenkuSelfTokenMint,
     resource_usage_service: ResourceUsageService,
+    authz: Authz,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -1065,7 +1070,7 @@ async def start_session(
         project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
         session_extras = session_extras.concat(
             await get_project_storage(
-                user, project_storage_k8s, data_connector_repo, project.id, storage_mount, cluster
+                user, project_storage_k8s, data_connector_repo, project.id, storage_mount, cluster, authz
             )
         )
 
