@@ -39,7 +39,6 @@ from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
 
 logger = logging.getLogger(__name__)
@@ -64,7 +63,6 @@ class NotebooksNewBP(CustomBlueprint):
     project_session_secret_repo: ProjectSessionSecretRepository
     rp_repo: ResourcePoolRepository
     session_repo: SessionRepository
-    storage_repo: StorageRepository
     user_repo: UserRepo
     metrics: MetricsService
     git_repositories_repo: GitRepositoriesRepository
