@@ -38,6 +38,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
+from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.client_interfaces import K8sClient
@@ -81,7 +82,6 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
-from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
@@ -141,7 +141,6 @@ class DependencyManager:
     authz: Authz
     member_repo: MemberRepository
     rp_repo: ResourcePoolRepository
-    storage_repo: StorageRepository
     project_repo: ProjectRepository
     project_migration_repo: ProjectMigrationRepository
     group_repo: GroupRepository
@@ -177,6 +176,7 @@ class DependencyManager:
     session_logs_repo: AmaltheaSessionPersistedLogsReadRepository
     build_logs_repo: ImageBuildPersistedLogsReadRepository
     zenodo_client: ZenodoAPIClient
+    envidat_client: EnvidatClient
     job_client: DepositUploadJobClient
     secret_client: K8sSecretClient
     internal_token_mint: RenkuSelfTokenMint
@@ -371,12 +371,6 @@ class DependencyManager:
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
-        storage_repo = StorageRepository(
-            session_maker=config.db.async_session_maker,
-            gitlab_client=gitlab_client,
-            user_repo=kc_user_repo,
-            secret_service_public_key=config.secrets.public_key,
-        )
         reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
 
         git_repositories_repo = GitRepositoriesRepository(
@@ -489,7 +483,6 @@ class DependencyManager:
             kc_api=kc_api,
             member_repo=member_repo,
             rp_repo=rp_repo,
-            storage_repo=storage_repo,
             reprovisioning_repo=reprovisioning_repo,
             search_updates_repo=search_updates_repo,
             search_reprovisioning=search_reprovisioning,
@@ -526,6 +519,7 @@ class DependencyManager:
             session_logs_repo=session_logs_repo,
             build_logs_repo=build_logs_repo,
             zenodo_client=ZenodoAPIClient(),
+            envidat_client=EnvidatClient(),
             job_client=job_client,
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,

@@ -38,7 +38,6 @@ from renku_data_services.session.core import (
     validate_unsaved_session_launcher,
 )
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.storage import orm as storage_schemas
 from renku_data_services.users.db import UserRepo
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.core import with_db_transaction
@@ -417,10 +416,6 @@ class ProjectRepository:
         dcs = [e for e in dcs.scalars().all() if e]
 
         await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-
-        await session.execute(
-            delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == str(project_id))
-        )
 
         if dcs != []:
             await session.execute(delete(dc_schemas.DataConnectorORM).where(dc_schemas.DataConnectorORM.id.in_(dcs)))

@@ -31,7 +31,6 @@ def test_config_dummy(dependencies_dummy_fixture: DependencyManager) -> None:
     dm = dependencies_dummy_fixture
     assert dm.authenticator is not None
     assert isinstance(dm.authenticator, DummyAuthenticator)
-    assert dm.storage_repo is not None
     assert dm.rp_repo is not None
     assert dm.member_repo is not None
     assert dm.project_repo is not None
@@ -85,7 +84,6 @@ async def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
 def test_config_no_dummy(config_no_dummy_fixture: DependencyManager) -> None:
     config = config_no_dummy_fixture
     assert config.authenticator is not None
-    assert config.storage_repo is not None
     assert config.rp_repo is not None
     assert config.member_repo is not None
     assert config.project_repo is not None

@@ -35,6 +35,7 @@ from renku_data_services.crc.db import ClusterRepository, MemberRepository, Quot
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
+from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
@@ -73,8 +74,6 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
-from renku_data_services.storage import models as storage_models
-from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users import models as user_preferences_models
 from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -263,12 +262,6 @@ class TestDependencyManager(DependencyManager):
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
-        storage_repo = StorageRepository(
-            session_maker=config.db.async_session_maker,
-            gitlab_client=gitlab_client,
-            user_repo=kc_user_repo,
-            secret_service_public_key=config.secrets.public_key,
-        )
         reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
 
         git_repositories_repo = gitrepositoriesrepository_class(
@@ -384,7 +377,6 @@ class TestDependencyManager(DependencyManager):
             kc_api=kc_api,
             member_repo=member_repo,
             rp_repo=rp_repo,
-            storage_repo=storage_repo,
             reprovisioning_repo=reprovisioning_repo,
             search_updates_repo=search_updates_repo,
             search_reprovisioning=search_reprovisioning,
@@ -419,6 +411,7 @@ class TestDependencyManager(DependencyManager):
             resource_requests_repo=resource_requests_repo,
             resource_usage_service=resource_usage_service,
             zenodo_client=ZenodoAPIClient(),
+            envidat_client=EnvidatClient(),
             job_client=job_client,
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,
@@ -538,20 +531,6 @@ async def create_rp(
     assert sort_rp_classes(inserted_rp.classes) == sort_rp_classes(retrieved_rps[0].classes)
     assert inserted_rp.quota == retrieved_rps[0].quota
     return inserted_rp
-
-
-async def create_storage(storage_dict: dict[str, Any], repo: StorageRepository, user: base_models.APIUser):
-    storage_dict["configuration"] = storage_models.RCloneConfig.model_validate(storage_dict["configuration"])
-    storage = storage_models.CloudStorage.model_validate(storage_dict)
-
-    inserted_storage = await repo.insert_storage(storage, user=user)
-    assert inserted_storage is not None
-    assert inserted_storage.storage_id is not None
-    retrieved_storage = await repo.get_storage_by_id(inserted_storage.storage_id, user=user)
-    assert retrieved_storage is not None
-
-    assert inserted_storage.model_dump() == retrieved_storage.model_dump()
-    return inserted_storage
 
 
 async def create_user_preferences(
