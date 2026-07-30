@@ -1,7 +1,10 @@
 """Adapters for persisted logs database classes."""
 
+from __future__ import annotations
+
 from collections.abc import AsyncIterator, Sequence
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession
@@ -13,12 +16,17 @@ from renku_data_services.authz.models import Scope
 from renku_data_services.persisted_logs import models
 from renku_data_services.persisted_logs import orm as schemas
 from renku_data_services.persisted_logs.constants import BUILD_MAIN_CONTAINER, SESSION_MAIN_CONTAINER
+from renku_data_services.repositories import models as repo_models
 from renku_data_services.session import models as session_models
 from renku_data_services.session import orm as session_schemas
 
+if TYPE_CHECKING:
+    from renku_data_services.repositories.db import GitRepositoriesRepository
+    from renku_data_services.session.config import BuildsConfig
+
 
 class AmaltheaSessionPersistedLogsReadRepository:
-    """Repository for persisted logs of Amalthea sessions."""
+    """Repository for reading persisted logs of Amalthea sessions."""
 
     def __init__(self, authz: Authz) -> None:
         self.authz: Authz = authz
@@ -213,8 +221,15 @@ class AmaltheaSessionPersistedLogsRepository:
 class ImageBuildPersistedLogsReadRepository:
     """Repository for persisted logs of image builds."""
 
-    def __init__(self, authz: Authz) -> None:
+    def __init__(
+        self,
+        authz: Authz,
+        builds_config: BuildsConfig,
+        git_repositories_repo: GitRepositoriesRepository,
+    ) -> None:
         self.authz: Authz = authz
+        self.builds_config = builds_config
+        self.git_repositories_repo = git_repositories_repo
 
     async def get_build_logs(
         self, session: AsyncSession, user: base_models.APIUser, build_id: ULID
@@ -238,6 +253,28 @@ class ImageBuildPersistedLogsReadRepository:
             if build_orm is not None
             else False
         )
+
+        # If the output image is private, check that the user can read the source repository
+        if build_orm is None or build_orm.result_image is None:
+            authorized = False
+        else:
+            if self.builds_config.private_builds_enabled and build_orm.result_image.startswith(
+                self.builds_config.build_output_private_image_prefix
+            ):
+                if build_orm.result_repository_url is None:
+                    authorized = False
+                else:
+                    repo_data = await self.git_repositories_repo.get_repository(
+                        repository_url=build_orm.result_repository_url,
+                        user=user,
+                        etag=None,
+                    )
+                    if (
+                        not isinstance(repo_data.metadata, repo_models.Metadata)
+                        or not repo_data.metadata.pull_permission
+                    ):
+                        authorized = False
+
         if not authorized or build_orm is None:
             raise errors.MissingResourceError(
                 message=f"Build with id '{build_id}' does not exist or you do not have access to it."

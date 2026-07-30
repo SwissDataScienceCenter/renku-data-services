@@ -470,7 +470,11 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
         )
         session_logs_repo = AmaltheaSessionPersistedLogsReadRepository(authz=authz)
-        build_logs_repo = ImageBuildPersistedLogsReadRepository(authz=authz)
+        build_logs_repo = ImageBuildPersistedLogsReadRepository(
+            authz=authz,
+            builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
+        )
         return cls(
             config,
             k8s_client=client,
