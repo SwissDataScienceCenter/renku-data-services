@@ -74,7 +74,6 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
-from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users import models as user_preferences_models
 from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -263,12 +262,6 @@ class TestDependencyManager(DependencyManager):
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
-        storage_repo = StorageRepository(
-            session_maker=config.db.async_session_maker,
-            gitlab_client=gitlab_client,
-            user_repo=kc_user_repo,
-            secret_service_public_key=config.secrets.public_key,
-        )
         reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
 
         git_repositories_repo = gitrepositoriesrepository_class(
@@ -384,7 +377,6 @@ class TestDependencyManager(DependencyManager):
             kc_api=kc_api,
             member_repo=member_repo,
             rp_repo=rp_repo,
-            storage_repo=storage_repo,
             reprovisioning_repo=reprovisioning_repo,
             search_updates_repo=search_updates_repo,
             search_reprovisioning=search_reprovisioning,
