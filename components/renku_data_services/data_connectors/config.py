@@ -11,37 +11,10 @@ from typing import Final
 from kubernetes.client import ApiClient, V1Toleration
 
 from renku_data_services.app_config import logging
-from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ProjectStorageConfig:
-    """The configuration for project storage."""
-
-    enabled: bool
-    storage_class: str
-    maximum_size: ByteSize
-
-    @classmethod
-    def from_env(cls) -> ProjectStorageConfig:
-        """Create a configuration from environment variables."""
-
-        enabled = os.environ.get("PROJECT_STORAGE_ENABLED", "").lower() == "true"
-        storage_class = os.environ.get("PROJECT_STORAGE_STORAGE_CLASS")
-        maximum_size = os.environ.get("PROJECT_STORAGE_MAX_SIZE_GB") or "10"
-        maximum_size = ByteSize.from_gibi(int(maximum_size))
-
-        # TODO: set defaults for easier PR/CI deployments for now
-        enabled = True
-        storage_class = "azurefile"
-        if enabled and not storage_class:
-            raise errors.ConfigurationError(message="A storage_class is required for enabled project storage")
-
-        return ProjectStorageConfig(enabled, storage_class=storage_class, maximum_size=maximum_size)
 
 
 @dataclass
