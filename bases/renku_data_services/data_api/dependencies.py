@@ -40,6 +40,7 @@ from renku_data_services.data_connectors.db import (
 )
 from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
+from renku_data_services.data_connectors.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import (
@@ -181,6 +182,7 @@ class DependencyManager:
     secret_client: K8sSecretClient
     internal_token_mint: RenkuSelfTokenMint
     internal_scope_verifier: ScopeVerifier
+    project_storage_k8s: ProjectStorageK8s
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -371,6 +373,7 @@ class DependencyManager:
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
+        project_storage_k8s = ProjectStorageK8s(config.nb_config.k8s_v2_client)
         reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
 
         git_repositories_repo = GitRepositoriesRepository(
@@ -427,6 +430,7 @@ class DependencyManager:
             project_repo=project_repo,
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
+            project_storage_config=config.project_storage_config,
         )
         data_connector_secret_repo = DataConnectorSecretRepository(
             session_maker=config.db.async_session_maker,
@@ -528,4 +532,5 @@ class DependencyManager:
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,
             internal_scope_verifier=internal_scope_verifier,
+            project_storage_k8s=project_storage_k8s,
         )

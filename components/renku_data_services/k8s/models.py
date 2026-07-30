@@ -14,6 +14,7 @@ from kr8s.asyncio.objects import APIObject
 from kr8s.objects import Secret
 from kubernetes.client import V1Secret
 
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.errors import ProgrammingError, errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 
@@ -482,3 +483,58 @@ class DeletePropagationPolicy(StrEnum):
 
     foreground = "Foreground"
     background = "Background"
+
+
+class K8sPersistentVolumeClaim(K8sObject):
+    """Represents a k8s persistent volume claim."""
+
+    def __init__(
+        self,
+        name: str,
+        namespace: str,
+        cluster: ClusterId,
+        manifest: Box,
+    ) -> None:
+        super().__init__(
+            name=name,
+            namespace=namespace,
+            cluster=cluster,
+            gvk=GVK(version="v1", kind="PersistentVolumeClaim"),
+            manifest=manifest,
+        )
+
+    @classmethod
+    def new(
+        cls,
+        name: str,
+        cluster: ClusterId,
+        namespace: str,
+        accessModes: list[str],
+        storage_class: str,
+        size: ByteSize,
+        labels: dict[str, str],
+    ) -> Self:
+        """Create a new perstistent volume claim."""
+        return cls(
+            name=name,
+            namespace=namespace,
+            cluster=cluster,
+            manifest=Box(
+                {
+                    "metadata": {
+                        "namespace": namespace,
+                        "name": name,
+                        "labels": labels,
+                    },
+                    "spec": {
+                        "accessModes": accessModes,
+                        "storageClassName": storage_class,
+                        "resources": {"requests": {"storage": f"{size.to_gibi()}Gi"}},
+                    },
+                }
+            ),
+        )
+
+    def get_storage_class(self) -> str:
+        """Return the storage class name from the manifest."""
+        return str(self.manifest.spec.storageClassName)

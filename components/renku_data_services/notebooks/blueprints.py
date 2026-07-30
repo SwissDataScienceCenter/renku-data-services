@@ -9,6 +9,7 @@ from sanic_ext import validate
 from renku_data_services import base_models
 from renku_data_services.app_config import logging
 from renku_data_services.authn.renku import RenkuSelfTokenMint
+from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
@@ -69,6 +70,7 @@ class NotebooksNewBP(CustomBlueprint):
     builds_config: BuildsConfig
     resource_usage_service: ResourceUsageService
     resource_requests_repo: ResourceRequestsRepo
+    authz: Authz
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -91,6 +93,7 @@ class NotebooksNewBP(CustomBlueprint):
                 git_provider_helper=self.git_provider_helper,
                 cluster_repo=self.cluster_repo,
                 data_connector_secret_repo=self.data_connector_secret_repo,
+                data_connector_repo=self.data_connector_repo,
                 project_repo=self.project_repo,
                 project_session_secret_repo=self.project_session_secret_repo,
                 rp_repo=self.rp_repo,
@@ -103,6 +106,7 @@ class NotebooksNewBP(CustomBlueprint):
                 builds_config=self.builds_config,
                 internal_token_mint=self.internal_token_mint,
                 resource_usage_service=self.resource_usage_service,
+                authz=self.authz,
             )
             status = 201 if created else 200
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"), status)
