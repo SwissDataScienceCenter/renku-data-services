@@ -819,6 +819,7 @@ class DataConnectorsBP(CustomBlueprint):
             created_by=ps.created_by,
             creation_date=ps.creation_date,
             updated_at=ps.updated_at,
+            etag=ps.etag,
         )
 
     @staticmethod
@@ -828,6 +829,7 @@ class DataConnectorsBP(CustomBlueprint):
             max_size=int(ps.max_size.to_gibi()),
             name=ps.name,
             namespace=ps.namespace_path.serialize(),
+            etag=ps.etag,
         )
 
     @staticmethod
