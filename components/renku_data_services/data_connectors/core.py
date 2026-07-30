@@ -247,13 +247,10 @@ def validate_unsaved_project_storage(body: apispec.ProjectStoragePost) -> models
     The namespace must be a project namespace. The project must be
     enabled for project storages and the user must be an owner.
     """
-    namespace_split = body.namespace.split("/")
-    if len(namespace_split) != 2:
-        raise errors.ValidationError(message=f"The namespace must be a project path: {body.namespace}")
 
     _validate_mount_path(body.mount_path)
 
-    namespace_path = ProjectPath.from_strings(namespace_split[0], namespace_split[1])
+    namespace_path = ProjectPath.parse(body.namespace)
     return models.UnsavedProjectStorage(
         namespace_path=namespace_path, size=ByteSize.from_gibi(body.size), mount_path=PurePosixPath(body.mount_path)
     )
