@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 from ulid import ULID
 
-
 # @dataclass(eq=True, frozen=True, kw_only=True)
 # class UnsavedLogLine:
 #     """Represents an unsaved log line."""

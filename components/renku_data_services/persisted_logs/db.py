@@ -1,9 +1,8 @@
 """Adapters for persisted logs database classes."""
 
 from collections.abc import AsyncIterator
-from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
@@ -11,7 +10,7 @@ from renku_data_services import base_models, errors
 from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
-from renku_data_services.persisted_logs import core, models
+from renku_data_services.persisted_logs import models
 from renku_data_services.persisted_logs import orm as schemas
 from renku_data_services.persisted_logs.constants import BUILD_MAIN_CONTAINER, SESSION_MAIN_CONTAINER
 from renku_data_services.session import models as session_models
