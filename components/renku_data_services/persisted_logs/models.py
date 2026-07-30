@@ -31,7 +31,6 @@ class SessionRun:
     """The continuous execution span of a session."""
 
     id: ULID
-    user_id: str
     session_uid: str | None
     launcher_id: ULID
     submission_id: str | None

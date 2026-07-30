@@ -44,7 +44,6 @@ class SessionRunsORM(BaseORM):
         """Create a session run model from the SessionRunsORM."""
         return models.SessionRun(
             id=self.id,
-            user_id=self.user_id,
             session_uid=self.session_uid,
             launcher_id=self.launcher_id,
             submission_id=self.submission_id,

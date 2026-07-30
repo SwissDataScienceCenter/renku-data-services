@@ -89,19 +89,8 @@ class PersistedLogsBP(CustomBlueprint):
     def _dump_persisted_session_logs(session_log: models.PersistedSessionLogs) -> dict[str, Any]:
         """Dump persisted session logs for API responses."""
         return dict(
-            run=PersistedLogsBP._dump_session_run(session_log.run),
+            run=session_log.run,
             logs=PersistedLogsBP._dump_session_run_logs(session_log.logs),
-        )
-
-    @staticmethod
-    def _dump_session_run(session_run: models.SessionRun) -> dict[str, Any]:
-        """Dump a session run for API responses."""
-        # NOTE: omit the "user_id" field
-        return dict(
-            id=session_run.id,
-            session_uid=session_run.session_uid,
-            launcher_id=session_run.launcher_id,
-            submission_id=session_run.submission_id,
         )
 
     @staticmethod
