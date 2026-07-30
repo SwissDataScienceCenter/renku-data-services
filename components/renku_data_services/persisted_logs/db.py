@@ -4,13 +4,13 @@ from collections.abc import AsyncIterator, Sequence
 from datetime import datetime
 
 from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession
 from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
-from renku_data_services.persisted_logs import core, models
+from renku_data_services.persisted_logs import models
 from renku_data_services.persisted_logs import orm as schemas
 from renku_data_services.persisted_logs.constants import BUILD_MAIN_CONTAINER, SESSION_MAIN_CONTAINER
 from renku_data_services.session import models as session_models
@@ -121,24 +121,8 @@ class AmaltheaSessionPersistedLogsReadRepository:
             .order_by(schemas.AmaltheaSessionLogORM.id.asc())
         )
         res = await session.stream_scalars(stmt)
-        logs_per_container: dict[str, list[models.LogLine]] = dict()
-        async for log_entry in res:
-            container = log_entry.container
-            logs = logs_per_container.get(container)
-            if logs is None:
-                logs = list[models.LogLine]()
-                logs_per_container[container] = logs
-            logs.append(models.LogLine(timestamp=log_entry.timestamp, log_line=log_entry.log_line))
-        # Sort containers by name, forcing "amalthea-session" to be the first item (main container)
-        containers_set = set(logs_per_container.keys())
-        containers: list[str] = list()
-        if SESSION_MAIN_CONTAINER in containers_set:
-            containers.append(SESSION_MAIN_CONTAINER)
-            containers_set.remove(SESSION_MAIN_CONTAINER)
-        containers.extend(sorted(containers_set))
-        return [
-            models.ContainerLogs(container=container, logs=logs_per_container[container]) for container in containers
-        ]
+        # Sort logs by container name, forcing "amalthea-session" to be the first item (main container)
+        return await _sort_logs_per_container(res, main_container=SESSION_MAIN_CONTAINER)
 
 
 class AmaltheaSessionPersistedLogsRepository:
@@ -202,7 +186,7 @@ class AmaltheaSessionPersistedLogsRepository:
 
     async def delete_expired_session_logs(self, session: AsyncSession, before: datetime) -> int:
         """Remove expired session logs from the database."""
-        nano_ts = core.NanoTimestamp.from_datetime(before)
+        nano_ts = models.NanoTimestamp.from_datetime(before)
         delete_logs_stmt = delete(schemas.AmaltheaSessionLogORM).where(
             schemas.AmaltheaSessionLogORM.timestamp < nano_ts
         )
@@ -287,24 +271,8 @@ class ImageBuildPersistedLogsReadRepository:
             .order_by(schemas.ImageBuildLogORM.id.asc())
         )
         res = await session.stream_scalars(stmt)
-        logs_per_container: dict[str, list[models.LogLine]] = dict()
-        async for log_entry in res:
-            container = log_entry.container
-            logs = logs_per_container.get(container)
-            if logs is None:
-                logs = list[models.LogLine]()
-                logs_per_container[container] = logs
-            logs.append(models.LogLine(timestamp=log_entry.timestamp, log_line=log_entry.log_line))
-        # Sort container by name, forcing "step-build-and-push" to be the first item (main container)
-        containers_set = set(logs_per_container.keys())
-        containers: list[str] = list()
-        if BUILD_MAIN_CONTAINER in containers_set:
-            containers.append(BUILD_MAIN_CONTAINER)
-            containers_set.remove(BUILD_MAIN_CONTAINER)
-        containers.extend(sorted(containers_set))
-        return [
-            models.ContainerLogs(container=container, logs=logs_per_container[container]) for container in containers
-        ]
+        # Sort logs by container name, forcing "step-build-and-push" to be the first item (main container)
+        return await _sort_logs_per_container(res, main_container=BUILD_MAIN_CONTAINER)
 
 
 class ImageBuildPersistedLogsWriteRepository:
@@ -353,8 +321,31 @@ class ImageBuildPersistedLogsWriteRepository:
 
     async def delete_expired_build_logs(self, session: AsyncSession, before: datetime) -> int:
         """Remove expired build logs from the database."""
-        nano_ts = core.NanoTimestamp.from_datetime(before)
+        nano_ts = models.NanoTimestamp.from_datetime(before)
         delete_logs_stmt = delete(schemas.ImageBuildLogORM).where(schemas.ImageBuildLogORM.timestamp < nano_ts)
         res = await session.execute(delete_logs_stmt)
         deleted_logs_count = res.rowcount
         return deleted_logs_count
+
+
+async def _sort_logs_per_container(
+    result: AsyncScalarResult[schemas.AmaltheaSessionLogORM] | AsyncScalarResult[schemas.ImageBuildLogORM],
+    main_container: str | None = None,
+) -> Sequence[models.ContainerLogs]:
+    """Organize logs per container."""
+    logs_per_container: dict[str, list[models.LogLine]] = dict()
+    async for log_entry in result:
+        container = log_entry.container
+        logs = logs_per_container.get(container)
+        if logs is None:
+            logs = list[models.LogLine]()
+            logs_per_container[container] = logs
+        logs.append(models.LogLine(timestamp=log_entry.timestamp, log_line=log_entry.log_line))
+    # Sort containers by name, forcing `main_container` to be the first item
+    containers_set = set(logs_per_container.keys())
+    containers: list[str] = list()
+    if main_container and main_container in containers_set:
+        containers.append(main_container)
+        containers_set.remove(main_container)
+    containers.extend(sorted(containers_set))
+    return [models.ContainerLogs(container=container, logs=logs_per_container[container]) for container in containers]

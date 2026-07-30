@@ -2,8 +2,23 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Self
 
 from ulid import ULID
+
+
+class NanoTimestamp(int):
+    """Unix timestamp in nanoseconds."""
+
+    def to_datetime(self) -> datetime:
+        """Return the corresponding datetime, trucated to microsecond precision."""
+        return datetime.fromtimestamp((self // 1_000) / 1e6, tz=UTC)
+
+    @classmethod
+    def from_datetime(cls, dt: datetime) -> Self:
+        """Create a nano timestamp from a datetime object."""
+        return cls(int(dt.timestamp() * 1e6) * 1000)
 
 
 @dataclass(eq=True, frozen=True, kw_only=True)
