@@ -10,6 +10,7 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import APIUser, NamespacePath
 from renku_data_services.base_models.metrics import MetricsService
+from renku_data_services.data_connectors.config import ProjectStorageConfig
 from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.data_connectors.models import (
     CloudStorageCore,
@@ -54,7 +55,7 @@ def make_setup(app_manager_instance, solr_config) -> Setup:
     gr = GroupRepository(sess, authz, search_updates)
     ur = UserRepo(sess, gr, search_updates, None, MagicMock(spec=MetricsService), authz)
     pr = ProjectRepository(sess, gr, search_updates, authz)
-    dcr = DataConnectorRepository(sess, authz, pr, gr, search_updates)
+    dcr = DataConnectorRepository(sess, authz, pr, gr, search_updates, ProjectStorageConfig.from_env())
     sr = SearchReprovision(
         search_updates_repo=search_updates,
         reprovisioning_repo=ReprovisioningRepository(sess),

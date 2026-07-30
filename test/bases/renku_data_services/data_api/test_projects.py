@@ -358,7 +358,7 @@ async def test_result_is_sorted_by_creation_date(create_project, sanic_client, u
 
 
 @pytest.mark.asyncio
-async def test_delete_project(create_project, sanic_client, user_headers, app_manager) -> None:
+async def test_delete_project(create_project, sanic_client, user_headers, app_manager, cluster) -> None:
     await app_manager.search_updates_repo.clear_all()
 
     # Create some projects
