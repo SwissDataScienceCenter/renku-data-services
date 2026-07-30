@@ -1,6 +1,6 @@
 """Models for persisted logs."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from ulid import ULID
@@ -44,8 +44,12 @@ class LogLine:
     log_line: str
 
 
-type SessionRunLogs = Mapping[str, Sequence[LogLine]]
-"""Logs of a session run, organized by pod container."""
+@dataclass(eq=True, frozen=True, kw_only=True)
+class ContainerLogs:
+    """Logs of a single container."""
+
+    container: str
+    logs: Sequence[LogLine]
 
 
 @dataclass(eq=True, frozen=True, kw_only=True)
@@ -53,7 +57,7 @@ class PersistedSessionLogs:
     """Result of getting session logs from the database."""
 
     run: SessionRun
-    logs: SessionRunLogs
+    logs: Sequence[ContainerLogs]
 
 
 @dataclass(eq=True, frozen=True, kw_only=True)

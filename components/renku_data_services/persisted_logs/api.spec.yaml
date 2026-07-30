@@ -10,6 +10,16 @@ servers:
 paths:
   /persisted_logs/sessions/{launcher_id}:
     get:
+      summary: Get persisted logs for a session
+      description: |
+        Returns logs for a given session launcher belonging to the current user.
+
+        * If the `run_id` is not specified, logs from the most recent run will be returned.
+        * For offline jobs (`launcher_type: non-interactive`), the `submission_id` can
+        also be used to get the corresponding logs.
+
+        NOTE: logs are persisted for a limited amount of time. Once expired, logs are
+        purged from the database.
       parameters:
         - in: path
           name: launcher_id
@@ -21,17 +31,18 @@ paths:
           style: form
           explode: true
           schema:
-            $ref: "#/components/schemas/PersistedLogsGetQuery"
+            $ref: "#/components/schemas/PersistedSessionLogsGetQuery"
       responses:
         "200":
           description: |
-            The session logs from the corresponding run and container, paginated.
+            The persisted logs from the corresponding session run.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PersistedSessionLogs"
         "404":
-          description: The session launcher does not exist
+          description: |
+            The session launcher does not exist or there are no logs persisted for it at the moment.
           content:
             application/json:
               schema:
@@ -42,6 +53,11 @@ paths:
         - persisted_logs
   /persisted_logs/sessions/{launcher_id}/runs:
     get:
+      summary: Get the list of session runs for a given session launcher
+      description: |
+        Returns the list of session runs for the given session launcher.
+
+        NOTE: session runs are removed when the corresponding logs have expired.
       parameters:
         - in: path
           name: launcher_id
@@ -68,6 +84,12 @@ paths:
         - persisted_logs
   /persisted_logs/builds/{build_id}:
     get:
+      summary: Get persisted logs for a build
+      description: |
+        Returns logs for a given image build.
+
+        NOTE: logs are persisted for a limited amount of time. Once expired, logs are
+        purged from the database.
       parameters:
         - in: path
           name: build_id
@@ -95,13 +117,13 @@ paths:
 components:
   schemas:
     PersistedSessionLogs:
-      description: Logs for a session
+      description: Persisted logs for a session
       type: object
       properties:
         run:
           $ref: "#/components/schemas/SessionRun"
         logs:
-          $ref: "#/components/schemas/SessionRunLogs"
+          $ref: "#/components/schemas/LogsPerContainer"
       required:
         - run
         - logs
@@ -126,19 +148,19 @@ components:
         - id
         - launcher_id
     PersistedBuildLogs:
-      description: Logs for an image build
+      description: Persisted logs for an image build
       type: object
       properties:
         logs:
-          $ref: "#/components/schemas/SessionRunLogs"
+          $ref: "#/components/schemas/LogsPerContainer"
       required:
         - logs
-    SessionRunLogs:
-      description: Logs of a session run, organized by pod container
+    LogsPerContainer:
+      description: Logs organized by pod container
       type: array
       items:
-        $ref: "#/components/schemas/SessionRunLog"
-    SessionRunLog:
+        $ref: "#/components/schemas/ContainerLogs"
+    ContainerLogs:
       description: Logs of a single container
       type: object
       properties:
@@ -175,8 +197,8 @@ components:
       description: UNIX timestamp in nanoseconds
       type: string
       pattern: "[0-9]+"
-    PersistedLogsGetQuery:
-      description: Query params for querying persisted logs
+    PersistedSessionLogsGetQuery:
+      description: Query params for querying persisted logs of a session
       type: object
       properties:
         run_id:
