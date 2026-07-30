@@ -7,7 +7,7 @@ from ulid import ULID
 
 
 @dataclass(eq=True, frozen=True, kw_only=True)
-class UnsavedLogLine:
+class UnsavedSessionLogLine:
     """Represents an unsaved log line."""
 
     id: str

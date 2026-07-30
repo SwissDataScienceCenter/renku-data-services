@@ -39,7 +39,7 @@ class LokiLogReader:
 
     async def get_amalthea_session_logs(
         self, limit: int = 1000, start: int | None = None, end: int | None = None
-    ) -> AsyncIterator[models.UnsavedLogLine]:
+    ) -> AsyncIterator[models.UnsavedSessionLogLine]:
         """Fetches Amalthea session logs from Loki.
 
         Parameters:
@@ -91,7 +91,7 @@ class LokiLogReader:
                     continue
 
                 log_line_ids.add(log_line_id)
-                yield models.UnsavedLogLine(
+                yield models.UnsavedSessionLogLine(
                     id=log_line_id,
                     user_id=stream.renku_io_safe_username,
                     run_id=run_id,

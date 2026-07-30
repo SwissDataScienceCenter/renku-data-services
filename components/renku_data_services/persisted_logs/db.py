@@ -57,10 +57,10 @@ class AmaltheaSessionPersistedLogsReadRepository:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
         await self._check_session_launcher(session=session, user=user, launcher_id=launcher_id)
         stmt = (
-            select(schemas.SessionRunsORM)
-            .where(schemas.SessionRunsORM.user_id == user.id)
-            .where(schemas.SessionRunsORM.launcher_id == launcher_id)
-            .order_by(schemas.SessionRunsORM.id.desc())
+            select(schemas.SessionRunORM)
+            .where(schemas.SessionRunORM.user_id == user.id)
+            .where(schemas.SessionRunORM.launcher_id == launcher_id)
+            .order_by(schemas.SessionRunORM.id.desc())
         )
         res = await session.stream_scalars(stmt)
         async for session_run_orm in res:
@@ -96,16 +96,16 @@ class AmaltheaSessionPersistedLogsReadRepository:
         If no `run_id` is specified, then return the latest session run.
         """
         stmt = (
-            select(schemas.SessionRunsORM)
-            .where(schemas.SessionRunsORM.user_id == user_id)
-            .where(schemas.SessionRunsORM.launcher_id == launcher_id)
-            .order_by(schemas.SessionRunsORM.id.desc())
+            select(schemas.SessionRunORM)
+            .where(schemas.SessionRunORM.user_id == user_id)
+            .where(schemas.SessionRunORM.launcher_id == launcher_id)
+            .order_by(schemas.SessionRunORM.id.desc())
             .limit(1)
         )
         if run_id:
-            stmt = stmt.where(schemas.SessionRunsORM.id == run_id)
+            stmt = stmt.where(schemas.SessionRunORM.id == run_id)
         if submission_id:
-            stmt = stmt.where(schemas.SessionRunsORM.submission_id == submission_id)
+            stmt = stmt.where(schemas.SessionRunORM.submission_id == submission_id)
         res = await session.scalars(stmt)
         session_run_orm = res.one_or_none()
         if session_run_orm is None:
@@ -116,9 +116,9 @@ class AmaltheaSessionPersistedLogsReadRepository:
         """Get the logs of a specific session run, organized by container."""
         # TODO: handle pagination?
         stmt = (
-            select(schemas.AmaltheaSessionLogsORM)
-            .where(schemas.AmaltheaSessionLogsORM.run_id == run_id)
-            .order_by(schemas.AmaltheaSessionLogsORM.id.asc())
+            select(schemas.AmaltheaSessionLogORM)
+            .where(schemas.AmaltheaSessionLogORM.run_id == run_id)
+            .order_by(schemas.AmaltheaSessionLogORM.id.asc())
         )
         res = await session.stream_scalars(stmt)
         logs_per_container: dict[str, list[models.LogLine]] = dict()
@@ -147,9 +147,9 @@ class AmaltheaSessionPersistedLogsRepository:
     async def get_latest_log_timestamp(self, session: AsyncSession) -> int | None:
         """Returns the latest log timestamp."""
         stmt = (
-            select(schemas.AmaltheaSessionLogsORM.timestamp)
-            .select_from(schemas.AmaltheaSessionLogsORM)
-            .order_by(schemas.AmaltheaSessionLogsORM.timestamp.desc())
+            select(schemas.AmaltheaSessionLogORM.timestamp)
+            .select_from(schemas.AmaltheaSessionLogORM)
+            .order_by(schemas.AmaltheaSessionLogORM.timestamp.desc())
             .limit(1)
         )
         res = await session.scalars(stmt)
@@ -157,7 +157,7 @@ class AmaltheaSessionPersistedLogsRepository:
         return timestamp
 
     async def insert_session_logs(
-        self, session: AsyncSession, logs_stream: AsyncIterator[models.UnsavedLogLine]
+        self, session: AsyncSession, logs_stream: AsyncIterator[models.UnsavedSessionLogLine]
     ) -> models.InsertLogsResult:
         """Insert sessions logs into the persisted logs database."""
         log_count = 0
@@ -168,18 +168,18 @@ class AmaltheaSessionPersistedLogsRepository:
                 last_timestamp = log.timestamp
 
             existing_log_res = await session.scalars(
-                select(schemas.AmaltheaSessionLogsORM.id).where(schemas.AmaltheaSessionLogsORM.id == log.id)
+                select(schemas.AmaltheaSessionLogORM.id).where(schemas.AmaltheaSessionLogORM.id == log.id)
             )
             existing_log_orm = existing_log_res.one_or_none()
             if existing_log_orm:
                 continue
 
             session_run_res = await session.scalars(
-                select(schemas.SessionRunsORM).where(schemas.SessionRunsORM.id == log.run_id)
+                select(schemas.SessionRunORM).where(schemas.SessionRunORM.id == log.run_id)
             )
             session_run_orm = session_run_res.one_or_none()
             if session_run_orm is None:
-                session_run_orm = schemas.SessionRunsORM(
+                session_run_orm = schemas.SessionRunORM(
                     id=log.run_id,
                     user_id=log.user_id,
                     session_uid=log.session_uid,
@@ -189,7 +189,7 @@ class AmaltheaSessionPersistedLogsRepository:
                 session.add(session_run_orm)
                 await session.flush()
 
-            log_orm = schemas.AmaltheaSessionLogsORM(
+            log_orm = schemas.AmaltheaSessionLogORM(
                 id=log.id,
                 run_id=log.run_id,
                 container=log.container,
@@ -203,25 +203,25 @@ class AmaltheaSessionPersistedLogsRepository:
     async def delete_expired_session_logs(self, session: AsyncSession, before: datetime) -> int:
         """Remove expired session logs from the database."""
         nano_ts = core.NanoTimestamp.from_datetime(before)
-        delete_logs_stmt = delete(schemas.AmaltheaSessionLogsORM).where(
-            schemas.AmaltheaSessionLogsORM.timestamp < nano_ts
+        delete_logs_stmt = delete(schemas.AmaltheaSessionLogORM).where(
+            schemas.AmaltheaSessionLogORM.timestamp < nano_ts
         )
         res = await session.execute(delete_logs_stmt)
         deleted_logs_count = res.rowcount
 
         # Remove orphaned session runs
         stmt = (
-            select(schemas.SessionRunsORM.id)
+            select(schemas.SessionRunORM.id)
             .join(
-                schemas.AmaltheaSessionLogsORM,
-                schemas.SessionRunsORM.id == schemas.AmaltheaSessionLogsORM.run_id,
+                schemas.AmaltheaSessionLogORM,
+                schemas.SessionRunORM.id == schemas.AmaltheaSessionLogORM.run_id,
                 isouter=True,  # isouter makes it a left-join, not an outer join
             )
-            .where(schemas.AmaltheaSessionLogsORM.id.is_(None))
+            .where(schemas.AmaltheaSessionLogORM.id.is_(None))
         )
         session_runs_res = await session.scalars(stmt)
         session_run_ids = session_runs_res.all()
-        await session.execute(delete(schemas.SessionRunsORM).where(schemas.SessionRunsORM.id.in_(session_run_ids)))
+        await session.execute(delete(schemas.SessionRunORM).where(schemas.SessionRunORM.id.in_(session_run_ids)))
 
         return deleted_logs_count
 
@@ -282,9 +282,9 @@ class ImageBuildPersistedLogsReadRepository:
         """Get the logs of a specific image build, organized by container."""
         # TODO: handle pagination?
         stmt = (
-            select(schemas.ImageBuildLogsORM)
-            .where(schemas.ImageBuildLogsORM.build_id == build_id)
-            .order_by(schemas.ImageBuildLogsORM.id.asc())
+            select(schemas.ImageBuildLogORM)
+            .where(schemas.ImageBuildLogORM.build_id == build_id)
+            .order_by(schemas.ImageBuildLogORM.id.asc())
         )
         res = await session.stream_scalars(stmt)
         logs_per_container: dict[str, list[models.LogLine]] = dict()
@@ -313,9 +313,9 @@ class ImageBuildPersistedLogsWriteRepository:
     async def get_latest_log_timestamp(self, session: AsyncSession) -> int | None:
         """Returns the latest log timestamp."""
         stmt = (
-            select(schemas.ImageBuildLogsORM.timestamp)
-            .select_from(schemas.ImageBuildLogsORM)
-            .order_by(schemas.ImageBuildLogsORM.timestamp.desc())
+            select(schemas.ImageBuildLogORM.timestamp)
+            .select_from(schemas.ImageBuildLogORM)
+            .order_by(schemas.ImageBuildLogORM.timestamp.desc())
             .limit(1)
         )
         res = await session.scalars(stmt)
@@ -334,13 +334,13 @@ class ImageBuildPersistedLogsWriteRepository:
                 last_timestamp = log.timestamp
 
             existing_log_res = await session.scalars(
-                select(schemas.ImageBuildLogsORM.id).where(schemas.ImageBuildLogsORM.id == log.id)
+                select(schemas.ImageBuildLogORM.id).where(schemas.ImageBuildLogORM.id == log.id)
             )
             existing_log_orm = existing_log_res.one_or_none()
             if existing_log_orm:
                 continue
 
-            log_orm = schemas.ImageBuildLogsORM(
+            log_orm = schemas.ImageBuildLogORM(
                 id=log.id,
                 build_id=log.build_id,
                 container=log.container,
@@ -354,7 +354,7 @@ class ImageBuildPersistedLogsWriteRepository:
     async def delete_expired_build_logs(self, session: AsyncSession, before: datetime) -> int:
         """Remove expired build logs from the database."""
         nano_ts = core.NanoTimestamp.from_datetime(before)
-        delete_logs_stmt = delete(schemas.ImageBuildLogsORM).where(schemas.ImageBuildLogsORM.timestamp < nano_ts)
+        delete_logs_stmt = delete(schemas.ImageBuildLogORM).where(schemas.ImageBuildLogORM.timestamp < nano_ts)
         res = await session.execute(delete_logs_stmt)
         deleted_logs_count = res.rowcount
         return deleted_logs_count

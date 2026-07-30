@@ -20,7 +20,7 @@ class BaseORM(MappedAsDataclass, DeclarativeBase):
     registry = COMMON_ORM_REGISTRY
 
 
-class SessionRunsORM(BaseORM):
+class SessionRunORM(BaseORM):
     """A session run, which is the continuous execution of a session."""
 
     __tablename__ = "session_runs"
@@ -41,7 +41,7 @@ class SessionRunsORM(BaseORM):
     """The submission ID, if the session run corresponds to an offline job."""
 
     def dump(self) -> models.SessionRun:
-        """Create a session run model from the SessionRunsORM."""
+        """Create a session run model from the SessionRunORM."""
         return models.SessionRun(
             id=self.id,
             session_uid=self.session_uid,
@@ -50,7 +50,7 @@ class SessionRunsORM(BaseORM):
         )
 
 
-class AmaltheaSessionLogsORM(BaseORM):
+class AmaltheaSessionLogORM(BaseORM):
     """A log line from an Amalthea session."""
 
     __tablename__ = "amalthea_session_logs"
@@ -58,10 +58,10 @@ class AmaltheaSessionLogsORM(BaseORM):
     id: Mapped[str] = mapped_column("id", primary_key=True, nullable=False)
     """ID of the log line."""
 
-    run_id: Mapped[ULID] = mapped_column(ForeignKey(SessionRunsORM.id, ondelete="CASCADE"), index=True, nullable=False)
+    run_id: Mapped[ULID] = mapped_column(ForeignKey(SessionRunORM.id, ondelete="CASCADE"), index=True, nullable=False)
     """ID of the session run."""
 
-    session_run: Mapped[SessionRunsORM] = relationship(lazy="select", init=False, repr=False, viewonly=True)
+    session_run: Mapped[SessionRunORM] = relationship(lazy="select", init=False, repr=False, viewonly=True)
     """The session run this log line belongs to."""
 
     container: Mapped[str] = mapped_column(nullable=False)
@@ -74,7 +74,7 @@ class AmaltheaSessionLogsORM(BaseORM):
     """The contents of the log line."""
 
 
-class ImageBuildLogsORM(BaseORM):
+class ImageBuildLogORM(BaseORM):
     """A log line from an image build."""
 
     __tablename__ = "image_build_logs"
