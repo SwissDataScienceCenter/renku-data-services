@@ -21,3 +21,11 @@ class BaseAPISpec(BaseModel):
         if isinstance(value, ULID):
             return str(value)
         return value
+
+    @field_validator("timestamp", mode="before", check_fields=False)
+    @classmethod
+    def serialize_nano_timestamp(cls, value: Any) -> Any:
+        """Handle serializing nanosecond timestamps to string."""
+        if isinstance(value, int):
+            return str(value)
+        return value
