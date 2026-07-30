@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnExpressionArgument, Select, delete, exists, func, or_, select
+from sqlalchemy import ColumnExpressionArgument, Select, delete, exists, func, or_, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from ulid import ULID
@@ -635,7 +635,10 @@ class DataConnectorRepository:
             .join(ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id)
             .join(
                 ns_schemas.EntitySlugORM,
-                ns_schemas.EntitySlugORM.project_id == schemas.ProjectStorageAllowORM.project_id,
+                and_(
+                    ns_schemas.EntitySlugORM.project_id == schemas.ProjectStorageAllowORM.project_id,
+                    ns_schemas.EntitySlugORM.data_connector_id.is_(None),
+                ),
             )
             .join(ns_schemas.NamespaceORM, ns_schemas.NamespaceORM.id == ns_schemas.EntitySlugORM.namespace_id)
             .where(schemas.ProjectStorageAllowORM.project_id == project_id)
@@ -664,7 +667,10 @@ class DataConnectorRepository:
                 .join(ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id)
                 .join(
                     ns_schemas.EntitySlugORM,
-                    ns_schemas.EntitySlugORM.project_id == schemas.ProjectStorageAllowORM.project_id,
+                    and_(
+                        ns_schemas.EntitySlugORM.project_id == schemas.ProjectStorageAllowORM.project_id,
+                        ns_schemas.EntitySlugORM.data_connector_id.is_(None),
+                    ),
                 )
                 .join(ns_schemas.NamespaceORM, ns_schemas.NamespaceORM.id == ns_schemas.EntitySlugORM.namespace_id)
             )
