@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnExpressionArgument, Select, delete, exists, func, or_, select, and_
+from sqlalchemy import ColumnExpressionArgument, Select, and_, delete, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from ulid import ULID
@@ -663,6 +663,7 @@ class DataConnectorRepository:
                     ProjectORM.name,
                     ns_schemas.NamespaceORM.slug.label("namespace_slug"),
                     ns_schemas.EntitySlugORM.slug.label("project_slug"),
+                    schemas.ProjectStorageAllowORM.updated_at,
                 )
                 .join(ProjectORM, ProjectORM.id == schemas.ProjectStorageAllowORM.project_id)
                 .join(
