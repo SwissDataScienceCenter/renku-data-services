@@ -30,6 +30,7 @@ from renku_data_services.data_connectors.blueprints import DataConnectorsBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.notebooks.blueprints import NotebooksNewBP
 from renku_data_services.notifications.blueprints import NotificationsBP
+from renku_data_services.persisted_logs.blueprints import PersistedLogsBP
 from renku_data_services.platform.blueprints import PlatformConfigBP, PlatformUrlRedirectBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
@@ -276,7 +277,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         metrics=dm.metrics,
         zenodo_client=dm.zenodo_client,
-        envidat_client=dm.envidat_client,
         connected_services_repo=dm.connected_services_repo,
         job_client=dm.job_client,
         secret_client=dm.secret_client,
@@ -307,6 +307,14 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         rr_svc=dm.resource_usage_service,
         authenticator=dm.authenticator,
         rp_repo=dm.rp_repo,
+    )
+    persisted_logs = PersistedLogsBP(
+        name="persisted_logs",
+        url_prefix=url_prefix,
+        session_logs_repo=dm.session_logs_repo,
+        build_logs_repo=dm.build_logs_repo,
+        authenticator=dm.authenticator,
+        session_maker=dm.config.db.async_session_maker,
     )
     internal_authentication = InternalAuthenticationBP(
         name="internal_authentication",
@@ -346,6 +354,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             notifications.blueprint(),
             capacity_reservation.blueprint(),
             resource_usage.blueprint(),
+            persisted_logs.blueprint(),
             internal_authentication.blueprint(),
         ]
     )
