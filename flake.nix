@@ -70,7 +70,7 @@
         src = pkgs.fetchFromGitHub {
           owner = "SwissDataScienceCenter";
           repo = "rclone";
-          rev = "v1.71.2+renku-1";
+          tag = "v1.71.2+renku-1";
           sha256 = "sha256-NhPYEGPgpwe56zExrV3SiYsbKLb3/OuX+UOuezgJQ8w=";
         };
       });
@@ -142,7 +142,7 @@
         redis
         postgresql_16
         jq
-        devshellToolsPkgs.openapi-docs
+        #devshellToolsPkgs.openapi-docs
         devshellToolsPkgs.solr
         devshellToolsPkgs.postgres-fg
         spicedb
@@ -164,9 +164,14 @@
         '')
         (
           writeShellScriptBin "poetry-setup" ''
+            set -e
             venv_path="$(poetry env info -p)"
             if [ "$1" == "-c" ]; then
                echo "Removing virtual env at $venv_path"
+               if [ -z "$venv_path" ]; then
+                   echo "No venv path found??? exiting."
+                   exit 1
+               fi
                rm -rf "$venv_path"/*
             fi
             poetry install
@@ -281,7 +286,7 @@
             SOLR_CORE = "renku-search-dev";
 
             #AMALTHEA_SESSIONS_VERSION = "refs/heads/eikek/non-interactive-session";
-            RENKU_ENV = "renku-ci-ds-1328";
+            RENKU_ENV = "renku-ci-ds-1378";
             K8S_NAMESPACE = "default";
             KUBERNETES_NAMESPACE = "default";
             DEBUG_LOGGING = "renku_data_services";
