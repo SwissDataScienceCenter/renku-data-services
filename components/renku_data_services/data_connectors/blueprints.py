@@ -595,6 +595,20 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/projects/<project_id:ulid>/storage", ["GET"], _get_all_storage_to_project
 
+    def get_storage_config(self) -> BlueprintFactoryResponse:
+        """Get the current config used for project storage."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _get_project_config(_: Request, user: base_models.APIUser) -> JSONResponse:
+            storage_config = self.data_connector_repo.get_project_storage_config()
+            result = apispec.ProjectStorageConfig(
+                enabled=storage_config.enabled, max_size=int(storage_config.maximum_size.to_gibi())
+            )
+            return validated_json(apispec.ProjectStorageConfig, result)
+
+        return "/data_connectors/storage/config", ["GET"], _get_project_config
+
     def delete_storage(self) -> BlueprintFactoryResponse:
         """Delete a specific project storage."""
 

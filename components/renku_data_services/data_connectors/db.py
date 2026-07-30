@@ -376,7 +376,7 @@ class DataConnectorRepository:
         return dc
 
     async def get_project_storage(self, user: base_models.APIUser, storage_id: ULID) -> models.ProjectStorage | None:
-        """Get a project storage to a project if it exists."""
+        """Get a project storage by its id."""
 
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
@@ -397,6 +397,12 @@ class DataConnectorRepository:
         return result
 
     async def get_storage_to(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectStorage | None:
+        if not self.project_storage_config.enabled:
+            return None
+        else:
+            return await self._get_storage_to_project(user, project_id)
+
+    async def _get_storage_to_project(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectStorage | None:
         """Get a project storage to a project if it exists."""
 
         if user.id is None:
@@ -417,11 +423,20 @@ class DataConnectorRepository:
 
         return result
 
+    def get_project_storage_config(self) -> ProjectStorageConfig:
+        """Return the current config for project storage."""
+
+        return self.project_storage_config
+
     @with_db_transaction
     async def insert_project_storage(
         self, user: base_models.APIUser, input: models.UnsavedProjectStorage, *, session: AsyncSession | None = None
     ) -> models.ProjectStorage:
         """Insert a new project storage."""
+
+        # When the feature is disabled, we disallow insertion, but still allow managing existing data
+        if not self.project_storage_config.enabled:
+            raise errors.MissingResourceError(message="The project storage api is not enabled.")
 
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
@@ -721,7 +736,7 @@ class DataConnectorRepository:
         if user.id is None or not user.is_admin:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
-        storage = await self.get_storage_to(user, project_id)
+        storage = await self._get_storage_to_project(user, project_id)
         result = await session.scalars(
             select(schemas.ProjectStorageAllowORM).where(schemas.ProjectStorageAllowORM.project_id == project_id)
         )
