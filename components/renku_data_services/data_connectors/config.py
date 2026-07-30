@@ -38,9 +38,8 @@ class ProjectStorageConfig:
         # TODO: set defaults for easier PR/CI deployments for now
         enabled = True
         storage_class = "azurefile"
-        if enabled:
-            if not storage_class:
-                raise errors.ConfigurationError(message="A storage_class is required for enabled project storage")
+        if enabled and not storage_class:
+            raise errors.ConfigurationError(message="A storage_class is required for enabled project storage")
 
         return ProjectStorageConfig(enabled, storage_class=storage_class, maximum_size=maximum_size)
 

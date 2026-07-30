@@ -397,12 +397,16 @@ class DataConnectorRepository:
         return result
 
     async def get_storage_to(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectStorage | None:
+        """Get a project storage to a project if it exists and the feature is enabled."""
+
         if not self.project_storage_config.enabled:
             return None
         else:
             return await self._get_storage_to_project(user, project_id)
 
-    async def _get_storage_to_project(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectStorage | None:
+    async def _get_storage_to_project(
+        self, user: base_models.APIUser, project_id: ULID
+    ) -> models.ProjectStorage | None:
         """Get a project storage to a project if it exists."""
 
         if user.id is None:
