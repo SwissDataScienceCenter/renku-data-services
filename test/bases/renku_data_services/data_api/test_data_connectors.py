@@ -3578,3 +3578,25 @@ async def test_patch_storage_allow_min_size(
 
     assert response.status_code == 422, response.text
     assert "at least 1GB" in response.text
+
+
+@pytest.mark.asyncio
+async def test_get_all_storage_allow(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str], user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_id": project_id, "max_size": 10}
+    _, response = await sanic_client.post(
+        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.get("/api/data/data_connectors/storage/allow", headers=admin_headers)
+    assert response.status_code == 200, response.text
+    assert response.json is not None, f"No json response body: {response.text}"
+    assert isinstance(response.json, list)
+    assert len(response.json) == 1
+    assert response.json[0]["project_id"] == project_id
+    assert response.json[0]["max_size"] == 10
