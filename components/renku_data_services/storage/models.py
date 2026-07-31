@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import configparser
 from collections.abc import Generator, MutableMapping
-from copy import deepcopy
 from pathlib import PurePosixPath
-from typing import IO, Any
+from typing import Any
 from urllib.parse import ParseResult, urlparse
 
 from pydantic import BaseModel, Field, PrivateAttr, model_serializer, model_validator
@@ -23,7 +21,7 @@ class RCloneConfig(BaseModel, MutableMapping):
     _validator: RCloneValidator = PrivateAttr(default=RCloneValidator())
 
     @model_validator(mode="after")
-    def check_rclone_schema(self) -> "RCloneConfig":
+    def check_rclone_schema(self) -> RCloneConfig:
         """Validate that the reclone config is valid."""
         self._validator.validate(self.config)
         return self

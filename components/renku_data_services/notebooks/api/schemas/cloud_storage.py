@@ -3,8 +3,7 @@
 import json
 from configparser import ConfigParser
 from io import StringIO
-from pathlib import PurePosixPath
-from typing import Any, Final, Optional, Protocol, Self
+from typing import Any, Final, Optional, Protocol
 
 from kubernetes import client
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema

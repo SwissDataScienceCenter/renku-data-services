@@ -98,7 +98,7 @@ def validate_unsaved_storage_url(
     validator.validate(config)
     return models.CloudStorageCore(
         storage_type=config["type"],
-        configuration=models.SingleConfig.validated(config.config),
+        configuration=config.config,
         source_path=source_path.as_posix(),
         target_path=storage.target_path,
         readonly=storage.readonly,
