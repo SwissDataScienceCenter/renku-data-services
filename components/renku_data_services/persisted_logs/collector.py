@@ -56,8 +56,61 @@ class LokiLogReader:
             "}"
         )
         response = await self._get_logs(query=query, limit=limit, start=start, end=end)
-        log_line_ids: set[str] = set()
+        async for item in self._process_session_logs(response):
+            yield item
 
+    async def get_image_build_logs(
+        self, limit: int = 1000, start: int | None = None, end: int | None = None
+    ) -> AsyncIterator[models.UnsavedBuildLogLine]:
+        """Fetchesimage build logs from Loki.
+
+        Parameters:
+        - limit: max number of entries to return
+        - start: start timestamp as a Unix nano timestamp
+        - end: end timestamp as a Unix nano timestamp
+
+        See also https://grafana.com/docs/loki/latest/reference/loki-http-api/#query-logs-within-a-range-of-time
+        """
+        query = (
+            "{"
+            f'{PERSISTED_LOGS_BUILD_LABEL_KEY}="{PERSISTED_LOGS_BUILD_LABEL_VALUE}",'
+            f'{PERSISTED_LOGS_NAMESPACE_LABEL_KEY}="{self.config.namespace}"'
+            "}"
+        )
+        response = await self._get_logs(query=query, limit=limit, start=start, end=end)
+        async for item in self._process_image_build_logs(response):
+            yield item
+
+    async def _get_logs(
+        self, query: str, limit: int = 1000, start: int | None = None, end: int | None = None
+    ) -> loki_api.LokiQueryRangeResponse:
+        """Fetches logs from Loki, using the passed in query.
+
+        Parameters:
+        - query: the Loki query
+        - limit: max number of entries to return
+        - start: start timestamp as a Unix nano timestamp
+        - end: end timestamp as a Unix nano timestamp
+
+        See also https://grafana.com/docs/loki/latest/reference/loki-http-api/#query-logs-within-a-range-of-time
+        """
+        params: dict[str, str | int] = dict()
+        params["query"] = query
+        params["direction"] = "forward"
+        params["limit"] = limit
+        if start:
+            params["start"] = str(start)
+        if end:
+            params["end"] = str(end)
+        res = await self.client.get("loki/api/v1/query_range", params=params)
+        res.raise_for_status()
+        return loki_api.LokiQueryRangeResponse.model_validate_json(res.content)
+
+    @staticmethod
+    async def _process_session_logs(
+        response: loki_api.LokiQueryRangeResponse,
+    ) -> AsyncIterator[models.UnsavedSessionLogLine]:
+        log_line_ids: set[str] = set()
         for entry in response.data.result:
             stream: loki_api.AmaltheaSessionStream | None = None
             try:
@@ -103,27 +156,11 @@ class LokiLogReader:
                     log_line=log_line,
                 )
 
-    async def get_image_build_logs(
-        self, limit: int = 1000, start: int | None = None, end: int | None = None
+    @staticmethod
+    async def _process_image_build_logs(
+        response: loki_api.LokiQueryRangeResponse,
     ) -> AsyncIterator[models.UnsavedBuildLogLine]:
-        """Fetchesimage build logs from Loki.
-
-        Parameters:
-        - limit: max number of entries to return
-        - start: start timestamp as a Unix nano timestamp
-        - end: end timestamp as a Unix nano timestamp
-
-        See also https://grafana.com/docs/loki/latest/reference/loki-http-api/#query-logs-within-a-range-of-time
-        """
-        query = (
-            "{"
-            f'{PERSISTED_LOGS_BUILD_LABEL_KEY}="{PERSISTED_LOGS_BUILD_LABEL_VALUE}",'
-            f'{PERSISTED_LOGS_NAMESPACE_LABEL_KEY}="{self.config.namespace}"'
-            "}"
-        )
-        response = await self._get_logs(query=query, limit=limit, start=start, end=end)
         log_line_ids: set[str] = set()
-
         for entry in response.data.result:
             stream: loki_api.ShipwrightBuildRunStream | None = None
             try:
@@ -155,31 +192,6 @@ class LokiLogReader:
                     timestamp=nano_ts.get_value(),
                     log_line=log_line,
                 )
-
-    async def _get_logs(
-        self, query: str, limit: int = 1000, start: int | None = None, end: int | None = None
-    ) -> loki_api.LokiQueryRangeResponse:
-        """Fetches logs from Loki, using the passed in query.
-
-        Parameters:
-        - query: the Loki query
-        - limit: max number of entries to return
-        - start: start timestamp as a Unix nano timestamp
-        - end: end timestamp as a Unix nano timestamp
-
-        See also https://grafana.com/docs/loki/latest/reference/loki-http-api/#query-logs-within-a-range-of-time
-        """
-        params: dict[str, str | int] = dict()
-        params["query"] = query
-        params["direction"] = "forward"
-        params["limit"] = limit
-        if start:
-            params["start"] = str(start)
-        if end:
-            params["end"] = str(end)
-        res = await self.client.get("loki/api/v1/query_range", params=params)
-        res.raise_for_status()
-        return loki_api.LokiQueryRangeResponse.model_validate_json(res.content)
 
 
 class PersistedLogsCollector:
