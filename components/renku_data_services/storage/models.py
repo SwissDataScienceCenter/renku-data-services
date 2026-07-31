@@ -1,11 +1,15 @@
 """Models for cloud storage."""
 
+from __future__ import annotations
+
+import configparser
 from collections.abc import Generator, MutableMapping
-from typing import Any
+from copy import deepcopy
+from pathlib import PurePosixPath
+from typing import IO, Any
 from urllib.parse import ParseResult, urlparse
 
 from pydantic import BaseModel, Field, PrivateAttr, model_serializer, model_validator
-from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.storage.rclone import RCloneValidator
@@ -51,88 +55,21 @@ class RCloneConfig(BaseModel, MutableMapping):
         yield from self.config.keys()
 
 
-class UnsavedCloudStorage(BaseModel):
-    """Cloud Storage model."""
+def storage_url_parser(storage_url: str) -> tuple[RCloneConfig, PurePosixPath]:
+    """Get Cloud Storage/rclone config from a storage URL.
 
-    project_id: str = Field(pattern=r"^[A-Z0-9]+$")
-    name: str = Field(min_length=3)
-    storage_type: str = Field(pattern=r"^[a-z0-9]+$")
-    configuration: RCloneConfig
-    readonly: bool = Field(default=True)
-
-    source_path: str = Field()
-    """Path inside the cloud storage.
-
-    Note: Since rclone itself doesn't really know about buckets/containers (they're not in the schema),
-    bucket/container/etc. has to be the first part of source path.
+    Example:
+        Supported URLs are:
+        - s3://s3.<region>.amazonaws.com/<bucket>/<path>
+        - s3://<bucket>.s3.<region>.amazonaws.com/<path>
+        - s3://bucket/
+        - http(s)://<endpoint>/<bucket>/<path>
+        - (azure|az)://<account>.dfs.core.windows.net/<container>/<path>
+        - (azure|az)://<account>.blob.core.windows.net/<container>/<path>
+        - (azure|az)://<container>/<path>
     """
 
-    target_path: str = Field(min_length=1)
-    """Path inside the target repository to mount/clone data to."""
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "UnsavedCloudStorage":
-        """Create the model from a plain dictionary."""
-
-        if "project_id" not in data:
-            raise errors.ValidationError(message="'project_id' not set")
-        if "configuration" not in data:
-            raise errors.ValidationError(message="'configuration' not set")
-
-        if "source_path" not in data:
-            raise errors.ValidationError(message="'source_path' not set")
-
-        if "target_path" not in data:
-            raise errors.ValidationError(message="'target_path' not set")
-
-        if "type" not in data["configuration"]:
-            raise errors.ValidationError(message="'type' not set in 'configuration'")
-
-        return cls(
-            project_id=data["project_id"],
-            name=data["name"],
-            configuration=RCloneConfig(config=data["configuration"]),
-            storage_type=data["configuration"]["type"],
-            source_path=data["source_path"],
-            target_path=data["target_path"],
-            readonly=data.get("readonly", True),
-        )
-
-    @classmethod
-    def from_url(
-        cls, storage_url: str, name: str, readonly: bool, project_id: str, target_path: str
-    ) -> "UnsavedCloudStorage":
-        """Get Cloud Storage/rclone config from a storage URL.
-
-        Example:
-            Supported URLs are:
-            - s3://s3.<region>.amazonaws.com/<bucket>/<path>
-            - s3://<bucket>.s3.<region>.amazonaws.com/<path>
-            - s3://bucket/
-            - http(s)://<endpoint>/<bucket>/<path>
-            - (azure|az)://<account>.dfs.core.windows.net/<container>/<path>
-            - (azure|az)://<account>.blob.core.windows.net/<container>/<path>
-            - (azure|az)://<container>/<path>
-        """
-        parsed_url = urlparse(storage_url)
-
-        if parsed_url.scheme is None:
-            raise errors.ValidationError(message="Couldn't parse scheme of 'storage_url'")
-
-        match parsed_url.scheme:
-            case "s3":
-                return UnsavedCloudStorage.from_s3_url(parsed_url, project_id, name, readonly, target_path)
-            case "azure" | "az":
-                return UnsavedCloudStorage.from_azure_url(parsed_url, project_id, name, readonly, target_path)
-            case "http" | "https":
-                return UnsavedCloudStorage._from_ambiguous_url(parsed_url, project_id, name, readonly, target_path)
-            case _:
-                raise errors.ValidationError(message=f"Scheme '{parsed_url.scheme}' is not supported.")
-
-    @classmethod
-    def from_s3_url(
-        cls, storage_url: ParseResult, project_id: str, name: str, readonly: bool, target_path: str
-    ) -> "UnsavedCloudStorage":
+    def from_s3_url(storage_url: ParseResult) -> tuple[RCloneConfig, PurePosixPath]:
         """Get Cloud storage from an S3 URL.
 
         Example:
@@ -163,20 +100,9 @@ class UnsavedCloudStorage(BaseModel):
         else:
             configuration["endpoint"] = storage_url.netloc
 
-        return UnsavedCloudStorage(
-            project_id=project_id,
-            name=name,
-            storage_type="s3",
-            configuration=RCloneConfig(config=configuration),
-            source_path=source_path,
-            target_path=target_path,
-            readonly=readonly,
-        )
+        return RCloneConfig(config=configuration), PurePosixPath(source_path)
 
-    @classmethod
-    def from_azure_url(
-        cls, storage_url: ParseResult, project_id: str, name: str, readonly: bool, target_path: str
-    ) -> "UnsavedCloudStorage":
+    def from_azure_url(storage_url: ParseResult) -> tuple[RCloneConfig, PurePosixPath]:
         """Get Cloud storage from an Azure URL.
 
         Example:
@@ -199,32 +125,30 @@ class UnsavedCloudStorage(BaseModel):
                     raise errors.ValidationError(message="Host cannot contain dots unless it's a core.windows.net URL")
 
                 source_path = f"{storage_url.hostname}{storage_url.path}"
-        return UnsavedCloudStorage(
-            project_id=project_id,
-            name=name,
-            storage_type="azureblob",
-            configuration=RCloneConfig(config=configuration),
-            source_path=source_path,
-            target_path=target_path,
-            readonly=readonly,
-        )
+        return RCloneConfig(config=configuration), PurePosixPath(source_path)
 
-    @classmethod
-    def _from_ambiguous_url(
-        cls, storage_url: ParseResult, project_id: str, name: str, readonly: bool, target_path: str
-    ) -> "UnsavedCloudStorage":
+    def _from_ambiguous_url(storage_url: ParseResult) -> tuple[RCloneConfig, PurePosixPath]:
         """Get cloud storage from an ambiguous storage url."""
         if storage_url.hostname is None:
             raise errors.ValidationError(message="Storage URL must contain a host")
 
         if storage_url.hostname.endswith(".windows.net"):
-            return UnsavedCloudStorage.from_azure_url(storage_url, project_id, name, readonly, target_path)
+            return from_azure_url(storage_url)
 
         # default to S3 for unknown URLs, since these are way more common
-        return UnsavedCloudStorage.from_s3_url(storage_url, project_id, name, readonly, target_path)
+        return from_s3_url(storage_url)
 
+    parsed_url = urlparse(storage_url)
 
-class CloudStorage(UnsavedCloudStorage):
-    """Cloudstorage saved in the database."""
+    if parsed_url.scheme is None:
+        raise errors.ValidationError(message="Couldn't parse scheme of 'storage_url'")
 
-    storage_id: ULID = Field()
+    match parsed_url.scheme:
+        case "s3":
+            return from_s3_url(parsed_url)
+        case "azure" | "az":
+            return from_azure_url(parsed_url)
+        case "http" | "https":
+            return _from_ambiguous_url(parsed_url)
+        case _:
+            raise errors.ValidationError(message=f"Scheme '{parsed_url.scheme}' is not supported.")

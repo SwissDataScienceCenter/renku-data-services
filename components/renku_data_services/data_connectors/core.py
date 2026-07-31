@@ -94,20 +94,12 @@ def validate_unsaved_storage_url(
     storage: apispec.CloudStorageUrlV2, validator: RCloneValidator
 ) -> models.CloudStorageCore:
     """Validate the unsaved storage when its configuration is specified as a URL."""
-    cloud_storage = storage_models.UnsavedCloudStorage.from_url(
-        project_id="FAKEPROJECTID",
-        name="fake-storage-name",
-        storage_url=storage.storage_url,
-        target_path=storage.target_path,
-        readonly=storage.readonly,
-    )
-    configuration = cloud_storage.configuration.config
-    source_path = cloud_storage.source_path
-    validator.validate(configuration)
+    config, source_path = storage_models.storage_url_parser(storage.storage_url)
+    validator.validate(config)
     return models.CloudStorageCore(
-        storage_type=configuration["type"],
-        configuration=configuration,
-        source_path=source_path,
+        storage_type=config["type"],
+        configuration=models.SingleConfig.validated(config.config),
+        source_path=source_path.as_posix(),
         target_path=storage.target_path,
         readonly=storage.readonly,
     )
