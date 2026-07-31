@@ -20,7 +20,7 @@ class PersistedLogsConfig:
         # return cls(
         #     enabled=enabled,
         # )
-
+        # TODO: load config from env vars
         return cls(
             enabled=True,
             loki_read_base_url="http://loki-read.monitoring.svc.cluster.local:3100/",

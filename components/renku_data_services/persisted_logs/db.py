@@ -133,8 +133,11 @@ class AmaltheaSessionPersistedLogsReadRepository:
         return await _sort_logs_per_container(res, main_container=SESSION_MAIN_CONTAINER)
 
 
-class AmaltheaSessionPersistedLogsRepository:
-    """Repository for persisted logs of Amalthea sessions."""
+class AmaltheaSessionPersistedLogsWriteRepository:
+    """Repository for writing persisted logs of Amalthea sessions.
+
+    The write side is performed as a background task and does not access authz.
+    """
 
     async def get_latest_log_timestamp(self, session: AsyncSession) -> int | None:
         """Returns the latest log timestamp."""
@@ -219,7 +222,7 @@ class AmaltheaSessionPersistedLogsRepository:
 
 
 class ImageBuildPersistedLogsReadRepository:
-    """Repository for persisted logs of image builds."""
+    """Repository for reading persisted logs of image builds."""
 
     def __init__(
         self,
@@ -313,7 +316,10 @@ class ImageBuildPersistedLogsReadRepository:
 
 
 class ImageBuildPersistedLogsWriteRepository:
-    """Repository for writing persisted logs of image builds."""
+    """Repository for writing persisted logs of image builds.
+
+    The write side is performed as a background task and does not access authz.
+    """
 
     async def get_latest_log_timestamp(self, session: AsyncSession) -> int | None:
         """Returns the latest log timestamp."""

@@ -52,6 +52,22 @@ class SessionRun:
 
 
 @dataclass(eq=True, frozen=True, kw_only=True)
+class UnsavedBuildLogLine:
+    """Represents an unsaved image build log line."""
+
+    id: str
+    """The ID of the log line.
+
+    This is used to de-duplicate log lines.
+    """
+
+    build_id: ULID
+    container: str
+    timestamp: int
+    log_line: str
+
+
+@dataclass(eq=True, frozen=True, kw_only=True)
 class LogLine:
     """A single log line."""
 
@@ -81,19 +97,3 @@ class InsertLogsResult:
 
     log_count: int
     last_timestamp: int
-
-
-@dataclass(eq=True, frozen=True, kw_only=True)
-class UnsavedBuildLogLine:
-    """Represents an unsaved image build log line."""
-
-    id: str
-    """The ID of the log line.
-
-    This is used to de-duplicate log lines.
-    """
-
-    build_id: ULID
-    container: str
-    timestamp: int
-    log_line: str

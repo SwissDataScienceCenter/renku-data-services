@@ -347,12 +347,13 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             notifications.blueprint(),
             capacity_reservation.blueprint(),
             resource_usage.blueprint(),
-            persisted_logs.blueprint(),
             internal_authentication.blueprint(),
         ]
     )
     if builds is not None:
         app.blueprint(builds.blueprint())
+    if dm.config.persisted_logs.enabled:
+        app.blueprint(persisted_logs.blueprint())
 
     # We need to patch sanic_ext as since version 24.12 they only send a string representation of errors
     import sanic_ext.extras.validation.setup

@@ -48,8 +48,9 @@ class PersistedLogsBP(CustomBlueprint):
                     submission_id=query.submission_id,
                 )
             if result is None:
+                # TODO: adjust error message when params are passed in the query
                 raise errors.MissingResourceError(
-                    message=f"Session launcher with id '{launcher_id}' does not have persisted."
+                    message=f"Session launcher with id '{launcher_id}' does not have persisted logs."
                 )
             return validated_json(apispec.PersistedSessionLogs, result)
 

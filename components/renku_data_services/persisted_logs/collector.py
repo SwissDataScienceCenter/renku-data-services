@@ -22,7 +22,7 @@ from renku_data_services.persisted_logs.constants import (
     PERSISTED_LOGS_SESSIONS_LABEL_VALUE,
 )
 from renku_data_services.persisted_logs.db import (
-    AmaltheaSessionPersistedLogsRepository,
+    AmaltheaSessionPersistedLogsWriteRepository,
     ImageBuildPersistedLogsWriteRepository,
 )
 
@@ -210,7 +210,7 @@ class PersistedLogsCollector:
                 session_maker=session_maker,
                 config=config,
                 reader=reader,
-                session_logs_repo=AmaltheaSessionPersistedLogsRepository(),
+                session_logs_repo=AmaltheaSessionPersistedLogsWriteRepository(),
                 build_logs_repo=ImageBuildPersistedLogsWriteRepository(),
             )
         return NoopPersistedLogsCollector()
@@ -236,7 +236,7 @@ class DefaultPersistedLogsCollector(PersistedLogsCollector):
         session_maker: Callable[..., AsyncSession],
         config: PersistedLogsConfig,
         reader: LokiLogReader,
-        session_logs_repo: AmaltheaSessionPersistedLogsRepository,
+        session_logs_repo: AmaltheaSessionPersistedLogsWriteRepository,
         build_logs_repo: ImageBuildPersistedLogsWriteRepository,
     ) -> None:
         self.session_maker = session_maker
