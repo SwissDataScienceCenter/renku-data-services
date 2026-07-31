@@ -109,7 +109,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data_connectors
+        - storage
   /data_connectors/storage/config:
     get:
       summary: Get the current configuration for project storage
@@ -123,7 +123,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data_connectors
+        - storage
   /data_connectors/storage/allow:
     get:
       summary: List all projects in the storage allow list
@@ -166,7 +166,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data_connectors
+        - storage
     post:
       summary: Add a project to the storage allow list
       requestBody:
@@ -185,7 +185,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data_connectors
+        - storage
   /data_connectors/storage/allow/{project_id}:
     parameters:
       - in: path
@@ -211,7 +211,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data_connectors
+        - storage
     patch:
       summary: Change the maximum size for a project storage
       parameters:
@@ -238,7 +238,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data_connectors
+        - storage
     delete:
       summary: Remove a project from the storage allow list
       responses:
@@ -247,7 +247,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data_connectors
+        - storage
   /data_connectors/storage/{storage_id}:
     parameters:
       - in: path
@@ -273,7 +273,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data_connectors
+        - storage
     patch:
       summary: Change the size or mount path of a project storage
       parameters:
@@ -300,7 +300,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data_connectors
+        - storage
     delete:
       summary: Delete a specific project storage
       responses:
@@ -309,7 +309,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data_connectors
+        - storage
   /projects/{project_id}/storage:
     parameters:
       - in: path
