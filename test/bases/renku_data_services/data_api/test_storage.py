@@ -251,13 +251,11 @@ async def test_post_storage_success(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
 
     assert response.status_code == 201, response.text
     assert response.json is not None
@@ -278,13 +276,11 @@ async def test_post_storage_unauthenticated_fails(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", json=payload)
+    _, response = await sanic_client.post("/api/data/storage", json=payload)
 
     assert response.status_code == 401, response.text
 
@@ -297,7 +293,7 @@ async def test_post_storage_not_allowed_fails(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", json=payload, headers=user_headers)
+    _, response = await sanic_client.post("/api/data/storage", json=payload, headers=user_headers)
 
     assert response.status_code == 403, response.text
 
@@ -311,16 +307,14 @@ async def test_post_storage_duplicate_fails(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status == 201
 
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
 
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
 
     assert response.status_code == 422, response.text
 
@@ -334,17 +328,15 @@ async def test_get_one_storage_success(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
     storage_id = response.json["id"]
 
-    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/{storage_id}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/storage/{storage_id}", headers=user_headers)
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -360,7 +352,7 @@ async def test_get_one_storage_not_found(sanic_client: SanicASGITestClient, user
     from ulid import ULID
 
     non_existent_id = str(ULID())
-    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/{non_existent_id}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/storage/{non_existent_id}", headers=user_headers)
 
     assert response.status_code == 404, response.text
 
@@ -374,19 +366,17 @@ async def test_get_one_storage_etag(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
     storage_id = response.json["id"]
     etag = response.headers["ETag"]
 
     headers = merge_headers(user_headers, {"If-None-Match": etag})
-    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/{storage_id}", headers=headers)
+    _, response = await sanic_client.get(f"/api/data/storage/{storage_id}", headers=headers)
 
     assert response.status_code == 304, response.text
 
@@ -412,13 +402,11 @@ async def test_get_storage_to_project_success(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status == 201
 
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
 
     _, response = await sanic_client.get(f"/api/data/projects/{project['id']}/storage", headers=user_headers)
@@ -444,17 +432,15 @@ async def test_delete_storage_success(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
     storage_id = response.json["id"]
 
-    _, response = await sanic_client.delete(f"/api/data/data_connectors/storage/{storage_id}", headers=user_headers)
+    _, response = await sanic_client.delete(f"/api/data/storage/{storage_id}", headers=user_headers)
     assert response.status_code == 204, response.text
 
     _, response = await sanic_client.get(f"/api/data/projects/{project['id']}/storage", headers=user_headers)
@@ -471,17 +457,15 @@ async def test_delete_storage_unauthenticated_fails(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
     storage_id = response.json["id"]
 
-    _, response = await sanic_client.delete(f"/api/data/data_connectors/storage/{storage_id}")
+    _, response = await sanic_client.delete(f"/api/data/storage/{storage_id}")
 
     assert response.status_code == 401, response.text
 
@@ -494,9 +478,7 @@ async def test_post_storage_allow_success(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
 
     assert response.status_code == 201, response.text
     assert response.json is not None
@@ -512,7 +494,7 @@ async def test_post_storage_allow_requires_admin(
     project = await create_project(sanic_client, "Test Project")
 
     payload = {"project_id": project["id"], "max_size": 10}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage/allow", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=user_headers, json=payload)
 
     assert response.status_code == 403, response.text
 
@@ -524,7 +506,7 @@ async def test_post_storage_allow_unauthenticated_fails(
     project = await create_project(sanic_client, "Test Project")
 
     payload = {"project_id": project["id"], "max_size": 10}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage/allow", json=payload)
+    _, response = await sanic_client.post("/api/data/storage/allow", json=payload)
 
     assert response.status_code == 401, response.text
 
@@ -537,14 +519,10 @@ async def test_post_storage_allow_duplicate_fails(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
 
     assert response.status_code == 422, response.text
 
@@ -557,21 +535,15 @@ async def test_delete_storage_allow_success(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
-    _, response = await sanic_client.delete(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=admin_headers
-    )
+    _, response = await sanic_client.delete(f"/api/data/storage/allow/{project_id}", headers=admin_headers)
 
     assert response.status_code == 204, response.text
 
     # Re-adding after deletion should succeed
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
 
@@ -583,14 +555,10 @@ async def test_delete_storage_allow_requires_admin(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
-    _, response = await sanic_client.delete(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers
-    )
+    _, response = await sanic_client.delete(f"/api/data/storage/allow/{project_id}", headers=user_headers)
 
     assert response.status_code == 403, response.text
 
@@ -603,12 +571,10 @@ async def test_get_storage_allow_success(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
-    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}", headers=user_headers)
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -623,7 +589,7 @@ async def test_get_storage_allow_not_in_list(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}", headers=user_headers)
 
     assert response.status_code == 404, response.text
 
@@ -636,12 +602,10 @@ async def test_get_storage_allow_unauthenticated(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
-    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}")
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}")
 
     assert response.status_code == 401, response.text
 
@@ -655,13 +619,11 @@ async def test_patch_storage_success(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 5, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
     storage = response.json
     storage_id = storage["id"]
@@ -670,9 +632,7 @@ async def test_patch_storage_success(
     # Patch the size
     headers = merge_headers(user_headers, {"If-Match": original_etag})
     patch = {"size": 8}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/{storage_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -691,13 +651,11 @@ async def test_patch_storage_mount_path(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
     storage = response.json
     storage_id = storage["id"]
@@ -705,9 +663,7 @@ async def test_patch_storage_mount_path(
     # Patch the mount path
     headers = merge_headers(user_headers, {"If-Match": response.headers["ETag"]})
     patch = {"mount_path": "/new/mount"}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/{storage_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -726,13 +682,11 @@ async def test_patch_storage_both_fields(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 5, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
     storage = response.json
     storage_id = storage["id"]
@@ -740,9 +694,7 @@ async def test_patch_storage_both_fields(
     # Patch both fields at once
     headers = merge_headers(user_headers, {"If-Match": response.headers["ETag"]})
     patch = {"size": 8, "mount_path": "/new/mount"}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/{storage_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -761,21 +713,17 @@ async def test_patch_storage_without_if_match_header(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
     storage_id = response.json["id"]
 
     # Patch without If-Match header
     patch = {"size": 20}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/{storage_id}", headers=user_headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=user_headers, json=patch)
 
     assert response.status_code == 428, response.text
     assert "If-Match header not provided" in response.text
@@ -790,13 +738,11 @@ async def test_patch_storage_with_invalid_etag(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 5, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
     storage_id = response.json["id"]
     correct_etag = response.headers["ETag"]
@@ -804,18 +750,14 @@ async def test_patch_storage_with_invalid_etag(
     # Patch with wrong ETag
     headers = merge_headers(user_headers, {"If-Match": "wrong-etag"})
     patch = {"size": 8}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/{storage_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
 
     assert response.status_code == 409, response.text
 
     # Verify the etag changed after a successful patch
     headers = merge_headers(user_headers, {"If-Match": correct_etag})
     patch = {"size": 6}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/{storage_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
     assert response.status_code == 200, response.text
     new_etag = response.headers["ETag"]
     assert new_etag != correct_etag
@@ -828,9 +770,7 @@ async def test_patch_storage_not_found(sanic_client: SanicASGITestClient, user_h
     non_existent_id = str(ULID())
     headers = merge_headers(user_headers, {"If-Match": "some-etag"})
     patch = {"size": 20}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/{non_existent_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/{non_existent_id}", headers=headers, json=patch)
 
     assert response.status_code == 404, response.text
 
@@ -844,18 +784,16 @@ async def test_patch_storage_unauthenticated_fails(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 5, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
     storage_id = response.json["id"]
 
     # Patch without authentication
-    _, response = await sanic_client.patch(f"/api/data/data_connectors/storage/{storage_id}", json={"size": 8})
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", json={"size": 8})
 
     assert response.status_code == 401, response.text
 
@@ -869,22 +807,18 @@ async def test_patch_storage_exceeds_max_size(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 5, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
     storage_id = response.json["id"]
 
     # Try to patch size beyond the allowed max (10GB)
     headers = merge_headers(user_headers, {"If-Match": response.headers["ETag"]})
     patch = {"size": 11}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/{storage_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
 
     assert response.status_code == 422, response.text
 
@@ -898,22 +832,18 @@ async def test_patch_storage_invalid_mount_path(
 
     project_id = project["id"]
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-    _, response = await sanic_client.post("/api/data/data_connectors/storage", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
     storage_id = response.json["id"]
 
     # Try to patch with invalid mount path
     headers = merge_headers(user_headers, {"If-Match": response.headers["ETag"]})
     patch = {"mount_path": "/etc/passwd"}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/{storage_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
 
     assert response.status_code == 422, response.text
 
@@ -926,22 +856,18 @@ async def test_patch_storage_allow_success(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     # Get the allow entry to retrieve the etag (use user_headers as admin may not have read access)
-    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}", headers=user_headers)
     assert response.status_code == 200, response.text
     etag = response.headers["ETag"]
 
     # Patch the max_size
     headers = merge_headers(admin_headers, {"If-Match": etag})
     patch = {"max_size": 20}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -958,22 +884,18 @@ async def test_patch_storage_allow_requires_admin(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     # Get the allow entry to retrieve the etag (use user_headers as admin may not have read access)
-    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=admin_headers)
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}", headers=admin_headers)
     assert response.status_code == 200, response.text
     etag = response.headers["ETag"]
 
     # Try to patch as non-admin
     headers = merge_headers(user_headers, {"If-Match": etag})
     patch = {"max_size": 20}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 403, response.text
 
@@ -986,16 +908,12 @@ async def test_patch_storage_allow_without_if_match_header(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     # Patch without If-Match header
     patch = {"max_size": 20}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=admin_headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=admin_headers, json=patch)
 
     assert response.status_code == 428, response.text
     assert "If-Match header not provided" in response.text
@@ -1009,31 +927,25 @@ async def test_patch_storage_allow_with_invalid_etag(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     # Get the allow entry to retrieve the etag (use user_headers as admin may not have read access)
-    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}", headers=user_headers)
     assert response.status_code == 200, response.text
     correct_etag = response.headers["ETag"]
 
     # Patch with wrong ETag
     headers = merge_headers(admin_headers, {"If-Match": "wrong-etag"})
     patch = {"max_size": 20}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 409, response.text
 
     # Verify the etag changed after a successful patch
     headers = merge_headers(admin_headers, {"If-Match": correct_etag})
     patch = {"max_size": 15}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
     assert response.status_code == 200, response.text
     new_etag = response.headers["ETag"]
     assert new_etag != correct_etag
@@ -1048,9 +960,7 @@ async def test_patch_storage_allow_not_in_list(
 
     headers = merge_headers(admin_headers, {"If-Match": "some-etag"})
     patch = {"max_size": 20}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 404, response.text
 
@@ -1063,15 +973,11 @@ async def test_patch_storage_allow_unauthenticated_fails(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     # Patch without authentication
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/allow/{project_id}", json={"max_size": 20}
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", json={"max_size": 20})
 
     assert response.status_code == 401, response.text
 
@@ -1084,22 +990,18 @@ async def test_patch_storage_allow_min_size(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
     # Get the allow entry to retrieve the etag (use user_headers as admin may not have read access)
-    _, response = await sanic_client.get(f"/api/data/data_connectors/storage/allow/{project_id}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}", headers=user_headers)
     assert response.status_code == 200, response.text
     etag = response.headers["ETag"]
 
     # Try to set max_size below minimum (1GB)
     headers = merge_headers(admin_headers, {"If-Match": etag})
     patch = {"max_size": 0}
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/storage/allow/{project_id}", headers=headers, json=patch
-    )
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 422, response.text
     assert "at least 1GB" in response.text
@@ -1113,12 +1015,10 @@ async def test_get_all_storage_allow(
     project_id = project["id"]
 
     payload = {"project_id": project_id, "max_size": 10}
-    _, response = await sanic_client.post(
-        "/api/data/data_connectors/storage/allow", headers=admin_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
-    _, response = await sanic_client.get("/api/data/data_connectors/storage/allow", headers=admin_headers)
+    _, response = await sanic_client.get("/api/data/storage/allow", headers=admin_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None, f"No json response body: {response.text}"
     assert isinstance(response.json, list)

@@ -124,7 +124,7 @@ class ProjectStorageBP(CustomBlueprint):
                 headers=headers,
             )
 
-        return "/data_connectors/storage/<storage_id:ulid>", ["GET"], _get_one
+        return "/storage/<storage_id:ulid>", ["GET"], _get_one
 
     def get_storage_to_project(self) -> BlueprintFactoryResponse:
         """List all project storage to a given project."""
@@ -153,7 +153,7 @@ class ProjectStorageBP(CustomBlueprint):
             )
             return validated_json(apispec.ProjectStorageConfig, result)
 
-        return "/data_connectors/storage/config", ["GET"], _get_project_config
+        return "/storage/config", ["GET"], _get_project_config
 
     def delete_storage(self) -> BlueprintFactoryResponse:
         """Delete a specific project storage."""
@@ -170,7 +170,7 @@ class ProjectStorageBP(CustomBlueprint):
                 await self.project_storage_k8s.delete_volume(deleted)
             return HTTPResponse(status=204)
 
-        return "/data_connectors/storage/<storage_id:ulid>", ["DELETE"], _delete_storage
+        return "/storage/<storage_id:ulid>", ["DELETE"], _delete_storage
 
     def post_storage(self) -> BlueprintFactoryResponse:
         """Create a new shared project storage."""
@@ -188,7 +188,7 @@ class ProjectStorageBP(CustomBlueprint):
                 apispec.ProjectStorage, self._dump_project_storage(result), headers=headers, status=201
             )
 
-        return "/data_connectors/storage", ["POST"], _post_storage
+        return "/storage", ["POST"], _post_storage
 
     def patch_storage(self) -> BlueprintFactoryResponse:
         """Partially update a project storage entry."""
@@ -219,7 +219,7 @@ class ProjectStorageBP(CustomBlueprint):
                 headers=headers,
             )
 
-        return "/data_connectors/storage/<storage_id:ulid>", ["PATCH"], _patch_storage
+        return "/storage/<storage_id:ulid>", ["PATCH"], _patch_storage
 
     def get_all_storage_allows(self) -> BlueprintFactoryResponse:
         """List all projects in the storage allow list."""
@@ -246,7 +246,7 @@ class ProjectStorageBP(CustomBlueprint):
                 for a in allows
             ], total
 
-        return "/data_connectors/storage/allow", ["GET"], _get_all_storage_allows
+        return "/storage/allow", ["GET"], _get_all_storage_allows
 
     def post_storage_allow(self) -> BlueprintFactoryResponse:
         """Add a project to the storage allow list."""
@@ -265,7 +265,7 @@ class ProjectStorageBP(CustomBlueprint):
                 status=201,
             )
 
-        return "/data_connectors/storage/allow", ["POST"], _post_storage_allow
+        return "/storage/allow", ["POST"], _post_storage_allow
 
     def patch_storage_allow(self) -> BlueprintFactoryResponse:
         """Partially update a project storage allow entry."""
@@ -295,7 +295,7 @@ class ProjectStorageBP(CustomBlueprint):
                 apispec.ProjectStorageAllow, self._dump_project_storage_allow_detail(pse_update.new), headers=headers
             )
 
-        return "/data_connectors/storage/allow/<project_id:ulid>", ["PATCH"], _patch
+        return "/storage/allow/<project_id:ulid>", ["PATCH"], _patch
 
     def get_storage_allow(self) -> BlueprintFactoryResponse:
         """Get the storage allow entry for a project."""
@@ -312,7 +312,7 @@ class ProjectStorageBP(CustomBlueprint):
                 apispec.ProjectStorageAllow, self._dump_project_storage_allow_detail(allow), headers=headers
             )
 
-        return "/data_connectors/storage/allow/<project_id:ulid>", ["GET"], _get_storage_allow
+        return "/storage/allow/<project_id:ulid>", ["GET"], _get_storage_allow
 
     def delete_storage_allow(self) -> BlueprintFactoryResponse:
         """Remove a project from the storage allow list."""
@@ -325,7 +325,7 @@ class ProjectStorageBP(CustomBlueprint):
                 await self.project_storage_k8s.delete_volume(deleted)
             return HTTPResponse(status=204)
 
-        return "/data_connectors/storage/allow/<project_id:ulid>", ["DELETE"], _delete_storage_allow
+        return "/storage/allow/<project_id:ulid>", ["DELETE"], _delete_storage_allow
 
     @staticmethod
     def _dump_project_storage(ps: models.ProjectStorage) -> apispec.ProjectStorage:
