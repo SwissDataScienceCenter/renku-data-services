@@ -25,7 +25,6 @@ from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project, UnsavedProject
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.reprovision import SearchReprovision
-from renku_data_services.storage.config import ProjectStorageConfig
 from renku_data_services.users.db import UserRepo
 
 admin = APIUser(id="the-admin-1", is_admin=True)
@@ -55,7 +54,7 @@ def make_setup(app_manager_instance, solr_config) -> Setup:
     gr = GroupRepository(sess, authz, search_updates)
     ur = UserRepo(sess, gr, search_updates, None, MagicMock(spec=MetricsService), authz)
     pr = ProjectRepository(sess, gr, search_updates, authz)
-    dcr = DataConnectorRepository(sess, authz, pr, gr, search_updates, ProjectStorageConfig.from_env())
+    dcr = DataConnectorRepository(sess, authz, pr, gr, search_updates)
     sr = SearchReprovision(
         search_updates_repo=search_updates,
         reprovisioning_repo=ReprovisioningRepository(sess),
