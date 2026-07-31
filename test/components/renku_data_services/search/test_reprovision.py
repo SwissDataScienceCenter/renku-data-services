@@ -10,7 +10,6 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import APIUser, NamespacePath
 from renku_data_services.base_models.metrics import MetricsService
-from renku_data_services.data_connectors.config import ProjectStorageConfig
 from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.data_connectors.models import (
     CloudStorageCore,
@@ -26,6 +25,7 @@ from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project, UnsavedProject
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.reprovision import SearchReprovision
+from renku_data_services.storage.config import ProjectStorageConfig
 from renku_data_services.users.db import UserRepo
 
 admin = APIUser(id="the-admin-1", is_admin=True)

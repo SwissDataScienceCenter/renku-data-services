@@ -29,7 +29,6 @@ from renku_data_services.base_models.core import (
 )
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
-from renku_data_services.data_connectors.config import ProjectStorageConfig
 from renku_data_services.data_connectors.core import validate_unsaved_global_data_connector
 from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
@@ -58,14 +57,12 @@ class DataConnectorRepository:
         project_repo: ProjectRepository,
         group_repo: GroupRepository,
         search_updates_repo: SearchUpdatesRepo,
-        project_storage_config: ProjectStorageConfig,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
         self.project_repo = project_repo
         self.group_repo = group_repo
         self.search_updates_repo = search_updates_repo
-        self.project_storage_config = project_storage_config
 
     async def get_data_connectors(
         self,

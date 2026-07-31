@@ -37,7 +37,6 @@ from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
 from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
-from renku_data_services.data_connectors.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
 from renku_data_services.k8s.clients import (
@@ -75,6 +74,8 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
+from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users import models as user_preferences_models
 from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -325,7 +326,6 @@ class TestDependencyManager(DependencyManager):
             project_repo=project_repo,
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
-            project_storage_config=config.project_storage_config,
         )
         data_connector_secret_repo = DataConnectorSecretRepository(
             session_maker=config.db.async_session_maker,
@@ -333,6 +333,13 @@ class TestDependencyManager(DependencyManager):
             user_repo=kc_user_repo,
             secret_service_public_key=config.secrets.public_key,
             authz=authz,
+        )
+        project_storage_repo = ProjectStorageRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            project_repo=project_repo,
+            group_repo=group_repo,
+            project_storage_config=config.project_storage_config,
         )
         search_reprovisioning = SearchReprovision(
             search_updates_repo=search_updates_repo,
@@ -420,6 +427,7 @@ class TestDependencyManager(DependencyManager):
             internal_token_mint=internal_token_mint,
             internal_scope_verifier=internal_scope_verifier,
             project_storage_k8s=project_storage_k8s,
+            project_storage_repo=project_storage_repo,
         )
 
     def __post_init__(self) -> None:

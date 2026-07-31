@@ -14,12 +14,13 @@ from renku_data_services.app_config.config import (
 )
 from renku_data_services.app_config.logging import Config as LoggingConfig
 from renku_data_services.authz.config import AuthzConfig
-from renku_data_services.data_connectors.config import DepositConfig, ProjectStorageConfig
+from renku_data_services.data_connectors.config import DepositConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.secrets.config import PublicSecretsConfig
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.solr.solr_client import SolrClientConfig
+from renku_data_services.storage.config import ProjectStorageConfig
 from renku_data_services.users.config import UserPreferencesConfig
 
 

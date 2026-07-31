@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from sanic import HTTPResponse, Request, empty
+from sanic import Request, empty
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 from ulid import ULID
@@ -20,7 +20,6 @@ from renku_data_services.base_api.etag import extract_if_none_match, if_match_re
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
-from renku_data_services.data_connectors.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage import apispec, models
 from renku_data_services.storage.core import (
@@ -30,6 +29,7 @@ from renku_data_services.storage.core import (
     validate_unsaved_project_storage,
 )
 from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -98,6 +98,8 @@ class StorageSchemaBP(CustomBlueprint):
 
 @dataclass(kw_only=True)
 class ProjectStorageBP(CustomBlueprint):
+    """Handler for project storage."""
+
     project_storage_k8s: ProjectStorageK8s
     project_storage_repo: ProjectStorageRepository
     authenticator: base_models.Authenticator
@@ -123,6 +125,52 @@ class ProjectStorageBP(CustomBlueprint):
             )
 
         return "/data_connectors/storage/<storage_id:ulid>", ["GET"], _get_one
+
+    def get_storage_to_project(self) -> BlueprintFactoryResponse:
+        """List all project storage to a given project."""
+
+        @authenticate(self.authenticator)
+        async def _get_all_storage_to_project(
+            _: Request,
+            user: base_models.APIUser,
+            project_id: ULID,
+        ) -> JSONResponse:
+            project_storage = await self.project_storage_repo.get_storage_to(user=user, project_id=project_id)
+            result = [self._dump_project_storage(project_storage)] if project_storage else []
+            return validated_json(apispec.ProjectStorageList, result)
+
+        return "/projects/<project_id:ulid>/storage", ["GET"], _get_all_storage_to_project
+
+    def get_storage_config(self) -> BlueprintFactoryResponse:
+        """Get the current config used for project storage."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _get_project_config(_: Request, user: base_models.APIUser) -> JSONResponse:
+            storage_config = self.project_storage_repo.get_project_storage_config()
+            result = apispec.ProjectStorageConfig(
+                enabled=storage_config.enabled, max_size=int(storage_config.maximum_size.to_gibi())
+            )
+            return validated_json(apispec.ProjectStorageConfig, result)
+
+        return "/data_connectors/storage/config", ["GET"], _get_project_config
+
+    def delete_storage(self) -> BlueprintFactoryResponse:
+        """Delete a specific project storage."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete_storage(
+            _: Request,
+            user: base_models.APIUser,
+            storage_id: ULID,
+        ) -> HTTPResponse:
+            deleted = await self.project_storage_repo.delete_project_storage(user=user, storage_id=storage_id)
+            if deleted:
+                await self.project_storage_k8s.delete_volume(deleted)
+            return HTTPResponse(status=204)
+
+        return "/data_connectors/storage/<storage_id:ulid>", ["DELETE"], _delete_storage
 
     def post_storage(self) -> BlueprintFactoryResponse:
         """Create a new shared project storage."""

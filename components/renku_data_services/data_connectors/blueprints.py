@@ -11,7 +11,6 @@ from ulid import ULID
 from renku_data_services import base_models, errors
 from renku_data_services.base_api.auth import (
     authenticate,
-    only_admins,
     only_authenticated,
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -54,7 +53,6 @@ from renku_data_services.data_connectors.db import (
 )
 from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
-from renku_data_services.data_connectors.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.notebooks.data_sources import DataSourceRepository
@@ -79,7 +77,6 @@ class DataConnectorsBP(CustomBlueprint):
     data_service_base_url: str
     k8s_client: K8sClient
     deposit_config: DepositConfig
-    project_storage_k8s: ProjectStorageK8s
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List data connectors."""
@@ -398,52 +395,6 @@ class DataConnectorsBP(CustomBlueprint):
             ["DELETE"],
             _delete_project_link,
         )
-
-    def get_storage_to_project(self) -> BlueprintFactoryResponse:
-        """List all project storage to a given project."""
-
-        @authenticate(self.authenticator)
-        async def _get_all_storage_to_project(
-            _: Request,
-            user: base_models.APIUser,
-            project_id: ULID,
-        ) -> JSONResponse:
-            project_storage = await self.data_connector_repo.get_storage_to(user=user, project_id=project_id)
-            result = [self._dump_project_storage(project_storage)] if project_storage else []
-            return validated_json(apispec.ProjectStorageList, result)
-
-        return "/projects/<project_id:ulid>/storage", ["GET"], _get_all_storage_to_project
-
-    def get_storage_config(self) -> BlueprintFactoryResponse:
-        """Get the current config used for project storage."""
-
-        @authenticate(self.authenticator)
-        @only_admins
-        async def _get_project_config(_: Request, user: base_models.APIUser) -> JSONResponse:
-            storage_config = self.data_connector_repo.get_project_storage_config()
-            result = apispec.ProjectStorageConfig(
-                enabled=storage_config.enabled, max_size=int(storage_config.maximum_size.to_gibi())
-            )
-            return validated_json(apispec.ProjectStorageConfig, result)
-
-        return "/data_connectors/storage/config", ["GET"], _get_project_config
-
-    def delete_storage(self) -> BlueprintFactoryResponse:
-        """Delete a specific project storage."""
-
-        @authenticate(self.authenticator)
-        @only_authenticated
-        async def _delete_storage(
-            _: Request,
-            user: base_models.APIUser,
-            storage_id: ULID,
-        ) -> HTTPResponse:
-            deleted = await self.data_connector_repo.delete_project_storage(user=user, storage_id=storage_id)
-            if deleted:
-                await self.project_storage_k8s.delete_volume(deleted)
-            return HTTPResponse(status=204)
-
-        return "/data_connectors/storage/<storage_id:ulid>", ["DELETE"], _delete_storage
 
     def get_all_data_connectors_links_to_project(self) -> BlueprintFactoryResponse:
         """List all links from data connectors to a given project."""
