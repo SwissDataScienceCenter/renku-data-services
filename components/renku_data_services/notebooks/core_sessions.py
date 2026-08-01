@@ -849,7 +849,9 @@ async def get_mount_work_dir(
         image_workdir = await image_check_repo.image_workdir(user, parsed_image)
         work_dir_fallback = PurePosixPath("/home/jovyan/work")
         work_dir = image_workdir or work_dir_fallback
-    storage_mount_fallback = work_dir
+    # NOTE: The fallback should have appended /work to avoid collisions
+    # between the mount and workdir and for backwards compatibility reasons.
+    storage_mount_fallback = work_dir / "work"
     storage_mount = environment.mount_directory or storage_mount_fallback
     if storage_mount == PurePosixPath("/"):
         # NOTE: Mounting the volume for the session at / will essentially wipe everything out from the image
@@ -860,11 +862,11 @@ async def get_mount_work_dir(
         # they may not carry over into the session container from the init container or
         # the location where they need to be cloned may not be writable.
         logger.warning(
-            f"Setting work_dir {work_dir} to the storage mount directory {storage_mount} "
+            f"Work_dir {work_dir} is not equal to or child of the storage mount directory {storage_mount} "
             f"for environment ID {environment.id} "
-            "because the work directory is not a child or equal to the mount directory"
+            "this means that no Git repositories will carry over into the session from the "
+            "initialization container that does the cloning."
         )
-        work_dir = storage_mount
     return storage_mount, work_dir
 
 
