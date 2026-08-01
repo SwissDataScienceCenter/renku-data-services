@@ -1,120 +1,20 @@
 """Metadata handling for DOIs."""
 
+import contextlib
+import re
+from dataclasses import dataclass
+from enum import StrEnum
+from html.parser import HTMLParser
 from urllib.parse import urlencode
 
 import httpx
+from pydantic import AnyHttpUrl
 from pydantic import ValidationError as PydanticValidationError
 
+from renku_data_services.data_connectors import apispec
 from renku_data_services.data_connectors.doi import models
+from renku_data_services.errors import errors
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
-
-
-async def get_dataset_metadata(provider: str, metadata_url: str) -> models.DOIMetadata | None:
-    """Retrieve DOI metadata."""
-    if provider == "invenio" or provider == "zenodo":
-        return await _get_dataset_metadata_invenio(metadata_url)
-    if provider == "dataverse":
-        return await _get_dataset_metadata_dataverse(metadata_url)
-    if provider == ENVIDAT_V1_PROVIDER:
-        return await _get_envidat_metadata(metadata_url)
-    return None
-
-
-async def _get_dataset_metadata_invenio(metadata_url: str) -> models.DOIMetadata | None:
-    """Retrieve DOI metadata from the InvenioRDM API."""
-    async with httpx.AsyncClient(timeout=5) as client:
-        try:
-            res = await client.get(url=metadata_url, follow_redirects=True, headers=[("accept", "application/json")])
-            if res.status_code >= 400:
-                return None
-            record = models.InvenioRecord.model_validate_json(res.content)
-        except httpx.HTTPError:
-            return None
-        except PydanticValidationError:
-            return None
-
-    name = ""
-    description = ""
-    keywords = []
-    if record.metadata is not None:
-        name = record.metadata.title or ""
-        description = record.metadata.description or ""
-        keywords = record.metadata.keywords or []
-    return models.DOIMetadata(name=name, description=description, keywords=keywords)
-
-
-async def _get_dataset_metadata_dataverse(metadata_url: str) -> models.DOIMetadata | None:
-    """Retrieve DOI metadata from the Dataverse API."""
-
-    async with httpx.AsyncClient(timeout=5) as client:
-        try:
-            res = await client.get(url=metadata_url, follow_redirects=True, headers=[("accept", "application/json")])
-            if res.status_code >= 400:
-                return None
-            response = models.DataverseDatasetResponse.model_validate_json(res.content)
-        except httpx.HTTPError:
-            return None
-        except PydanticValidationError:
-            return None
-
-    if response.status != "OK":
-        return None
-
-    name = ""
-    description = ""
-    keywords: list[str] = []
-    if (
-        response.data is not None
-        and response.data.latest_version is not None
-        and response.data.latest_version.metadata_blocks is not None
-        and response.data.latest_version.metadata_blocks.citation is not None
-    ):
-        for field in response.data.latest_version.metadata_blocks.citation.fields:
-            if field.type_name == "title" and field.type_class == "primitive" and not field.multiple:
-                name = str(field.value)
-            if (
-                field.type_name == "dsDescription"
-                and field.type_class == "compound"
-                and field.multiple
-                and isinstance(field.value, list)
-                and field.value
-            ):
-                try:
-                    description_field = models.DataverseMetadataBlockCitationField.model_validate(
-                        field.value[0].get("dsDescriptionValue", dict())
-                    )
-                    if (
-                        description_field.type_name == "dsDescriptionValue"
-                        and description_field.type_class == "primitive"
-                        and not description_field.multiple
-                    ):
-                        description = str(description_field.value)
-                except AttributeError:
-                    pass
-                except PydanticValidationError:
-                    pass
-            if (
-                field.type_name == "keyword"
-                and field.type_class == "compound"
-                and field.multiple
-                and isinstance(field.value, list)
-            ):
-                for value in field.value:
-                    try:
-                        kw_field = models.DataverseMetadataBlockCitationField.model_validate(
-                            value.get("keywordValue", dict())
-                        )
-                        if (
-                            kw_field.type_name == "keywordValue"
-                            and kw_field.type_class == "primitive"
-                            and not kw_field.multiple
-                        ):
-                            keywords.append(str(kw_field.value))
-                    except AttributeError:
-                        pass
-                    except PydanticValidationError:
-                        pass
-    return models.DOIMetadata(name=name, description=description, keywords=keywords)
 
 
 def create_envidat_metadata_url(doi: models.DOI) -> str:
@@ -124,7 +24,7 @@ def create_envidat_metadata_url(doi: models.DOI) -> str:
     return f"{url}?{params}"
 
 
-async def _get_envidat_metadata(metadata_url: str) -> models.DOIMetadata | None:
+async def _get_envidat_metadata(metadata_url: str) -> models.SchemaOrgDataset | None:
     """Get metadata about the envidat dataset."""
     clnt = httpx.AsyncClient(follow_redirects=True, timeout=5)
     headers = {"accept": "application/json"}
@@ -139,6 +39,111 @@ async def _get_envidat_metadata(metadata_url: str) -> models.DOIMetadata | None:
         parsed_metadata = models.SchemaOrgDataset.model_validate_json(res.text)
     except PydanticValidationError:
         return None
-    return models.DOIMetadata(
-        name=parsed_metadata.name, description=parsed_metadata.description or "", keywords=parsed_metadata.keywords
-    )
+    return parsed_metadata
+
+
+class DOIProviders(StrEnum):
+    """List of supported doi providers."""
+
+    doi = "doi"
+    "Supported by Rclone"
+    envidat_v1 = ENVIDAT_V1_PROVIDER
+    "Only supported by Renku"
+
+
+@dataclass
+class ParsedDOIMetadata:
+    """DOI metadata that has been parsed."""
+
+    dataset: models.SchemaOrgDataset
+    provider: DOIProviders
+
+
+def _host_is(host: str, domain: str) -> bool:
+    """Check whether host is exactly domain or a subdomain of domain."""
+    return host == domain or host.endswith(f".{domain}")
+
+
+async def get_metadata(doi: models.DOI) -> ParsedDOIMetadata | None:
+    """Get metadata for a specific doi."""
+    clnt = httpx.AsyncClient(follow_redirects=True, timeout=5)
+    res = await clnt.get(f"https://doi.org/api/handles/{doi}", follow_redirects=True)
+    if res.status_code != 200:
+        return None
+    handles_data = models.DOIHandles.model_validate_json(res.text)
+    provider = DOIProviders.doi
+
+    match handles_data.url:
+        case None:
+            dataset = await doi.metadata()
+        case AnyHttpUrl(host=None):
+            dataset = await doi.metadata()
+        case AnyHttpUrl(host=host) if host and _host_is(host, "psi.ch"):
+            raise errors.ValidationError(message="Datasets from PSI or SciCat are not supported yet.")
+        case AnyHttpUrl(host=host) if host and _host_is(host, "envidat.ch"):
+            dataset = await _get_envidat_metadata(create_envidat_metadata_url(doi))
+            provider = DOIProviders.envidat_v1
+        case AnyHttpUrl(host=host) if host and _host_is(host, "zenodo.org"):
+            dataset = await doi.metadata()
+        case AnyHttpUrl(host="dataverse.harvard.edu"):
+            dataset = await doi.metadata()
+        case _:
+            dataset = await doi.metadata()
+
+    if dataset is None:
+        return None
+    description = _html_to_text(dataset.description or "")
+    keywords = dataset.keywords
+
+    # Fix metadata if needed
+    name = dataset.name or f"doi:{doi}"
+    if len(name) > 99:
+        name = f"{name[:96]}..."
+    if len(description) > 500:
+        description = f"{description[:497]}..."
+    fixed_keywords: list[str] = []
+    for word in keywords:
+        for kw in word.strip().split(","):
+            with contextlib.suppress(PydanticValidationError):
+                fixed_keywords.append(apispec.Keyword.model_validate(kw.strip()).root)
+    keywords = fixed_keywords
+
+    dataset.name = name
+    dataset.description = description
+    dataset.keywords = keywords
+
+    return ParsedDOIMetadata(dataset=dataset, provider=provider)
+
+
+def _html_to_text(html: str) -> str:
+    """Returns the text content of an html snippet."""
+    try:
+        f = _HTMLToText()
+        f.feed(html)
+        content = f.text
+
+        # Cleanup whitespace characters
+        content = content.strip()
+        content = content.strip("\n")
+        content = re.sub(" ( )+", " ", content)
+        content = re.sub("\n\n(\n)+", "\n\n", content)
+        content = re.sub("\n( )+", "\n", content)
+
+        return content
+    except Exception:
+        return html
+
+
+class _HTMLToText(HTMLParser):
+    """Parses HTML into text content."""
+
+    def __init__(self, *, convert_charrefs: bool = True) -> None:
+        super().__init__(convert_charrefs=convert_charrefs)
+        self._text = ""
+
+    @property
+    def text(self) -> str:
+        return self._text
+
+    def handle_data(self, data: str) -> None:
+        self._text += data
