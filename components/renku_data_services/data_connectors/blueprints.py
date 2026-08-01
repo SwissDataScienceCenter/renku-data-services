@@ -147,7 +147,10 @@ class DataConnectorsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.GlobalDataConnectorPost)
         async def _post_global(
-            _: Request, user: base_models.APIUser, body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
+            _: Request,
+            user: base_models.APIUser,
+            body: apispec.GlobalDataConnectorPost,
+            validator: RCloneValidator,
         ) -> JSONResponse:
             data_connector = await prevalidate_unsaved_global_data_connector(body, validator=validator)
             result, inserted = await self.data_connector_repo.insert_global_data_connector(
@@ -167,7 +170,11 @@ class DataConnectorsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @extract_if_none_match
         async def _get_one(
-            _: Request, user: base_models.APIUser, data_connector_id: ULID, etag: str | None, validator: RCloneValidator
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+            etag: str | None,
+            validator: RCloneValidator,
         ) -> HTTPResponse:
             data_connector = await self.data_connector_repo.get_data_connector(
                 user=user, data_connector_id=data_connector_id

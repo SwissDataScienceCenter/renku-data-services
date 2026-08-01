@@ -5,11 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
-from collections.abc import Generator
+from collections.abc import Generator, MutableMapping
+from copy import deepcopy
+from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast, overload
+from urllib.parse import ParseResult, urlparse
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, PrivateAttr, ValidationError, model_serializer, model_validator
 
 from renku_data_services import errors
 from renku_data_services.app_config import logging
@@ -21,7 +24,6 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from renku_data_services import base_models
     from renku_data_services.notebooks.data_sources import DataSourceRepository
-    from renku_data_services.storage.models import RCloneConfig
 
 
 class ConnectionResult(NamedTuple):
@@ -36,19 +38,9 @@ class RCloneValidator:
 
     def __init__(self) -> None:
         """Initialize with contained schema file."""
-        spec = RCloneValidator._get_spec()
-
+        spec = self._get_spec()
         apply_patches(spec)
-
-        self.providers: dict[str, RCloneProviderSchema] = {}
-
-        for provider_config in spec:
-            try:
-                provider_schema = RCloneProviderSchema.model_validate(provider_config)
-                self.providers[provider_schema.prefix] = provider_schema
-            except ValidationError:
-                logger.error("Couldn't load RClone config: %s", provider_config)
-                raise
+        self.providers = RCloneValidator._get_providers(spec)
 
     def validate(self, configuration: Union[RCloneConfig, dict[str, Any]], keep_sensitive: bool = False) -> None:
         """Validates an RClone config."""
@@ -69,21 +61,6 @@ class RCloneValidator:
                 continue
             raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
 
-    def get_real_configuration(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> dict[str, Any]:
-        """Converts a Renku rclone configuration to a real rclone config."""
-        real_config = dict(configuration)
-
-        if real_config["type"] == "s3" and real_config.get("provider") == "Switch":
-            # Switch is a fake provider we add for users, we need to replace it since rclone itself
-            # doesn't know it
-            real_config["provider"] = "Other"
-        elif configuration["type"] == "openbis":
-            real_config["type"] = "sftp"
-            real_config["port"] = "2222"
-            real_config["user"] = "?"
-            real_config["pass"] = real_config.pop("session_token")
-        return real_config
-
     async def test_connection(
         self,
         configuration: Union[RCloneConfig, dict[str, Any]],
@@ -98,9 +75,10 @@ class RCloneValidator:
             return ConnectionResult(False, str(e))
 
         # Obscure configuration and transform if needed
-        obscured_config = await self.obscure_config(self.get_real_configuration(configuration))
-        transformed_config = self.inject_default_values(self.transform_polybox_switchdriver_config(obscured_config))
-        transformed_config = self.transform_envidat_config(transformed_config)
+        transformed_config = await self.obscure_config(configuration)
+        transformed_config = self.inject_default_values(transformed_config)
+
+        transformed_config = convert_rclone_configuration(transformed_config)
 
         # Handle testing with Renku integrations
         if user is not None and data_source_repo is not None:
@@ -108,7 +86,9 @@ class RCloneValidator:
                 user=user, configuration=transformed_config
             )
             if with_oauth2_config is not None:
-                transformed_config = with_oauth2_config
+                transformed_config = (
+                    with_oauth2_config.config if isinstance(with_oauth2_config, RCloneConfig) else with_oauth2_config
+                )
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
             config = "\n".join(f"{k}={v}" for k, v in transformed_config.items())
@@ -126,7 +106,7 @@ class RCloneValidator:
             storage_type = cast(str, configuration.get("type"))
             if storage_type == "sftp":
                 args.extend(["--low-level-retries", "1"])
-            logger.debug(f"Execute: rclone {" ".join(args)}")
+            logger.debug(f"Execute: rclone {' '.join(args)}")
             proc = await asyncio.create_subprocess_exec(
                 "rclone",
                 *args,
@@ -181,43 +161,18 @@ class RCloneValidator:
         provider = self.get_provider(configuration)
         return provider.get_private_fields(configuration)
 
-    async def get_doi_metadata(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> RCloneDOIMetadata | None:
-        """Returns the metadata of a DOI remote."""
-        provider = self.get_provider(configuration)
-        if provider.name != "doi":
-            raise errors.ValidationError(message="Configuration is not of type DOI")
-
-        # Obscure configuration and transform if needed
-        obscured_config = await self.obscure_config(configuration)
-
-        with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
-            config = "\n".join(f"{k}={v}" for k, v in obscured_config.items())
-            f.write(f"[temp]\n{config}")
-            f.close()
-            proc = await asyncio.create_subprocess_exec(
-                "rclone",
-                "backend",
-                "metadata",
-                "--config",
-                f.name,
-                "temp:",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await proc.communicate()
-            success = proc.returncode == 0
-        if success:
-            metadata = RCloneDOIMetadata.model_validate_json(stdout.decode().strip())
-            return metadata
-        return None
-
+    @overload
+    def inject_default_values(self, config: RCloneConfig) -> RCloneConfig: ...
+    @overload
+    def inject_default_values(self, config: dict[str, Any]) -> dict[str, Any]: ...
     def inject_default_values(self, config: Union[RCloneConfig, dict[str, Any]]) -> Union[RCloneConfig, dict[str, Any]]:
         """Adds default values for required options that are not provided in the config."""
-        provider = self.get_provider(config)
-        cfg_provider: str | None = config.get("provider")
+        output: dict[str, Any] = deepcopy(config.config) if isinstance(config, RCloneConfig) else deepcopy(config)
+        provider = self.get_provider(output)
+        cfg_provider: str | None = output.get("provider")
 
         for opt in provider.options:
-            if not opt.required or not opt.default or opt.name in config or not opt.matches_provider(cfg_provider):
+            if not opt.required or not opt.default or opt.name in output or not opt.matches_provider(cfg_provider):
                 continue
 
             match opt.default:
@@ -226,59 +181,9 @@ class RCloneValidator:
                 case v:
                     def_val = v
 
-            config.update({opt.name: def_val})
+            output.update({opt.name: def_val})
 
-        return config
-
-    @staticmethod
-    def transform_polybox_switchdriver_config(
-        configuration: Union[RCloneConfig, dict[str, Any]],
-    ) -> Union[RCloneConfig, dict[str, Any]]:
-        """Transform the configuration for public access."""
-        storage_type = configuration.get("type")
-
-        # Only process Polybox or SwitchDrive configurations
-        if storage_type not in {"polybox", "switchDrive"}:
-            return configuration
-
-        configuration["type"] = "webdav"
-
-        provider = configuration.get("provider")
-
-        if provider == "personal":
-            configuration["url"] = configuration.get("url") or (
-                "https://polybox.ethz.ch/remote.php/webdav/"
-                if storage_type == "polybox"
-                else "https://drive.switch.ch/remote.php/webdav/"
-            )
-            return configuration
-
-        ## Set url and username when is a shared configuration
-        configuration["url"] = (
-            "https://polybox.ethz.ch/public.php/webdav/"
-            if storage_type == "polybox"
-            else "https://drive.switch.ch/public.php/webdav/"
-        )
-        public_link = configuration.get("public_link")
-
-        if not public_link:
-            raise ValueError("Missing 'public_link' for public access configuration.")
-
-        # Extract the user from the public link
-        configuration["user"] = public_link.split("/")[-1]
-
-        return configuration
-
-    @staticmethod
-    def transform_envidat_config(configuration: RCloneConfig | dict[str, Any]) -> RCloneConfig | dict[str, Any]:
-        """Used to convert the configuration for Envidat into a real configuration."""
-        storage_type = configuration.get("type")
-        if storage_type is None:
-            return configuration
-        if storage_type != ENVIDAT_V1_PROVIDER:
-            return configuration
-        configuration["type"] = "doi"
-        return configuration
+        return RCloneConfig(config=output) if isinstance(config, RCloneConfig) else output
 
     @staticmethod
     def _get_spec() -> Any:
@@ -286,6 +191,27 @@ class RCloneValidator:
         with open(Path(__file__).parent / "rclone_schema.autogenerated.json") as f:
             spec = json.load(f)
         return spec
+
+    @staticmethod
+    def _get_providers(spec: Any) -> dict[str, RCloneProviderSchema]:
+        """Read the spec and parse it into a dict of Providers."""
+        providers: dict[str, RCloneProviderSchema] = {}
+
+        for provider_config in spec:
+            try:
+                provider_schema = RCloneProviderSchema.model_validate(provider_config)
+                providers[provider_schema.prefix] = provider_schema
+            except ValidationError:
+                logger.error("Couldn't load RClone config: %s", provider_config)
+                raise
+
+        return providers
+
+
+@lru_cache(maxsize=1)
+def get_rclone_validator() -> RCloneValidator:
+    """Returns a shared, cached instance of RCloneValidator."""
+    return RCloneValidator()
 
 
 class RCloneTriState(BaseModel):
@@ -519,10 +445,233 @@ class RCloneProviderSchema(BaseModel):
             yield option
 
 
-class RCloneDOIMetadata(BaseModel):
-    """Schema for metadata provided by rclone about a DOI remote."""
+def _transform_polybox_switchdriver_config(configuration: Union[RCloneConfig, dict[str, Any]]) -> None:
+    """Transform the configuration for public access."""
+    storage_type = configuration.get("type")
 
-    doi: str = Field(alias="DOI")
-    url: str = Field(alias="URL")
-    metadata_url: str = Field(alias="metadataURL")
-    provider: str = Field()
+    # Only process Polybox or SwitchDrive configurations
+    if storage_type not in {"polybox", "switchDrive"}:
+        return None
+
+    configuration["type"] = "webdav"
+
+    # NOTE: Without the vendor field mounting storage and editing files results in the modification
+    # time for touched files to be temporarily set to `1999-09-04` which causes the text
+    # editor to complain that the file has changed and whether it should overwrite new changes.
+    configuration["vendor"] = "owncloud"
+
+    provider = configuration.get("provider")
+
+    if provider in ["personal", "shared"]:
+        configuration["provider"] = ""
+
+    if provider == "personal":
+        configuration["url"] = configuration.get("url") or (
+            "https://polybox.ethz.ch/remote.php/webdav/"
+            if storage_type == "polybox"
+            else "https://drive.switch.ch/remote.php/webdav/"
+        )
+        return None
+
+    ## Set url and username when is a shared configuration
+    configuration["url"] = (
+        "https://polybox.ethz.ch/public.php/webdav/"
+        if storage_type == "polybox"
+        else "https://drive.switch.ch/public.php/webdav/"
+    )
+    public_link = configuration.get("public_link")
+
+    if not public_link:
+        raise ValueError("Missing 'public_link' for public access configuration.")
+
+    # Extract the user from the public link
+    configuration["user"] = public_link.split("/")[-1]
+
+
+def _transform_envidat_config(configuration: RCloneConfig | dict[str, Any]) -> None:
+    """Used to convert the configuration for Envidat into a real configuration."""
+    storage_type = configuration.get("type")
+    if storage_type is None:
+        return None
+    if storage_type != ENVIDAT_V1_PROVIDER:
+        return None
+    configuration["type"] = "doi"
+
+
+def _transform_switch_config(configuration: RCloneConfig | dict[str, Any]) -> None:
+    """Converts a Renku specific Switch S3 config into a regular RClone config."""
+    if configuration.get("type") != "s3" or configuration.get("provider") != "Switch":
+        return
+    # Switch is a fake provider we add for users, we need to replace it since rclone itself
+    # doesn't know it
+    configuration["provider"] = "Other"
+
+
+def _transform_openbis_config(configuration: RCloneConfig | dict[str, Any]) -> None:
+    if configuration.get("type") != "openbis":
+        return None
+    configuration["type"] = "sftp"
+    configuration["port"] = "2222"
+    configuration["user"] = "?"
+
+
+def _transform_sftp_retries(configuration: RCloneConfig | dict[str, Any]) -> None:
+    if configuration.get("type") == "sftp" or configuration.get("type") == "openbis":
+        # Do not allow retries for sftp
+        # Reference: https://rclone.org/docs/#globalconfig
+        configuration["override.low_level_retries"] = 1
+
+
+@overload
+def convert_rclone_configuration(configuration: RCloneConfig) -> RCloneConfig: ...
+@overload
+def convert_rclone_configuration(configuration: dict[str, Any]) -> dict[str, Any]: ...
+def convert_rclone_configuration(configuration: dict[str, Any] | RCloneConfig) -> dict[str, Any] | RCloneConfig:
+    """Converts a Renku-specific RClone configuration into a regular RClone configuration."""
+    new_config = deepcopy(configuration.config if isinstance(configuration, RCloneConfig) else configuration)
+    _transform_switch_config(new_config)
+    _transform_openbis_config(new_config)
+    _transform_polybox_switchdriver_config(new_config)
+    _transform_envidat_config(new_config)
+    _transform_sftp_retries(new_config)
+    output = RCloneConfig(config=new_config) if isinstance(configuration, RCloneConfig) else new_config
+    return output
+
+
+class RCloneConfig(BaseModel, MutableMapping):
+    """Class for RClone configuration that is valid."""
+
+    config: dict[str, Any] = Field(exclude=True)
+
+    _validator: RCloneValidator = PrivateAttr(default_factory=get_rclone_validator)
+
+    @model_validator(mode="after")
+    def check_rclone_schema(self) -> RCloneConfig:
+        """Validate that the reclone config is valid."""
+        self._validator.validate(self.config)
+        return self
+
+    @model_serializer
+    def serialize_model(self) -> dict[str, Any]:
+        """Serialize model by returning contained dict."""
+        return self.config
+
+    def __len__(self) -> int:
+        return len(self.config)
+
+    def __getitem__(self, k: str) -> Any:
+        return self.config[k]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self.config[key] = value
+        self._validator.validate(self.config)
+
+    def __delitem__(self, key: str) -> None:
+        del self.config[key]
+        self._validator.validate(self.config)
+
+    def __iter__(self) -> Generator[str, None, None]:  # type: ignore[override]
+        """Iterate method.
+
+        Needed for pydantic to properly serialize the object.
+        """
+        yield from self.config.keys()
+
+
+def parse_storage_url(storage_url: str) -> tuple[RCloneConfig, str]:
+    """Get Cloud Storage/rclone config from a storage URL.
+
+    Example:
+        Supported URLs are:
+        - s3://s3.<region>.amazonaws.com/<bucket>/<path>
+        - s3://<bucket>.s3.<region>.amazonaws.com/<path>
+        - s3://bucket/
+        - http(s)://<endpoint>/<bucket>/<path>
+        - (azure|az)://<account>.dfs.core.windows.net/<container>/<path>
+        - (azure|az)://<account>.blob.core.windows.net/<container>/<path>
+        - (azure|az)://<container>/<path>
+    """
+
+    def from_s3_url(storage_url: ParseResult) -> tuple[RCloneConfig, str]:
+        """Get Cloud storage from an S3 URL.
+
+        Example:
+            Supported URLs are:
+            - s3://s3.<region>.amazonaws.com/<bucket>/<path>
+            - s3://<bucket>.s3.<region>.amazonaws.com/<path>
+            - s3://bucket/
+            - https://<endpoint>/<bucket>/<path>
+        """
+
+        if storage_url.hostname is None:
+            raise errors.ValidationError(message="Storage URL must contain a host")
+
+        configuration = {"type": "s3"}
+        source_path = storage_url.path.lstrip("/")
+
+        if storage_url.scheme == "s3":
+            configuration["provider"] = "AWS"
+            match storage_url.hostname.split(".", 4):
+                case ["s3", region, "amazonaws", "com"]:
+                    configuration["region"] = region
+                case [bucket, "s3", region, "amazonaws", "com"]:
+                    configuration["region"] = region
+                    source_path = f"{bucket}{storage_url.path}"
+                case _:
+                    # URL like 's3://giab/' where the bucket is the
+                    source_path = f"{storage_url.hostname}/{source_path}" if source_path else storage_url.hostname
+        else:
+            configuration["endpoint"] = storage_url.netloc
+
+        return RCloneConfig(config=configuration), source_path
+
+    def from_azure_url(storage_url: ParseResult) -> tuple[RCloneConfig, str]:
+        """Get Cloud storage from an Azure URL.
+
+        Example:
+            Supported URLs are:
+            - (azure|az)://<account>.dfs.core.windows.net/<container>/<path>
+            - (azure|az)://<account>.blob.core.windows.net/<container>/<path>
+            - (azure|az)://<container>/<path>
+        """
+        if storage_url.hostname is None:
+            raise errors.ValidationError(message="Storage URL must contain a host")
+
+        configuration = {"type": "azureblob"}
+        source_path = storage_url.path.lstrip("/")
+
+        match storage_url.hostname.split(".", 5):
+            case [account, "dfs", "core", "windows", "net"] | [account, "blob", "core", "windows", "net"]:
+                configuration["account"] = account
+            case _:
+                if "." in storage_url.hostname:
+                    raise errors.ValidationError(message="Host cannot contain dots unless it's a core.windows.net URL")
+
+                source_path = f"{storage_url.hostname}{storage_url.path}"
+        return RCloneConfig(config=configuration), source_path
+
+    def _from_ambiguous_url(storage_url: ParseResult) -> tuple[RCloneConfig, str]:
+        """Get cloud storage from an ambiguous storage url."""
+        if storage_url.hostname is None:
+            raise errors.ValidationError(message="Storage URL must contain a host")
+
+        if storage_url.hostname.endswith(".windows.net"):
+            return from_azure_url(storage_url)
+
+        # default to S3 for unknown URLs, since these are way more common
+        return from_s3_url(storage_url)
+
+    parsed_url = urlparse(storage_url)
+
+    if parsed_url.scheme is None:
+        raise errors.ValidationError(message="Couldn't parse scheme of 'storage_url'")
+
+    match parsed_url.scheme:
+        case "s3":
+            return from_s3_url(parsed_url)
+        case "azure" | "az":
+            return from_azure_url(parsed_url)
+        case "http" | "https":
+            return _from_ambiguous_url(parsed_url)
+        case _:
+            raise errors.ValidationError(message=f"Scheme '{parsed_url.scheme}' is not supported.")

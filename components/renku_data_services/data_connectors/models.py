@@ -22,7 +22,6 @@ from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.models import GVK, K8sObjectMeta
 from renku_data_services.namespace.models import GroupNamespace, ProjectNamespace, UserNamespace
-from renku_data_services.storage.rclone import RCloneDOIMetadata
 from renku_data_services.utils.etag import compute_etag_from_fields
 
 if TYPE_CHECKING:
@@ -126,7 +125,6 @@ class PrevalidatedGlobalDataConnector:
     """Global data connector model that is unsaved but has been pre-validated."""
 
     data_connector: UnsavedGlobalDataConnector
-    rclone_metadata: RCloneDOIMetadata | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
