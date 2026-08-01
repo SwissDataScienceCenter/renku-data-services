@@ -42,7 +42,7 @@ from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.decorators import update_search_document
 from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.models import SecretKind
-from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.storage.rclone import RenkuRCloneValidator, convert_rclone_configuration
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
 
@@ -326,7 +326,7 @@ class DataConnectorRepository:
             name=data_connector.name,
             visibility=visibility_orm,
             storage_type=data_connector.storage.storage_type,
-            configuration=data_connector.storage.configuration,
+            configuration=convert_rclone_configuration(data_connector.storage.configuration),
             source_path=data_connector.storage.source_path,
             target_path=data_connector.storage.target_path,
             readonly=data_connector.storage.readonly,
@@ -377,7 +377,7 @@ class DataConnectorRepository:
         self,
         user: base_models.APIUser,
         prevalidated_dc: models.PrevalidatedGlobalDataConnector,
-        validator: RCloneValidator | None,
+        validator: RenkuRCloneValidator,
         *,
         session: AsyncSession | None = None,
     ) -> tuple[models.GlobalDataConnector, bool]:
@@ -405,8 +405,6 @@ class DataConnectorRepository:
 
         # Fully validate a global data connector before inserting
         if isinstance(data_connector, models.UnsavedGlobalDataConnector):
-            if validator is None:
-                raise RuntimeError("Could not validate global data connector")
             data_connector = await validate_unsaved_global_data_connector(
                 prevalidated_dc=prevalidated_dc, validator=validator
             )

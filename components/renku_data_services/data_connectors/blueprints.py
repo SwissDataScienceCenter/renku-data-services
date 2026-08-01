@@ -56,7 +56,7 @@ from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.notebooks.data_sources import DataSourceRepository
-from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.storage.rclone import RenkuRCloneValidator
 
 
 @dataclass(kw_only=True)
@@ -89,7 +89,7 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             pagination: PaginationRequest,
             query: apispec.DataConnectorsGetQuery,
-            validator: RCloneValidator,
+            validator: RenkuRCloneValidator,
         ) -> tuple[list[dict[str, Any]], int]:
             ns_segments = query.namespace.split("/")
             ns: None | NamespacePath | ProjectPath
@@ -125,7 +125,7 @@ class DataConnectorsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.DataConnectorPost)
         async def _post(
-            _: Request, user: base_models.APIUser, body: apispec.DataConnectorPost, validator: RCloneValidator
+            _: Request, user: base_models.APIUser, body: apispec.DataConnectorPost, validator: RenkuRCloneValidator
         ) -> JSONResponse:
             data_connector = await validate_unsaved_data_connector(body, validator=validator)
             result = await self.data_connector_repo.insert_namespaced_data_connector(
@@ -147,7 +147,10 @@ class DataConnectorsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.GlobalDataConnectorPost)
         async def _post_global(
-            _: Request, user: base_models.APIUser, body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
+            _: Request,
+            user: base_models.APIUser,
+            body: apispec.GlobalDataConnectorPost,
+            validator: RenkuRCloneValidator,
         ) -> JSONResponse:
             data_connector = await prevalidate_unsaved_global_data_connector(body, validator=validator)
             result, inserted = await self.data_connector_repo.insert_global_data_connector(
@@ -167,7 +170,11 @@ class DataConnectorsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @extract_if_none_match
         async def _get_one(
-            _: Request, user: base_models.APIUser, data_connector_id: ULID, etag: str | None, validator: RCloneValidator
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+            etag: str | None,
+            validator: RenkuRCloneValidator,
         ) -> HTTPResponse:
             data_connector = await self.data_connector_repo.get_data_connector(
                 user=user, data_connector_id=data_connector_id
@@ -195,7 +202,7 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             slug: Slug,
             etag: str | None,
-            validator: RCloneValidator,
+            validator: RenkuRCloneValidator,
         ) -> HTTPResponse:
             data_connector = await self.data_connector_repo.get_global_data_connector_by_slug(user=user, slug=slug)
 
@@ -222,7 +229,7 @@ class DataConnectorsBP(CustomBlueprint):
             namespace: str,
             slug: Slug,
             etag: str | None,
-            validator: RCloneValidator,
+            validator: RenkuRCloneValidator,
         ) -> HTTPResponse:
             data_connector = await self.data_connector_repo.get_data_connector_by_slug(
                 user=user,
@@ -253,7 +260,7 @@ class DataConnectorsBP(CustomBlueprint):
             project_slug: Slug,
             dc_slug: Slug,
             etag: str | None,
-            validator: RCloneValidator,
+            validator: RenkuRCloneValidator,
         ) -> HTTPResponse:
             dc_path = DataConnectorInProjectPath.from_strings(
                 ns_slug.value,
@@ -291,7 +298,7 @@ class DataConnectorsBP(CustomBlueprint):
             data_connector_id: ULID,
             body: apispec.DataConnectorPatch,
             etag: str,
-            validator: RCloneValidator,
+            validator: RenkuRCloneValidator,
         ) -> JSONResponse:
             existing_dc = await self.data_connector_repo.get_data_connector(
                 user=user, data_connector_id=data_connector_id
@@ -539,7 +546,7 @@ class DataConnectorsBP(CustomBlueprint):
 
     @staticmethod
     def _dump_data_connector(
-        data_connector: models.DataConnector | models.GlobalDataConnector, validator: RCloneValidator
+        data_connector: models.DataConnector | models.GlobalDataConnector, validator: RenkuRCloneValidator
     ) -> dict[str, Any]:
         """Dumps a data connector for API responses."""
         storage = dump_storage_with_sensitive_fields(data_connector.storage, validator=validator)

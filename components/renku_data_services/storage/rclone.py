@@ -6,6 +6,7 @@ import asyncio
 import json
 import tempfile
 from collections.abc import Generator
+from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast
 
@@ -37,18 +38,7 @@ class RCloneValidator:
     def __init__(self) -> None:
         """Initialize with contained schema file."""
         spec = RCloneValidator._get_spec()
-
-        apply_patches(spec)
-
-        self.providers: dict[str, RCloneProviderSchema] = {}
-
-        for provider_config in spec:
-            try:
-                provider_schema = RCloneProviderSchema.model_validate(provider_config)
-                self.providers[provider_schema.prefix] = provider_schema
-            except ValidationError:
-                logger.error("Couldn't load RClone config: %s", provider_config)
-                raise
+        self.providers = RCloneValidator._get_providers(spec)
 
     def validate(self, configuration: Union[RCloneConfig, dict[str, Any]], keep_sensitive: bool = False) -> None:
         """Validates an RClone config."""
@@ -69,21 +59,6 @@ class RCloneValidator:
                 continue
             raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
 
-    def get_real_configuration(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> dict[str, Any]:
-        """Converts a Renku rclone configuration to a real rclone config."""
-        real_config = dict(configuration)
-
-        if real_config["type"] == "s3" and real_config.get("provider") == "Switch":
-            # Switch is a fake provider we add for users, we need to replace it since rclone itself
-            # doesn't know it
-            real_config["provider"] = "Other"
-        elif configuration["type"] == "openbis":
-            real_config["type"] = "sftp"
-            real_config["port"] = "2222"
-            real_config["user"] = "?"
-            real_config["pass"] = real_config.pop("session_token")
-        return real_config
-
     async def test_connection(
         self,
         configuration: Union[RCloneConfig, dict[str, Any]],
@@ -98,9 +73,7 @@ class RCloneValidator:
             return ConnectionResult(False, str(e))
 
         # Obscure configuration and transform if needed
-        obscured_config = await self.obscure_config(self.get_real_configuration(configuration))
-        transformed_config = self.inject_default_values(self.transform_polybox_switchdriver_config(obscured_config))
-        transformed_config = self.transform_envidat_config(transformed_config)
+        transformed_config = await self.obscure_config(configuration)
 
         # Handle testing with Renku integrations
         if user is not None and data_source_repo is not None:
@@ -126,7 +99,7 @@ class RCloneValidator:
             storage_type = cast(str, configuration.get("type"))
             if storage_type == "sftp":
                 args.extend(["--low-level-retries", "1"])
-            logger.debug(f"Execute: rclone {" ".join(args)}")
+            logger.debug(f"Execute: rclone {' '.join(args)}")
             proc = await asyncio.create_subprocess_exec(
                 "rclone",
                 *args,
@@ -231,61 +204,26 @@ class RCloneValidator:
         return config
 
     @staticmethod
-    def transform_polybox_switchdriver_config(
-        configuration: Union[RCloneConfig, dict[str, Any]],
-    ) -> Union[RCloneConfig, dict[str, Any]]:
-        """Transform the configuration for public access."""
-        storage_type = configuration.get("type")
-
-        # Only process Polybox or SwitchDrive configurations
-        if storage_type not in {"polybox", "switchDrive"}:
-            return configuration
-
-        configuration["type"] = "webdav"
-
-        provider = configuration.get("provider")
-
-        if provider == "personal":
-            configuration["url"] = configuration.get("url") or (
-                "https://polybox.ethz.ch/remote.php/webdav/"
-                if storage_type == "polybox"
-                else "https://drive.switch.ch/remote.php/webdav/"
-            )
-            return configuration
-
-        ## Set url and username when is a shared configuration
-        configuration["url"] = (
-            "https://polybox.ethz.ch/public.php/webdav/"
-            if storage_type == "polybox"
-            else "https://drive.switch.ch/public.php/webdav/"
-        )
-        public_link = configuration.get("public_link")
-
-        if not public_link:
-            raise ValueError("Missing 'public_link' for public access configuration.")
-
-        # Extract the user from the public link
-        configuration["user"] = public_link.split("/")[-1]
-
-        return configuration
-
-    @staticmethod
-    def transform_envidat_config(configuration: RCloneConfig | dict[str, Any]) -> RCloneConfig | dict[str, Any]:
-        """Used to convert the configuration for Envidat into a real configuration."""
-        storage_type = configuration.get("type")
-        if storage_type is None:
-            return configuration
-        if storage_type != ENVIDAT_V1_PROVIDER:
-            return configuration
-        configuration["type"] = "doi"
-        return configuration
-
-    @staticmethod
     def _get_spec() -> Any:
         """Get the rclone spec file."""
         with open(Path(__file__).parent / "rclone_schema.autogenerated.json") as f:
             spec = json.load(f)
         return spec
+
+    @staticmethod
+    def _get_providers(spec: Any) -> dict[str, RCloneProviderSchema]:
+        """Read the spec and parse it into a dict of Providers."""
+        providers: dict[str, RCloneProviderSchema] = {}
+
+        for provider_config in spec:
+            try:
+                provider_schema = RCloneProviderSchema.model_validate(provider_config)
+                providers[provider_schema.prefix] = provider_schema
+            except ValidationError:
+                logger.error("Couldn't load RClone config: %s", provider_config)
+                raise
+
+        return providers
 
 
 class RCloneTriState(BaseModel):
@@ -517,6 +455,103 @@ class RCloneProviderSchema(BaseModel):
             if option.name not in configuration:
                 continue
             yield option
+
+
+class RenkuRCloneValidator(RCloneValidator):
+    """RCloneValidator that is aware of all the Renku-specific providers that are not real RClone providers."""
+
+    @staticmethod
+    def _get_spec() -> Any:
+        """Get the rclone spec file."""
+        spec = RCloneValidator._get_spec()
+        apply_patches(spec)
+        return spec
+
+    async def test_connection(
+        self,
+        configuration: Union[RCloneConfig, dict[str, Any]],
+        source_path: str,
+        user: base_models.APIUser | None = None,
+        data_source_repo: DataSourceRepository | None = None,
+    ) -> ConnectionResult:
+        """Tests connecting with an RClone config."""
+        transformed_config = convert_rclone_configuration(
+            configuration.config if isinstance(configuration, RCloneConfig) else configuration
+        )
+        return await super().test_connection(transformed_config, source_path, user, data_source_repo)
+
+
+def __transform_polybox_switchdriver_config(configuration: Union[RCloneConfig, dict[str, Any]]) -> None:
+    """Transform the configuration for public access."""
+    storage_type = configuration.get("type")
+
+    # Only process Polybox or SwitchDrive configurations
+    if storage_type not in {"polybox", "switchDrive"}:
+        return None
+
+    configuration["type"] = "webdav"
+
+    provider = configuration.get("provider")
+
+    if provider == "personal":
+        configuration["url"] = configuration.get("url") or (
+            "https://polybox.ethz.ch/remote.php/webdav/"
+            if storage_type == "polybox"
+            else "https://drive.switch.ch/remote.php/webdav/"
+        )
+        return None
+
+    ## Set url and username when is a shared configuration
+    configuration["url"] = (
+        "https://polybox.ethz.ch/public.php/webdav/"
+        if storage_type == "polybox"
+        else "https://drive.switch.ch/public.php/webdav/"
+    )
+    public_link = configuration.get("public_link")
+
+    if not public_link:
+        raise ValueError("Missing 'public_link' for public access configuration.")
+
+    # Extract the user from the public link
+    configuration["user"] = public_link.split("/")[-1]
+
+
+def __transform_envidat_config(configuration: RCloneConfig | dict[str, Any]) -> None:
+    """Used to convert the configuration for Envidat into a real configuration."""
+    storage_type = configuration.get("type")
+    if storage_type is None:
+        return None
+    if storage_type != ENVIDAT_V1_PROVIDER:
+        return None
+    configuration["type"] = "doi"
+
+
+def __transform_switch_config(configuration: RCloneConfig | dict[str, Any]) -> None:
+    """Converts a Renku specific Switch S3 config into a regular RClone config."""
+    if configuration["type"] != "s3" or configuration.get("provider") != "Switch":
+        return
+    # Switch is a fake provider we add for users, we need to replace it since rclone itself
+    # doesn't know it
+    configuration["provider"] = "Other"
+
+
+def __transform_openbis_config(configuration: RCloneConfig | dict[str, Any]) -> None:
+    if configuration["type"] != "openbis":
+        return None
+    configuration["type"] = "sftp"
+    configuration["port"] = "2222"
+    configuration["user"] = "?"
+    configuration["pass"] = configuration.pop("session_token")
+
+
+def convert_rclone_configuration(configuration: dict[str, Any]) -> dict[str, Any]:
+    """Converts a Renku-specific RClone configuration into a regular RClone configuration."""
+    configuration = deepcopy(configuration)
+    __transform_switch_config(configuration)
+    __transform_openbis_config(configuration)
+    __transform_polybox_switchdriver_config(configuration)
+    __transform_envidat_config(configuration)
+    return configuration
 
 
 class RCloneDOIMetadata(BaseModel):

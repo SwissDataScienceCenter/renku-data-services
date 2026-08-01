@@ -13,7 +13,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage import apispec
-from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.storage.rclone import RenkuRCloneValidator
 
 
 @dataclass(kw_only=True)
@@ -26,7 +26,7 @@ class StorageSchemaBP(CustomBlueprint):
     def get(self) -> BlueprintFactoryResponse:
         """Get cloud storage for a repository."""
 
-        async def _get(_: Request, validator: RCloneValidator) -> JSONResponse:
+        async def _get(_: Request, validator: RenkuRCloneValidator) -> JSONResponse:
             return validated_json(apispec.RCloneSchema, validator.asdict())
 
         return "/storage_schema", ["GET"], _get
@@ -39,7 +39,7 @@ class StorageSchemaBP(CustomBlueprint):
         async def _test_connection(
             request: Request,
             user: base_models.APIUser,
-            validator: RCloneValidator,
+            validator: RenkuRCloneValidator,
             body: apispec.StorageSchemaTestConnectionPostRequest,
         ) -> HTTPResponse:
             validator.validate(body.configuration, keep_sensitive=True)
@@ -57,7 +57,7 @@ class StorageSchemaBP(CustomBlueprint):
 
         @validate(json=apispec.RCloneConfigValidate)
         async def _validate(
-            request: Request, validator: RCloneValidator, body: apispec.RCloneConfigValidate
+            request: Request, validator: RenkuRCloneValidator, body: apispec.RCloneConfigValidate
         ) -> HTTPResponse:
             if body.root is None:
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
@@ -71,7 +71,7 @@ class StorageSchemaBP(CustomBlueprint):
 
         @validate(json=apispec.StorageSchemaObscurePostRequest)
         async def _obscure(
-            request: Request, validator: RCloneValidator, body: apispec.StorageSchemaObscurePostRequest
+            request: Request, validator: RenkuRCloneValidator, body: apispec.StorageSchemaObscurePostRequest
         ) -> JSONResponse:
             config = await validator.obscure_config(body.configuration)
             return validated_json(apispec.RCloneConfigValidate, config)
