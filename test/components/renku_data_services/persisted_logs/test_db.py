@@ -20,11 +20,11 @@ from renku_data_services.persisted_logs.db import (
 )
 from renku_data_services.project.models import Project, UnsavedProject, Visibility
 from renku_data_services.session.models import (
-    EnvironmentImageSource,
-    EnvironmentKind,
+    Build,
     LauncherType,
+    Platform,
     SessionLauncher,
-    UnsavedEnvironment,
+    UnsavedBuildParameters,
     UnsavedSessionLauncher,
 )
 from renku_data_services.users.models import UserInfo
@@ -91,12 +91,11 @@ async def my_session_launcher(
     regular_user: base_models.AuthenticatedAPIUser,
     my_project: Project,
 ) -> SessionLauncher:
-    environment = UnsavedEnvironment(
-        name="My Environment",
-        container_image="renku:test",
-        default_url="/",
-        environment_kind=EnvironmentKind.CUSTOM,
-        environment_image_source=EnvironmentImageSource.image,
+    build_parameters = UnsavedBuildParameters(
+        repository="https://example.org/repo.git",
+        platforms=[Platform.linux_amd64],
+        builder_variant="python",
+        frontend_variant="vscodium",
     )
     launcher = await dependency_manager.session_repo.insert_launcher(
         user=regular_user,
@@ -107,12 +106,26 @@ async def my_session_launcher(
             resource_class_id=None,
             disk_storage=None,
             env_variables=None,
-            environment=environment,
+            environment=build_parameters,
             launcher_type=LauncherType.interactive,
         ),
     )
     assert launcher is not None
     return launcher
+
+
+@pytest_asyncio.fixture
+async def my_build(
+    dependency_manager: DependencyManager,
+    regular_user: base_models.AuthenticatedAPIUser,
+    my_session_launcher: SessionLauncher,
+) -> Build:
+    builds = await dependency_manager.session_repo.get_environment_builds(
+        user=regular_user, environment_id=my_session_launcher.environment.id
+    )
+    assert builds is not None
+    assert len(builds) == 1
+    return builds[0]
 
 
 @pytest.mark.asyncio
@@ -190,4 +203,79 @@ async def test_insert_session_logs_with_db_failures(
     # Check the result of get_latest_log_timestamp()
     async with async_session_maker() as session, session.begin():
         ts = await session_logs_repo.get_latest_log_timestamp(session=session)
+    assert ts == expected.last_timestamp
+
+
+@pytest.mark.asyncio
+async def test_build_latest_log_timestamp_is_none_at_startup(
+    build_logs_repo: ImageBuildPersistedLogsWriteRepository, dependency_manager: DependencyManager
+):
+    async_session_maker = dependency_manager.config.db.async_session_maker
+    async with async_session_maker() as session, session.begin():
+        ts = await build_logs_repo.get_latest_log_timestamp(session=session)
+    assert ts is None
+
+
+@pytest.mark.asyncio
+async def test_insert_build_logs(
+    build_logs_response: loki_api.LokiQueryRangeResponse,
+    build_logs_repo: ImageBuildPersistedLogsWriteRepository,
+    dependency_manager: DependencyManager,
+    my_build: Build,
+):
+    # Replace the log line metadata for the test
+    async def _make_logs_stream() -> AsyncIterator[models.UnsavedBuildLogLine]:
+        source = LokiLogReader._process_image_build_logs(build_logs_response)
+        async for item in source:
+            yield replace(item, build_id=my_build.id)
+
+    async_session_maker = dependency_manager.config.db.async_session_maker
+    async with async_session_maker() as session, session.begin():
+        result = await build_logs_repo.insert_build_logs(session=session, logs_stream=_make_logs_stream())
+
+    expected = models.LogStreamMetadata(log_count=3, last_timestamp=1785482346922298906)
+    assert result == expected
+
+    # Check the result of get_latest_log_timestamp()
+    async with async_session_maker() as session, session.begin():
+        ts = await build_logs_repo.get_latest_log_timestamp(session=session)
+    assert ts == expected.last_timestamp
+
+
+@pytest.mark.asyncio
+async def test_insert_build_logs_with_db_failures(
+    build_logs_response: loki_api.LokiQueryRangeResponse,
+    build_logs_repo: ImageBuildPersistedLogsWriteRepository,
+    dependency_manager: DependencyManager,
+    my_build: Build,
+):
+    # Replace the log line metadata for the test
+    async def _make_logs_stream() -> AsyncIterator[models.UnsavedBuildLogLine]:
+        source = LokiLogReader._process_image_build_logs(build_logs_response)
+        idx = 0
+        async for item in source:
+            # Use correct foreign keys only on half of the log lines
+            if idx % 2 == 0:
+                yield replace(item, build_id=my_build.id)
+            else:
+                yield item
+            idx += 1
+
+    async_session_maker = dependency_manager.config.db.async_session_maker
+    async with async_session_maker() as session, session.begin():
+        result = await build_logs_repo.insert_build_logs(session=session, logs_stream=_make_logs_stream())
+
+    expected = models.LogStreamMetadata(log_count=3, last_timestamp=1785482346922298906)
+    assert result == expected
+
+    async with async_session_maker() as session, session.begin():
+        stmt = select(schemas.ImageBuildLogORM)
+        res = await session.scalars(stmt)
+        build_logs_orm = res.all()
+
+    assert len(build_logs_orm) == 2
+
+    # Check the result of get_latest_log_timestamp()
+    async with async_session_maker() as session, session.begin():
+        ts = await build_logs_repo.get_latest_log_timestamp(session=session)
     assert ts == expected.last_timestamp

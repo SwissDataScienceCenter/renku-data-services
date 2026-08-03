@@ -358,23 +358,11 @@ class ImageBuildPersistedLogsWriteRepository:
             log_count += 1
             if log.timestamp > last_timestamp:
                 last_timestamp = log.timestamp
+            try:
+                await self._insert_log_line(session=session, log=log)
+            except DatabaseError as err:
+                logger.warning(f"Could not process log line {log.id}: {err}")
 
-            existing_log_res = await session.scalars(
-                select(schemas.ImageBuildLogORM.id).where(schemas.ImageBuildLogORM.id == log.id)
-            )
-            existing_log_orm = existing_log_res.one_or_none()
-            if existing_log_orm:
-                continue
-
-            log_orm = schemas.ImageBuildLogORM(
-                id=log.id,
-                build_id=log.build_id,
-                container=log.container,
-                timestamp=log.timestamp,
-                log_line=log.log_line,
-            )
-            session.add(log_orm)
-            await session.flush()
         return models.LogStreamMetadata(log_count=log_count, last_timestamp=last_timestamp)
 
     async def delete_expired_build_logs(self, session: AsyncSession, before: datetime) -> int:
@@ -384,6 +372,30 @@ class ImageBuildPersistedLogsWriteRepository:
         res = await session.execute(delete_logs_stmt)
         deleted_logs_count = res.rowcount
         return deleted_logs_count
+
+    async def _insert_log_line(self, session: AsyncSession, log: models.UnsavedBuildLogLine) -> bool:
+        """Insert a single session log line into the persisted logs database.
+
+        Returns true if the log line was inserted into the database and false otherwise (the log line already exists).
+        """
+        existing_log_res = await session.scalars(
+            select(schemas.ImageBuildLogORM.id).where(schemas.ImageBuildLogORM.id == log.id)
+        )
+        existing_log_orm = existing_log_res.one_or_none()
+        if existing_log_orm:
+            return False
+
+        async with session.begin_nested():
+            log_orm = schemas.ImageBuildLogORM(
+                id=log.id,
+                build_id=log.build_id,
+                container=log.container,
+                timestamp=log.timestamp,
+                log_line=log.log_line,
+            )
+            session.add(log_orm)
+            await session.flush()
+            return True
 
 
 async def _sort_logs_per_container(
