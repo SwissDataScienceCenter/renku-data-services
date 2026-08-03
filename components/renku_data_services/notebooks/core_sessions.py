@@ -145,7 +145,6 @@ async def get_extra_init_containers(
         git_providers=git_providers,
         workspace_mount_path=storage_mount,
         work_dir=work_dir,
-        mount_dir=storage_mount,
         uid=uid,
         gid=gid,
     )

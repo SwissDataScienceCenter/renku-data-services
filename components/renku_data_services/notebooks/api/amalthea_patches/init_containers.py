@@ -36,7 +36,6 @@ async def git_clone_container_v2(
     git_providers: list[GitProvider],
     workspace_mount_path: PurePosixPath,
     work_dir: PurePosixPath,
-    mount_dir: PurePosixPath,
     lfs_auto_fetch: bool = False,
     uid: int = 1000,
     gid: int = 1000,
@@ -56,9 +55,9 @@ async def git_clone_container_v2(
     # NOTE: We default to the clone location as the workdir for backwards compatibiltiy reasons.
     # If we change it some existing sessions on Renku will break.
     clone_location = work_dir
-    if not clone_location.is_relative_to(mount_dir):
+    if not clone_location.is_relative_to(workspace_mount_path):
         # If we dont set this then the cloned repositories never show up anywhere in the session.
-        clone_location = mount_dir
+        clone_location = workspace_mount_path
     prefix = "GIT_CLONE_"
     env = [
         # NOTE: The MOUNT_PATH is where the cloner container clones the repository
