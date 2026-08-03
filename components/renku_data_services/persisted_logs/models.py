@@ -92,8 +92,11 @@ class PersistedSessionLogs:
 
 
 @dataclass(eq=True, frozen=True, kw_only=True)
-class InsertLogsResult:
-    """Result of inserting a log stream in the database."""
+class LogStreamMetadata:
+    """Log stream metadata.
+
+    Used to know if there are more logs to fetch and if so, where to continue from.
+    """
 
     log_count: int
     last_timestamp: int

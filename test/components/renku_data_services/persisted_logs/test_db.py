@@ -5,11 +5,14 @@ from dataclasses import replace
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
+from ulid import ULID
 
 from renku_data_services import base_models
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.persisted_logs import loki_api, models
+from renku_data_services.persisted_logs import orm as schemas
 from renku_data_services.persisted_logs.collector import LokiLogReader
 from renku_data_services.persisted_logs.db import (
     AmaltheaSessionPersistedLogsWriteRepository,
@@ -41,16 +44,6 @@ def session_logs_repo() -> AmaltheaSessionPersistedLogsWriteRepository:
 @pytest.fixture
 def build_logs_repo() -> ImageBuildPersistedLogsWriteRepository:
     return ImageBuildPersistedLogsWriteRepository()
-
-
-@pytest.mark.asyncio
-async def test_session_latest_log_timestamp_is_none_at_startup(
-    session_logs_repo: AmaltheaSessionPersistedLogsWriteRepository, dependency_manager: DependencyManager
-):
-    async_session_maker = dependency_manager.config.db.async_session_maker
-    async with async_session_maker() as session, session.begin():
-        ts = await session_logs_repo.get_latest_log_timestamp(session=session)
-    assert ts is None
 
 
 @pytest_asyncio.fixture
@@ -123,6 +116,16 @@ async def my_session_launcher(
 
 
 @pytest.mark.asyncio
+async def test_session_latest_log_timestamp_is_none_at_startup(
+    session_logs_repo: AmaltheaSessionPersistedLogsWriteRepository, dependency_manager: DependencyManager
+):
+    async_session_maker = dependency_manager.config.db.async_session_maker
+    async with async_session_maker() as session, session.begin():
+        ts = await session_logs_repo.get_latest_log_timestamp(session=session)
+    assert ts is None
+
+
+@pytest.mark.asyncio
 async def test_insert_session_logs(
     session_logs_response: loki_api.LokiQueryRangeResponse,
     session_logs_repo: AmaltheaSessionPersistedLogsWriteRepository,
@@ -139,4 +142,52 @@ async def test_insert_session_logs(
     async_session_maker = dependency_manager.config.db.async_session_maker
     async with async_session_maker() as session, session.begin():
         result = await session_logs_repo.insert_session_logs(session=session, logs_stream=_make_logs_stream())
-    assert result is None
+
+    expected = models.LogStreamMetadata(log_count=22, last_timestamp=1785482091170416212)
+    assert result == expected
+
+    # Check the result of get_latest_log_timestamp()
+    async with async_session_maker() as session, session.begin():
+        ts = await session_logs_repo.get_latest_log_timestamp(session=session)
+    assert ts == expected.last_timestamp
+
+
+@pytest.mark.asyncio
+async def test_insert_session_logs_with_db_failures(
+    session_logs_response: loki_api.LokiQueryRangeResponse,
+    session_logs_repo: AmaltheaSessionPersistedLogsWriteRepository,
+    dependency_manager: DependencyManager,
+    regular_user: base_models.AuthenticatedAPIUser,
+    my_session_launcher: SessionLauncher,
+):
+    # Replace the log line metadata for the test
+    async def _make_logs_stream() -> AsyncIterator[models.UnsavedSessionLogLine]:
+        source = LokiLogReader._process_session_logs(session_logs_response)
+        alt_run_id = ULID()
+        idx = 0
+        async for item in source:
+            # # Use correct foreign keys only on half of the log lines
+            if idx % 2 == 0:
+                yield replace(item, user_id=regular_user.id, run_id=alt_run_id, launcher_id=my_session_launcher.id)
+            else:
+                yield item
+            idx += 1
+
+    async_session_maker = dependency_manager.config.db.async_session_maker
+    async with async_session_maker() as session, session.begin():
+        result = await session_logs_repo.insert_session_logs(session=session, logs_stream=_make_logs_stream())
+
+    expected = models.LogStreamMetadata(log_count=22, last_timestamp=1785482091170416212)
+    assert result == expected
+
+    async with async_session_maker() as session, session.begin():
+        stmt = select(schemas.AmaltheaSessionLogORM)
+        res = await session.scalars(stmt)
+        session_logs_orm = res.all()
+
+    assert len(session_logs_orm) == 11
+
+    # Check the result of get_latest_log_timestamp()
+    async with async_session_maker() as session, session.begin():
+        ts = await session_logs_repo.get_latest_log_timestamp(session=session)
+    assert ts == expected.last_timestamp

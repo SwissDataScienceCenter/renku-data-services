@@ -7,10 +7,12 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import DatabaseError
 from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession
 from ulid import ULID
 
 from renku_data_services import base_models, errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.persisted_logs import models
@@ -23,6 +25,7 @@ from renku_data_services.session import orm as session_schemas
 if TYPE_CHECKING:
     from renku_data_services.repositories.db import GitRepositoriesRepository
     from renku_data_services.session.config import BuildsConfig
+logger = logging.getLogger(__name__)
 
 
 class AmaltheaSessionPersistedLogsReadRepository:
@@ -153,7 +156,7 @@ class AmaltheaSessionPersistedLogsWriteRepository:
 
     async def insert_session_logs(
         self, session: AsyncSession, logs_stream: AsyncIterator[models.UnsavedSessionLogLine]
-    ) -> models.InsertLogsResult:
+    ) -> models.LogStreamMetadata:
         """Insert sessions logs into the persisted logs database."""
         log_count = 0
         last_timestamp = 0
@@ -161,39 +164,12 @@ class AmaltheaSessionPersistedLogsWriteRepository:
             log_count += 1
             if log.timestamp > last_timestamp:
                 last_timestamp = log.timestamp
+            try:
+                await self._insert_log_line(session=session, log=log)
+            except DatabaseError as err:
+                logger.warning(f"Could not process log line {log.id}: {err}")
 
-            existing_log_res = await session.scalars(
-                select(schemas.AmaltheaSessionLogORM.id).where(schemas.AmaltheaSessionLogORM.id == log.id)
-            )
-            existing_log_orm = existing_log_res.one_or_none()
-            if existing_log_orm:
-                continue
-
-            session_run_res = await session.scalars(
-                select(schemas.SessionRunORM).where(schemas.SessionRunORM.id == log.run_id)
-            )
-            session_run_orm = session_run_res.one_or_none()
-            if session_run_orm is None:
-                session_run_orm = schemas.SessionRunORM(
-                    id=log.run_id,
-                    user_id=log.user_id,
-                    session_uid=log.session_uid,
-                    launcher_id=log.launcher_id,
-                    submission_id=log.submission_id,
-                )
-                session.add(session_run_orm)
-                await session.flush()
-
-            log_orm = schemas.AmaltheaSessionLogORM(
-                id=log.id,
-                run_id=log.run_id,
-                container=log.container,
-                timestamp=log.timestamp,
-                log_line=log.log_line,
-            )
-            session.add(log_orm)
-            await session.flush()
-        return models.InsertLogsResult(log_count=log_count, last_timestamp=last_timestamp)
+        return models.LogStreamMetadata(log_count=log_count, last_timestamp=last_timestamp)
 
     async def delete_expired_session_logs(self, session: AsyncSession, before: datetime) -> int:
         """Remove expired session logs from the database."""
@@ -219,6 +195,45 @@ class AmaltheaSessionPersistedLogsWriteRepository:
         await session.execute(delete(schemas.SessionRunORM).where(schemas.SessionRunORM.id.in_(session_run_ids)))
 
         return deleted_logs_count
+
+    async def _insert_log_line(self, session: AsyncSession, log: models.UnsavedSessionLogLine) -> bool:
+        """Insert a single session log line into the persisted logs database.
+
+        Returns true if the log line was inserted into the database and false otherwise (the log line already exists).
+        """
+        existing_log_res = await session.scalars(
+            select(schemas.AmaltheaSessionLogORM.id).where(schemas.AmaltheaSessionLogORM.id == log.id)
+        )
+        existing_log_orm = existing_log_res.one_or_none()
+        if existing_log_orm:
+            return False
+
+        session_run_res = await session.scalars(
+            select(schemas.SessionRunORM).where(schemas.SessionRunORM.id == log.run_id)
+        )
+        session_run_orm = session_run_res.one_or_none()
+        if session_run_orm is None:
+            async with session.begin_nested():
+                session_run_orm = schemas.SessionRunORM(
+                    id=log.run_id,
+                    user_id=log.user_id,
+                    session_uid=log.session_uid,
+                    launcher_id=log.launcher_id,
+                    submission_id=log.submission_id,
+                )
+                session.add(session_run_orm)
+                await session.flush()
+
+        log_orm = schemas.AmaltheaSessionLogORM(
+            id=log.id,
+            run_id=log.run_id,
+            container=log.container,
+            timestamp=log.timestamp,
+            log_line=log.log_line,
+        )
+        session.add(log_orm)
+        await session.flush()
+        return True
 
 
 class ImageBuildPersistedLogsReadRepository:
@@ -335,7 +350,7 @@ class ImageBuildPersistedLogsWriteRepository:
 
     async def insert_build_logs(
         self, session: AsyncSession, logs_stream: AsyncIterator[models.UnsavedBuildLogLine]
-    ) -> models.InsertLogsResult:
+    ) -> models.LogStreamMetadata:
         """Insert sessions logs into the persisted logs database."""
         log_count = 0
         last_timestamp = 0
@@ -360,7 +375,7 @@ class ImageBuildPersistedLogsWriteRepository:
             )
             session.add(log_orm)
             await session.flush()
-        return models.InsertLogsResult(log_count=log_count, last_timestamp=last_timestamp)
+        return models.LogStreamMetadata(log_count=log_count, last_timestamp=last_timestamp)
 
     async def delete_expired_build_logs(self, session: AsyncSession, before: datetime) -> int:
         """Remove expired build logs from the database."""
