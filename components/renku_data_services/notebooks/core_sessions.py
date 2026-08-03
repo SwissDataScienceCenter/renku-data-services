@@ -145,6 +145,7 @@ async def get_extra_init_containers(
         git_providers=git_providers,
         workspace_mount_path=storage_mount,
         work_dir=work_dir,
+        mount_dir=storage_mount,
         uid=uid,
         gid=gid,
     )
@@ -849,24 +850,14 @@ async def get_mount_work_dir(
         image_workdir = await image_check_repo.image_workdir(user, parsed_image)
         work_dir_fallback = PurePosixPath("/home/jovyan/work")
         work_dir = image_workdir or work_dir_fallback
-    # NOTE: The fallback should have appended /work to avoid collisions
+    # NOTE: The fallback should have /work appended to the path to avoid collisions
     # between the mount and workdir and for backwards compatibility reasons.
+    # If /work is not added then we overwrite the workdir from the image which may contain files that are needed.
     storage_mount_fallback = work_dir / "work"
     storage_mount = environment.mount_directory or storage_mount_fallback
     if storage_mount == PurePosixPath("/"):
         # NOTE: Mounting the volume for the session at / will essentially wipe everything out from the image
         storage_mount = PurePosixPath("/work")
-    if not work_dir.is_relative_to(storage_mount):
-        # NOTE: The work dir is where the repos are cloned to. So if the repositories
-        # are not cloned in the storage mount or in a sub directory then
-        # they may not carry over into the session container from the init container or
-        # the location where they need to be cloned may not be writable.
-        logger.warning(
-            f"Work_dir {work_dir} is not equal to or child of the storage mount directory {storage_mount} "
-            f"for environment ID {environment.id} "
-            "this means that no Git repositories will carry over into the session from the "
-            "initialization container that does the cloning."
-        )
     return storage_mount, work_dir
 
 
