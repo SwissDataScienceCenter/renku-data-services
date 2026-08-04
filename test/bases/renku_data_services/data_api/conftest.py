@@ -807,6 +807,7 @@ _valid_resource_pool_payload: dict[str, Any] = {
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "kind": "local",
         },
         {
             "cpu": 2.0,
@@ -818,6 +819,7 @@ _valid_resource_pool_payload: dict[str, Any] = {
             "default": False,
             "node_affinities": [],
             "tolerations": [],
+            "kind": "local",
         },
     ],
     "quota": {"cpu": 100, "memory": 100, "gpu": 0},
