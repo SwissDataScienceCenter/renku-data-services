@@ -821,6 +821,28 @@ def _effective_firecrest_remote(
     return system_name, partition
 
 
+def _firecrest_resource_env_items(
+    resource_class: ResourceClass,
+    pool_remote: RemoteConfigurationFirecrest,
+) -> list[SessionEnvItem]:
+    """Build FirecREST-specific env vars for a remote session.
+
+    Resource class CPU, memory and GPU values are omitted when the class has
+    ``ignore_resource_class_values`` set, letting the HPC grid pick resources.
+    """
+    system_name, partition = _effective_firecrest_remote(resource_class, pool_remote)
+    env: list[SessionEnvItem] = [
+        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=system_name),
+    ]
+    if partition:
+        env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=partition))
+    if not (resource_class.remote is not None and resource_class.remote.ignore_resource_class_values):
+        env.append(SessionEnvItem(name="RSC_FIRECREST_CPUS_PER_TASK", value=str(int(round(resource_class.cpu)))))
+        env.append(SessionEnvItem(name="RSC_FIRECREST_MEM", value=f"{resource_class.memory}G"))
+        env.append(SessionEnvItem(name="RSC_FIRECREST_GPUS", value=str(resource_class.gpu)))
+    return env
+
+
 def get_remote_env(
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai,
 ) -> list[SessionEnvItem]:
@@ -1136,13 +1158,7 @@ async def start_session(
         env.extend(get_remote_env(remote=resource_pool.remote))
         if resource_class.kind == RemoteConfigurationKind.firecrest:
             assert isinstance(resource_pool.remote, RemoteConfigurationFirecrest)
-            system_name, partition = _effective_firecrest_remote(resource_class, resource_pool.remote)
-            env.append(SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=system_name))
-            if partition:
-                env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=partition))
-            env.append(SessionEnvItem(name="RSC_FIRECREST_CPUS_PER_TASK", value=str(int(round(resource_class.cpu)))))
-            env.append(SessionEnvItem(name="RSC_FIRECREST_MEM", value=f"{resource_class.memory}G"))
-            env.append(SessionEnvItem(name="RSC_FIRECREST_GPUS", value=str(resource_class.gpu)))
+            env.extend(_firecrest_resource_env_items(resource_class, resource_pool.remote))
     launcher_env_variables = get_launcher_env_variables(launcher, launch_request)
     env.extend(launcher_env_variables)
 
