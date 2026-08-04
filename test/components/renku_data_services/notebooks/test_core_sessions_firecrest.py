@@ -76,7 +76,7 @@ def test_effective_firecrest_remote_omits_partition_when_none():
     assert partition is None
 
 
-def test_firecrest_resource_env_items_include_resources_by_default():
+def test_firecrest_resource_env_items_omit_resource_values_by_default():
     pool_remote = RemoteConfigurationFirecrest(
         api_url="https://pool.example.org",
         system_name="pool-system",
@@ -96,12 +96,10 @@ def test_firecrest_resource_env_items_include_resources_by_default():
     by_name = {item.name: item.value for item in env}
     assert by_name["RSC_FIRECREST_SYSTEM_NAME"] == "pool-system"
     assert by_name["RSC_FIRECREST_PARTITION"] == "pool-partition"
-    assert by_name["RSC_FIRECREST_CPUS_PER_TASK"] == "4"
-    assert by_name["RSC_FIRECREST_MEM"] == "8G"
-    assert by_name["RSC_FIRECREST_GPUS"] == "1"
+    assert "RSC_FIRECREST_IGNORE_RESOURCE_CLASS_VALUES" not in by_name
 
 
-def test_firecrest_resource_env_items_omit_resources_when_ignore_flag_is_true():
+def test_firecrest_resource_env_items_emits_ignore_flag_when_set():
     pool_remote = RemoteConfigurationFirecrest(
         api_url="https://pool.example.org",
         system_name="pool-system",
@@ -125,6 +123,7 @@ def test_firecrest_resource_env_items_omit_resources_when_ignore_flag_is_true():
     assert "RSC_FIRECREST_GPUS" not in by_name
     assert by_name["RSC_FIRECREST_SYSTEM_NAME"] == "pool-system"
     assert by_name["RSC_FIRECREST_PARTITION"] == "pool-partition"
+    assert by_name["RSC_FIRECREST_IGNORE_RESOURCE_CLASS_VALUES"] == "true"
 
 
 def test_get_remote_env():
