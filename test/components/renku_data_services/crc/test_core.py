@@ -69,6 +69,15 @@ def _runai_body() -> apispec.ResourceClass:
 # ---------------------------------------------------------------------------
 
 
+def test_remote_class_configuration_firecrest_has_ignore_flag():
+    remote = apispec.RemoteClassConfigurationFirecrest(
+        system_name="eiger",
+        partition="normal",
+        ignore_resource_class_values=True,
+    )
+    assert remote.ignore_resource_class_values is True
+
+
 def test_validate_firecrest_class_remote_override():
     result = validate_resource_class(
         _firecrest_body(remote={"system_name": "eiger", "partition": "normal"}),
