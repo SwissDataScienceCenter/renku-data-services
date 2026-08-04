@@ -33,6 +33,7 @@ resource_pool_payload = [
                     "node_affinities": [],
                     "tolerations": [],
                     "quota_enforced": False,
+                    "kind": "local",
                 }
             ],
             "quota": {"cpu": 100, "memory": 100, "gpu": 0},
@@ -166,6 +167,9 @@ async def test_resource_pool_creation_with_remote_firecrest(
         "api_url": "https://example.org",
         "system_name": "my-system",
     }
+    for cls in payload["classes"]:
+        cls["kind"] = "firecrest"
+        cls["cpu"] = int(cls["cpu"])
 
     _, res = await create_rp(payload, sanic_client)
     assert res.status_code == expected_status_code, res.text
@@ -216,6 +220,8 @@ async def test_resource_pool_creation_with_remote_runai(
         "provider_id": provider_payload["id"],
         "base_url": "https://example.org",
     }
+    for cls in payload["classes"]:
+        cls["kind"] = "runai"
 
     _, res = await create_rp(payload, sanic_client)
     assert res.status_code == expected_status_code, res.text
@@ -338,6 +344,7 @@ async def test_resource_class_filtering(
     matching_class.pop("matching")
     # NOTE: `quota_enforced` is `False` by default
     new_classes[2]["quota_enforced"] = False
+    new_classes[2]["kind"] = "local"
     assert matching_class == new_classes[2]
     # Test without any filtering
     _, res = await sanic_client.get(
@@ -1279,6 +1286,7 @@ resource_pool_payload_2 = {
             "node_affinities": [],
             "tolerations": [],
             "quota_enforced": False,
+            "kind": "local",
         }
     ],
     "quota": {"cpu": 100.0, "memory": 100, "gpu": 0},
@@ -3031,7 +3039,7 @@ async def test_post_resource_pool_with_remote_grants_connected_users(
         "name": "d1-rp",
         "classes": [
             {
-                "cpu": 1.0,
+                "cpu": 1,
                 "memory": 10,
                 "gpu": 0,
                 "name": "class1",
@@ -3040,6 +3048,7 @@ async def test_post_resource_pool_with_remote_grants_connected_users(
                 "default": True,
                 "node_affinities": [],
                 "tolerations": [],
+                "kind": "firecrest",
             }
         ],
         "quota": {"cpu": 100, "memory": 100, "gpu": 0},
@@ -3116,7 +3125,7 @@ async def test_patch_resource_pool_remote_change_swaps_access(
         "name": "d3-rp",
         "classes": [
             {
-                "cpu": 1.0,
+                "cpu": 1,
                 "memory": 10,
                 "gpu": 0,
                 "name": "class1",
@@ -3125,6 +3134,7 @@ async def test_patch_resource_pool_remote_change_swaps_access(
                 "default": True,
                 "node_affinities": [],
                 "tolerations": [],
+                "kind": "firecrest",
             }
         ],
         "quota": {"cpu": 100, "memory": 100, "gpu": 0},

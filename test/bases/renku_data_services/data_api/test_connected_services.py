@@ -665,7 +665,7 @@ async def test_oauth_callback_adds_user_to_rp(
         "name": "hpc-auth-rp",
         "classes": [
             {
-                "cpu": 1.0,
+                "cpu": 1,
                 "memory": 10,
                 "gpu": 0,
                 "name": "class1",
@@ -674,6 +674,7 @@ async def test_oauth_callback_adds_user_to_rp(
                 "default": True,
                 "node_affinities": [],
                 "tolerations": [],
+                "kind": "firecrest",
             }
         ],
         "quota": {"cpu": 100, "memory": 100, "gpu": 0},
@@ -736,7 +737,7 @@ async def test_delete_oauth_connection_removes_rp_access(
         "name": "hpc-revoke-rp",
         "classes": [
             {
-                "cpu": 1.0,
+                "cpu": 1,
                 "memory": 10,
                 "gpu": 0,
                 "name": "class1",
@@ -745,6 +746,7 @@ async def test_delete_oauth_connection_removes_rp_access(
                 "default": True,
                 "node_affinities": [],
                 "tolerations": [],
+                "kind": "firecrest",
             }
         ],
         "quota": {"cpu": 100, "memory": 100, "gpu": 0},
