@@ -96,12 +96,18 @@ class FirecrestClassRemote:
 
     system_name: str | None = None
     partition: str | None = None
+    ignore_resource_class_values: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance into a dictionary."""
-        return {
-            k: v for k, v in {"system_name": self.system_name, "partition": self.partition}.items() if v is not None
+        result: dict[str, Any] = {
+            "ignore_resource_class_values": self.ignore_resource_class_values,
         }
+        if self.system_name is not None:
+            result["system_name"] = self.system_name
+        if self.partition is not None:
+            result["partition"] = self.partition
+        return result
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

@@ -78,6 +78,29 @@ def test_remote_class_configuration_firecrest_has_ignore_flag():
     assert remote.ignore_resource_class_values is True
 
 
+def test_firecrest_class_remote_to_dict_includes_ignore_flag_when_true():
+    from renku_data_services.crc.models import FirecrestClassRemote
+
+    remote = FirecrestClassRemote(
+        system_name="eiger", partition="normal", ignore_resource_class_values=True
+    )
+    assert remote.to_dict() == {
+        "system_name": "eiger",
+        "partition": "normal",
+        "ignore_resource_class_values": True,
+    }
+
+
+def test_firecrest_class_remote_to_dict_includes_ignore_flag_when_false():
+    from renku_data_services.crc.models import FirecrestClassRemote
+
+    remote = FirecrestClassRemote(system_name="eiger")
+    assert remote.to_dict() == {
+        "system_name": "eiger",
+        "ignore_resource_class_values": False,
+    }
+
+
 def test_validate_firecrest_class_remote_override():
     result = validate_resource_class(
         _firecrest_body(remote={"system_name": "eiger", "partition": "normal"}),
