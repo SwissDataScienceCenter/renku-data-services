@@ -17,6 +17,55 @@ from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_cli
 from test.components.renku_data_services.resource_usage.helper import make_resources_request
 from test.utils import KindCluster
 
+
+async def _create_oauth_provider_and_pool(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    *,
+    pool_name: str,
+    class_kind: str,
+    class_remote: dict | None = None,
+    remote: dict | None = None,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Create an OAuth provider and a resource pool with one class."""
+    provider_payload = {
+        "id": "some-provider",
+        "kind": "gitlab",
+        "client_id": "some-client-id",
+        "display_name": "my oauth2 application",
+        "scope": "api",
+        "url": "https://example.org",
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=provider_payload)
+    assert res.status_code == 201, res.text
+
+    payload: dict[str, Any] = {
+        "name": pool_name,
+        "default": False,
+        "public": False,
+        "classes": [
+            {
+                "cpu": 2,
+                "memory": 10,
+                "gpu": 0,
+                "name": f"{pool_name}-class",
+                "max_storage": 100,
+                "default_storage": 1,
+                "default": True,
+                "kind": class_kind,
+            }
+        ],
+    }
+    if class_remote:
+        payload["classes"][0]["remote"] = class_remote
+    if remote:
+        payload["remote"] = remote
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201, res.text
+    return res.json, provider_payload
+
+
 resource_pool_payload = [
     (
         {
@@ -183,6 +232,127 @@ async def test_resource_pool_creation_with_remote_firecrest(
             "api_url": "https://example.org",
             "system_name": "my-system",
         }
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_put_resource_class_without_kind_keeps_firecrest_kind(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """PUT of a FirecREST class without kind should keep the FirecREST kind."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="firecrest-pool",
+        class_kind="firecrest",
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    )
+    rc = rp["classes"][0]
+
+    body = {
+        "name": "updated-class",
+        "default": True,
+        "cpu": 2,
+        "memory": 10,
+        "gpu": 0,
+        "max_storage": 100,
+        "default_storage": 1,
+    }
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/classes/{rc['id']}",
+        headers=admin_headers,
+        json=body,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json["kind"] == "firecrest"
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_pool_to_firecrest_converts_local_classes(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Patching a local pool to FirecREST converts the class kinds."""
+    rp, provider_payload = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="local-pool",
+        class_kind="local",
+    )
+    rc = rp["classes"][0]
+    assert rc["kind"] == "local"
+
+    patch = {
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": provider_payload["id"],
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+        "classes": [{"id": rc["id"], "cpu": 2}],
+    }
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+    assert res.json["classes"][0]["kind"] == "firecrest"
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_pool_from_firecrest_rejects_when_class_has_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Converting a FirecREST pool to local is rejected if a class has remote data."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="firecrest-pool",
+        class_kind="firecrest",
+        class_remote={"system_name": "eiger"},
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    )
+
+    patch = {"remote": {}, "classes": [{"id": rp["classes"][0]["id"], "cpu": 2}]}
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 422, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_pool_from_firecrest_clears_kind_when_class_has_no_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Converting a FirecREST pool to local clears class kind when no remote data is stored."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="firecrest-pool",
+        class_kind="firecrest",
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    )
+
+    patch = {"remote": {}, "classes": [{"id": rp["classes"][0]["id"], "cpu": 2}]}
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+    assert res.json["classes"][0]["kind"] == "local"
 
 
 @pytest.mark.parametrize(
