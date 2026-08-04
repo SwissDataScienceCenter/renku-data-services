@@ -60,7 +60,7 @@ from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectMeta
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
-from renku_data_services.storage.rclone import RCloneDOIMetadata, RCloneValidator
+from renku_data_services.storage.rclone import RCloneDOIMetadata, RCloneValidator, convert_rclone_configuration
 from renku_data_services.utils.core import get_openbis_pat
 
 if TYPE_CHECKING:
@@ -90,7 +90,7 @@ def dump_storage_with_sensitive_fields(
     return body
 
 
-def validate_unsaved_storage_url(
+def _validate_unsaved_storage_url(
     storage: apispec.CloudStorageUrlV2, validator: RCloneValidator
 ) -> models.CloudStorageCore:
     """Validate the unsaved storage when its configuration is specified as a URL."""
@@ -105,15 +105,17 @@ def validate_unsaved_storage_url(
     )
 
 
-def validate_unsaved_storage_generic(
+def _validate_unsaved_storage_generic(
     storage: apispec.CloudStorageCorePost, validator: RCloneValidator
 ) -> models.CloudStorageCore:
     """Validate the unsaved storage when its configuration is specified as a URL."""
     configuration = storage.configuration
-    validator.validate(configuration)
+    pure_rclone_configuration = convert_rclone_configuration(configuration)
+    validator.validate(pure_rclone_configuration)
     storage_type = configuration.get("type")
     if not isinstance(storage_type, str):
         raise errors.ValidationError()
+    configuration = convert_rclone_configuration(configuration)
     return models.CloudStorageCore(
         storage_type=storage_type,
         configuration=configuration,
@@ -123,7 +125,7 @@ def validate_unsaved_storage_generic(
     )
 
 
-async def validate_unsaved_storage_doi(
+async def _validate_unsaved_storage_doi(
     storage: apispec.CloudStorageCorePost, validator: RCloneValidator
 ) -> tuple[models.CloudStorageCore, DOI]:
     """Validate the storage configuration of an unsaved data connector."""
@@ -169,11 +171,11 @@ async def validate_unsaved_data_connector(
     keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
     match body.storage:
         case apispec.CloudStorageCorePost() if body.storage.storage_type != "doi":
-            storage = validate_unsaved_storage_generic(body.storage, validator=validator)
+            storage = _validate_unsaved_storage_generic(body.storage, validator=validator)
         case apispec.CloudStorageCorePost() if body.storage.storage_type == "doi":
-            storage, _ = await validate_unsaved_storage_doi(body.storage, validator=validator)
+            storage, _ = await _validate_unsaved_storage_doi(body.storage, validator=validator)
         case apispec.CloudStorageUrlV2():
-            storage = validate_unsaved_storage_url(body.storage, validator=validator)
+            storage = _validate_unsaved_storage_url(body.storage, validator=validator)
         case _:
             raise errors.ValidationError(message="The data connector provided has an unknown payload format.")
 
@@ -210,7 +212,7 @@ async def prevalidate_unsaved_global_data_connector(
     # TODO: allow admins to create global data connectors, e.g. s3://giab
     if isinstance(body.storage, apispec.CloudStorageUrlV2):
         raise errors.ValidationError(message="Global data connectors cannot be configured via a URL.")
-    storage, doi = await validate_unsaved_storage_doi(body.storage, validator=validator)
+    storage, doi = await _validate_unsaved_storage_doi(body.storage, validator=validator)
     if storage.storage_type not in ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS:
         raise errors.ValidationError(message="Only doi storage type is allowed for global data connectors")
     if not storage.readonly:
