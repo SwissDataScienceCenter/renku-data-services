@@ -43,6 +43,14 @@ class ResourcesProtocol(Protocol):
         ...
 
 
+class RemoteConfigurationKind(StrEnum):
+    """Remote resource pool kinds."""
+
+    firecrest = "firecrest"
+    runai = "runai"
+    local = "local"
+
+
 class ResourcesCompareMixin:
     """A mixin that adds comparison operator support on ResourceClasses and Quotas."""
 
@@ -83,6 +91,20 @@ class NodeAffinity:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class FirecrestClassRemote:
+    """FirecREST-only overrides that can be set per resource class."""
+
+    system_name: str | None = None
+    partition: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert this instance into a dictionary."""
+        return {
+            k: v for k, v in {"system_name": self.system_name, "partition": self.partition}.items() if v is not None
+        }
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedResourceClass(ResourcesCompareMixin):
     """Model for a resource class yet to be saved."""
 
@@ -91,11 +113,13 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     memory: int
     max_storage: int
     gpu: int
+    kind: RemoteConfigurationKind = RemoteConfigurationKind.local
     default: bool = False
     default_storage: int = 1
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
     quota_enforced: bool = False
+    remote: FirecrestClassRemote | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -108,6 +132,7 @@ class ResourceClass(ResourcesCompareMixin):
     max_storage: int
     gpu: int
     id: int
+    kind: RemoteConfigurationKind = RemoteConfigurationKind.local
     default: bool = False
     default_storage: int = 1
     matching: Optional[bool] = None
@@ -117,6 +142,7 @@ class ResourceClass(ResourcesCompareMixin):
     usage_hours_remaining: float | None = None
     usage_hours_total: float | None = None
     quota_enforced: bool = False
+    remote: FirecrestClassRemote | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -133,6 +159,8 @@ class ResourceClassPatch:
     node_affinities: list[NodeAffinity] | None = None
     tolerations: list[str] | None = None
     quota_enforced: bool | None = None
+    kind: RemoteConfigurationKind | None = None
+    remote: FirecrestClassRemote | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -398,13 +426,6 @@ class ResourcePoolPatch:
     cluster_id: ClusterId | ResetType | None = None
     platform: RuntimePlatform | None = None
     cpu_limit_factor: float | None | ResetType = None
-
-
-class RemoteConfigurationKind(StrEnum):
-    """Remote resource pool kinds."""
-
-    firecrest = "firecrest"
-    runai = "runai"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
