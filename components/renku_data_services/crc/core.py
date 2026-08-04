@@ -154,7 +154,23 @@ def validate_resource_class_patch_or_put(
             partition=body.remote.partition,
             ignore_resource_class_values=body.remote.ignore_resource_class_values or False,
         )
-    kwargs = dict(
+    if rc_id:
+        return models.ResourceClassPatchWithId(
+            id=rc_id,
+            name=body.name,
+            cpu=body.cpu,
+            memory=body.memory,
+            max_storage=body.max_storage,
+            gpu=body.gpu,
+            default=body.default,
+            default_storage=body.default_storage,
+            node_affinities=node_affinities,
+            tolerations=tolerations,
+            quota_enforced=body.quota_enforced,
+            kind=kind,
+            remote=remote,
+        )
+    return models.ResourceClassPatch(
         name=body.name,
         cpu=body.cpu,
         memory=body.memory,
@@ -168,9 +184,6 @@ def validate_resource_class_patch_or_put(
         kind=kind,
         remote=remote,
     )
-    if rc_id:
-        return models.ResourceClassPatchWithId(id=rc_id, **kwargs)
-    return models.ResourceClassPatch(**kwargs)
 
 
 def validate_resource_class_update(

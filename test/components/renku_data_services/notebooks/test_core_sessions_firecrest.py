@@ -6,10 +6,7 @@ from renku_data_services.crc.models import (
     RemoteConfigurationKind,
     ResourceClass,
 )
-from renku_data_services.notebooks.core_sessions import (
-    _firecrest_resource_env_items,
-    get_remote_env,
-)
+from renku_data_services.notebooks.core_sessions import _firecrest_resource_env_items
 
 
 def test_firecrest_resource_env_items_omit_resource_values_by_default():
@@ -103,5 +100,3 @@ def test_firecrest_resource_env_items_emits_ignore_flag_when_set():
     assert by_name["RSC_FIRECREST_SYSTEM_NAME"] == "pool-system"
     assert by_name["RSC_FIRECREST_PARTITION"] == "pool-partition"
     assert by_name["RSC_FIRECREST_IGNORE_RESOURCE_CLASS_VALUES"] == "true"
-
-
