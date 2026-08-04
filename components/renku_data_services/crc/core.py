@@ -76,6 +76,7 @@ def validate_resource_class(
         remote = models.FirecrestClassRemote(
             system_name=body.remote.system_name,
             partition=body.remote.partition,
+            ignore_resource_class_values=body.remote.ignore_resource_class_values or False,
         )
 
     if kind == models.RemoteConfigurationKind.firecrest:
@@ -165,6 +166,7 @@ def validate_resource_class_patch_or_put(
         remote = models.FirecrestClassRemote(
             system_name=body.remote.system_name,
             partition=body.remote.partition,
+            ignore_resource_class_values=body.remote.ignore_resource_class_values or False,
         )
     if rc_id:
         return models.ResourceClassPatchWithId(

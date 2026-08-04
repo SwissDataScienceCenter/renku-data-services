@@ -101,6 +101,15 @@ def test_firecrest_class_remote_to_dict_includes_ignore_flag_when_false():
     }
 
 
+def test_validate_firecrest_class_preserves_ignore_resource_class_values():
+    result = validate_resource_class(
+        _firecrest_body(remote={"ignore_resource_class_values": True}),
+        pool_kind=models.RemoteConfigurationKind.firecrest,
+    )
+    assert result.remote is not None
+    assert result.remote.ignore_resource_class_values is True
+
+
 def test_validate_firecrest_class_remote_override():
     result = validate_resource_class(
         _firecrest_body(remote={"system_name": "eiger", "partition": "normal"}),
