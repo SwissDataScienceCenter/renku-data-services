@@ -827,8 +827,10 @@ def _firecrest_resource_env_items(
 ) -> list[SessionEnvItem]:
     """Build FirecREST-specific env vars for a remote session.
 
-    Resource class CPU, memory and GPU values are omitted when the class has
-    ``ignore_resource_class_values`` set, letting the HPC grid pick resources.
+    Resource class CPU, memory and GPU values are passed to Amalthea through
+    the CRD, so they are never emitted as env vars. When the class has
+    ``ignore_resource_class_values`` set, an env var tells Amalthea to ignore
+    the CRD resources and let the HPC grid pick resources.
     """
     system_name, partition = _effective_firecrest_remote(resource_class, pool_remote)
     env: list[SessionEnvItem] = [
@@ -836,10 +838,8 @@ def _firecrest_resource_env_items(
     ]
     if partition:
         env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=partition))
-    if not (resource_class.remote is not None and resource_class.remote.ignore_resource_class_values):
-        env.append(SessionEnvItem(name="RSC_FIRECREST_CPUS_PER_TASK", value=str(int(round(resource_class.cpu)))))
-        env.append(SessionEnvItem(name="RSC_FIRECREST_MEM", value=f"{resource_class.memory}G"))
-        env.append(SessionEnvItem(name="RSC_FIRECREST_GPUS", value=str(resource_class.gpu)))
+    if resource_class.remote is not None and resource_class.remote.ignore_resource_class_values:
+        env.append(SessionEnvItem(name="RSC_FIRECREST_IGNORE_RESOURCE_CLASS_VALUES", value="true"))
     return env
 
 
