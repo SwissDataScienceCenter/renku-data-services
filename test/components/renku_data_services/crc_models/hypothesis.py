@@ -221,7 +221,9 @@ def apispec_resource_class_mismatch_kind_strat(draw):
     body_kind = draw(st.sampled_from(list(apispec.RemoteKind)))
     body = draw(apispec_resource_class_strat(kind=body_kind))
     # Pick a pool kind that is guaranteed to differ from the body kind.
-    pool_kind_options = [k for k in models.RemoteConfigurationKind if models.RemoteConfigurationKind(body_kind.value) != k]
+    pool_kind_options = [
+        k for k in models.RemoteConfigurationKind if models.RemoteConfigurationKind(body_kind.value) != k
+    ]
     pool_kind = draw(st.sampled_from(pool_kind_options))
     return body, pool_kind
 
