@@ -81,9 +81,7 @@ def test_remote_class_configuration_firecrest_has_ignore_flag():
 def test_firecrest_class_remote_to_dict_includes_ignore_flag_when_true():
     from renku_data_services.crc.models import FirecrestClassRemote
 
-    remote = FirecrestClassRemote(
-        system_name="eiger", partition="normal", ignore_resource_class_values=True
-    )
+    remote = FirecrestClassRemote(system_name="eiger", partition="normal", ignore_resource_class_values=True)
     assert remote.to_dict() == {
         "system_name": "eiger",
         "partition": "normal",
@@ -99,6 +97,29 @@ def test_firecrest_class_remote_to_dict_includes_ignore_flag_when_false():
         "system_name": "eiger",
         "ignore_resource_class_values": False,
     }
+
+
+def test_resource_class_orm_dump_deserializes_ignore_resource_class_values():
+    from renku_data_services.crc.orm import ResourceClassORM
+
+    orm = ResourceClassORM.from_unsaved_model(
+        new_resource_class=models.UnsavedResourceClass(
+            name="fc",
+            cpu=2,
+            memory=8,
+            max_storage=100,
+            gpu=0,
+            kind=models.RemoteConfigurationKind.firecrest,
+            remote=models.FirecrestClassRemote(
+                system_name="eiger",
+                ignore_resource_class_values=True,
+            ),
+        ),
+        resource_pool_id=None,
+    )
+    dumped = orm.dump()
+    assert dumped.remote is not None
+    assert dumped.remote.ignore_resource_class_values is True
 
 
 def test_validate_firecrest_class_preserves_ignore_resource_class_values():

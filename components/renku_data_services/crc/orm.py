@@ -169,6 +169,7 @@ class ResourceClassORM(BaseORM):
             remote = models.FirecrestClassRemote(
                 system_name=self.remote_json.get("system_name") or None,
                 partition=self.remote_json.get("partition") or None,
+                ignore_resource_class_values=self.remote_json.get("ignore_resource_class_values") or False,
             )
         kind = models.RemoteConfigurationKind.local
         if self.resource_pool and self.resource_pool.remote_json is not None:
