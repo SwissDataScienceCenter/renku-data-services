@@ -550,7 +550,6 @@ class ResourcePoolRepository(_Base):
             resource_class = schemas.ResourceClassORM.from_unsaved_model(
                 new_resource_class=new_resource_class, resource_pool_id=resource_pool_id
             )
-            print(f"resource_class = {resource_class.resource_pool_id}")
 
             if resource_pool_id is not None:
                 stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
