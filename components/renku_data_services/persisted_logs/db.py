@@ -266,7 +266,7 @@ class ImageBuildPersistedLogsReadRepository:
         build_orm = res.one_or_none()
         authorized = (
             await self._check_environment(
-                session=session, user=user, environment=build_orm.environment, scope=Scope.READ
+                session=session, user=user, environment=build_orm.environment, scope=Scope.WRITE
             )
             if build_orm is not None
             else False
