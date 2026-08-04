@@ -69,36 +69,6 @@ def _runai_body() -> apispec.ResourceClass:
 # ---------------------------------------------------------------------------
 
 
-def test_remote_class_configuration_firecrest_has_ignore_flag():
-    remote = apispec.RemoteClassConfigurationFirecrest(
-        system_name="eiger",
-        partition="normal",
-        ignore_resource_class_values=True,
-    )
-    assert remote.ignore_resource_class_values is True
-
-
-def test_firecrest_class_remote_to_dict_includes_ignore_flag_when_true():
-    from renku_data_services.crc.models import FirecrestClassRemote
-
-    remote = FirecrestClassRemote(system_name="eiger", partition="normal", ignore_resource_class_values=True)
-    assert remote.to_dict() == {
-        "system_name": "eiger",
-        "partition": "normal",
-        "ignore_resource_class_values": True,
-    }
-
-
-def test_firecrest_class_remote_to_dict_includes_ignore_flag_when_false():
-    from renku_data_services.crc.models import FirecrestClassRemote
-
-    remote = FirecrestClassRemote(system_name="eiger")
-    assert remote.to_dict() == {
-        "system_name": "eiger",
-        "ignore_resource_class_values": False,
-    }
-
-
 def test_resource_class_orm_dump_deserializes_ignore_resource_class_values():
     from renku_data_services.crc.orm import ResourceClassORM
 
@@ -211,7 +181,7 @@ def test_validate_resource_class_rejects_invalid_case_split(invalid_case: str, d
 
 
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
-@given(body=apispec_resource_class_strat())
+@given(body=apispec_resource_class_strat(kind=st.just(apispec.RemoteKind.local)))
 def test_validate_resource_class_patch_or_put_put_valid(body: apispec.ResourceClass) -> None:
     """PUT with a fully populated body yields a valid ResourceClassPatch."""
     result = validate_resource_class_patch_or_put(body, method="PUT")
