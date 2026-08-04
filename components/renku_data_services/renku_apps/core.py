@@ -34,6 +34,16 @@ def _slug_label(slug: str) -> str:
     return label[:_SLUG_MAX_LENGTH].rstrip("-")
 
 
+def app_url(base_url: str | None, default_url: str) -> str | None:
+    """Join the URL Knative assigned to the service with the environment's default URL."""
+    if base_url is None:
+        return None
+    path = default_url.strip()
+    if not path or path == "/":
+        return base_url
+    return f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+
+
 def build_app(launcher: SessionLauncher, runtime: AppRuntimeState) -> App:
     """Compose an App from its launcher and the runtime state observed in the cluster."""
     return App(
@@ -41,7 +51,7 @@ def build_app(launcher: SessionLauncher, runtime: AppRuntimeState) -> App:
         launcher_id=launcher.id,
         project_id=launcher.project_id,
         status=derive_app_status(runtime),
-        url=runtime.url,
+        url=app_url(runtime.url, launcher.environment.default_url),
         started=runtime.started_at,
         image=runtime.image,
     )

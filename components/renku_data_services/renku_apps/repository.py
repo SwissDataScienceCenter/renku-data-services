@@ -17,7 +17,7 @@ from renku_data_services.renku_apps.data_connectors import select_mountable_conn
 from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
 from renku_data_services.renku_apps.models import App
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.models import SessionLauncher, app_launcher_project_visibility_is_valid
+from renku_data_services.session.models import app_launcher_project_visibility_is_valid
 from renku_data_services.storage.rclone import RCloneValidator
 
 logger = logging.getLogger(__name__)
@@ -115,12 +115,13 @@ class RenkuAppsRepository:
         logger.info(f"App with name {app_name} has been deleted.")
         return None
 
-    async def delete_app_for_launcher(self, user: base_models.APIUser, launcher: SessionLauncher) -> None:
+    async def delete_app_for_launcher_id(self, launcher_id: ULID) -> None:
         """Delete the app deployment backing the given launcher, if one exists."""
-        runtime_state = await self.k8s_client.get_app_deployment_for_launcher(launcher.id)
+        runtime_state = await self.k8s_client.get_app_deployment_for_launcher(launcher_id)
         if runtime_state is None:
             return None
-        await self.delete_app(user, runtime_state.name)
+        await self.k8s_client.delete_app_deployment(runtime_state.name)
+        logger.info(f"App with name {runtime_state.name} was deleted along with its launcher {launcher_id}.")
         return None
 
     async def delete_apps_for_project(self, project_id: ULID) -> None:

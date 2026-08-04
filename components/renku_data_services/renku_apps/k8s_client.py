@@ -11,6 +11,7 @@ from typing import Any
 
 from ulid import ULID
 
+from renku_data_services.app_config import logging
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.data_connectors.models import DataConnectorWithSecrets
@@ -30,19 +31,33 @@ from renku_data_services.renku_apps.crs import KnativeService
 from renku_data_services.renku_apps.models import AppRuntimeState
 from renku_data_services.session.models import SessionLauncher
 
+logger = logging.getLogger(__name__)
+
 KNATIVE_SERVICE_GVK = GVK(kind="Service", group="serving.knative.dev", version="v1")
 _SECRET_GVK = GVK(kind="Secret", version="v1")
 _PVC_GVK = GVK(kind="PersistentVolumeClaim", version="v1")
 
 _DEFAULT_WORK_DIR = PurePosixPath("/home/jovyan")
 
-_MAX_SCALE_ANNOTATION = "autoscaling.knative.dev/max-scale"
-_MAX_SCALE_RUNNING = "3"
+# How long the last pod of an idle app is kept alive after the autoscaler has
+# decided to scale it to zero.
+#
+# This is what decides whether a visitor pays a cold start. A scaled-to-zero app
+# still reports Ready, so the UI cannot route around the wait — it can only sit
+# in front of it (see the app lobby in renku-ui). Keeping the pod for a while
+# after the last request means a second visitor, or the same one returning from
+# a tab they left open, skips the wait entirely.
+#
+# Deliberately this annotation rather than `scale-down-delay`: apps run with
+# max-scale 3, and scale-down-delay would hold surplus replicas of a briefly
+# busy app for the same window. The cost here is bounded to a single pod, and
+# only for apps that were actually visited.
+_SCALE_TO_ZERO_POD_RETENTION = "15m"
 
 _APP_AUTOSCALING_ANNOTATIONS = {
     "autoscaling.knative.dev/min-scale": "0",
-    _MAX_SCALE_ANNOTATION: _MAX_SCALE_RUNNING,
-    "autoscaling.knative.dev/scale-to-zero-pod-retention-period": "2m",
+    "autoscaling.knative.dev/max-scale": "3",
+    "autoscaling.knative.dev/scale-to-zero-pod-retention-period": _SCALE_TO_ZERO_POD_RETENTION,
 }
 
 
@@ -166,9 +181,17 @@ class RenkuAppsK8sClient:
         )
 
         owner_reference = _service_owner_reference(app_name, str(created.manifest.metadata.uid))
-        for resource in dc_resources:
-            await self._create_owned(resource.secret, _SECRET_GVK, resource.name, cluster, owner_reference)
-            await self._create_owned(resource.pvc, _PVC_GVK, resource.name, cluster, owner_reference)
+        try:
+            for resource in dc_resources:
+                await self._create_owned(resource.secret, _SECRET_GVK, resource.name, cluster, owner_reference)
+                await self._create_owned(resource.pvc, _PVC_GVK, resource.name, cluster, owner_reference)
+        except Exception:
+            logger.exception("Rolling back app '%s': its data connector resources could not be created", app_name)
+            try:
+                await self.delete_app_deployment(app_name)
+            except Exception:
+                logger.exception("Could not roll back app '%s'; it may be left running without its data", app_name)
+            raise
 
         return _extract_runtime_state(KnativeService.model_validate(created.manifest))
 
@@ -325,8 +348,11 @@ def _build_app_deployment_manifest(
         "image": environment.container_image,
         "ports": [{"containerPort": environment.port}],
         "securityContext": {
+            "allowPrivilegeEscalation": False,
             "runAsUser": environment.uid,
             "runAsGroup": environment.gid,
+            "runAsNonRoot": True,
+            "capabilities": {"drop": ["ALL"]},
         },
     }
     if resource_class is not None:

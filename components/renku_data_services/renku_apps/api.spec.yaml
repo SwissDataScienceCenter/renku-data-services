@@ -108,7 +108,7 @@ components:
       # generate_app_name() truncates to.
       maxLength: 50
       pattern: "^[a-z]([-a-z0-9]*[a-z0-9])?$"
-      example: d185e68d-d43-renku-2-b9ac279a4e8a85ac28d08
+      example: my-data-dashboard-0h8kq2zt
 
     AppResponse:
       type: object

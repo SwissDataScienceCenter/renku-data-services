@@ -76,6 +76,9 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
+from renku_data_services.storage import models as storage_models
+from renku_data_services.storage.db import StorageRepository
+from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users import models as user_preferences_models
 from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -367,14 +370,25 @@ class TestDependencyManager(DependencyManager):
         resource_requests_repo = ResourceRequestsRepo(session_maker=config.db.async_session_maker)
         resource_usage_service = ResourceUsageService(resource_requests_repo)
 
-        apps_k8s_client = RenkuAppsK8sClient(client=client, cluster_repo=cluster_repo)
+        apps_k8s_client = RenkuAppsK8sClient(
+            client=client,
+            cluster_repo=cluster_repo,
+            storage_class=config.nb_config.cloud_storage.storage_class,
+            default_affinity=config.nb_config.sessions.affinity_model,
+            default_tolerations=config.nb_config.sessions.tolerations_model,
+        )
+        validator = RCloneValidator()
         apps_repo = RenkuAppsRepository(
             authz=authz,
             session_repo=session_repo,
             rp_repo=rp_repo,
             project_repo=project_repo,
             k8s_client=apps_k8s_client,
+            dc_secret_repo=data_connector_secret_repo,
+            validator=validator,
         )
+        project_repo.apps_cleanup = apps_repo
+        session_repo.apps_cleanup = apps_repo
         return cls(
             config=config,
             k8s_client=client,

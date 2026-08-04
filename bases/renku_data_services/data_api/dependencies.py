@@ -279,19 +279,16 @@ class DependencyManager:
 
         k8s_db_cache = K8sDbCache(config.db.async_session_maker)
         default_kubeconfig = KubeConfigEnv()
+        kinds_to_cache = [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK]
+        if config.apps.enabled:
+            kinds_to_cache.append(KNATIVE_SERVICE_GVK)
         client = K8sClusterClientsPool(
             lambda: get_clusters(
                 kube_conf_root_dir=config.k8s_config_root,
                 default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_repo,
                 cache=k8s_db_cache,
-                kinds_to_cache=[
-                    AMALTHEA_SESSION_GVK,
-                    JUPYTER_SESSION_GVK,
-                    BUILD_RUN_GVK,
-                    TASK_RUN_GVK,
-                    KNATIVE_SERVICE_GVK,
-                ],
+                kinds_to_cache=kinds_to_cache,
             ),
         )
 
@@ -353,13 +350,7 @@ class DependencyManager:
                             default_kubeconfig=default_kubeconfig,
                             cluster_repo=cluster_repo,
                             cache=k8s_db_cache,
-                            kinds_to_cache=[
-                                AMALTHEA_SESSION_GVK,
-                                JUPYTER_SESSION_GVK,
-                                BUILD_RUN_GVK,
-                                TASK_RUN_GVK,
-                                KNATIVE_SERVICE_GVK,
-                            ],
+                            kinds_to_cache=kinds_to_cache,
                         ),
                     ),
                     namespace=config.k8s_namespace,
@@ -454,10 +445,10 @@ class DependencyManager:
             oauth_client_factory=oauth_http_client_factory,
             internal_token_mint=internal_token_mint,
         )
-        validator = RCloneValidator()
         apps_k8s_client: RenkuAppsK8sClient | None = None
         apps_repo: RenkuAppsRepository | None = None
         if config.apps.enabled:
+            validator = RCloneValidator()
             apps_k8s_client = RenkuAppsK8sClient(
                 client=client,
                 cluster_repo=cluster_repo,
@@ -474,6 +465,8 @@ class DependencyManager:
                 dc_secret_repo=data_connector_secret_repo,
                 validator=validator,
             )
+            project_repo.apps_cleanup = apps_repo
+            session_repo.apps_cleanup = apps_repo
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
             builds_config=config.builds,

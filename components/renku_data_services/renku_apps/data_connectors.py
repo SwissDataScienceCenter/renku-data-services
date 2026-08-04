@@ -1,27 +1,9 @@
-"""Launch-time selection of the data connectors an app may mount.
+"""Fail-closed filter for connectors a public, anonymous app may mount.
 
-Apps are publicly and anonymously reachable and run as ``DUMMY_RENKU_APP_USER_ID``
-rather than a real user. The set of data connectors an app mounts is therefore a
-**security boundary**: mounting a connector that carries a user's decrypted
-credentials would expose that user's data to anonymous visitors. This module
-defines the fail-closed filter that decides which of a project's linked connectors
-are safe to expose through an app.
-
-A connector is mounted iff **all** of:
-
-1. it is public (owner intent);
-2. it needs no static credentials (the UI's "Credentials" box -- ``get_private_fields``);
-3. it needs no OAuth integration (the UI's "Integration" box -- ``_OAUTH2_INTEGRATION_STORAGE_TYPES``).
-
-Conditions 2 and 3 are the two halves of "requires nothing from a user"; together
-they are what actually guarantee the underlying data is anonymously reachable.
-Condition 3 is load-bearing: an OAuth connector set up via connect-account has an
-*empty* set of static credential fields, so without it a user's private Google
-Drive would pass condition 2 and be mounted into an anonymous public app.
-
-Any error while evaluating the predicate excludes the connector -- fail closed.
-
-See ``docs/adr/0001-mount-data-connectors-into-apps.md``.
+A connector is mounted iff it is public, needs no static credentials, and needs no
+OAuth integration; any error evaluating that excludes it. Both credential checks
+matter: OAuth connectors have no static fields, so without the OAuth check a user's
+private Drive would leak into an anonymous app.
 """
 
 from ulid import ULID
