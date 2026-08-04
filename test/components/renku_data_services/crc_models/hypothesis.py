@@ -146,25 +146,6 @@ a_cpu_float = st.floats(min_value=0.01, max_value=10.0, allow_nan=False, allow_i
 a_cpu_int = st.integers(min_value=1, max_value=10)
 
 
-# Map between apispec.RemoteKind and models.RemoteConfigurationKind
-_REMOTE_KIND_MAP = {
-    apispec.RemoteKind.local: models.RemoteConfigurationKind.local,
-    apispec.RemoteKind.firecrest: models.RemoteConfigurationKind.firecrest,
-    apispec.RemoteKind.runai: models.RemoteConfigurationKind.runai,
-}
-
-
-def _to_apispec_kind(kind: models.RemoteConfigurationKind) -> apispec.RemoteKind:
-    for apispec_kind, model_kind in _REMOTE_KIND_MAP.items():
-        if model_kind == kind:
-            return apispec_kind
-    raise ValueError(f"Unknown model kind: {kind}")
-
-
-def _to_model_kind(kind: apispec.RemoteKind) -> models.RemoteConfigurationKind:
-    return _REMOTE_KIND_MAP[kind]
-
-
 @st.composite
 def apispec_node_affinity_strat(draw):
     """Generate a valid apispec.NodeAffinity."""
@@ -240,7 +221,7 @@ def apispec_resource_class_mismatch_kind_strat(draw):
     body_kind = draw(st.sampled_from(list(apispec.RemoteKind)))
     body = draw(apispec_resource_class_strat(kind=body_kind))
     # Pick a pool kind that is guaranteed to differ from the body kind.
-    pool_kind_options = [k for k in models.RemoteConfigurationKind if _to_model_kind(body_kind) != k]
+    pool_kind_options = [k for k in models.RemoteConfigurationKind if models.RemoteConfigurationKind(body_kind.value) != k]
     pool_kind = draw(st.sampled_from(pool_kind_options))
     return body, pool_kind
 
@@ -300,7 +281,7 @@ def apispec_resource_class_patch_strat(
     include_remote = draw(a_bool)
     if include_remote:
         # remote is only valid for FirecREST classes
-        remote_kind = _to_apispec_kind(existing_kind) if existing_kind is not None else None
+        remote_kind = apispec.RemoteKind(existing_kind.value) if existing_kind is not None else None
         if remote_kind is None or remote_kind == apispec.RemoteKind.firecrest:
             remote = draw(apispec_remote_class_configuration_firecrest_strat())
 
