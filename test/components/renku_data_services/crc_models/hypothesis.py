@@ -397,10 +397,13 @@ def resource_class_patch_update_strat(
     """
     name = draw(a_long_name) if invalid_name else draw(st.one_of(st.none(), a_name))
 
+    max_storage = draw(st.one_of(st.none(), st.integers(min_value=existing.default_storage, max_value=2000)))
+    effective_max = max_storage if max_storage is not None else existing.max_storage
+
     if invalid_default_storage:
-        default_storage = existing.max_storage + draw(st.integers(min_value=1, max_value=100))
+        default_storage = effective_max + draw(st.integers(min_value=1, max_value=100))
     else:
-        default_storage = draw(st.one_of(st.none(), st.integers(min_value=1, max_value=existing.max_storage)))
+        default_storage = draw(st.one_of(st.none(), st.integers(min_value=1, max_value=effective_max)))
 
     if invalid_kind:
         kind_options = [k for k in models.RemoteConfigurationKind if k != existing.kind]
@@ -419,7 +422,7 @@ def resource_class_patch_update_strat(
         cpu=draw(st.one_of(st.none(), a_cpu_float)),
         memory=draw(st.one_of(st.none(), st.integers(min_value=1, max_value=128))),
         gpu=draw(st.one_of(st.none(), st.integers(min_value=0, max_value=8))),
-        max_storage=draw(st.one_of(st.none(), st.integers(min_value=max(default_storage or 1, 1), max_value=2000))),
+        max_storage=max_storage,
         default_storage=default_storage,
         quota_enforced=draw(st.one_of(st.none(), a_bool)),
         kind=kind,
