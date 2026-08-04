@@ -49,7 +49,7 @@ def validate_resource_class(
     if body.default_storage > body.max_storage:
         raise errors.ValidationError(message="The default storage cannot be larger than the max allowable storage.")
     expected_kind = pool_kind if pool_kind is not None else models.RemoteConfigurationKind.local
-    if body.kind != expected_kind:
+    if body.kind != expected_kind.value:
         raise errors.ValidationError(message="The pool kind and the resource class kind do not match")
     # We need to sort node affinities and tolerations to make '__eq__' reliable
     node_affinities = sorted(
