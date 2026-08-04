@@ -1,7 +1,7 @@
 """resource_class_remote_json
 
 Revision ID: 2338deb8c428
-Revises: 0a6cee40fe0d
+Revises: 36435401b2e7
 Create Date: 2026-07-29 13:19:40.805177
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "2338deb8c428"
-down_revision = "0a6cee40fe0d"
+down_revision = "36435401b2e7"
 branch_labels = None
 depends_on = None
 
