@@ -126,6 +126,10 @@ def validate_resource_class_patch_or_put(
 
     if kind_input is not None and existing_kind is not None and kind_input != existing_kind:
         raise errors.ValidationError(message="The resource class kind cannot be changed.")
+    if kind_input is not None and existing_kind is None and kind_input != models.RemoteConfigurationKind.local:
+        raise errors.ValidationError(
+            message="The resource class kind cannot be inferred; only 'local' is allowed when existing kind is unknown."
+        )
     kind = kind_input or existing_kind or (models.RemoteConfigurationKind.local if method == "PUT" else None)
 
     if body.name is not None and len(body.name) > 40:
