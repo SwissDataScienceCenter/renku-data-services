@@ -827,6 +827,7 @@ def _firecrest_resource_env_items(
 
 
 def get_remote_env(
+    resource_class: ResourceClass,
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
@@ -837,6 +838,7 @@ def get_remote_env(
         env.append(SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url))
     else:
         env.append(SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url))
+        env.extend(_firecrest_resource_env_items(resource_class, remote))
     return env
 
 
@@ -1135,12 +1137,7 @@ async def start_session(
         )
     if session_location == SessionLocation.remote:
         assert resource_pool.remote is not None
-        if resource_class.kind == RemoteConfigurationKind.firecrest:
-            assert isinstance(resource_pool.remote, RemoteConfigurationFirecrest)
-            env.extend(get_remote_env(remote=resource_pool.remote))
-            env.extend(_firecrest_resource_env_items(resource_class, resource_pool.remote))
-        else:
-            env.extend(get_remote_env(remote=resource_pool.remote))
+        env.extend(get_remote_env(resource_class, resource_pool.remote))
     launcher_env_variables = get_launcher_env_variables(launcher, launch_request)
     env.extend(launcher_env_variables)
 
