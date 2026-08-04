@@ -107,13 +107,7 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPut
         ) -> HTTPResponse:
-            existing_rps = await self.rp_repo.get_resource_pools(api_user=user, id=resource_pool_id)
-            if len(existing_rps) < 1:
-                raise errors.MissingResourceError(
-                    message=f"The resource pool with id {resource_pool_id} cannot be found."
-                )
-            existing_pool_kind = existing_rps[0].remote.kind if existing_rps[0].remote else None
-            put = validate_resource_pool_put_or_patch(body=body, method="PUT", existing_pool_kind=existing_pool_kind)
+            put = validate_resource_pool_put_or_patch(body=body, method="PUT")
             rp = await self.rp_repo.update_resource_pool(api_user=user, resource_pool_id=resource_pool_id, update=put)
             return validated_json(apispec.ResourcePoolWithId, rp)
 
@@ -129,15 +123,7 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPatch
         ) -> HTTPResponse:
-            existing_rps = await self.rp_repo.get_resource_pools(api_user=user, id=resource_pool_id)
-            if len(existing_rps) < 1:
-                raise errors.MissingResourceError(
-                    message=f"The resource pool with id {resource_pool_id} cannot be found."
-                )
-            existing_pool_kind = existing_rps[0].remote.kind if existing_rps[0].remote else None
-            patch = validate_resource_pool_put_or_patch(
-                body=body, method="PATCH", existing_pool_kind=existing_pool_kind
-            )
+            patch = validate_resource_pool_put_or_patch(body=body, method="PATCH")
             rp = await self.rp_repo.update_resource_pool(api_user=user, resource_pool_id=resource_pool_id, update=patch)
             return validated_json(apispec.ResourcePoolWithId, rp)
 
@@ -526,12 +512,7 @@ class ClassesBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, body: apispec.ResourceClass, resource_pool_id: int, class_id: int
         ) -> HTTPResponse:
-            existing = await self.repo.get_classes(api_user=user, resource_pool_id=resource_pool_id, id=class_id)
-            if len(existing) < 1:
-                raise errors.MissingResourceError(
-                    message=f"The class with id {class_id} or resource pool with id {resource_pool_id} cannot be found."
-                )
-            put = validate_resource_class_patch_or_put(body=body, method="PUT", existing_kind=existing[0].kind)
+            put = validate_resource_class_patch_or_put(body=body, method="PUT")
             rc = await self.repo.update_resource_class(
                 api_user=user,
                 resource_pool_id=resource_pool_id,
@@ -556,12 +537,7 @@ class ClassesBP(CustomBlueprint):
             resource_pool_id: int,
             class_id: int,
         ) -> HTTPResponse:
-            existing = await self.repo.get_classes(api_user=user, resource_pool_id=resource_pool_id, id=class_id)
-            if len(existing) < 1:
-                raise errors.MissingResourceError(
-                    message=f"The class with id {class_id} or resource pool with id {resource_pool_id} cannot be found."
-                )
-            patch = validate_resource_class_patch_or_put(body=body, method="PATCH", existing_kind=existing[0].kind)
+            patch = validate_resource_class_patch_or_put(body=body, method="PATCH")
             rc = await self.repo.update_resource_class(
                 api_user=user,
                 resource_pool_id=resource_pool_id,
