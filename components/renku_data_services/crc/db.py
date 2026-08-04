@@ -561,6 +561,13 @@ class ResourcePoolRepository(_Base):
                         message=f"Resource pool with id {resource_pool_id} does not exist."
                     )
                 resource_class.resource_pool = rp
+                expected_kind = models.RemoteConfigurationKind.local
+                if rp.remote_json is not None:
+                    expected_kind = models.RemoteConfigurationKind(
+                        rp.remote_json.get("kind", models.RemoteConfigurationKind.local)
+                    )
+                if expected_kind is not None and new_resource_class.kind != expected_kind:
+                    raise errors.ValidationError(message="Class kind does not match resource pool remote kind.")
                 if resource_class.default and len(rp.classes) > 0 and any([icls.default for icls in rp.classes]):
                     raise errors.ValidationError(
                         message="There can only be one default resource class per resource pool."
@@ -852,6 +859,8 @@ class ResourcePoolRepository(_Base):
                 cls.default_storage = update.default_storage
             if update.quota_enforced is not None:
                 cls.quota_enforced = update.quota_enforced
+            if update.remote is not None:
+                cls.remote_json = update.remote.to_dict()
 
             if update.node_affinities is not None:
                 existing_affinities: dict[str, schemas.NodeAffinityORM] = {i.key: i for i in cls.node_affinities}
