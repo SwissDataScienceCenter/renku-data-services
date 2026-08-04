@@ -60,12 +60,7 @@ def validate_resource_class(
         key=lambda x: (x.key, x.required_during_scheduling),
     )
     tolerations = sorted(t.root for t in body.tolerations or [])
-    kind_input = body.kind if body.kind is not None else apispec.RemoteKind.local
-    kind = models.RemoteConfigurationKind(kind_input.value)
-    if kind != expected_kind and expected_kind is not None:
-        raise errors.ValidationError(
-            message=f"Resource class kind must match the resource pool remote kind: {expected_kind.value}"
-        )
+    kind = models.RemoteConfigurationKind(body.kind)
 
     if kind != models.RemoteConfigurationKind.firecrest and body.remote is not None:
         raise errors.ValidationError(
@@ -79,10 +74,8 @@ def validate_resource_class(
             ignore_resource_class_values=body.remote.ignore_resource_class_values or False,
         )
 
-    if kind == models.RemoteConfigurationKind.firecrest:
-        cpu_int = int(body.cpu)
-        if cpu_int != body.cpu:
-            raise errors.ValidationError(message="FirecREST resource classes require an integer value for cpu.")
+    if kind == models.RemoteConfigurationKind.firecrest and not body.cpu.is_integer():
+        raise errors.ValidationError(message="FirecREST resource classes require an integer value for cpu.")
 
     return models.UnsavedResourceClass(
         name=body.name,
@@ -131,16 +124,9 @@ def validate_resource_class_patch_or_put(
     rc_id = body.id if isinstance(body, (apispec.ResourceClassPatchWithId, apispec.ResourceClassWithId)) else None
     kind_input = models.RemoteConfigurationKind(body.kind) if body.kind is not None else None
 
-    if method == "PATCH":
-        # PATCH bodies no longer include kind; an explicit kind is rejected as a kind change.
-        if kind_input is not None and existing_kind is not None and kind_input != existing_kind:
-            raise errors.ValidationError(message="The resource class kind cannot be changed.")
-        kind = kind_input or existing_kind
-    else:
-        # For PUT, the kind may be provided; it must match the existing kind if one is known.
-        if kind_input is not None and existing_kind is not None and kind_input != existing_kind:
-            raise errors.ValidationError(message="The resource class kind cannot be changed.")
-        kind = kind_input or existing_kind or models.RemoteConfigurationKind.local
+    if kind_input is not None and existing_kind is not None and kind_input != existing_kind:
+        raise errors.ValidationError(message="The resource class kind cannot be changed.")
+    kind = kind_input or existing_kind or (models.RemoteConfigurationKind.local if method == "PUT" else None)
 
     if body.name is not None and len(body.name) > 40:
         raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
@@ -168,23 +154,7 @@ def validate_resource_class_patch_or_put(
             partition=body.remote.partition,
             ignore_resource_class_values=body.remote.ignore_resource_class_values or False,
         )
-    if rc_id:
-        return models.ResourceClassPatchWithId(
-            id=rc_id,
-            name=body.name,
-            cpu=body.cpu,
-            memory=body.memory,
-            max_storage=body.max_storage,
-            gpu=body.gpu,
-            default=body.default,
-            default_storage=body.default_storage,
-            node_affinities=node_affinities,
-            tolerations=tolerations,
-            quota_enforced=body.quota_enforced,
-            kind=kind,
-            remote=remote,
-        )
-    return models.ResourceClassPatch(
+    kwargs = dict(
         name=body.name,
         cpu=body.cpu,
         memory=body.memory,
@@ -198,6 +168,9 @@ def validate_resource_class_patch_or_put(
         kind=kind,
         remote=remote,
     )
+    if rc_id:
+        return models.ResourceClassPatchWithId(id=rc_id, **kwargs)
+    return models.ResourceClassPatch(**kwargs)
 
 
 def validate_resource_class_update(
