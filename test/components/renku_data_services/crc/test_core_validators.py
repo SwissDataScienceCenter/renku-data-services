@@ -175,6 +175,32 @@ def test_validate_resource_class_rejects_invalid_case_split(invalid_case: str, d
         validate_resource_class(body)
 
 
+def test_validate_resource_class_patch_or_put_put_omitted_kind_uses_existing_kind():
+    """PUT without kind uses the existing class kind, not local."""
+    body = apispec.ResourceClassPatch(
+        name="firecrest-class",
+        default=True,
+        cpu=2,
+        memory=8,
+        gpu=0,
+        max_storage=100,
+        default_storage=1,
+    )
+    result = validate_resource_class_patch_or_put(
+        body, method="PUT", existing_kind=models.RemoteConfigurationKind.firecrest
+    )
+    assert result.kind == models.RemoteConfigurationKind.firecrest
+
+
+def test_validate_resource_class_patch_or_put_rejects_kind_when_existing_unknown():
+    """PATCH/PUT that provides a non-local kind when existing_kind is unknown is rejected."""
+    body = apispec.ResourceClassPatch(kind="firecrest")
+    with pytest.raises(errors.ValidationError):
+        validate_resource_class_patch_or_put(body, method="PATCH", existing_kind=None)
+    with pytest.raises(errors.ValidationError):
+        validate_resource_class_patch_or_put(body, method="PUT", existing_kind=None)
+
+
 # ---------------------------------------------------------------------------
 # Property-based tests for PATCH/PUT helpers.
 # ---------------------------------------------------------------------------
