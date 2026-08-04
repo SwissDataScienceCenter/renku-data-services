@@ -1,5 +1,6 @@
 """crc modules converters and validators."""
 
+from dataclasses import replace
 from typing import Literal, overload
 from urllib.parse import urlparse
 
@@ -124,13 +125,20 @@ def validate_resource_class_patch_or_put(
     rc_id = body.id if isinstance(body, (apispec.ResourceClassPatchWithId, apispec.ResourceClassWithId)) else None
     kind_input = models.RemoteConfigurationKind(body.kind) if body.kind is not None else None
 
-    if kind_input is not None and existing_kind is not None and kind_input != existing_kind:
+    # Treat an explicit 'local' as unspecified when we know the existing kind is not local; this lets PUT/PATCH
+    # bodies omit kind while still rejecting real kind changes.
+    local_means_default = (
+        kind_input == models.RemoteConfigurationKind.local
+        and existing_kind is not None
+        and existing_kind != models.RemoteConfigurationKind.local
+    )
+    effective_kind_input = None if local_means_default else kind_input
+
+    if effective_kind_input is not None and effective_kind_input != (
+        existing_kind or models.RemoteConfigurationKind.local
+    ):
         raise errors.ValidationError(message="The resource class kind cannot be changed.")
-    if kind_input is not None and existing_kind is None and kind_input != models.RemoteConfigurationKind.local:
-        raise errors.ValidationError(
-            message="The resource class kind cannot be inferred; only 'local' is allowed when existing kind is unknown."
-        )
-    kind = kind_input or existing_kind or (models.RemoteConfigurationKind.local if method == "PUT" else None)
+    kind = effective_kind_input or existing_kind or (models.RemoteConfigurationKind.local if method == "PUT" else None)
 
     if body.name is not None and len(body.name) > 40:
         raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
@@ -198,9 +206,6 @@ def validate_resource_class_update(
     name = update.name if update.name is not None else existing.name
     max_storage = update.max_storage if update.max_storage is not None else existing.max_storage
     default_storage = update.default_storage if update.default_storage is not None else existing.default_storage
-
-    if update.kind is not None and update.kind != existing.kind:
-        raise errors.ValidationError(message="The resource class kind cannot be changed.")
 
     if update.default is not None and existing.default != update.default:
         raise errors.ValidationError(message="Changing the default class in a resource pool is not supported.")
@@ -275,13 +280,56 @@ def validate_resource_pool_post(body: apispec.ResourcePool) -> models.UnsavedRes
     )
 
 
+def _resolve_pool_kind_after_update(
+    method: Literal["PATCH"] | Literal["PUT"],
+    body: apispec.ResourcePoolPatch | apispec.ResourcePoolPut,
+    existing_pool_kind: models.RemoteConfigurationKind | None,
+) -> models.RemoteConfigurationKind:
+    """Determine the pool kind that will apply after this patch/put is processed."""
+    match body.remote:
+        case apispec.RemoteConfigurationPatchReset():
+            return models.RemoteConfigurationKind.local
+        case apispec.RemoteConfigurationFirecrest() | apispec.RemoteConfigurationFirecrestPatch():
+            return models.RemoteConfigurationKind.firecrest
+        case apispec.RemoteConfigurationRunai() | apispec.RemoteConfigurationRunaiPatch():
+            return models.RemoteConfigurationKind.runai
+        case None:
+            if method == "PUT":
+                return models.RemoteConfigurationKind.local
+            return existing_pool_kind or models.RemoteConfigurationKind.local
+
+
+def _validate_classes_against_pool_kind(
+    classes: list[models.ResourceClassPatchWithId],
+    new_pool_kind: models.RemoteConfigurationKind,
+    existing_classes: list[models.ResourceClass] | None = None,
+) -> None:
+    """Ensure existing classes can be converted to the new pool kind."""
+    existing_by_id = {rc.id: rc for rc in (existing_classes or [])}
+    for rc in classes:
+        existing = existing_by_id.get(rc.id) if isinstance(rc, models.ResourceClassPatchWithId) else None
+        # Reject class-level remote data when the new pool kind is not FirecREST.
+        has_remote = rc.remote is not None or (existing is not None and existing.remote is not None)
+        if new_pool_kind != models.RemoteConfigurationKind.firecrest and has_remote:
+            raise errors.ValidationError(
+                message="Remove class-level remote configuration before converting the pool away from FirecREST."
+            )
+        # FirecREST requires integer CPU.
+        cpu = rc.cpu if rc.cpu is not None else (existing.cpu if existing is not None else None)
+        if new_pool_kind == models.RemoteConfigurationKind.firecrest and cpu is not None and not cpu.is_integer():
+            raise errors.ValidationError(message="FirecREST resource classes require an integer value for cpu.")
+
+
 def validate_resource_pool_put_or_patch(
     method: Literal["PATCH"] | Literal["PUT"],
     body: apispec.ResourcePoolPatch | apispec.ResourcePoolPut,
     *,
     existing_pool_kind: models.RemoteConfigurationKind | None = None,
+    existing_classes: list[models.ResourceClass] | None = None,
 ) -> models.ResourcePoolPatch:
     """Validate the patch to a resource pool."""
+    new_pool_kind = _resolve_pool_kind_after_update(method=method, body=body, existing_pool_kind=existing_pool_kind)
+
     classes = (
         [
             validate_resource_class_patch_or_put(body=rc, method=method, existing_kind=existing_pool_kind)
@@ -290,6 +338,15 @@ def validate_resource_pool_put_or_patch(
         if body.classes
         else None
     )
+    if classes is not None:
+        _validate_classes_against_pool_kind(
+            classes=classes, new_pool_kind=new_pool_kind, existing_classes=existing_classes
+        )
+        # When the pool kind changes, convert the class kind to the new pool kind so the DB update
+        # applies consistently. The class-level remote/kind guards above ensure the conversion is valid.
+        if existing_pool_kind is not None and new_pool_kind != existing_pool_kind:
+            classes = [replace(rc, kind=new_pool_kind) for rc in classes]
+
     quota = validate_quota_put_patch(body=body.quota) if body.quota else RESET if method == "PUT" else None
     remote = None
     match body.remote:
@@ -364,6 +421,15 @@ def validate_hibernation_warning_period(
 def validate_resource_pool_update(existing: models.ResourcePool, update: models.ResourcePoolPatch) -> None:
     """Validate the update to a resource pool."""
     name = update.name if update.name is not None else existing.name
+    match update.remote:
+        case ResetType.Reset:
+            new_pool_kind = models.RemoteConfigurationKind.local
+        case models.RemoteConfigurationFirecrestPatch() | models.RemoteConfigurationFirecrest():
+            new_pool_kind = models.RemoteConfigurationKind.firecrest
+        case models.RemoteConfigurationRunaiPatch() | models.RemoteConfigurationRunai():
+            new_pool_kind = models.RemoteConfigurationKind.runai
+        case None:
+            new_pool_kind = existing.remote.kind if existing.remote else models.RemoteConfigurationKind.local
     classes = existing.classes
     for rc in update.classes or []:
         found = next(filter(lambda tup: tup[1].id == rc.id, enumerate(classes)), None)
@@ -372,7 +438,7 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
                 message=f"Resource class '{rc.id}' does not exist in resource pool '{existing.id}'."
             )
         idx, existing_rc = found
-        if rc.kind is not None and rc.kind != existing_rc.kind:
+        if rc.kind is not None and rc.kind != existing_rc.kind and rc.kind != new_pool_kind:
             raise errors.ValidationError(message="The resource class kind cannot be changed.")
         class_remote = existing_rc.remote
         if rc.remote is not None:

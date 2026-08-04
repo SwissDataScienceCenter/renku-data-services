@@ -858,6 +858,8 @@ class ResourcePoolRepository(_Base):
                 cls.default_storage = update.default_storage
             if update.quota_enforced is not None:
                 cls.quota_enforced = update.quota_enforced
+            if update.kind is not None and update.kind != models.RemoteConfigurationKind.firecrest:
+                cls.remote_json = None
             if update.remote is not None:
                 cls.remote_json = update.remote.to_dict()
 
