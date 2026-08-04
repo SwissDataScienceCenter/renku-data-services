@@ -107,6 +107,9 @@ class ResourceClassORM(BaseORM):
         back_populates="classes", default=None, lazy="joined"
     )
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, default=None, init=False)
+    remote_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONVariant, default=None, server_default=None, nullable=True
+    )
     tolerations: Mapped[list[TolerationORM]] = relationship(
         back_populates="resource_class",
         default_factory=list,
@@ -133,6 +136,7 @@ class ResourceClassORM(BaseORM):
             for affinity in new_resource_class.node_affinities
         ]
         tolerations = [TolerationORM(key=toleration) for toleration in new_resource_class.tolerations]
+        remote_json = new_resource_class.remote.to_dict() if new_resource_class.remote is not None else None
         return cls(
             name=new_resource_class.name,
             cpu=new_resource_class.cpu,
@@ -145,6 +149,7 @@ class ResourceClassORM(BaseORM):
             resource_pool_id=resource_pool_id,
             tolerations=tolerations,
             node_affinities=node_affinities,
+            remote_json=remote_json,
         )
 
     def dump(
@@ -159,6 +164,18 @@ class ResourceClassORM(BaseORM):
                 and self.gpu >= matching_criteria.gpu
                 and self.max_storage >= matching_criteria.max_storage
             )
+        remote: models.FirecrestClassRemote | None = None
+        if self.remote_json is not None:
+            remote = models.FirecrestClassRemote(
+                system_name=self.remote_json.get("system_name") or None,
+                partition=self.remote_json.get("partition") or None,
+            )
+        kind = models.RemoteConfigurationKind.local
+        if self.resource_pool and self.resource_pool.remote_json is not None:
+            kind = models.RemoteConfigurationKind(
+                self.resource_pool.remote_json.get("kind", models.RemoteConfigurationKind.local)
+            )
+        quota = self.resource_pool.quota if self.resource_pool else None
         return models.ResourceClass(
             id=self.id,
             name=self.name,
@@ -171,8 +188,10 @@ class ResourceClassORM(BaseORM):
             node_affinities=[affinity.dump() for affinity in self.node_affinities],
             tolerations=[toleration.key for toleration in self.tolerations],
             matching=matching,
-            quota=self.resource_pool.quota if self.resource_pool else None,
+            quota=quota,
             quota_enforced=self.quota_enforced,
+            kind=kind,
+            remote=remote,
         )
 
 
