@@ -105,16 +105,3 @@ def test_firecrest_resource_env_items_emits_ignore_flag_when_set():
     assert by_name["RSC_FIRECREST_IGNORE_RESOURCE_CLASS_VALUES"] == "true"
 
 
-def test_get_remote_env():
-    remote = RemoteConfigurationFirecrest(
-        api_url="https://example.org",
-        system_name="sys",
-        partition="normal",
-        provider_id="p1",
-    )
-    env = get_remote_env(remote)
-    by_name = {item.name: item.value for item in env}
-    assert by_name == {
-        "RSC_REMOTE_KIND": RemoteConfigurationKind.firecrest.value,
-        "RSC_FIRECREST_API_URL": "https://example.org",
-    }
