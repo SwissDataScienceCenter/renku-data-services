@@ -6,7 +6,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
-from renku_data_services.authz.models import Scope
+from renku_data_services.authz.models import Scope, Visibility
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.data_connectors.db import DataConnectorSecretRepository
@@ -17,7 +17,7 @@ from renku_data_services.renku_apps.data_connectors import select_mountable_conn
 from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
 from renku_data_services.renku_apps.models import App
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.models import SessionLauncher
+from renku_data_services.session.models import SessionLauncher, app_launcher_project_visibility_is_valid
 from renku_data_services.storage.rclone import RCloneValidator
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,15 @@ class RenkuAppsRepository:
             resource_class = await self.rp_repo.get_resource_class(user, launcher.resource_class_id)
 
         project = await self.project_repo.get_project(user, launcher.project_id)
+
+        if not app_launcher_project_visibility_is_valid(
+            launcher.launcher_type, project_is_public=project.visibility == Visibility.PUBLIC
+        ):
+            raise errors.ValidationError(
+                message=f"App '{launcher.name}' cannot be started because project "
+                f"'{project.slug}' is not public. Make the project public to start its app."
+            )
+
         if await self.k8s_client.get_app_deployment_for_project(launcher.project_id) is not None:
             raise errors.ConflictError(message=f"An app already exists for project '{launcher.project_id}'.")
 

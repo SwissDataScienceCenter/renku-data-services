@@ -35,7 +35,9 @@ def _validate_app_launcher_project_visibility(
     launcher_type: models.LauncherType, project_visibility: ProjectVisibility
 ) -> None:
     """Enforce that an app launcher can only live in a public project."""
-    if launcher_type == models.LauncherType.app and project_visibility != ProjectVisibility.public:
+    if not models.app_launcher_project_visibility_is_valid(
+        launcher_type, project_is_public=project_visibility == ProjectVisibility.public
+    ):
         raise errors.ValidationError(message="An app launcher can only be created in a public project.")
 
 
