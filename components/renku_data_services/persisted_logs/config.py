@@ -4,10 +4,6 @@ import os
 from dataclasses import dataclass
 from datetime import timedelta
 
-from renku_data_services.app_config import logging
-
-logger = logging.getLogger(__name__)
-
 
 @dataclass(eq=True, frozen=True, kw_only=True)
 class PersistedLogsConfig:
@@ -23,16 +19,9 @@ class PersistedLogsConfig:
         """Create a config from environment variables."""
         enabled = os.environ.get("PERSISTED_LOGS_ENABLED", "false").lower() == "true"
         logs_ttl_seconds = int(os.environ.get("PERSISTED_LOGS_TTL_SECONDS", "86400"))
-        cfg = cls(
+        return cls(
             enabled=enabled,
             loki_read_base_url=os.environ.get("PERSISTED_LOGS_LOKI_READ_URL", ""),
             namespace=namespace,
             logs_ttl=timedelta(seconds=logs_ttl_seconds),
         )
-        logger.info(cfg)
-        logger.info(
-            f"Env vars: PERSISTED_LOGS_ENABLED={os.environ.get("PERSISTED_LOGS_ENABLED")}, "
-            f"PERSISTED_LOGS_LOKI_READ_URL={os.environ.get("PERSISTED_LOGS_LOKI_READ_URL")}, "
-            f"PERSISTED_LOGS_TTL_SECONDS={os.environ.get("PERSISTED_LOGS_TTL_SECONDS")}"
-        )
-        return cfg
