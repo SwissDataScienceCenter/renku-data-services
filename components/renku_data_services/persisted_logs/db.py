@@ -25,6 +25,7 @@ from renku_data_services.session import orm as session_schemas
 if TYPE_CHECKING:
     from renku_data_services.repositories.db import GitRepositoriesRepository
     from renku_data_services.session.config import BuildsConfig
+
 logger = logging.getLogger(__name__)
 
 
