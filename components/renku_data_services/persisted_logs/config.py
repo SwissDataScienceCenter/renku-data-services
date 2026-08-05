@@ -21,7 +21,7 @@ class PersistedLogsConfig:
     @classmethod
     def from_env(cls, namespace: str) -> "PersistedLogsConfig":
         """Create a config from environment variables."""
-        enabled = os.environ.get("PERSISTED_LOG_ENABLED", "false").lower() == "true"
+        enabled = os.environ.get("PERSISTED_LOGS_ENABLED", "false").lower() == "true"
         logs_ttl_seconds = int(os.environ.get("PERSISTED_LOGS_TTL_SECONDS", "86400"))
         cfg = cls(
             enabled=enabled,
@@ -31,7 +31,7 @@ class PersistedLogsConfig:
         )
         logger.info(cfg)
         logger.info(
-            f"Env vars: PERSISTED_LOG_ENABLED={os.environ.get("PERSISTED_LOG_ENABLED")}, "
+            f"Env vars: PERSISTED_LOGS_ENABLED={os.environ.get("PERSISTED_LOGS_ENABLED")}, "
             f"PERSISTED_LOGS_LOKI_READ_URL={os.environ.get("PERSISTED_LOGS_LOKI_READ_URL")}, "
             f"PERSISTED_LOGS_TTL_SECONDS={os.environ.get("PERSISTED_LOGS_TTL_SECONDS")}"
         )
