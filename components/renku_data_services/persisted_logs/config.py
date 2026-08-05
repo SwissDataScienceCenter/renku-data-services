@@ -1,5 +1,6 @@
 """Configuration for persisted logs."""
 
+import os
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -16,14 +17,11 @@ class PersistedLogsConfig:
     @classmethod
     def from_env(cls, namespace: str) -> "PersistedLogsConfig":
         """Create a config from environment variables."""
-        # enabled = os.environ.get("PERSISTED_LOG_ENABLED", "false").lower() == "true"
-        # return cls(
-        #     enabled=enabled,
-        # )
-        # TODO: load config from env vars
+        enabled = os.environ.get("PERSISTED_LOG_ENABLED", "false").lower() == "true"
+        logs_ttl_seconds = int(os.environ.get("PERSISTED_LOGS_TTL_SECONDS", "86400"))
         return cls(
-            enabled=True,
-            loki_read_base_url="http://loki-read.monitoring.svc.cluster.local:3100/",
+            enabled=enabled,
+            loki_read_base_url=os.environ.get("PERSISTED_LOGS_LOKI_READ_URL", ""),
             namespace=namespace,
-            logs_ttl=timedelta(days=1),
+            logs_ttl=timedelta(seconds=logs_ttl_seconds),
         )
