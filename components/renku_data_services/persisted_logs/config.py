@@ -19,9 +19,11 @@ class PersistedLogsConfig:
         """Create a config from environment variables."""
         enabled = os.environ.get("PERSISTED_LOG_ENABLED", "false").lower() == "true"
         logs_ttl_seconds = int(os.environ.get("PERSISTED_LOGS_TTL_SECONDS", "86400"))
-        return cls(
+        cfg = cls(
             enabled=enabled,
             loki_read_base_url=os.environ.get("PERSISTED_LOGS_LOKI_READ_URL", ""),
             namespace=namespace,
             logs_ttl=timedelta(seconds=logs_ttl_seconds),
         )
+        print(cfg)
+        return cfg
