@@ -51,13 +51,11 @@ def upgrade() -> None:
         sa.Column("session_uid", sa.String(), nullable=True),
         sa.Column("launcher_id", ULIDType(), nullable=False),
         sa.Column("submission_id", sa.String(), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["launcher_id"],
-            ["sessions.launchers.id"],
-        ),
+        sa.ForeignKeyConstraint(["launcher_id"], ["sessions.launchers.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["user_id"],
             ["users.users.keycloak_id"],
+            ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
         schema="persisted_logs",

@@ -28,13 +28,17 @@ class SessionRunORM(BaseORM):
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True)
     """ID of a session run."""
 
-    user_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), index=True, nullable=False
+    )
     """User ID of the owner of the session."""
 
     session_uid: Mapped[str | None] = mapped_column(nullable=True)
     """The session UID for this session run."""
 
-    launcher_id: Mapped[ULID] = mapped_column(ULIDType, ForeignKey(SessionLauncherORM.id), index=True, nullable=False)
+    launcher_id: Mapped[ULID] = mapped_column(
+        ULIDType, ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"), index=True, nullable=False
+    )
     """The session launcher ID of the session."""
 
     submission_id: Mapped[str | None] = mapped_column(nullable=True)
