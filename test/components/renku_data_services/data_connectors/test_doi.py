@@ -7,8 +7,6 @@ from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.data_connectors.models import CloudStorageCore
 from renku_data_services.data_connectors.orm import DataConnectorORM
 from renku_data_services.errors import errors
-from renku_data_services.namespace.orm import EntitySlugOldORM, EntitySlugORM
-from renku_data_services.storage.models import RCloneConfig
 from renku_data_services.storage.rclone import RCloneValidator
 
 

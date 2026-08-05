@@ -51,7 +51,7 @@ from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.config import DepositConfig
 from renku_data_services.data_connectors.constants import ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS
 from renku_data_services.data_connectors.doi import schema_org
-from renku_data_services.data_connectors.doi.metadata import create_envidat_metadata_url, get_dataset_metadata
+from renku_data_services.data_connectors.doi.metadata import create_envidat_metadata_url, get_metadata
 from renku_data_services.data_connectors.doi.models import DOI, SchemaOrgDataset
 from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
@@ -258,7 +258,6 @@ async def validate_unsaved_global_data_connector(
     """Validate the data connector."""
     data_connector = prevalidated_dc.data_connector
     doi = prevalidated_dc.data_connector.doi
-    rclone_metadata = prevalidated_dc.rclone_metadata
 
     if not doi:
         raise errors.ValidationError(message="Global data connectors require a DOI.")
@@ -273,20 +272,14 @@ async def validate_unsaved_global_data_connector(
         )
 
     # Fetch DOI metadata
-    if rclone_metadata:
-        metadata = await get_dataset_metadata(rclone_metadata.provider, rclone_metadata.metadata_url)
-    elif data_connector.storage.storage_type == ENVIDAT_V1_PROVIDER:
-        metadata_url = create_envidat_metadata_url(doi)
-        metadata = await get_dataset_metadata(ENVIDAT_V1_PROVIDER, metadata_url)
-    else:
-        metadata = None
+    metadata = await get_metadata(doi)
 
     name = data_connector.name
     description = ""
     keywords: list[str] = []
     if metadata is not None:
         name = metadata.name or name
-        description = _html_to_text(metadata.description)
+        description = _html_to_text(metadata.description or "")
         keywords = metadata.keywords
 
     # Fix metadata if needed
