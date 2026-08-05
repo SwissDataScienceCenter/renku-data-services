@@ -565,6 +565,7 @@ class DataConnectorsBP(CustomBlueprint):
                 doi=data_connector.doi,
                 publisher_name=data_connector.publisher_name,
                 publisher_url=data_connector.publisher_url,
+                expires_at=data_connector.expires_at,
             )
         return dict(
             id=str(data_connector.id),
@@ -579,6 +580,7 @@ class DataConnectorsBP(CustomBlueprint):
             description=data_connector.description,
             etag=data_connector.etag,
             keywords=data_connector.keywords or [],
+            expires_at=data_connector.expires_at,
         )
 
     @staticmethod

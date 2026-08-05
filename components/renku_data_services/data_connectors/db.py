@@ -337,6 +337,9 @@ class DataConnectorRepository:
             doi=doi,
             publisher_url=publisher_url,
             publisher_name=publisher_name,
+            expires_at=data_connector.expires_at
+            if isinstance(data_connector, models.UnsavedGlobalDataConnector)
+            else None,
         )
         if ns is not None:
             data_connector_slug = ns_schemas.EntitySlugORM.create_data_connector_slug(

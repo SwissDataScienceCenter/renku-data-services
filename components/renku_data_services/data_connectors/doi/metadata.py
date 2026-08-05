@@ -3,6 +3,7 @@
 import contextlib
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from html.parser import HTMLParser
 from urllib.parse import urlencode
@@ -29,10 +30,11 @@ def create_scicat_metadata_url(doi: models.DOI) -> str:
     return f"https://doi.psi.ch/detail/{doi}"
 
 
-async def _get_schema_org_metadata(metadata_url: str) -> models.DOIMetadata | None:
+async def _get_schema_org_metadata(
+    metadata_url: str, headers: dict[str, str] | None = None
+) -> models.DOIMetadata | None:
     """Get metadata about the envidat dataset."""
     clnt = httpx.AsyncClient(follow_redirects=True, timeout=5)
-    headers = {"accept": "application/json"}
     async with clnt:
         try:
             res = await clnt.get(metadata_url, headers=headers)

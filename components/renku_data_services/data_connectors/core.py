@@ -312,6 +312,7 @@ async def validate_unsaved_global_data_connector(
         doi=data_connector.doi,
         publisher_name=data_connector.publisher_name,
         publisher_url=data_connector.publisher_url,
+        expires_at=metadata.expires_at if metadata is not None else None,
     )
 
 

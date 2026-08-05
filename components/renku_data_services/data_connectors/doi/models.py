@@ -88,6 +88,7 @@ class DOIMetadata:
     name: str
     description: str
     keywords: list[str]
+    expires_at: datetime | None = None
 
 
 class SchemaOrgDistribution(BaseModel):
