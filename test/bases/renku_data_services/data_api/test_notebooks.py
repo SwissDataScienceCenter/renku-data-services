@@ -434,12 +434,12 @@ def create_test_environment(
         (
             create_test_environment("busybox:1.38"),
             PurePosixPath("/work"),
-            PurePosixPath("/work"),
+            PurePosixPath("/"),
         ),
         (
             create_test_environment("ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3"),
             # The default work dir in the buildpack images is /workspace so we mount there
-            PurePosixPath("/workspace"),
+            PurePosixPath("/workspace/work"),
             PurePosixPath("/workspace"),
         ),
         (
@@ -448,7 +448,7 @@ def create_test_environment(
                 "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3",
                 work_dir=PurePosixPath("/home/renku/work"),
             ),
-            PurePosixPath("/home/renku/work"),
+            PurePosixPath("/home/renku/work/work"),
             PurePosixPath("/home/renku/work"),
         ),
         (
@@ -469,7 +469,7 @@ def create_test_environment(
                 work_dir=PurePosixPath("/home/renku/work"),
             ),
             PurePosixPath("/home/renku/mount"),
-            PurePosixPath("/home/renku/mount"),
+            PurePosixPath("/home/renku/work"),
         ),
         (
             create_test_environment(
@@ -477,7 +477,7 @@ def create_test_environment(
                 mount_dir=PurePosixPath("/home/renku/mount"),
             ),
             PurePosixPath("/home/renku/mount"),
-            PurePosixPath("/home/renku/mount"),
+            PurePosixPath("/workspace"),
         ),
         (
             # If you try to mount on / we move it to /work to preven users from wiping out the whole image
@@ -486,7 +486,7 @@ def create_test_environment(
                 mount_dir=PurePosixPath("/"),
             ),
             PurePosixPath("/work"),
-            PurePosixPath("/work"),
+            PurePosixPath("/workspace"),
         ),
     ],
 )
