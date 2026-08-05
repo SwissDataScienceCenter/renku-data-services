@@ -10,10 +10,8 @@ from renku_data_services.authz.models import Scope, Visibility
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.data_connectors.db import DataConnectorSecretRepository
-from renku_data_services.k8s.constants import DUMMY_RENKU_APP_USER_ID
 from renku_data_services.project.db import ProjectRepository
-from renku_data_services.renku_apps.core import build_app
-from renku_data_services.renku_apps.data_connectors import select_mountable_connectors
+from renku_data_services.renku_apps.core import build_app, select_mountable_connectors
 from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
 from renku_data_services.renku_apps.models import App
 from renku_data_services.session.db import SessionRepository
@@ -79,10 +77,7 @@ class RenkuAppsRepository:
         if await self.k8s_client.get_app_deployment_for_project(launcher.project_id) is not None:
             raise errors.ConflictError(message=f"An app already exists for project '{launcher.project_id}'.")
 
-        app_user = base_models.AnonymousAPIUser(id=DUMMY_RENKU_APP_USER_ID)
-        data_connectors = await select_mountable_connectors(
-            app_user, launcher.project_id, self.dc_secret_repo, self.validator
-        )
+        data_connectors = await select_mountable_connectors(launcher.project_id, self.dc_secret_repo, self.validator)
         runtime_state = await self.k8s_client.create_app_deployment(launcher, resource_class, project, data_connectors)
         return build_app(launcher, runtime_state)
 

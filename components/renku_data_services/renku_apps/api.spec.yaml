@@ -102,10 +102,12 @@ components:
 
     AppName:
       type: string
+      description: |
+        The name of an app, which is also a DNS label in the app's public hostname.
+        The Kubernetes limit is 63 characters, but names are capped at 50 to leave
+        leeway. This must match APP_NAME_MAX_LENGTH in renku_apps/core.py, which is
+        the length generate_app_name() truncates to.
       minLength: 5
-      # The k8s limit is 63 characters (the name becomes a hostname label) but we leave
-      # some leeway. Must match APP_NAME_MAX_LENGTH in renku_apps/core.py, which is what
-      # generate_app_name() truncates to.
       maxLength: 50
       pattern: "^[a-z]([-a-z0-9]*[a-z0-9])?$"
       example: my-data-dashboard-0h8kq2zt

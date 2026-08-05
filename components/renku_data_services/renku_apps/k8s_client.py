@@ -9,8 +9,10 @@ from hashlib import md5
 from pathlib import PurePosixPath
 from typing import Any
 
+import httpx
 from ulid import ULID
 
+from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.crc.models import ResourceClass
@@ -18,6 +20,7 @@ from renku_data_services.data_connectors.models import DataConnectorWithSecrets
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, DUMMY_RENKU_APP_USER_ID, ClusterId
 from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObjectFilter, K8sObjectMeta, sanitizer
+from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.crs import Affinity, Toleration
 from renku_data_services.notebooks.utils import (
@@ -29,7 +32,7 @@ from renku_data_services.renku_apps.core import generate_app_name
 from renku_data_services.renku_apps.cr_knative_service import Condition
 from renku_data_services.renku_apps.crs import KnativeService
 from renku_data_services.renku_apps.models import AppRuntimeState
-from renku_data_services.session.models import SessionLauncher
+from renku_data_services.session.models import Environment, SessionLauncher
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +148,7 @@ class RenkuAppsK8sClient:
         app_name = generate_app_name(project.slug, session_launcher.id)
         labels = _app_labels(session_launcher, project)
 
-        work_dir = session_launcher.environment.working_directory or _DEFAULT_WORK_DIR
+        work_dir = await _resolve_work_dir(session_launcher.environment)
         dc_resources = _build_data_connector_resources(
             data_connectors,
             base_name=_data_source_base_name(app_name),
@@ -288,6 +291,24 @@ def _resources_from_resource_class(resource_class: ResourceClass) -> dict[str, A
     }
 
 
+async def _resolve_work_dir(environment: Environment) -> PurePosixPath:
+    """Use the launcher's working directory, else the image's, else the shared default."""
+    if environment.working_directory is not None:
+        return environment.working_directory
+    try:
+        image = Image.from_path(environment.container_image)
+        image_workdir = await image.repo_api().image_workdir(image)
+    except (errors.ValidationError, httpx.HTTPError):
+        logger.warning(
+            "Could not read the working directory of image %s; falling back to %s",
+            environment.container_image,
+            _DEFAULT_WORK_DIR,
+            exc_info=True,
+        )
+        return _DEFAULT_WORK_DIR
+    return image_workdir or _DEFAULT_WORK_DIR
+
+
 def _app_labels(session_launcher: SessionLauncher, project: Project) -> dict[str, str]:
     """Labels shared by an app's Knative Service and its owned data-connector resources."""
     return {
@@ -307,7 +328,6 @@ def _service_owner_reference(app_name: str, uid: str) -> dict[str, Any]:
         "kind": KNATIVE_SERVICE_GVK.kind,
         "name": app_name,
         "uid": uid,
-        "controller": True,
         "blockOwnerDeletion": True,
     }
 
@@ -349,6 +369,7 @@ def _build_app_deployment_manifest(
         "ports": [{"containerPort": environment.port}],
         "securityContext": {
             "allowPrivilegeEscalation": False,
+            "privileged": False,
             "runAsUser": environment.uid,
             "runAsGroup": environment.gid,
             "runAsNonRoot": True,
@@ -363,19 +384,10 @@ def _build_app_deployment_manifest(
     # read it (e.g. from a Procfile). This mirrors the AmaltheaSession path in
     # ``notebooks.core_sessions``; without it the buildpack default (8000) wins and
     # the app binds a port Knative never probes, so the revision never becomes ready.
-    # System-controlled vars come first; user-defined vars are appended and are not
-    # allowed to override them.
-    env: list[dict[str, str]] = [
-        {"name": "RENKU_SESSION_IP", "value": "0.0.0.0"},  # nosec B104
-        {"name": "RENKU_SESSION_PORT", "value": str(environment.port)},
-    ]
-    reserved_names = {var["name"] for var in env}
-    env.extend(
-        {"name": var.name, "value": var.value or ""}
-        for var in session_launcher.env_variables or []
-        if var.name not in reserved_names
-    )
-    container["env"] = env
+    env = {var.name: var.value or "" for var in session_launcher.env_variables or []}
+    env["RENKU_SESSION_IP"] = "0.0.0.0"  # nosec B104
+    env["RENKU_SESSION_PORT"] = str(environment.port)
+    container["env"] = [{"name": name, "value": value} for name, value in env.items()]
     if environment.command:
         container["command"] = environment.command
     if environment.args:
