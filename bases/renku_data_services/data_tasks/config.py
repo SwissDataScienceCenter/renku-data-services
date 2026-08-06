@@ -43,12 +43,30 @@ class MeteringConfig:
     token: str
 
     @classmethod
-    def from_env(cls) -> "MeteringConfig":
+    def from_env(cls) -> MeteringConfig:
         """Create metering config from environment variables."""
         return cls(
             enabled=os.environ.get("METERING_ENABLED", "false").lower() == "true",
             endpoint_url=os.environ.get("METERING_ENDPOINT_URL", ""),
             token=os.environ.get("METERING_API_TOKEN", ""),
+        )
+
+
+@dataclass
+class LagoConfig:
+    """Configuration for the Lago metering endpoint."""
+
+    enabled: bool
+    endpoint_url: str
+    token: str
+
+    @classmethod
+    def from_env(cls) -> LagoConfig:
+        """Create Lago config from environment variables."""
+        return cls(
+            enabled=os.environ.get("LAGO_ENABLED", "false").lower() == "true",
+            endpoint_url=os.environ.get("LAGO_ENDPOINT_URL", ""),
+            token=os.environ.get("LAGO_API_TOKEN", ""),
         )
 
 
@@ -60,6 +78,7 @@ class Config:
     solr: SolrClientConfig
     posthog: PosthogConfig
     metering: MeteringConfig
+    lago: LagoConfig
     authz: AuthzConfig
     keycloak: KeycloakConfig | None
     persisted_logs: PersistedLogsConfig
@@ -89,6 +108,7 @@ class Config:
         solr_config = SolrClientConfig.from_env()
         posthog_config = PosthogConfig.from_env()
         metering_config = MeteringConfig.from_env()
+        lago_config = LagoConfig.from_env()
         tcp_host = os.environ.get("TCP_HOST", "127.0.0.1")
         tcp_port = int(os.environ.get("TCP_PORT", "8001"))
 
@@ -113,6 +133,7 @@ class Config:
             solr=solr_config,
             posthog=posthog_config,
             metering=metering_config,
+            lago=lago_config,
             authz=authz,
             keycloak=keycloak,
             persisted_logs=PersistedLogsConfig.from_env(namespace=k8s_namespace),
