@@ -6,7 +6,7 @@ import base64
 import json
 import os
 from collections.abc import AsyncIterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Protocol, TypeVar, cast
@@ -1137,6 +1137,8 @@ async def start_session(
         )
     if session_location == SessionLocation.remote:
         assert resource_pool.remote is not None
+        if resource_pool.remote.kind == RemoteConfigurationKind.firecrest:
+            resource_class = replace(resource_class, cpu=int(resource_class.cpu))
         env.extend(get_remote_env(resource_class, resource_pool.remote))
     launcher_env_variables = get_launcher_env_variables(launcher, launch_request)
     env.extend(launcher_env_variables)
