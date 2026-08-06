@@ -107,11 +107,20 @@ class SchemaOrgDataset(BaseModel):
     raw_keywords: str = Field(alias="keywords", default="")
     publisher: SchemaOrgPublisher | None = None
     provider: SchemaOrgProvider | None = None
+    _parsed_keywords: list[str] | None = Field(exclude=True, init=False, repr=False)
 
     @property
     def keywords(self) -> list[str]:
         """Split the single keywords string into a list."""
-        return [i.strip() for i in self.raw_keywords.split(",")]
+        if self._parsed_keywords is not None:
+            return self._parsed_keywords
+        self._parsed_keywords = [i.strip() for i in self.raw_keywords.split(",")]
+        return self._parsed_keywords
+
+    @keywords.setter
+    def keywords(self, value: list[str]) -> None:
+        """Set the keywords."""
+        self._parsed_keywords = value
 
     def to_doi_metadata(self) -> DOIMetadata:
         """Convert to an alternative metdata representation."""
