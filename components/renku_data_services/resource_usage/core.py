@@ -11,7 +11,7 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.resource_usage import apispec
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
-from renku_data_services.resource_usage.metering import MeteringClient, MetricCode
+from renku_data_services.resource_usage.metering import MetricCode, ResourceUsageMetering
 from renku_data_services.resource_usage.model import (
     Credit,
     ResourceClassCost,
@@ -160,7 +160,7 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
         self,
         repo: ResourceRequestsRepo,
         fetch: ResourceRequestsFetchProto,
-        metering: MeteringClient | None = None,
+        metering: ResourceUsageMetering | None = None,
     ) -> None:
         self._repo = repo
         self._fetch = fetch

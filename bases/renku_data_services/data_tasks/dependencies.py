@@ -26,8 +26,13 @@ from renku_data_services.resource_usage.core import (
     ResourcesRequestRecorder,
     ResourceUsageService,
 )
-from renku_data_services.resource_usage.metering import MeteringClient
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.resource_usage.metering import (
+    LagoClient,
+    MeteringClient,
+    MultiMeteringClient,
+    ResourceUsageMetering,
+)
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.tasks import SessionTasks
@@ -126,11 +131,14 @@ class DependencyManager:
 
         resource_requests_recorder: ResourcesRequestRecorder
         if cfg.enable_resource_request_tracking:
-            metering_client = (
-                MeteringClient(endpoint_url=cfg.metering.endpoint_url, token=cfg.metering.token)
-                if cfg.metering.enabled
-                else None
-            )
+            metering_clients: list[ResourceUsageMetering] = []
+            if cfg.metering.enabled:
+                metering_clients.append(
+                    MeteringClient(endpoint_url=cfg.metering.endpoint_url, token=cfg.metering.token)
+                )
+            if cfg.lago.enabled:
+                metering_clients.append(LagoClient(endpoint_url=cfg.lago.endpoint_url, token=cfg.lago.token))
+            metering_client = MultiMeteringClient(metering_clients) if metering_clients else None
             resource_requests_recorder = DefaultResourcesRequestRecorder(
                 repo=resource_requests_repo,
                 fetch=ResourceRequestsFetch(k8s_client),
