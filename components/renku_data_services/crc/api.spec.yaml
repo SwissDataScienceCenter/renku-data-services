@@ -1326,8 +1326,33 @@ components:
         remote:
           $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
     ResourceClass:
-      allOf:
-        - $ref: "#/components/schemas/ResourceClassProperties"
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        max_storage:
+          $ref: "#/components/schemas/Storage"
+        default_storage:
+          $ref: "#/components/schemas/Storage"
+        tolerations:
+          $ref: "#/components/schemas/K8sLabelList"
+        node_affinities:
+          $ref: "#/components/schemas/NodeAffinityList"
+        quota_enforced:
+          allOf:
+            - $ref: "#/components/schemas/QuotaEnforced"
+          default: false
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
       required:
         - name
         - default
@@ -1354,24 +1379,54 @@ components:
     ResourceClassPatchWithId:
       allOf:
         - $ref: "#/components/schemas/ResourceClassProperties"
-      type: object
-      properties:
-        id:
-          $ref: "#/components/schemas/IntegerId"
+        - type: object
+          properties:
+            id:
+              $ref: "#/components/schemas/IntegerId"
       required:
         - id
       example:
         id: 1
         max_storage: 50
     ResourceClassWithId:
-      allOf:
-        - $ref: "#/components/schemas/ResourceClass"
-        - type: object
-          properties:
-            id:
-              $ref: "#/components/schemas/IntegerId"
-          required:
-            - id
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        max_storage:
+          $ref: "#/components/schemas/Storage"
+        default_storage:
+          $ref: "#/components/schemas/Storage"
+        tolerations:
+          $ref: "#/components/schemas/K8sLabelList"
+        node_affinities:
+          $ref: "#/components/schemas/NodeAffinityList"
+        id:
+          $ref: "#/components/schemas/IntegerId"
+        quota_enforced:
+          allOf:
+            - $ref: "#/components/schemas/QuotaEnforced"
+          default: false
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
+      required:
+        - name
+        - default
+        - cpu
+        - memory
+        - gpu
+        - max_storage
+        - default_storage
+        - id
       example:
         name: "resource class"
         default: true
@@ -2002,11 +2057,6 @@ components:
       description: Number of cpu cores
       example: 10
       exclusiveMinimum: true
-      minimum: 0
-    CpuInteger:
-      type: integer
-      description: Number of CPU cores (integer-only, required for FirecREST Slurm jobs)
-      examples: [4]
       minimum: 0
     CpuFilter:
       type: number

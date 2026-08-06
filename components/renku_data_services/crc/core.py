@@ -58,21 +58,20 @@ def validate_resource_class(
         key=lambda x: (x.key, x.required_during_scheduling),
     )
     tolerations = sorted(t.root for t in body.tolerations or [])
-    kind = pool_kind
 
-    if kind != models.RemoteConfigurationKind.firecrest and body.remote is not None:
+    if pool_kind != models.RemoteConfigurationKind.firecrest and body.remote is not None:
         raise errors.ValidationError(
             message="Resource class remote configuration is only allowed for FirecREST classes."
         )
     remote: models.FirecrestClassRemote | None = None
-    if kind == models.RemoteConfigurationKind.firecrest and body.remote is not None:
+    if pool_kind == models.RemoteConfigurationKind.firecrest and body.remote is not None:
         remote = models.FirecrestClassRemote(
             system_name=body.remote.system_name,
             partition=body.remote.partition,
-            ignore_resource_class_values=body.remote.ignore_resource_class_values or False,
+            ignore_resource_class_values=body.remote.ignore_resource_class_values,
         )
 
-    if kind == models.RemoteConfigurationKind.firecrest and not body.cpu.is_integer():
+    if pool_kind == models.RemoteConfigurationKind.firecrest and not body.cpu.is_integer():
         raise errors.ValidationError(message="FirecREST resource classes require an integer value for cpu.")
 
     return models.UnsavedResourceClass(
@@ -85,8 +84,8 @@ def validate_resource_class(
         default_storage=body.default_storage,
         node_affinities=node_affinities,
         tolerations=tolerations,
-        quota_enforced=body.quota_enforced or False,
-        kind=kind,
+        quota_enforced=body.quota_enforced,
+        kind=pool_kind,
         remote=remote,
     )
 
@@ -146,7 +145,7 @@ def validate_resource_class_patch_or_put(
         remote = models.FirecrestClassRemote(
             system_name=body.remote.system_name,
             partition=body.remote.partition,
-            ignore_resource_class_values=body.remote.ignore_resource_class_values or False,
+            ignore_resource_class_values=body.remote.ignore_resource_class_values,
         )
     if rc_id:
         return models.ResourceClassPatchWithId(
@@ -160,7 +159,7 @@ def validate_resource_class_patch_or_put(
             default_storage=body.default_storage,
             node_affinities=node_affinities,
             tolerations=tolerations,
-            quota_enforced=body.quota_enforced or False,
+            quota_enforced=body.quota_enforced,
             kind=kind,
             remote=remote,
         )
