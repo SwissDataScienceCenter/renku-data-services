@@ -48,7 +48,6 @@ class RemoteConfigurationKind(StrEnum):
 
     firecrest = "firecrest"
     runai = "runai"
-    local = "local"
 
 
 class ResourcesCompareMixin:
@@ -119,7 +118,7 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     memory: int
     max_storage: int
     gpu: int
-    kind: RemoteConfigurationKind = RemoteConfigurationKind.local
+    kind: RemoteConfigurationKind | None = None
     default: bool = False
     default_storage: int = 1
     node_affinities: list[NodeAffinity] = field(default_factory=list)
@@ -138,7 +137,7 @@ class ResourceClass(ResourcesCompareMixin):
     max_storage: int
     gpu: int
     id: int
-    kind: RemoteConfigurationKind = RemoteConfigurationKind.local
+    kind: RemoteConfigurationKind | None = None
     default: bool = False
     default_storage: int = 1
     matching: Optional[bool] = None
