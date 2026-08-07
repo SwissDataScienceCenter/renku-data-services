@@ -167,11 +167,11 @@ class ResourceClassORM(BaseORM):
         remote: models.FirecrestClassRemote | None = None
         if self.remote_json is not None:
             remote = models.FirecrestClassRemote(**{k: v for k, v in self.remote_json.items() if k != "kind"})
-        kind = models.RemoteConfigurationKind(
-            self.resource_pool.remote_json.get("kind", models.RemoteConfigurationKind.local)
-            if self.resource_pool and self.resource_pool.remote_json
-            else models.RemoteConfigurationKind.local
-        )
+        kind: models.RemoteConfigurationKind | None = None
+        if self.resource_pool and self.resource_pool.remote_json:
+            remote_kind = self.resource_pool.remote_json.get("kind")
+            if remote_kind is not None:
+                kind = models.RemoteConfigurationKind(remote_kind)
         quota = self.resource_pool.quota if self.resource_pool else None
         return models.ResourceClass(
             id=self.id,

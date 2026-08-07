@@ -560,11 +560,11 @@ class ResourcePoolRepository(_Base):
                         message=f"Resource pool with id {resource_pool_id} does not exist."
                     )
                 resource_class.resource_pool = rp
-                expected_kind = models.RemoteConfigurationKind.local
+                expected_kind: models.RemoteConfigurationKind | None = None
                 if rp.remote_json is not None:
-                    expected_kind = models.RemoteConfigurationKind(
-                        rp.remote_json.get("kind", models.RemoteConfigurationKind.local)
-                    )
+                    remote_kind = rp.remote_json.get("kind")
+                    if remote_kind is not None:
+                        expected_kind = models.RemoteConfigurationKind(remote_kind)
                 if expected_kind is not None and new_resource_class.kind != expected_kind:
                     raise errors.ValidationError(message="Class kind does not match resource pool remote kind.")
                 if resource_class.default and len(rp.classes) > 0 and any([icls.default for icls in rp.classes]):
@@ -858,7 +858,7 @@ class ResourcePoolRepository(_Base):
                 cls.default_storage = update.default_storage
             if update.quota_enforced is not None:
                 cls.quota_enforced = update.quota_enforced
-            if update.kind is not None and update.kind != models.RemoteConfigurationKind.firecrest:
+            if update.kind is None or update.kind != models.RemoteConfigurationKind.firecrest:
                 cls.remote_json = None
             if update.remote is not None:
                 cls.remote_json = update.remote.to_dict()

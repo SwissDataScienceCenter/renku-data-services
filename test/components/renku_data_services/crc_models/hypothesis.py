@@ -173,9 +173,9 @@ def apispec_remote_class_configuration_firecrest_strat(draw):
 
 
 @st.composite
-def _resource_class_base_kwargs(draw, *, kind: apispec.RemoteKind):
+def _resource_class_base_kwargs(draw, *, pool_kind: models.RemoteConfigurationKind | None):
     """Draw the shared fields for an apispec resource class body."""
-    cpu = draw(a_cpu_int if kind == apispec.RemoteKind.firecrest else a_cpu_float)
+    cpu = draw(a_cpu_int if pool_kind == models.RemoteConfigurationKind.firecrest else a_cpu_float)
     default_storage = draw(st.integers(min_value=1, max_value=500))
     max_storage = draw(st.integers(min_value=default_storage, max_value=1000))
 
@@ -195,37 +195,27 @@ def _resource_class_base_kwargs(draw, *, kind: apispec.RemoteKind):
 
 @st.composite
 def apispec_resource_class_strat(
-    draw, *, kind: apispec.RemoteKind | st.SearchStrategy[apispec.RemoteKind] | None = None
+    draw,
+    *,
+    pool_kind: models.RemoteConfigurationKind | None | st.SearchStrategy[models.RemoteConfigurationKind | None] = None,
 ):
     """Generate a valid apispec.ResourceClass.
 
-    Pass ``kind`` to fix the remote kind; otherwise one is drawn at random.
-    The optional ``remote`` field is only populated for FirecREST kinds because
+    Pass ``pool_kind`` to fix the parent pool kind; otherwise one is drawn at random.
+    The class kind is derived from the pool and is no longer part of the API body.
+    The optional ``remote`` field is only populated for FirecREST pools because
     the validator rejects it for other kinds.
     """
-    resolved_kind = draw(kind) if isinstance(kind, st.SearchStrategy) else kind
-    if resolved_kind is None:
-        resolved_kind = draw(st.sampled_from(list(apispec.RemoteKind)))
+    resolved_pool_kind = draw(pool_kind) if isinstance(pool_kind, st.SearchStrategy) else pool_kind
+    if resolved_pool_kind is None and not isinstance(pool_kind, st.SearchStrategy):
+        resolved_pool_kind = draw(st.sampled_from([None, *list(models.RemoteConfigurationKind)]))
 
-    kwargs = draw(_resource_class_base_kwargs(kind=resolved_kind))
+    kwargs = draw(_resource_class_base_kwargs(pool_kind=resolved_pool_kind))
     remote = None
-    if resolved_kind == apispec.RemoteKind.firecrest:
+    if resolved_pool_kind == models.RemoteConfigurationKind.firecrest:
         remote = draw(st.one_of(st.none(), apispec_remote_class_configuration_firecrest_strat()))
 
-    return apispec.ResourceClass(kind=resolved_kind, remote=remote, **kwargs)
-
-
-@st.composite
-def apispec_resource_class_mismatch_kind_strat(draw):
-    """Generate an apispec.ResourceClass together with a deliberately mismatched pool kind."""
-    body_kind = draw(st.sampled_from(list(apispec.RemoteKind)))
-    body = draw(apispec_resource_class_strat(kind=body_kind))
-    # Pick a pool kind that is guaranteed to differ from the body kind.
-    pool_kind_options = [
-        k for k in models.RemoteConfigurationKind if models.RemoteConfigurationKind(body_kind.value) != k
-    ]
-    pool_kind = draw(st.sampled_from(pool_kind_options))
-    return body, pool_kind
+    return apispec.ResourceClass(remote=remote, **kwargs)
 
 
 @st.composite
@@ -247,27 +237,27 @@ def apispec_resource_class_invalid_strat(
     )
 
     if case == "firecrest_fractional_cpu":
-        kwargs = draw(_resource_class_base_kwargs(kind=apispec.RemoteKind.firecrest))
-        kwargs["cpu"] = draw(a_cpu_float)
-        return apispec.ResourceClass(kind=apispec.RemoteKind.firecrest, remote=None, **kwargs)
+        kwargs = draw(_resource_class_base_kwargs(pool_kind=models.RemoteConfigurationKind.firecrest))
+        kwargs["cpu"] = draw(a_cpu_float.filter(lambda x: not x.is_integer()))
+        return apispec.ResourceClass(remote=None, **kwargs)
 
     if case == "non_firecrest_with_remote":
-        kind = draw(st.sampled_from([apispec.RemoteKind.local, apispec.RemoteKind.runai]))
-        kwargs = draw(_resource_class_base_kwargs(kind=kind))
+        pool_kind = draw(st.sampled_from([None, models.RemoteConfigurationKind.runai]))
+        kwargs = draw(_resource_class_base_kwargs(pool_kind=pool_kind))
         remote = draw(apispec_remote_class_configuration_firecrest_strat())
-        return apispec.ResourceClass(kind=kind, remote=remote, **kwargs)
+        return apispec.ResourceClass(remote=remote, **kwargs)
 
     if case == "name_too_long":
-        kind = draw(st.sampled_from(list(apispec.RemoteKind)))
-        kwargs = draw(_resource_class_base_kwargs(kind=kind))
+        pool_kind = draw(st.sampled_from([None, *list(models.RemoteConfigurationKind)]))
+        kwargs = draw(_resource_class_base_kwargs(pool_kind=pool_kind))
         kwargs["name"] = draw(a_long_name)
-        return apispec.ResourceClass(kind=kind, remote=None, **kwargs)
+        return apispec.ResourceClass(remote=None, **kwargs)
 
     # default_storage_larger_than_max
-    kind = draw(st.sampled_from(list(apispec.RemoteKind)))
-    kwargs = draw(_resource_class_base_kwargs(kind=kind))
+    pool_kind = draw(st.sampled_from([None, *list(models.RemoteConfigurationKind)]))
+    kwargs = draw(_resource_class_base_kwargs(pool_kind=pool_kind))
     kwargs["default_storage"] = kwargs["max_storage"] + draw(st.integers(min_value=1, max_value=100))
-    return apispec.ResourceClass(kind=kind, remote=None, **kwargs)
+    return apispec.ResourceClass(remote=None, **kwargs)
 
 
 @st.composite
@@ -277,15 +267,10 @@ def apispec_resource_class_patch_strat(
     existing_kind: models.RemoteConfigurationKind | None = None,
 ):
     """Generate an apispec.ResourceClassPatch relative to an existing resource class kind."""
-    include_kind = draw(a_bool)
-    kind = draw(st.sampled_from(list(apispec.RemoteKind))) if include_kind else None
     remote = None
     include_remote = draw(a_bool)
-    if include_remote:
-        # remote is only valid for FirecREST classes
-        remote_kind = apispec.RemoteKind(existing_kind.value) if existing_kind is not None else None
-        if remote_kind is None or remote_kind == apispec.RemoteKind.firecrest:
-            remote = draw(apispec_remote_class_configuration_firecrest_strat())
+    if include_remote and existing_kind == models.RemoteConfigurationKind.firecrest:
+        remote = draw(apispec_remote_class_configuration_firecrest_strat())
 
     return apispec.ResourceClassPatch(
         name=draw(st.one_of(st.none(), a_name)),
@@ -298,7 +283,6 @@ def apispec_resource_class_patch_strat(
         tolerations=draw(st.one_of(st.none(), apispec_tolerations_strat())),
         node_affinities=draw(st.one_of(st.none(), st.lists(apispec_node_affinity_strat(), min_size=0, max_size=3))),
         quota_enforced=draw(st.one_of(st.none(), a_bool)),
-        kind=kind,
         remote=remote,
     )
 
@@ -319,15 +303,14 @@ def apispec_resource_class_patch_with_id_strat(draw, *, existing_kind: models.Re
         tolerations=patch.tolerations,
         node_affinities=patch.node_affinities,
         quota_enforced=patch.quota_enforced,
-        kind=patch.kind,
         remote=patch.remote,
     )
 
 
 @st.composite
-def apispec_resource_class_with_id_strat(draw, *, kind: apispec.RemoteKind | None = None):
+def apispec_resource_class_with_id_strat(draw, *, pool_kind: models.RemoteConfigurationKind | None = None):
     """Generate a valid apispec.ResourceClassWithId."""
-    base = draw(apispec_resource_class_strat(kind=kind))
+    base = draw(apispec_resource_class_strat(pool_kind=pool_kind))
     return apispec.ResourceClassWithId(
         id=draw(a_row_id),
         name=base.name,
@@ -340,7 +323,6 @@ def apispec_resource_class_with_id_strat(draw, *, kind: apispec.RemoteKind | Non
         tolerations=base.tolerations,
         node_affinities=base.node_affinities,
         quota_enforced=base.quota_enforced,
-        kind=base.kind,
         remote=base.remote,
     )
 
@@ -357,7 +339,7 @@ def resource_class_model_strat(draw):
         memory=draw(st.integers(min_value=1, max_value=128)),
         gpu=draw(st.integers(min_value=0, max_value=8)),
         max_storage=max_storage,
-        kind=draw(st.sampled_from(list(models.RemoteConfigurationKind))),
+        kind=draw(st.sampled_from([None, *list(models.RemoteConfigurationKind)])),
         default=draw(a_bool),
         default_storage=default_storage,
         quota_enforced=draw(a_bool),
@@ -371,7 +353,6 @@ def resource_class_patch_update_strat(
     existing: models.ResourceClass,
     invalid_name: bool = False,
     invalid_default_storage: bool = False,
-    invalid_kind: bool = False,
     invalid_default: bool = False,
 ):
     """Generate a models.ResourceClassPatch to apply to an existing class.
@@ -388,12 +369,6 @@ def resource_class_patch_update_strat(
     else:
         default_storage = draw(st.one_of(st.none(), st.integers(min_value=1, max_value=effective_max)))
 
-    if invalid_kind:
-        kind_options = [k for k in models.RemoteConfigurationKind if k != existing.kind]
-        kind = draw(st.sampled_from(kind_options))
-    else:
-        kind = draw(st.one_of(st.none(), st.just(existing.kind)))
-
     if invalid_default:
         default = draw(st.just(not existing.default))
     else:
@@ -408,5 +383,4 @@ def resource_class_patch_update_strat(
         max_storage=max_storage,
         default_storage=default_storage,
         quota_enforced=draw(st.one_of(st.none(), a_bool)),
-        kind=kind,
     )
