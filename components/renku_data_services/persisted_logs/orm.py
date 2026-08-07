@@ -42,7 +42,7 @@ class SessionRunORM(BaseORM):
     """The session launcher ID of the session."""
 
     submission_id: Mapped[str | None] = mapped_column(nullable=True)
-    """The submission ID, if the session run corresponds to an offline job."""
+    """The submission ID, if the session run corresponds to a non-interactive job."""
 
     def dump(self) -> models.SessionRun:
         """Create a session run model from the SessionRunORM."""

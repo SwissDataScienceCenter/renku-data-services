@@ -191,9 +191,7 @@ class AmaltheaSessionPersistedLogsWriteRepository:
             )
             .where(schemas.AmaltheaSessionLogORM.id.is_(None))
         )
-        session_runs_res = await session.scalars(stmt)
-        session_run_ids = session_runs_res.all()
-        await session.execute(delete(schemas.SessionRunORM).where(schemas.SessionRunORM.id.in_(session_run_ids)))
+        await session.execute(delete(schemas.SessionRunORM).where(schemas.SessionRunORM.id.in_(stmt)))
 
         return deleted_logs_count
 
