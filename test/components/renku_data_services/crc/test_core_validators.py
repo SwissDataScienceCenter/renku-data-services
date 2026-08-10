@@ -170,6 +170,43 @@ def test_validate_resource_class_patch_or_put_put_uses_none_kind():
     assert result.kind is None
 
 
+def test_validate_resource_class_put_preserves_existing_firecrest_kind_and_remote():
+    """Standalone PUT on a FirecREST class keeps kind=firecrest and accepts body.remote."""
+    body = apispec.ResourceClass(
+        name="fc-class",
+        default=True,
+        cpu=2,
+        memory=8,
+        gpu=0,
+        max_storage=100,
+        default_storage=1,
+        remote=apispec.RemoteClassConfigurationFirecrest(system_name="eiger"),
+    )
+    result = validate_resource_class_patch_or_put(
+        body, method="PUT", existing_kind=models.RemoteConfigurationKind.firecrest
+    )
+    assert result.kind == models.RemoteConfigurationKind.firecrest
+    assert result.remote is not None
+    assert result.remote.system_name == "eiger"
+
+
+def test_validate_resource_class_put_preserves_kind_when_remote_absent():
+    """Standalone PUT without remote in the body keeps the existing kind so the DB will not wipe stored remote_json."""
+    body = apispec.ResourceClass(
+        name="fc-class",
+        default=True,
+        cpu=2,
+        memory=8,
+        gpu=0,
+        max_storage=100,
+        default_storage=1,
+    )
+    result = validate_resource_class_patch_or_put(
+        body, method="PUT", existing_kind=models.RemoteConfigurationKind.firecrest
+    )
+    assert result.kind == models.RemoteConfigurationKind.firecrest
+
+
 # ---------------------------------------------------------------------------
 # Property-based tests for PATCH/PUT helpers.
 # ---------------------------------------------------------------------------

@@ -119,7 +119,7 @@ def validate_resource_class_patch_or_put(
 ) -> models.ResourceClassPatch | models.ResourceClassPatchWithId:
     """Validate the patch/put of a resource class."""
     rc_id = body.id if isinstance(body, (apispec.ResourceClassPatchWithId, apispec.ResourceClassWithId)) else None
-    kind = existing_kind if method == "PATCH" else None
+    kind = existing_kind
 
     if body.name is not None and len(body.name) > 40:
         raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
