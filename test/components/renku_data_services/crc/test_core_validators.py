@@ -372,6 +372,30 @@ def test_validate_resource_pool_update_allows_kind_change_via_pool_remote():
     validate_resource_pool_update(existing=existing_pool, update=update)
 
 
+def test_validate_resource_pool_patch_allows_class_remote_on_local_to_firecrest_transition() -> None:
+    """PATCH converting a local pool to FirecREST accepts a class remote override in the same request."""
+    body = apispec.ResourcePoolPatch(
+        remote=apispec.RemoteConfigurationFirecrestPatch(
+            kind="firecrest",
+            api_url="https://fc.example.com",
+            system_name="eiger",
+        ),
+        classes=[
+            apispec.ResourceClassPatchWithId(
+                id=1,
+                name="fc-class",
+                cpu=2,
+                remote=apispec.RemoteClassConfigurationFirecrest(system_name="eiger"),
+            )
+        ],
+    )
+    result = validate_resource_pool_put_or_patch(method="PATCH", body=body, existing_pool_kind=None)
+    assert result.classes is not None
+    assert result.classes[0].kind == models.RemoteConfigurationKind.firecrest
+    assert result.classes[0].remote is not None
+    assert result.classes[0].remote.system_name == "eiger"
+
+
 # ---------------------------------------------------------------------------
 # Property-based tests for resource class updates.
 # ---------------------------------------------------------------------------

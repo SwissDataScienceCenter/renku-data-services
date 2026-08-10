@@ -1,6 +1,5 @@
 """crc modules converters and validators."""
 
-from dataclasses import replace
 from typing import Literal, overload
 from urllib.parse import urlparse
 
@@ -313,7 +312,7 @@ def validate_resource_pool_put_or_patch(
 
     classes = (
         [
-            validate_resource_class_patch_or_put(body=rc, method=method, existing_kind=existing_pool_kind)
+            validate_resource_class_patch_or_put(body=rc, method=method, existing_kind=new_pool_kind)
             for rc in body.classes
         ]
         if body.classes
@@ -323,12 +322,6 @@ def validate_resource_pool_put_or_patch(
         _validate_classes_against_pool_kind(
             classes=classes, new_pool_kind=new_pool_kind, existing_classes=existing_classes
         )
-        # Convert the class kind to the new pool kind so the DB update applies consistently.
-        # For PUT this is unconditional (replacement semantics); for PATCH it happens whenever the
-        # pool kind changes (including from None/local to a remote kind). The class-level remote/kind
-        # guards above ensure the conversion is valid.
-        if method == "PUT" or new_pool_kind != existing_pool_kind:
-            classes = [replace(rc, kind=new_pool_kind) for rc in classes]
 
     quota = validate_quota_put_patch(body=body.quota) if body.quota else RESET if method == "PUT" else None
     remote = None
