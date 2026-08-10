@@ -10,6 +10,7 @@ from renku_data_services.crc.core import (
     validate_resource_class_patch_or_put,
     validate_resource_class_update,
     validate_resource_pool_put_or_patch,
+    validate_resource_pool_update,
 )
 from renku_data_services.errors import errors
 from test.components.renku_data_services.crc_models.hypothesis import (
@@ -346,6 +347,29 @@ def test_validate_resource_pool_put_or_patch_converts_class_kind_on_pool_change(
     result = validate_resource_pool_put_or_patch(method="PATCH", body=body, existing_pool_kind=None)
     assert result.classes is not None
     assert result.classes[0].kind == models.RemoteConfigurationKind.firecrest
+
+
+def test_validate_resource_pool_update_allows_kind_change_via_pool_remote():
+    """Pool update that changes the pool kind does not raise when class kind matches the new pool kind.
+
+    This characterizes the path guarded by the (now-dead) class-kind-change check:
+    rc.kind == new_pool_kind, so the guard never fires.
+    """
+    existing_pool = models.ResourcePool(
+        id=1,
+        name="local-pool",
+        classes=[
+            models.ResourceClass(
+                id=1, name="c", cpu=2, memory=4, max_storage=10, gpu=0, default=True, default_storage=1
+            )
+        ],
+        platform=models.RuntimePlatform.linux_amd64,
+    )
+    update = models.ResourcePoolPatch(
+        remote=models.RemoteConfigurationFirecrestPatch(api_url="https://fc.example.com", system_name="eiger"),
+        classes=[models.ResourceClassPatchWithId(id=1, kind=models.RemoteConfigurationKind.firecrest, cpu=2)],
+    )
+    validate_resource_pool_update(existing=existing_pool, update=update)
 
 
 # ---------------------------------------------------------------------------

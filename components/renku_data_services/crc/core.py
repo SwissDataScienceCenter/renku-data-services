@@ -404,15 +404,6 @@ def validate_hibernation_warning_period(
 def validate_resource_pool_update(existing: models.ResourcePool, update: models.ResourcePoolPatch) -> None:
     """Validate the update to a resource pool."""
     name = update.name if update.name is not None else existing.name
-    match update.remote:
-        case ResetType.Reset:
-            new_pool_kind = None
-        case models.RemoteConfigurationFirecrestPatch() | models.RemoteConfigurationFirecrest():
-            new_pool_kind = models.RemoteConfigurationKind.firecrest
-        case models.RemoteConfigurationRunaiPatch() | models.RemoteConfigurationRunai():
-            new_pool_kind = models.RemoteConfigurationKind.runai
-        case None:
-            new_pool_kind = existing.remote.kind if existing.remote else None
     classes = existing.classes
     for rc in update.classes or []:
         found = next(filter(lambda tup: tup[1].id == rc.id, enumerate(classes)), None)
@@ -421,8 +412,6 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
                 message=f"Resource class '{rc.id}' does not exist in resource pool '{existing.id}'."
             )
         idx, existing_rc = found
-        if rc.kind is not None and rc.kind != existing_rc.kind and rc.kind != new_pool_kind:
-            raise errors.ValidationError(message="The resource class kind cannot be changed.")
         class_remote = existing_rc.remote
         if rc.remote is not None:
             class_remote = rc.remote
