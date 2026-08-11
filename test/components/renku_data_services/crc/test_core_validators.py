@@ -146,11 +146,15 @@ def test_validate_resource_class_patch_or_put_patch_firecrest_valid():
         max_storage=100,
         default_storage=1,
     )
-    validate_resource_class_patch_or_put(body, method="PATCH", existing_kind=models.RemoteConfigurationKind.firecrest)
+    result = validate_resource_class_patch_or_put(
+        body, method="PATCH", existing_kind=models.RemoteConfigurationKind.firecrest
+    )
+    assert result.name == body.name
+    assert result.cpu == body.cpu
 
 
 def test_validate_resource_class_patch_or_put_put_valid_no_existing_kind():
-    """PUT on a resource class sets kind to None; the pool is the source of truth."""
+    """PUT on a resource class validates successfully without an existing kind."""
     body = apispec.ResourceClass(
         name="firecrest-class",
         default=True,
@@ -160,7 +164,9 @@ def test_validate_resource_class_patch_or_put_put_valid_no_existing_kind():
         max_storage=100,
         default_storage=1,
     )
-    validate_resource_class_patch_or_put(body, method="PUT")
+    result = validate_resource_class_patch_or_put(body, method="PUT")
+    assert result.name == body.name
+    assert result.cpu == body.cpu
 
 
 def test_validate_resource_class_put_accepts_remote_for_firecrest():
@@ -193,7 +199,11 @@ def test_validate_resource_class_put_without_remote_succeeds():
         max_storage=100,
         default_storage=1,
     )
-    validate_resource_class_patch_or_put(body, method="PUT", existing_kind=models.RemoteConfigurationKind.firecrest)
+    result = validate_resource_class_patch_or_put(
+        body, method="PUT", existing_kind=models.RemoteConfigurationKind.firecrest
+    )
+    assert result.name == body.name
+    assert result.cpu == body.cpu
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +214,7 @@ def test_validate_resource_class_put_without_remote_succeeds():
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @given(body=apispec_resource_class_strat(pool_kind=st.just(None)))
 def test_validate_resource_class_patch_or_put_put_valid(body: apispec.ResourceClass) -> None:
-    """PUT with a fully populated body yields a valid ResourceClassPatch with kind None."""
+    """PUT with a fully populated body yields a valid ResourceClassPatch."""
     result = validate_resource_class_patch_or_put(body, method="PUT")
     assert isinstance(result, models.ResourceClassPatch)
 
@@ -215,7 +225,7 @@ def test_validate_resource_class_patch_or_put_put_valid(body: apispec.ResourceCl
     body=apispec_resource_class_patch_strat(),
 )
 def test_validate_resource_class_patch_or_put_patch_valid(existing_kind, body) -> None:
-    """PATCH derives the class kind from the existing class and validates successfully."""
+    """PATCH with a compatible body validates successfully."""
     assume(body.remote is None or existing_kind == models.RemoteConfigurationKind.firecrest)
     result = validate_resource_class_patch_or_put(body, method="PATCH", existing_kind=existing_kind)
     assert isinstance(result, models.ResourceClassPatch)
@@ -333,11 +343,7 @@ def test_validate_resource_pool_put_or_patch_converts_class_kind_on_pool_change(
 
 
 def test_validate_resource_pool_update_allows_kind_change_via_pool_remote():
-    """Pool update that changes the pool kind does not raise when class kind matches the new pool kind.
-
-    This characterizes the path guarded by the (now-dead) class-kind-change check:
-    rc.kind == new_pool_kind, so the guard never fires.
-    """
+    """Pool update that changes the pool remote does not raise when classes are compatible."""
     existing_pool = models.ResourcePool(
         id=1,
         name="local-pool",
@@ -432,4 +438,10 @@ def test_validate_resource_class_update_rejects_storage_inversion(
 def test_resource_class_models_have_no_kind_field():
     """Resource class models no longer carry a kind field — the pool is the source of truth."""
     rc = models.ResourceClass(id=1, name="c", cpu=2, memory=4, max_storage=10, gpu=0, default=True, default_storage=1)
+    unsaved = models.UnsavedResourceClass(name="c", cpu=2, memory=4, max_storage=10, gpu=0)
+    patch = models.ResourceClassPatch()
+    patch_with_id = models.ResourceClassPatchWithId(id=1)
     assert not hasattr(rc, "kind"), "ResourceClass should not have a kind field"
+    assert not hasattr(unsaved, "kind"), "UnsavedResourceClass should not have a kind field"
+    assert not hasattr(patch, "kind"), "ResourceClassPatch should not have a kind field"
+    assert not hasattr(patch_with_id, "kind"), "ResourceClassPatchWithId should not have a kind field"

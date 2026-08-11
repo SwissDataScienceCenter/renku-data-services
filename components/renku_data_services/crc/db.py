@@ -669,18 +669,11 @@ class ResourcePoolRepository(_Base):
                 quota = await self.quotas_repo.update_quota(quota=updated_quota, cluster_id=cluster_id)
                 rp.quota = quota.id
 
-            # Compute the effective pool kind after this update
-            if update.remote is not None:
-                if isinstance(
-                    update.remote, (models.RemoteConfigurationFirecrest, models.RemoteConfigurationFirecrestPatch)
-                ):
-                    effective_pool_kind: models.RemoteConfigurationKind | None = (
-                        models.RemoteConfigurationKind.firecrest
-                    )
-                elif isinstance(update.remote, (models.RemoteConfigurationRunai, models.RemoteConfigurationRunaiPatch)):
-                    effective_pool_kind = models.RemoteConfigurationKind.runai
-                else:  # RESET
-                    effective_pool_kind = None
+            # Compute the effective pool kind after this update.
+            if update.remote is RESET:
+                effective_pool_kind: models.RemoteConfigurationKind | None = None
+            elif update.remote is not None:
+                effective_pool_kind = update.remote.kind
             else:
                 effective_pool_kind = None
                 if rp.remote_json is not None:
