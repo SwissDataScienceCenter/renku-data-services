@@ -811,18 +811,20 @@ def _firecrest_resource_env_items(
 
     Resource class CPU, memory and GPU values are passed to Amalthea through
     the CRD, so they are never emitted as env vars. Class-level system and
-    partition override the pool defaults. When ``ignore_resource_class_values``
-    is set, an env var tells Amalthea to ignore the CRD resources and let the
-    HPC grid pick resources.
+    partition override the pool defaults. ``forward_resource_value`` is always
+    emitted: when true Amalthea forwards the CRD CPU/memory/GPU values to
+    FirecREST; when false (the default) the HPC grid picks the resources.
     """
     class_remote = resource_class.remote
     system_name = (class_remote.system_name if class_remote is not None else None) or pool_remote.system_name
     partition = (class_remote.partition if class_remote is not None else None) or pool_remote.partition
-    env: list[SessionEnvItem] = [SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=system_name)]
+    forward = class_remote.forward_resource_value if class_remote is not None else False
+    env: list[SessionEnvItem] = [
+        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=system_name),
+        SessionEnvItem(name="RSC_FIRECREST_FORWARD_RESOURCE_VALUES", value=str(forward).lower()),
+    ]
     if partition:
         env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=partition))
-    if class_remote is not None and class_remote.ignore_resource_class_values:
-        env.append(SessionEnvItem(name="RSC_FIRECREST_IGNORE_RESOURCE_CLASS_VALUES", value="true"))
     return env
 
 
