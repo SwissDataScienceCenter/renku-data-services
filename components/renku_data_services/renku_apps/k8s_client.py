@@ -91,6 +91,21 @@ class RenkuAppsK8sClient:
         """Get the runtime state for the given project's app, or None if it does not exist."""
         return await self.get_app_deployment(_generate_app_name(project, session_launcher))
 
+    async def get_app_deployment_for_launcher(self, launcher_id: ULID) -> AppRuntimeState | None:
+        """Get the runtime state for the launcher's app via its label, or None if it does not exist."""
+        cluster = await self.__client.cluster_by_id(self.__cluster_id)
+        obj_filter = K8sObjectFilter(
+            name=None,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            gvk=KNATIVE_SERVICE_GVK,
+            user_id=DUMMY_RENKU_APP_USER_ID,
+            label_selector={"renku.io/launcher-id": str(launcher_id)},
+        )
+        async for obj in self.__client.list(obj_filter):
+            return _extract_runtime_state(KnativeService.model_validate(obj.manifest))
+        return None
+
     async def delete_app_deployment(self, app_name: str) -> None:
         """Delete the deployment for the given app name."""
         cluster = await self.__client.cluster_by_id(self.__cluster_id)
