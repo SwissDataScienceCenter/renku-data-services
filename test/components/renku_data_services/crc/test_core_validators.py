@@ -41,7 +41,7 @@ def _firecrest_body(cpu: int = 2, remote: dict | None = None) -> apispec.Resourc
 # ---------------------------------------------------------------------------
 
 
-def test_resource_class_orm_dump_deserializes_ignore_resource_class_values():
+def test_resource_class_orm_dump_deserializes_forward_resource_value():
     from renku_data_services.crc.orm import ResourceClassORM
 
     orm = ResourceClassORM.from_unsaved_model(
@@ -53,23 +53,23 @@ def test_resource_class_orm_dump_deserializes_ignore_resource_class_values():
             gpu=0,
             remote=models.FirecrestClassRemote(
                 system_name="eiger",
-                ignore_resource_class_values=True,
+                forward_resource_value=True,
             ),
         ),
         resource_pool_id=None,
     )
     dumped = orm.dump()
     assert dumped.remote is not None
-    assert dumped.remote.ignore_resource_class_values is True
+    assert dumped.remote.forward_resource_value is True
 
 
-def test_validate_firecrest_class_preserves_ignore_resource_class_values():
+def test_validate_firecrest_class_preserves_forward_resource_value():
     result = validate_resource_class(
-        _firecrest_body(remote={"ignore_resource_class_values": True}),
+        _firecrest_body(remote={"forward_resource_value": True}),
         pool_kind=models.RemoteConfigurationKind.firecrest,
     )
     assert result.remote is not None
-    assert result.remote.ignore_resource_class_values is True
+    assert result.remote.forward_resource_value is True
 
 
 def test_validate_firecrest_class_remote_override():
