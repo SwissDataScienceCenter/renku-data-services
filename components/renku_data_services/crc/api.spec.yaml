@@ -2202,12 +2202,13 @@ components:
           $ref: "#/components/schemas/RemoteConfigurationFirecrestSystemName"
         partition:
           $ref: "#/components/schemas/RemoteConfigurationFirecrestPartition"
-        ignore_resource_class_values:
+        forward_resource_value:
           type: boolean
           default: false
           description: >
-            When true, Amalthea will not pass the resource class CPU, memory, or GPU values to FirecREST.
-            The HPC grid will select the resources. The class values are still used for display and quota matching.
+            When true, Amalthea forwards the resource class CPU, memory, and GPU values to FirecREST.
+            When false (the default), the HPC grid selects the resources; the class values are still
+            used for display and quota matching.
     RemoteConfigurationFirecrestProviderId:
       type: string
       description: |
