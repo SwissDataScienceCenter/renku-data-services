@@ -118,7 +118,6 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     memory: int
     max_storage: int
     gpu: int
-    kind: RemoteConfigurationKind | None = None
     default: bool = False
     default_storage: int = 1
     node_affinities: list[NodeAffinity] = field(default_factory=list)
@@ -137,7 +136,6 @@ class ResourceClass(ResourcesCompareMixin):
     max_storage: int
     gpu: int
     id: int
-    kind: RemoteConfigurationKind | None = None
     default: bool = False
     default_storage: int = 1
     matching: Optional[bool] = None
@@ -164,7 +162,6 @@ class ResourceClassPatch:
     node_affinities: list[NodeAffinity] | None = None
     tolerations: list[str] | None = None
     quota_enforced: bool | None = None
-    kind: RemoteConfigurationKind | None = None
     remote: FirecrestClassRemote | None = None
 
 

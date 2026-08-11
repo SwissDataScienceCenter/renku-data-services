@@ -51,7 +51,6 @@ def test_resource_class_orm_dump_deserializes_ignore_resource_class_values():
             memory=8,
             max_storage=100,
             gpu=0,
-            kind=models.RemoteConfigurationKind.firecrest,
             remote=models.FirecrestClassRemote(
                 system_name="eiger",
                 ignore_resource_class_values=True,
@@ -94,7 +93,6 @@ def test_validate_local_class_valid(body: apispec.ResourceClass) -> None:
     """A local resource class validates successfully without a pool kind."""
     result = validate_resource_class(body)
     assert isinstance(result, models.UnsavedResourceClass)
-    assert result.kind is None
     assert result.name == body.name
     assert result.cpu == body.cpu
 
@@ -105,7 +103,6 @@ def test_validate_firecrest_class_valid(body: apispec.ResourceClass) -> None:
     """A FirecREST class validates successfully when the pool kind matches."""
     result = validate_resource_class(body, pool_kind=models.RemoteConfigurationKind.firecrest)
     assert isinstance(result, models.UnsavedResourceClass)
-    assert result.kind is None
     assert result.cpu == int(body.cpu)
     assert result.name == body.name
 
@@ -116,7 +113,6 @@ def test_validate_runai_class_valid(body: apispec.ResourceClass) -> None:
     """A Run:AI class validates successfully when the pool kind matches."""
     result = validate_resource_class(body, pool_kind=models.RemoteConfigurationKind.runai)
     assert isinstance(result, models.UnsavedResourceClass)
-    assert result.kind is None
 
 
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
@@ -150,10 +146,7 @@ def test_validate_resource_class_patch_or_put_patch_firecrest_valid():
         max_storage=100,
         default_storage=1,
     )
-    result = validate_resource_class_patch_or_put(
-        body, method="PATCH", existing_kind=models.RemoteConfigurationKind.firecrest
-    )
-    assert result.kind is None
+    validate_resource_class_patch_or_put(body, method="PATCH", existing_kind=models.RemoteConfigurationKind.firecrest)
 
 
 def test_validate_resource_class_patch_or_put_put_valid_no_existing_kind():
@@ -167,8 +160,7 @@ def test_validate_resource_class_patch_or_put_put_valid_no_existing_kind():
         max_storage=100,
         default_storage=1,
     )
-    result = validate_resource_class_patch_or_put(body, method="PUT")
-    assert result.kind is None
+    validate_resource_class_patch_or_put(body, method="PUT")
 
 
 def test_validate_resource_class_put_accepts_remote_for_firecrest():
@@ -186,7 +178,6 @@ def test_validate_resource_class_put_accepts_remote_for_firecrest():
     result = validate_resource_class_patch_or_put(
         body, method="PUT", existing_kind=models.RemoteConfigurationKind.firecrest
     )
-    assert result.kind is None
     assert result.remote is not None
     assert result.remote.system_name == "eiger"
 
@@ -202,10 +193,7 @@ def test_validate_resource_class_put_without_remote_succeeds():
         max_storage=100,
         default_storage=1,
     )
-    result = validate_resource_class_patch_or_put(
-        body, method="PUT", existing_kind=models.RemoteConfigurationKind.firecrest
-    )
-    assert result.kind is None
+    validate_resource_class_patch_or_put(body, method="PUT", existing_kind=models.RemoteConfigurationKind.firecrest)
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +207,6 @@ def test_validate_resource_class_patch_or_put_put_valid(body: apispec.ResourceCl
     """PUT with a fully populated body yields a valid ResourceClassPatch with kind None."""
     result = validate_resource_class_patch_or_put(body, method="PUT")
     assert isinstance(result, models.ResourceClassPatch)
-    assert result.kind is None
 
 
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
@@ -232,7 +219,6 @@ def test_validate_resource_class_patch_or_put_patch_valid(existing_kind, body) -
     assume(body.remote is None or existing_kind == models.RemoteConfigurationKind.firecrest)
     result = validate_resource_class_patch_or_put(body, method="PATCH", existing_kind=existing_kind)
     assert isinstance(result, models.ResourceClassPatch)
-    assert result.kind is None
 
 
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
@@ -246,7 +232,6 @@ def test_validate_resource_class_patch_or_put_with_id_valid(existing_kind, body)
     result = validate_resource_class_patch_or_put(body, method="PATCH", existing_kind=existing_kind)
     assert isinstance(result, models.ResourceClassPatchWithId)
     assert result.id == body.id
-    assert result.kind is None
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +268,6 @@ def test_validate_resource_pool_put_or_patch_rejects_stored_remote_on_non_firecr
         gpu=0,
         default=True,
         default_storage=1,
-        kind=models.RemoteConfigurationKind.firecrest,
         remote=models.FirecrestClassRemote(system_name="eiger", partition="normal"),
     )
     body = apispec.ResourcePoolPatch(
@@ -346,7 +330,6 @@ def test_validate_resource_pool_put_or_patch_converts_class_kind_on_pool_change(
     )
     result = validate_resource_pool_put_or_patch(method="PATCH", body=body, existing_pool_kind=None)
     assert result.classes is not None
-    assert result.classes[0].kind is None
 
 
 def test_validate_resource_pool_update_allows_kind_change_via_pool_remote():
@@ -367,7 +350,7 @@ def test_validate_resource_pool_update_allows_kind_change_via_pool_remote():
     )
     update = models.ResourcePoolPatch(
         remote=models.RemoteConfigurationFirecrestPatch(api_url="https://fc.example.com", system_name="eiger"),
-        classes=[models.ResourceClassPatchWithId(id=1, kind=models.RemoteConfigurationKind.firecrest, cpu=2)],
+        classes=[models.ResourceClassPatchWithId(id=1, cpu=2)],
     )
     validate_resource_pool_update(existing=existing_pool, update=update)
 
@@ -391,7 +374,6 @@ def test_validate_resource_pool_patch_allows_class_remote_on_local_to_firecrest_
     )
     result = validate_resource_pool_put_or_patch(method="PATCH", body=body, existing_pool_kind=None)
     assert result.classes is not None
-    assert result.classes[0].kind is None
     assert result.classes[0].remote is not None
     assert result.classes[0].remote.system_name == "eiger"
 
@@ -445,3 +427,9 @@ def test_validate_resource_class_update_rejects_storage_inversion(
     assume(update.default_storage > max_storage)
     with pytest.raises(errors.ValidationError):
         validate_resource_class_update(existing, update)
+
+
+def test_resource_class_models_have_no_kind_field():
+    """Resource class models no longer carry a kind field — the pool is the source of truth."""
+    rc = models.ResourceClass(id=1, name="c", cpu=2, memory=4, max_storage=10, gpu=0, default=True, default_storage=1)
+    assert not hasattr(rc, "kind"), "ResourceClass should not have a kind field"

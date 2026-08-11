@@ -3,7 +3,6 @@
 from renku_data_services.crc.models import (
     FirecrestClassRemote,
     RemoteConfigurationFirecrest,
-    RemoteConfigurationKind,
     ResourceClass,
 )
 from renku_data_services.notebooks.core_sessions import _firecrest_resource_env_items
@@ -23,7 +22,6 @@ def test_firecrest_resource_env_items_omit_resource_values_by_default():
         memory=8,
         gpu=1,
         max_storage=100,
-        kind=RemoteConfigurationKind.firecrest,
     )
     env = _firecrest_resource_env_items(resource_class, pool_remote)
     by_name = {item.name: item.value for item in env}
@@ -46,7 +44,6 @@ def test_firecrest_resource_env_items_use_class_overrides():
         memory=8,
         gpu=1,
         max_storage=100,
-        kind=RemoteConfigurationKind.firecrest,
         remote=FirecrestClassRemote(system_name="class-system", partition="class-partition"),
     )
     env = _firecrest_resource_env_items(resource_class, pool_remote)
@@ -70,7 +67,6 @@ def test_firecrest_resource_env_items_fall_back_to_pool_values():
         memory=4,
         gpu=0,
         max_storage=100,
-        kind=RemoteConfigurationKind.firecrest,
     )
     env = _firecrest_resource_env_items(resource_class, pool_remote)
     by_name = {item.name: item.value for item in env}
@@ -92,7 +88,6 @@ def test_firecrest_resource_env_items_emits_ignore_flag_when_set():
         memory=8,
         gpu=1,
         max_storage=100,
-        kind=RemoteConfigurationKind.firecrest,
         remote=FirecrestClassRemote(ignore_resource_class_values=True),
     )
     env = _firecrest_resource_env_items(resource_class, pool_remote)

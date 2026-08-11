@@ -339,7 +339,6 @@ def resource_class_model_strat(draw):
         memory=draw(st.integers(min_value=1, max_value=128)),
         gpu=draw(st.integers(min_value=0, max_value=8)),
         max_storage=max_storage,
-        kind=draw(st.sampled_from([None, *list(models.RemoteConfigurationKind)])),
         default=draw(a_bool),
         default_storage=default_storage,
         quota_enforced=draw(a_bool),
