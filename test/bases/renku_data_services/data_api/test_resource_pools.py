@@ -343,6 +343,46 @@ async def test_patch_pool_from_firecrest_clears_kind_when_class_has_no_remote(
     assert res.status_code == 200, res.text
 
 
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_pool_from_firecrest_clears_stale_class_remote_json(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """PATCHing a FirecREST pool to local clears remote_json on classes not in the update (Finding 3)."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="firecrest-pool-stale",
+        class_remote={"system_name": "eiger"},
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    )
+    pool_id = rp["id"]
+    class_id = rp["classes"][0]["id"]
+
+    # PATCH the pool to local (reset remote) WITHOUT including the class in the update
+    patch = {"remote": {}}
+    _, response = await sanic_client.patch(
+        f"/api/data/resource_pools/{pool_id}",
+        headers=admin_headers,
+        json=patch,
+    )
+    assert response.status_code == 200, response.text
+
+    # Verify the class's remote_json is cleared (stale data must not persist)
+    _, response = await sanic_client.get(
+        f"/api/data/resource_pools/{pool_id}/classes/{class_id}",
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json.get("remote") is None
+
+
 @pytest.mark.parametrize(
     "payload,expected_status_code",
     resource_pool_payload,

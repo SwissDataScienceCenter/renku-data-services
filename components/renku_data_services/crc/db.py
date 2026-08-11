@@ -560,13 +560,6 @@ class ResourcePoolRepository(_Base):
                         message=f"Resource pool with id {resource_pool_id} does not exist."
                     )
                 resource_class.resource_pool = rp
-                expected_kind: models.RemoteConfigurationKind | None = None
-                if rp.remote_json is not None:
-                    remote_kind = rp.remote_json.get("kind")
-                    if remote_kind is not None:
-                        expected_kind = models.RemoteConfigurationKind(remote_kind)
-                if expected_kind is not None and new_resource_class.kind != expected_kind:
-                    raise errors.ValidationError(message="Class kind does not match resource pool remote kind.")
                 if resource_class.default and len(rp.classes) > 0 and any([icls.default for icls in rp.classes]):
                     raise errors.ValidationError(
                         message="There can only be one default resource class per resource pool."
@@ -676,12 +669,35 @@ class ResourcePoolRepository(_Base):
                 quota = await self.quotas_repo.update_quota(quota=updated_quota, cluster_id=cluster_id)
                 rp.quota = quota.id
 
+            # Compute the effective pool kind after this update
+            if update.remote is not None:
+                if isinstance(
+                    update.remote, (models.RemoteConfigurationFirecrest, models.RemoteConfigurationFirecrestPatch)
+                ):
+                    effective_pool_kind: models.RemoteConfigurationKind | None = (
+                        models.RemoteConfigurationKind.firecrest
+                    )
+                elif isinstance(update.remote, (models.RemoteConfigurationRunai, models.RemoteConfigurationRunaiPatch)):
+                    effective_pool_kind = models.RemoteConfigurationKind.runai
+                else:  # RESET
+                    effective_pool_kind = None
+            else:
+                effective_pool_kind = None
+                if rp.remote_json is not None:
+                    remote_kind = rp.remote_json.get("kind")
+                    if remote_kind is not None:
+                        effective_pool_kind = models.RemoteConfigurationKind(remote_kind)
+
             new_classes_coroutines = []
             if update.classes is not None:
                 for rc in update.classes:
                     new_classes_coroutines.append(
                         self.update_resource_class(
-                            api_user=api_user, resource_pool_id=resource_pool_id, resource_class_id=rc.id, update=rc
+                            api_user=api_user,
+                            resource_pool_id=resource_pool_id,
+                            resource_class_id=rc.id,
+                            update=rc,
+                            pool_kind=effective_pool_kind,
                         )
                     )
 
@@ -705,6 +721,14 @@ class ResourcePoolRepository(_Base):
                 rp.remote_json = remote_json
 
             await gather(*new_classes_coroutines)
+
+            # Clear stale class remote_json when the pool is not FirecREST
+            if effective_pool_kind != models.RemoteConfigurationKind.firecrest:
+                updated_class_ids = {rc.id for rc in (update.classes or [])}
+                for cls_orm in rp.classes:
+                    if cls_orm.id not in updated_class_ids and cls_orm.remote_json is not None:
+                        cls_orm.remote_json = None
+
             await session.flush()
             await session.refresh(rp)
             transaction_result = rp.dump(quota=quota)
@@ -820,6 +844,8 @@ class ResourcePoolRepository(_Base):
         resource_pool_id: int,
         resource_class_id: int,
         update: models.ResourceClassPatch,
+        *,
+        pool_kind: models.RemoteConfigurationKind | None = None,
     ) -> models.ResourceClass:
         """Update a specific resource class."""
         async with self.session_maker() as session, session.begin():
@@ -841,6 +867,11 @@ class ResourcePoolRepository(_Base):
                     )
                 )
 
+            if pool_kind is None and cls.resource_pool is not None and cls.resource_pool.remote_json is not None:
+                remote_kind = cls.resource_pool.remote_json.get("kind")
+                if remote_kind is not None:
+                    pool_kind = models.RemoteConfigurationKind(remote_kind)
+
             validate_resource_class_update(existing=cls.dump(), update=update)
 
             # NOTE: updating the 'default' field is not supported, so it is skipped below
@@ -858,7 +889,7 @@ class ResourcePoolRepository(_Base):
                 cls.default_storage = update.default_storage
             if update.quota_enforced is not None:
                 cls.quota_enforced = update.quota_enforced
-            if update.kind is None or update.kind != models.RemoteConfigurationKind.firecrest:
+            if pool_kind is None or pool_kind != models.RemoteConfigurationKind.firecrest:
                 cls.remote_json = None
             if update.remote is not None:
                 cls.remote_json = update.remote.to_dict()
