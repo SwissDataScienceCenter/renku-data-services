@@ -61,6 +61,10 @@ from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTE
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.notifications.db import NotificationsRepository
+from renku_data_services.persisted_logs.db import (
+    AmaltheaSessionPersistedLogsReadRepository,
+    ImageBuildPersistedLogsReadRepository,
+)
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -169,6 +173,8 @@ class DependencyManager:
     occurrence_repo: OccurrenceRepository
     resource_requests_repo: ResourceRequestsRepo
     resource_usage_service: ResourceUsageService
+    session_logs_repo: AmaltheaSessionPersistedLogsReadRepository
+    build_logs_repo: ImageBuildPersistedLogsReadRepository
     zenodo_client: ZenodoAPIClient
     envidat_client: EnvidatClient
     job_client: DepositUploadJobClient
@@ -205,6 +211,7 @@ class DependencyManager:
             renku_data_services.notifications.__file__,
             renku_data_services.capacity_reservation.__file__,
             renku_data_services.resource_usage.__file__,
+            renku_data_services.persisted_logs.__file__,
             renku_data_services.authn.api.__file__,
         ]
 
@@ -462,6 +469,12 @@ class DependencyManager:
         occurrence_repo = OccurrenceRepository(
             session_maker=config.db.async_session_maker,
         )
+        session_logs_repo = AmaltheaSessionPersistedLogsReadRepository(authz=authz)
+        build_logs_repo = ImageBuildPersistedLogsReadRepository(
+            authz=authz,
+            builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
+        )
         return cls(
             config,
             k8s_client=client,
@@ -507,6 +520,8 @@ class DependencyManager:
             occurrence_repo=occurrence_repo,
             resource_requests_repo=resource_requests_repo,
             resource_usage_service=resource_usage_service,
+            session_logs_repo=session_logs_repo,
+            build_logs_repo=build_logs_repo,
             zenodo_client=ZenodoAPIClient(),
             envidat_client=EnvidatClient(),
             job_client=job_client,
