@@ -269,6 +269,47 @@ async def test_put_resource_class_without_kind_keeps_firecrest_kind(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
+async def test_put_resource_class_on_firecrest_pool_preserves_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Standalone PUT on a FirecREST class preserves remote_json."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="fc-pool",
+        class_remote={"system_name": "eiger"},
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://firecrest.example.com",
+            "system_name": "eiger",
+        },
+    )
+    pool_id = rp["id"]
+    class_id = rp["classes"][0]["id"]
+
+    _, response = await sanic_client.put(
+        f"/api/data/resource_pools/{pool_id}/classes/{class_id}",
+        headers=admin_headers,
+        json={
+            "name": "fc-class-renamed",
+            "cpu": 4,
+            "memory": 16,
+            "gpu": 0,
+            "max_storage": 100,
+            "default_storage": 1,
+            "default": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json["name"] == "fc-class-renamed"
+    assert response.json.get("remote") is not None
+    assert response.json["remote"]["system_name"] == "eiger"
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_patch_pool_to_firecrest_converts_local_classes(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
