@@ -105,7 +105,7 @@ def test_validate_firecrest_class_valid(body: apispec.ResourceClass) -> None:
     """A FirecREST class validates successfully when the pool kind matches."""
     result = validate_resource_class(body, pool_kind=models.RemoteConfigurationKind.firecrest)
     assert isinstance(result, models.UnsavedResourceClass)
-    assert result.kind == models.RemoteConfigurationKind.firecrest
+    assert result.kind is None
     assert result.cpu == int(body.cpu)
     assert result.name == body.name
 
@@ -116,7 +116,7 @@ def test_validate_runai_class_valid(body: apispec.ResourceClass) -> None:
     """A Run:AI class validates successfully when the pool kind matches."""
     result = validate_resource_class(body, pool_kind=models.RemoteConfigurationKind.runai)
     assert isinstance(result, models.UnsavedResourceClass)
-    assert result.kind == models.RemoteConfigurationKind.runai
+    assert result.kind is None
 
 
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
@@ -139,8 +139,8 @@ def test_validate_resource_class_rejects_invalid_case_split(invalid_case: str, d
         validate_resource_class(body, pool_kind=pool_kind)
 
 
-def test_validate_resource_class_patch_or_put_patch_preserves_existing_kind():
-    """PATCH preserves the existing class kind."""
+def test_validate_resource_class_patch_or_put_patch_firecrest_valid():
+    """PATCH on a FirecREST class validates successfully."""
     body = apispec.ResourceClassPatch(
         name="firecrest-class",
         default=True,
@@ -153,10 +153,10 @@ def test_validate_resource_class_patch_or_put_patch_preserves_existing_kind():
     result = validate_resource_class_patch_or_put(
         body, method="PATCH", existing_kind=models.RemoteConfigurationKind.firecrest
     )
-    assert result.kind == models.RemoteConfigurationKind.firecrest
+    assert result.kind is None
 
 
-def test_validate_resource_class_patch_or_put_put_uses_none_kind():
+def test_validate_resource_class_patch_or_put_put_valid_no_existing_kind():
     """PUT on a resource class sets kind to None; the pool is the source of truth."""
     body = apispec.ResourceClass(
         name="firecrest-class",
@@ -171,8 +171,8 @@ def test_validate_resource_class_patch_or_put_put_uses_none_kind():
     assert result.kind is None
 
 
-def test_validate_resource_class_put_preserves_existing_firecrest_kind_and_remote():
-    """Standalone PUT on a FirecREST class keeps kind=firecrest and accepts body.remote."""
+def test_validate_resource_class_put_accepts_remote_for_firecrest():
+    """Standalone PUT on a FirecREST class accepts body.remote."""
     body = apispec.ResourceClass(
         name="fc-class",
         default=True,
@@ -186,13 +186,13 @@ def test_validate_resource_class_put_preserves_existing_firecrest_kind_and_remot
     result = validate_resource_class_patch_or_put(
         body, method="PUT", existing_kind=models.RemoteConfigurationKind.firecrest
     )
-    assert result.kind == models.RemoteConfigurationKind.firecrest
+    assert result.kind is None
     assert result.remote is not None
     assert result.remote.system_name == "eiger"
 
 
-def test_validate_resource_class_put_preserves_kind_when_remote_absent():
-    """Standalone PUT without remote in the body keeps the existing kind so the DB will not wipe stored remote_json."""
+def test_validate_resource_class_put_without_remote_succeeds():
+    """Standalone PUT without remote in the body succeeds."""
     body = apispec.ResourceClass(
         name="fc-class",
         default=True,
@@ -205,7 +205,7 @@ def test_validate_resource_class_put_preserves_kind_when_remote_absent():
     result = validate_resource_class_patch_or_put(
         body, method="PUT", existing_kind=models.RemoteConfigurationKind.firecrest
     )
-    assert result.kind == models.RemoteConfigurationKind.firecrest
+    assert result.kind is None
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +232,7 @@ def test_validate_resource_class_patch_or_put_patch_valid(existing_kind, body) -
     assume(body.remote is None or existing_kind == models.RemoteConfigurationKind.firecrest)
     result = validate_resource_class_patch_or_put(body, method="PATCH", existing_kind=existing_kind)
     assert isinstance(result, models.ResourceClassPatch)
-    assert result.kind == existing_kind
+    assert result.kind is None
 
 
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
@@ -246,7 +246,7 @@ def test_validate_resource_class_patch_or_put_with_id_valid(existing_kind, body)
     result = validate_resource_class_patch_or_put(body, method="PATCH", existing_kind=existing_kind)
     assert isinstance(result, models.ResourceClassPatchWithId)
     assert result.id == body.id
-    assert result.kind == existing_kind
+    assert result.kind is None
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +346,7 @@ def test_validate_resource_pool_put_or_patch_converts_class_kind_on_pool_change(
     )
     result = validate_resource_pool_put_or_patch(method="PATCH", body=body, existing_pool_kind=None)
     assert result.classes is not None
-    assert result.classes[0].kind == models.RemoteConfigurationKind.firecrest
+    assert result.classes[0].kind is None
 
 
 def test_validate_resource_pool_update_allows_kind_change_via_pool_remote():
@@ -391,7 +391,7 @@ def test_validate_resource_pool_patch_allows_class_remote_on_local_to_firecrest_
     )
     result = validate_resource_pool_put_or_patch(method="PATCH", body=body, existing_pool_kind=None)
     assert result.classes is not None
-    assert result.classes[0].kind == models.RemoteConfigurationKind.firecrest
+    assert result.classes[0].kind is None
     assert result.classes[0].remote is not None
     assert result.classes[0].remote.system_name == "eiger"
 

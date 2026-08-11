@@ -84,7 +84,6 @@ def validate_resource_class(
         node_affinities=node_affinities,
         tolerations=tolerations,
         quota_enforced=body.quota_enforced,
-        kind=pool_kind,
         remote=remote,
     )
 
@@ -159,7 +158,6 @@ def validate_resource_class_patch_or_put(
             node_affinities=node_affinities,
             tolerations=tolerations,
             quota_enforced=body.quota_enforced,
-            kind=kind,
             remote=remote,
         )
     return models.ResourceClassPatch(
@@ -173,7 +171,6 @@ def validate_resource_class_patch_or_put(
         node_affinities=node_affinities,
         tolerations=tolerations,
         quota_enforced=body.quota_enforced,
-        kind=kind,
         remote=remote,
     )
 
@@ -419,7 +416,6 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             default_storage=rc.default_storage if rc.default_storage is not None else existing_rc.default_storage,
             node_affinities=rc.node_affinities if rc.node_affinities is not None else existing_rc.node_affinities,
             tolerations=rc.tolerations if rc.tolerations is not None else existing_rc.tolerations,
-            kind=existing_rc.kind,
             remote=class_remote,
         )
     quota: models.Quota | models.UnsavedQuota | ResetType = existing.quota if existing.quota else RESET
