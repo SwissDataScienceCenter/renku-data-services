@@ -43,13 +43,6 @@ class ResourcesProtocol(Protocol):
         ...
 
 
-class RemoteConfigurationKind(StrEnum):
-    """Remote resource pool kinds."""
-
-    firecrest = "firecrest"
-    runai = "runai"
-
-
 class ResourcesCompareMixin:
     """A mixin that adds comparison operator support on ResourceClasses and Quotas."""
 
@@ -428,6 +421,13 @@ class ResourcePoolPatch:
     cluster_id: ClusterId | ResetType | None = None
     platform: RuntimePlatform | None = None
     cpu_limit_factor: float | None | ResetType = None
+
+
+class RemoteConfigurationKind(StrEnum):
+    """Remote resource pool kinds."""
+
+    firecrest = "firecrest"
+    runai = "runai"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
