@@ -168,7 +168,7 @@ def apispec_remote_class_configuration_firecrest_strat(draw):
     return apispec.RemoteClassConfigurationFirecrest(
         system_name=draw(st.one_of(st.none(), a_name)),
         partition=draw(st.one_of(st.none(), a_name)),
-        forward_resource_value=draw(a_bool),
+        forward_resource_values=draw(a_bool),
     )
 
 

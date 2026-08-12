@@ -67,7 +67,7 @@ def validate_resource_class(
         remote = models.FirecrestClassRemote(
             system_name=body.remote.system_name,
             partition=body.remote.partition,
-            forward_resource_value=body.remote.forward_resource_value,
+            forward_resource_values=body.remote.forward_resource_values,
         )
 
     if pool_kind == models.RemoteConfigurationKind.firecrest and not body.cpu.is_integer():
@@ -143,7 +143,7 @@ def validate_resource_class_patch_or_put(
         remote = models.FirecrestClassRemote(
             system_name=body.remote.system_name,
             partition=body.remote.partition,
-            forward_resource_value=body.remote.forward_resource_value,
+            forward_resource_values=body.remote.forward_resource_values,
         )
     if rc_id:
         return models.ResourceClassPatchWithId(

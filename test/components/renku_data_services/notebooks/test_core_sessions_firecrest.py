@@ -89,7 +89,7 @@ def test_firecrest_resource_env_items_forwards_true_when_set():
         memory=8,
         gpu=1,
         max_storage=100,
-        remote=FirecrestClassRemote(forward_resource_value=True),
+        remote=FirecrestClassRemote(forward_resource_values=True),
     )
     env = _firecrest_resource_env_items(resource_class, pool_remote)
     by_name = {item.name: item.value for item in env}

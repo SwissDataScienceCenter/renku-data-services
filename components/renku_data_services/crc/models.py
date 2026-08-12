@@ -88,12 +88,12 @@ class FirecrestClassRemote:
 
     system_name: str | None = None
     partition: str | None = None
-    forward_resource_value: bool = False
+    forward_resource_values: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance into a dictionary."""
         result: dict[str, Any] = {
-            "forward_resource_value": self.forward_resource_value,
+            "forward_resource_values": self.forward_resource_values,
         }
         if self.system_name is not None:
             result["system_name"] = self.system_name
