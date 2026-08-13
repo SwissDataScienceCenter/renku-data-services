@@ -142,7 +142,7 @@ async def test_post_global_data_connector(
     assert response.json.get("id") == data_connector["id"]
 
 
-@pytest.skip("The Dataverse API is temporarily out of order.")
+@pytest.mark.skip("The Dataverse API is temporarily out of order.")
 @pytest.mark.asyncio
 async def test_post_global_data_connector_dataverse(
     sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch"
