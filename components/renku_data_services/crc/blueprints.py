@@ -465,7 +465,9 @@ class ClassesBP(CustomBlueprint):
         async def _post(
             _: Request, user: base_models.APIUser, body: apispec.ResourceClass, resource_pool_id: int
         ) -> HTTPResponse:
-            cls = validate_resource_class(body=body)
+            pool = await self.repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
+            pool_kind = pool.remote.kind if pool.remote else None
+            cls = validate_resource_class(body=body, pool_kind=pool_kind)
             res = await self.repo.insert_resource_class(
                 api_user=user, new_resource_class=cls, resource_pool_id=resource_pool_id
             )

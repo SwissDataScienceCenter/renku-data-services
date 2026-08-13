@@ -310,6 +310,46 @@ async def test_put_resource_class_on_firecrest_pool_preserves_remote(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
+async def test_post_resource_class_on_firecrest_pool_preserves_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """POSTing a FirecREST class with a remote block stores the remote config."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="fc-pool-post",
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://firecrest.example.com",
+            "system_name": "eiger",
+        },
+    )
+    pool_id = rp["id"]
+
+    _, response = await sanic_client.post(
+        f"/api/data/resource_pools/{pool_id}/classes",
+        headers=admin_headers,
+        json={
+            "name": "fc-posted-class",
+            "cpu": 2,
+            "memory": 8,
+            "gpu": 0,
+            "max_storage": 100,
+            "default_storage": 1,
+            "default": False,
+            "quota_enforced": False,
+            "remote": {"forward_resource_values": True},
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert "id" in response.json
+    assert response.json["remote"]["forward_resource_values"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_patch_pool_to_firecrest_converts_local_classes(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
