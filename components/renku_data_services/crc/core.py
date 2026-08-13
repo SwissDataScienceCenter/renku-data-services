@@ -145,6 +145,8 @@ def validate_resource_class_patch_or_put(
             partition=body.remote.partition,
             forward_resource_values=body.remote.forward_resource_values,
         )
+    if kind == models.RemoteConfigurationKind.firecrest and body.cpu is not None and not body.cpu.is_integer():
+        raise errors.ValidationError(message="FirecREST resource classes require an integer value for cpu.")
     if rc_id:
         return models.ResourceClassPatchWithId(
             id=rc_id,

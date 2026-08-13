@@ -206,6 +206,23 @@ def test_validate_resource_class_put_without_remote_succeeds():
     assert result.cpu == body.cpu
 
 
+def test_validate_resource_class_patch_or_put_rejects_fractional_cpu_for_firecrest():
+    """Standalone PUT/PATCH on a FirecREST class rejects fractional CPU."""
+    body = apispec.ResourceClassPatch(
+        name="fc-class",
+        default=False,
+        cpu=1.5,
+        memory=8,
+        gpu=0,
+        max_storage=100,
+        default_storage=1,
+    )
+    with pytest.raises(errors.ValidationError):
+        validate_resource_class_patch_or_put(
+            body, method="PATCH", existing_kind=models.RemoteConfigurationKind.firecrest
+        )
+
+
 # ---------------------------------------------------------------------------
 # Property-based tests for PATCH/PUT helpers.
 # ---------------------------------------------------------------------------
@@ -227,6 +244,7 @@ def test_validate_resource_class_patch_or_put_put_valid(body: apispec.ResourceCl
 def test_validate_resource_class_patch_or_put_patch_valid(existing_kind, body) -> None:
     """PATCH with a compatible body validates successfully."""
     assume(body.remote is None or existing_kind == models.RemoteConfigurationKind.firecrest)
+    assume(existing_kind != models.RemoteConfigurationKind.firecrest or body.cpu is None or body.cpu.is_integer())
     result = validate_resource_class_patch_or_put(body, method="PATCH", existing_kind=existing_kind)
     assert isinstance(result, models.ResourceClassPatch)
 
@@ -239,6 +257,7 @@ def test_validate_resource_class_patch_or_put_patch_valid(existing_kind, body) -
 def test_validate_resource_class_patch_or_put_with_id_valid(existing_kind, body) -> None:
     """PATCH/PUT with an id preserves the id and produces ResourceClassPatchWithId."""
     assume(body.remote is None or existing_kind == models.RemoteConfigurationKind.firecrest)
+    assume(existing_kind != models.RemoteConfigurationKind.firecrest or body.cpu is None or body.cpu.is_integer())
     result = validate_resource_class_patch_or_put(body, method="PATCH", existing_kind=existing_kind)
     assert isinstance(result, models.ResourceClassPatchWithId)
     assert result.id == body.id
