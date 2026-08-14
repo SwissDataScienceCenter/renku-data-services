@@ -35,7 +35,7 @@ class PosthogConfig:
 
 
 @dataclass
-class MeteringConfig:
+class MeteroidConfig:
     """Configuration for the Kong metering endpoint."""
 
     enabled: bool
@@ -43,7 +43,7 @@ class MeteringConfig:
     token: str
 
     @classmethod
-    def from_env(cls) -> MeteringConfig:
+    def from_env(cls) -> MeteroidConfig:
         """Create metering config from environment variables."""
         return cls(
             enabled=os.environ.get("METERING_ENABLED", "false").lower() == "true",
@@ -77,7 +77,7 @@ class Config:
     db: DBConfig
     solr: SolrClientConfig
     posthog: PosthogConfig
-    metering: MeteringConfig
+    meteroid: MeteroidConfig
     lago: LagoConfig
     authz: AuthzConfig
     keycloak: KeycloakConfig | None
@@ -107,7 +107,7 @@ class Config:
         main_tick = int(os.environ.get("MAIN_LOG_INTERVAL_SECONDS", "300"))
         solr_config = SolrClientConfig.from_env()
         posthog_config = PosthogConfig.from_env()
-        metering_config = MeteringConfig.from_env()
+        meteroid_config = MeteroidConfig.from_env()
         lago_config = LagoConfig.from_env()
         tcp_host = os.environ.get("TCP_HOST", "127.0.0.1")
         tcp_port = int(os.environ.get("TCP_PORT", "8001"))
@@ -132,7 +132,7 @@ class Config:
             main_log_interval_seconds=main_tick,
             solr=solr_config,
             posthog=posthog_config,
-            metering=metering_config,
+            meteroid=meteroid_config,
             lago=lago_config,
             authz=authz,
             keycloak=keycloak,
