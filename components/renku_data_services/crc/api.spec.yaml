@@ -1323,6 +1323,8 @@ components:
           $ref: "#/components/schemas/NodeAffinityList"
         quota_enforced:
           $ref: "#/components/schemas/QuotaEnforced"
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
     ResourceClass:
       type: object
       additionalProperties: false
@@ -1349,6 +1351,8 @@ components:
           allOf:
             - $ref: "#/components/schemas/QuotaEnforced"
           default: false
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
       required:
         - name
         - default
@@ -1412,6 +1416,8 @@ components:
           allOf:
             - $ref: "#/components/schemas/QuotaEnforced"
           default: false
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
       required:
         - name
         - default
@@ -2188,6 +2194,21 @@ components:
         - kind
         - api_url
         - system_name
+    RemoteClassConfigurationFirecrest:
+      type: object
+      additionalProperties: false
+      properties:
+        system_name:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestSystemName"
+        partition:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestPartition"
+        forward_resource_values:
+          type: boolean
+          default: false
+          description: >
+            When true, Amalthea forwards the resource class CPU, memory, and GPU values to FirecREST.
+            When false (the default), the HPC grid selects the resources; the class values are still
+            used for display and quota matching.
     RemoteConfigurationFirecrestProviderId:
       type: string
       description: |
