@@ -206,11 +206,17 @@ async def dummy_users():
 def pytest_addoption(parser):
     parser.addoption("--disable-cluster-creation", action="store_true", default=False, help="Disable cluster creation")
     parser.addoption("--enable-builds", action="store_true", default=False, help="Enable builds")
+    parser.addoption("--enable-apps", action="store_true", default=False, help="Enable apps")
 
 
 @pytest.fixture(scope="session")
 def builds_enabled(request):
     return request.config.getoption("--enable-builds")
+
+
+@pytest.fixture(scope="session")
+def apps_enabled(request):
+    return request.config.getoption("--enable-apps")
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -220,14 +226,21 @@ def disable_cluster_creation(request):
 
 @pytest_asyncio.fixture(scope="session")
 async def app_manager(
-    authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users, kubeconfig_path: Path, builds_enabled
+    authz_setup,
+    monkeysession,
+    worker_id,
+    secrets_key_pair,
+    dummy_users,
+    kubeconfig_path: Path,
+    builds_enabled,
+    apps_enabled,
 ) -> AsyncGenerator[DependencyManager, None]:
     monkeysession.setenv("DUMMY_STORES", "true")
     monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
     monkeysession.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
     monkeysession.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
     monkeysession.setenv("V1_SESSIONS_ENABLED", "true")
-    monkeysession.setenv("APPS_ENABLED", "true")
+    monkeysession.setenv("APPS_ENABLED", str(apps_enabled))
     monkeysession.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())
     monkeysession.setenv("DATA_DEPOSITS_JOB_IMAGE", "test-deposit-image")
     monkeysession.setenv("RENKU_URL", "http://test-renku-url.io")

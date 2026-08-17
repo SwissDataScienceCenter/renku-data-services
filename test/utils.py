@@ -368,25 +368,27 @@ class TestDependencyManager(DependencyManager):
         resource_requests_repo = ResourceRequestsRepo(session_maker=config.db.async_session_maker)
         resource_usage_service = ResourceUsageService(resource_requests_repo)
 
-        apps_k8s_client = RenkuAppsK8sClient(
-            client=client,
-            cluster_repo=cluster_repo,
-            storage_class=config.nb_config.cloud_storage.storage_class,
-            default_affinity=config.nb_config.sessions.affinity_model,
-            default_tolerations=config.nb_config.sessions.tolerations_model,
-        )
-        validator = RCloneValidator()
-        apps_repo = RenkuAppsRepository(
-            authz=authz,
-            session_repo=session_repo,
-            rp_repo=rp_repo,
-            project_repo=project_repo,
-            k8s_client=apps_k8s_client,
-            dc_secret_repo=data_connector_secret_repo,
-            validator=validator,
-        )
-        project_repo.apps_cleanup = apps_repo
-        session_repo.apps_cleanup = apps_repo
+        apps_k8s_client: RenkuAppsK8sClient | None = None
+        apps_repo: RenkuAppsRepository | None = None
+        if config.apps.enabled:
+            apps_k8s_client = RenkuAppsK8sClient(
+                client=client,
+                cluster_repo=cluster_repo,
+                storage_class=config.nb_config.cloud_storage.storage_class,
+                default_affinity=config.nb_config.sessions.affinity_model,
+                default_tolerations=config.nb_config.sessions.tolerations_model,
+            )
+            apps_repo = RenkuAppsRepository(
+                authz=authz,
+                session_repo=session_repo,
+                rp_repo=rp_repo,
+                project_repo=project_repo,
+                k8s_client=apps_k8s_client,
+                dc_secret_repo=data_connector_secret_repo,
+                validator=RCloneValidator(),
+            )
+            project_repo.apps_cleanup = apps_repo
+            session_repo.apps_cleanup = apps_repo
         return cls(
             config=config,
             k8s_client=client,
