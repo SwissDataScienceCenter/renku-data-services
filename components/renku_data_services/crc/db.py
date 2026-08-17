@@ -345,6 +345,28 @@ class ResourcePoolQueryRepository:
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
 
+    async def get_classes_by_class_ids(
+        self,
+        api_user: base_models.APIUser,
+        ids: list[int],
+    ) -> list[models.ResourceClass]:
+        """Get classes from the database."""
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.ResourceClassORM)
+                .join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool, isouter=True)
+                .where(schemas.ResourceClassORM.id.in_(ids))
+            )
+
+            # Apply user access control if api_user is provided
+            if api_user is not None:
+                # NOTE: The line below ensures that the right users can access the right resources, do not remove.
+                stmt = await _filter_by_authz(api_user, stmt, self.authz)
+
+            res = await session.execute(stmt)
+            orms = res.scalars().all()
+            return [orm.dump() for orm in orms]
+
     async def get_resource_class(self, api_user: base_models.APIUser, id: int) -> models.ResourceClass:
         """Get a specific resource class by its ID."""
         classes = await self.get_classes(api_user, id)

@@ -5,6 +5,7 @@ from datetime import UTC
 from enum import StrEnum
 from typing import Protocol
 
+from components.renku_data_services.crc.models import ResourceClass
 import httpx
 
 from renku_data_services.app_config import logging
@@ -22,7 +23,13 @@ class MetricCode(StrEnum):
 class ResourceUsageMetering(Protocol):
     """Emits resource usage events to an external metering service."""
 
-    async def emit(self, requests: list[ResourcesRequest], costs: dict[int, Credit], metric_code: MetricCode) -> None:
+    async def emit(
+        self,
+        requests: list[ResourcesRequest],
+        costs: dict[int, Credit],
+        classes: dict[int, ResourceClass],
+        metric_code: MetricCode,
+    ) -> None:
         """Emit resource usage events. Never raises."""
         ...
 
@@ -34,7 +41,9 @@ def _cu_cost(req: ResourcesRequest, costs: dict[int, Credit]) -> str:
     return str(cu_cost)
 
 
-def _to_meteroid_event(req: ResourcesRequest, costs: dict[int, Credit], metric_code: str) -> dict:
+def _to_meteroid_event(
+    req: ResourcesRequest, costs: dict[int, Credit], classes: dict[int, ResourceClass], metric_code: MetricCode
+) -> dict:
     properties: dict[str, str] = {
         "cu_cost": _cu_cost(req, costs),
         "kind": req.kind,
@@ -51,6 +60,18 @@ def _to_meteroid_event(req: ResourcesRequest, costs: dict[int, Credit], metric_c
         properties["launcher_id"] = str(req.launcher_id)
     if req.cluster_id is not None:
         properties["cluster_id"] = str(req.cluster_id)
+    if req.resource_class_id is not None and req.resource_class_id in classes:
+        rc = classes[req.resource_class_id]
+        properties["cpu_amount"] = str(rc.cpu)
+        properties["gpu_amount"] = str(rc.gpu)
+        properties["memory_amount"] = str(rc.memory)
+        properties["default_storage"] = str(rc.default_storage)
+        properties["max_storage"] = str(rc.max_storage)
+        properties["resource_class_name"] = str(rc.name)
+    if req.gpu_product is not None:
+        properties["gpu_product"] = str(req.gpu_product)
+    if req.gpu_slice is not None:
+        properties["gpu_slice"] = str(req.gpu_slice)
 
     return {
         "event_id": f"{req.uid}/{req.capture_date.astimezone(UTC).isoformat()}",
@@ -66,7 +87,11 @@ def _external_subscription_id(req: ResourcesRequest) -> str:
     return f"resource_pool_id-{req.resource_pool_id}"
 
 
-def _to_lago_event(req: ResourcesRequest, costs: dict[int, Credit]) -> dict:
+def _to_lago_event(
+    req: ResourcesRequest,
+    costs: dict[int, Credit],
+    classes: dict[int, ResourceClass],
+) -> dict:
     """Convert a resource request into a Lago usage event."""
     return {
         "transaction_id": f"{req.uid}/{req.capture_date.astimezone(UTC).isoformat()}",
@@ -86,7 +111,13 @@ class MeteringClient:
             "Content-Type": "application/json",
         }
 
-    async def emit(self, requests: list[ResourcesRequest], costs: dict[int, Credit], metric_code: MetricCode) -> None:
+    async def emit(
+        self,
+        requests: list[ResourcesRequest],
+        costs: dict[int, Credit],
+        classes: dict[int, ResourceClass],
+        metric_code: MetricCode,
+    ) -> None:
         """POST all resource requests as a Meteroid ingest batch. Never raises."""
         events = [
             _to_meteroid_event(r, costs, classes, metric_code)
@@ -121,7 +152,13 @@ class LagoClient:
             "Content-Type": "application/json",
         }
 
-    async def emit(self, requests: list[ResourcesRequest], costs: dict[int, Credit], metric_code: MetricCode) -> None:
+    async def emit(
+        self,
+        requests: list[ResourcesRequest],
+        costs: dict[int, Credit],
+        classes: dict[int, ResourceClass],
+        metric_code: MetricCode,
+    ) -> None:
         """POST resource requests as Lago usage events. Never raises."""
         events = [
             _to_lago_event(r, costs, classes)
@@ -153,7 +190,13 @@ class MultiMeteringClient:
     def __init__(self, clients: Sequence[ResourceUsageMetering]) -> None:
         self._clients = clients
 
-    async def emit(self, requests: list[ResourcesRequest], costs: dict[int, Credit], metric_code: MetricCode) -> None:
+    async def emit(
+        self,
+        requests: list[ResourcesRequest],
+        costs: dict[int, Credit],
+        classes: dict[int, ResourceClass],
+        metric_code: MetricCode,
+    ) -> None:
         """Emit resource usage events to all configured metering services."""
         for client in self._clients:
-            await client.emit(requests, costs, metric_code)
+            await client.emit(requests, costs, classes, metric_code)

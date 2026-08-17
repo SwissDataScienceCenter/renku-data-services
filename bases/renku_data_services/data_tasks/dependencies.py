@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from renku_data_services.k8s.clients import DummyPriorityClassClient, DummyResourceQuotaClient
+from components.renku_data_services.crc.db import QuotaRepository, ResourcePoolQueryRepository
 from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz
 from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
@@ -127,20 +129,33 @@ class DependencyManager:
         )
 
         resource_requests_repo = ResourceRequestsRepo(cfg.db.async_session_maker)
+        # NOTE: We only need the QuotaRepository to instantiate the ResourcePoolQueryRepository which is used
+        # to get the resource class and pool information for metrics. We don't need quota information for metrics
+        # at all so we use the dummy client for quotas here as we don't actually access k8s, just the db.
+        quota_repo = QuotaRepository(DummyResourceQuotaClient(), DummyPriorityClassClient())
+        resource_pool_repo = ResourcePoolQueryRepository(cfg.db.async_session_maker, quota_repo, authz)
         resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
 
         resource_requests_recorder: ResourcesRequestRecorder
         if cfg.enable_resource_request_tracking:
             metering_clients: list[ResourceUsageMetering] = []
-            if cfg.metering.enabled:
+            if cfg.meteroid.enabled:
                 metering_clients.append(
-                    MeteringClient(endpoint_url=cfg.metering.endpoint_url, token=cfg.metering.token)
+                    MeteringClient(endpoint_url=cfg.meteroid.endpoint_url, token=cfg.meteroid.token)
                 )
             if cfg.lago.enabled:
                 metering_clients.append(LagoClient(endpoint_url=cfg.lago.endpoint_url, token=cfg.lago.token))
-            metering_client = MultiMeteringClient(metering_clients) if metering_clients else None
+
+            metering_client = None
+            if metering_clients:
+                if len(metering_clients) > 1:
+                    metering_client = MultiMeteringClient(metering_clients)
+                else:
+                    metering_client = metering_clients[0]
+
             resource_requests_recorder = DefaultResourcesRequestRecorder(
-                repo=resource_requests_repo,
+                requests_repo=resource_requests_repo,
+                pool_repo=resource_pool_repo,
                 fetch=ResourceRequestsFetch(k8s_client),
                 metering=metering_client,
             )
