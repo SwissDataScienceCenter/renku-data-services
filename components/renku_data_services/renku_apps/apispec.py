@@ -16,18 +16,13 @@ class AppStatus(Enum):
     pending = "pending"
     ready = "ready"
     failed = "failed"
-    hibernated = "hibernated"
-
-
-class AppState(Enum):
-    running = "running"
-    hibernated = "hibernated"
 
 
 class AppResponse(BaseAPISpec):
     name: str = Field(
         ...,
-        examples=["d185e68d-d43-renku-2-b9ac279a4e8a85ac28d08"],
+        description="The name of an app, which is also a DNS label in the app's public hostname.\nThe Kubernetes limit is 63 characters, but names are capped at 50 to leave\nleeway. This must match APP_NAME_MAX_LENGTH in renku_apps/core.py, which is\nthe length generate_app_name() truncates to.\n",
+        examples=["my-data-dashboard-0h8kq2zt"],
         max_length=50,
         min_length=5,
         pattern="^[a-z]([-a-z0-9]*[a-z0-9])?$",
@@ -64,10 +59,6 @@ class AppPostRequest(BaseAPISpec):
         min_length=26,
         pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
     )
-
-
-class AppPatchRequest(BaseAPISpec):
-    state: Optional[AppState] = None
 
 
 class Error(BaseAPISpec):

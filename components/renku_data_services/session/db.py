@@ -35,7 +35,9 @@ def _validate_app_launcher_project_visibility(
     launcher_type: models.LauncherType, project_visibility: ProjectVisibility
 ) -> None:
     """Enforce that an app launcher can only live in a public project."""
-    if launcher_type == models.LauncherType.app and project_visibility != ProjectVisibility.public:
+    if not models.app_launcher_project_visibility_is_valid(
+        launcher_type, project_is_public=project_visibility == ProjectVisibility.public
+    ):
         raise errors.ValidationError(message="An app launcher can only be created in a public project.")
 
 
@@ -50,6 +52,14 @@ class SessionEnvironmentRepositoryProtocol(Protocol):
         self, user: base_models.APIUser, environment: models.UnsavedEnvironment
     ) -> models.Environment:
         """Insert a new session environment."""
+        ...
+
+
+class AppLauncherCleanupProtocol(Protocol):
+    """Protocol for tearing down the app deployment backing a launcher that is going away."""
+
+    async def delete_app_for_launcher_id(self, launcher_id: ULID) -> None:
+        """Delete the app deployment backing the given launcher, if one exists."""
         ...
 
 
@@ -71,6 +81,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         self.shipwright_client = shipwright_client
         self.builds_config = builds_config
         self.git_repositories_repo = git_repositories_repo
+        self.apps_cleanup: AppLauncherCleanupProtocol | None = None
 
     async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
@@ -856,6 +867,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             )
             if not authorized:
                 raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+            if launcher.launcher_type == models.LauncherType.app and self.apps_cleanup is not None:
+                await self.apps_cleanup.delete_app_for_launcher_id(launcher_id=launcher_id)
 
             await session.delete(launcher)
             if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:

@@ -250,6 +250,11 @@ class LauncherType(StrEnum):
     app = "app"
 
 
+def app_launcher_project_visibility_is_valid(launcher_type: LauncherType, project_is_public: bool) -> bool:
+    """Whether a launcher of this type may exist in a project with this visibility."""
+    return launcher_type != LauncherType.app or project_is_public
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedSessionLauncher:
     """Session launcher model that has not been persisted in the DB."""

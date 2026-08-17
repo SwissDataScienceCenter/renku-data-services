@@ -68,32 +68,6 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - apps
-    patch:
-      summary: Update an app
-      parameters:
-        - in: path
-          name: app_name
-          required: true
-          schema:
-            $ref: "#/components/schemas/AppName"
-          description: The name of the app to update
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AppPatchRequest"
-      responses:
-        "200":
-          description: The updated app
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppResponse"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - apps
     delete:
       summary: Delete an app
       parameters:
@@ -125,21 +99,18 @@ components:
         - pending
         - ready
         - failed
-        - hibernated
-
-    AppState:
-      description: The desired state of an app. `hibernated` scales the deployment to zero.
-      type: string
-      enum:
-        - running
-        - hibernated
 
     AppName:
       type: string
+      description: |
+        The name of an app, which is also a DNS label in the app's public hostname.
+        The Kubernetes limit is 63 characters, but names are capped at 50 to leave
+        leeway. This must match APP_NAME_MAX_LENGTH in renku_apps/core.py, which is
+        the length generate_app_name() truncates to.
       minLength: 5
       maxLength: 50
       pattern: "^[a-z]([-a-z0-9]*[a-z0-9])?$"
-      example: d185e68d-d43-renku-2-b9ac279a4e8a85ac28d08
+      example: my-data-dashboard-0h8kq2zt
 
     AppResponse:
       type: object
@@ -180,12 +151,6 @@ components:
           $ref: "#/components/schemas/Ulid"
       required:
         - launcher_id
-
-    AppPatchRequest:
-      type: object
-      properties:
-        state:
-          $ref: "#/components/schemas/AppState"
 
     ErrorResponse:
       type: object
