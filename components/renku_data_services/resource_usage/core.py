@@ -4,6 +4,8 @@ from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime, timedelta
 from typing import Protocol
 
+from components.renku_data_services.crc.db import ResourcePoolQueryRepository
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.k8s.client_interfaces import K8sClient
@@ -158,11 +160,13 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
 
     def __init__(
         self,
-        repo: ResourceRequestsRepo,
+        requests_repo: ResourceRequestsRepo,
+        pool_repo: ResourcePoolQueryRepository,
         fetch: ResourceRequestsFetchProto,
         metering: ResourceUsageMetering | None = None,
     ) -> None:
-        self._repo = repo
+        self._requests_repo = requests_repo
+        self._pool_repo = pool_repo
         self._fetch = fetch
         self._metering = metering
 
@@ -176,11 +180,14 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
             logger.warning("No pod or pvc was found!")
         else:
             logger.info(f"Inserting {size} resource request records.")
-        await self._repo.insert_many(result)
+        await self._requests_repo.insert_many(result)
         if self._metering is not None:
             class_ids = {r.resource_class_id for r in result if r.resource_class_id is not None}
-            costs = await self._repo.get_costs_by_class_ids(class_ids)
-            await self._metering.emit(result, costs, MetricCode.session_resource_usage)
+            costs = await self._requests_repo.get_costs_by_class_ids(class_ids)
+            admin_user = InternalServiceAdmin(id=ServiceAdminId.capacity_reservation)
+            classes = await self._pool_repo.get_classes_by_class_ids(admin_user, list(class_ids))
+            classes_dict = {c.id: c for c in classes}
+            await self._metering.emit(result, costs, classes_dict, MetricCode.session_resource_usage)
 
 
 class ResourceUsageService:
