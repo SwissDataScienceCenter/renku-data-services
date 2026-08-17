@@ -423,6 +423,9 @@ class ProjectRepository:
         if project is None:
             return None
 
+        if self.apps_cleanup is not None:
+            await self.apps_cleanup.delete_apps_for_project(project_id=project_id)
+
         dcs = await session.execute(
             select(distinct(ns_schemas.EntitySlugORM.data_connector_id))
             .where(ns_schemas.EntitySlugORM.project_id == project_id)
