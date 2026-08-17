@@ -25,13 +25,7 @@ _TERMINAL_READY_REASONS = frozenset({"ProgressDeadlineExceeded", "RevisionFailed
 """Knative Ready=False reasons that mean the revision has definitively failed (others are transient)."""
 
 _OAUTH2_INTEGRATION_STORAGE_TYPES = frozenset({"drive", "dropbox"})
-"""rclone storage types whose credentials come from an OAuth2 integration.
-
-SECURITY: this is the app-side copy of the drive/dropbox -> provider mapping that
-``notebooks.data_sources.DataSourceRepository`` uses for sessions. If a new OAuth-backed
-storage type is added there, it must be added here too -- otherwise a private connector of
-that type would clear this filter and be mounted into an anonymous public app.
-"""
+"""rclone storage types whose credentials come from an OAuth2 integration; must match notebooks.data_sources."""
 
 APP_NAME_MAX_LENGTH: Final[int] = 50
 """Upper bound on a generated app name; must match AppName.maxLength in api.spec.yaml."""
@@ -117,12 +111,9 @@ async def select_mountable_connectors(
 ) -> list[DataConnectorWithSecrets]:
     """Enumerate the project's linked connectors and keep only those safe for an app.
 
-    Enumeration always runs as the anonymous app identity (``DUMMY_RENKU_APP_USER_ID``):
-    the authz layer then only returns publicly-readable connectors, and downstream config
-    resolution mints no user tokens -- the same property that makes anonymous sessions
-    safe. Passing a real user here would defeat that, so the identity is not a parameter.
-    It reuses the project-membership model sessions use (``DataConnectorToProjectLinkORM``);
-    there is no app-specific connector list.
+    Enumeration always runs as the anonymous app identity, so authz returns only publicly-readable
+    connectors and no user tokens are minted. Passing a real user would defeat that, so the identity
+    is deliberately not a parameter.
     """
     app_user = base_models.AnonymousAPIUser(id=DUMMY_RENKU_APP_USER_ID)
     survivors: list[DataConnectorWithSecrets] = []
