@@ -227,9 +227,7 @@ class ProjectStorageRepository:
         if existing.scalar():
             raise errors.ValidationError(message=f"Project {input.project_id} is already in the allow list.")
 
-        existing_project = await session.execute(
-            select(exists().where(schemas.ProjectORM.id == input.project_id))
-        )
+        existing_project = await session.execute(select(exists().where(schemas.ProjectORM.id == input.project_id)))
         if not existing_project.scalar():
             raise errors.MissingResourceError(message=f"The project {input.project_id} doesn't exist.")
 
