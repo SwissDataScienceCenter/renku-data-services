@@ -90,7 +90,7 @@ paths:
       tags:
         - storage
 
-  /data_connectors/storage:
+  /storage:
     post:
       summary: Create a new project storage
       requestBody:
@@ -110,7 +110,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - storage
-  /data_connectors/storage/config:
+  /storage/config:
     get:
       summary: Get the current configuration for project storage
       responses:
@@ -124,7 +124,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - storage
-  /data_connectors/storage/allow:
+  /storage/allow:
     get:
       summary: List all projects in the storage allow list
       parameters:
@@ -186,7 +186,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - storage
-  /data_connectors/storage/allow/{project_id}:
+  /storage/allow/{project_id}:
     parameters:
       - in: path
         name: project_id
@@ -248,7 +248,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - storage
-  /data_connectors/storage/{storage_id}:
+  /storage/{storage_id}:
     parameters:
       - in: path
         name: storage_id
