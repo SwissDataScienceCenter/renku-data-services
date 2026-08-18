@@ -333,6 +333,11 @@ paths:
 
 components:
   schemas:
+    MaxStorageSize:
+      type: integer
+      format: int64
+      exclusiveMinimum: 0
+      description: Maximum size in GB
     RCloneConfig:
       type: object
       description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
@@ -549,9 +554,7 @@ components:
       additionalProperties: false
       properties:
         max_size:
-          type: integer
-          format: int64
-          description: The maximum size in GB
+          $ref: "#/components/schemas/MaxStorageSize"
     ProjectStorageAllowPost:
       description: |
         A project to be added to the storage allow list.
@@ -560,9 +563,7 @@ components:
         project_id:
           $ref: "#/components/schemas/Ulid"
         max_size:
-          type: integer
-          format: int64
-          description: Maximum size in GB
+          $ref: "#/components/schemas/MaxStorageSize"
       required:
         - project_id
         - max_size
@@ -578,9 +579,7 @@ components:
         namespace:
           type: string
         max_size:
-          type: integer
-          format: int64
-          description: Maximum size in GB
+          $ref: "#/components/schemas/MaxStorageSize"
         etag:
           $ref: "#/components/schemas/ETag"
       required:
@@ -613,9 +612,7 @@ components:
         enabled:
           type: boolean
         max_size:
-          type: integer
-          format: int64
-          description: The maximum size in GB
+          $ref: "#/components/schemas/MaxStorageSize"
       required:
         - enabled
         - max_size
