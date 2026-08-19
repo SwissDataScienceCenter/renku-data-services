@@ -261,6 +261,8 @@ async def app_manager(
 @pytest_asyncio.fixture
 async def app_manager_instance(app_manager, db_instance, authz_instance) -> AsyncGenerator[DependencyManager, None]:
     app_manager.metrics.reset_mock()
+    if app_manager.apps_k8s_pool is not None:
+        app_manager.apps_k8s_pool.objects.clear()
     yield app_manager
 
 

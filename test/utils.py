@@ -5,14 +5,18 @@ import json
 import os
 import subprocess
 import typing
+from collections.abc import AsyncIterator
 from contextlib import AbstractContextManager
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import yaml
 from authzed.api.v1 import AsyncClient
+from kr8s._api import Api
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
 from kubernetes import watch
@@ -41,13 +45,23 @@ from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
 from renku_data_services.k8s.clients import (
     DepositUploadJobClient,
+    K8sClusterClient,
     K8sClusterClientsPool,
     K8sPriorityClassClient,
     K8sResourceQuotaClient,
     K8sSecretClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.db import K8sDbCache
+from renku_data_services.k8s.models import (
+    GVK,
+    ClusterConnection,
+    DeletePropagationPolicy,
+    K8sObject,
+    K8sObjectFilter,
+    K8sObjectMeta,
+)
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
@@ -146,9 +160,63 @@ class FakeGitRepositoriesRepository(GitRepositoriesRepository):
         return result
 
 
+async def _no_clusters() -> AsyncIterator[K8sClusterClient]:
+    for cluster in ():
+        yield cluster
+
+
+class FakeK8sClusterClientsPool(K8sClusterClientsPool):
+    """In-memory stand-in for a k8s cluster, for tests that cannot rely on the kinds being installed."""
+
+    def __init__(self, namespace: str, cluster_id: ClusterId = DEFAULT_K8S_CLUSTER) -> None:
+        super().__init__(clusters=_no_clusters)
+        self.cluster = ClusterConnection(id=cluster_id, namespace=namespace, api=typing.cast(Api, None))
+        self.objects: dict[tuple[GVK, str], K8sObject] = {}
+
+    async def cluster_by_id(self, cluster_id: ClusterId) -> ClusterConnection:
+        return self.cluster
+
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
+        manifest = deepcopy(obj.manifest.to_dict())
+        manifest.setdefault("metadata", {}).setdefault("uid", str(uuid4()))
+        created = obj.with_manifest(manifest)
+        self.objects[(obj.gvk, obj.name)] = created
+        return created
+
+    async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
+        return self.objects.get((meta.gvk, meta.name))
+
+    async def delete(
+        self, meta: K8sObjectMeta, propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground
+    ) -> None:
+        deleted = self.objects.pop((meta.gvk, meta.name), None)
+        if deleted is None:
+            return
+        uid = deleted.manifest.metadata.get("uid")
+        for key, obj in list(self.objects.items()):
+            owners = obj.manifest.metadata.get("ownerReferences", [])
+            if any(owner.get("uid") == uid for owner in owners):
+                del self.objects[key]
+
+    async def list(self, _filter: K8sObjectFilter) -> AsyncIterator[K8sObject]:
+        selector = dict(_filter.label_selector or {})
+        if _filter.user_id:
+            selector["renku.io/safe-username"] = _filter.user_id
+        for obj in list(self.objects.values()):
+            if obj.gvk != _filter.gvk:
+                continue
+            if _filter.name is not None and obj.name != _filter.name:
+                continue
+            labels = obj.manifest.metadata.get("labels", {})
+            if all(labels.get(key) == value for key, value in selector.items()):
+                yield obj
+
+
 @dataclass
 class TestDependencyManager(DependencyManager):
     """Test class that can handle isolated dbs and authz instances."""
+
+    apps_k8s_pool: FakeK8sClusterClientsPool | None = None
 
     @classmethod
     def from_env(
@@ -369,10 +437,12 @@ class TestDependencyManager(DependencyManager):
         resource_usage_service = ResourceUsageService(resource_requests_repo)
 
         apps_k8s_client: RenkuAppsK8sClient | None = None
+        apps_k8s_pool: FakeK8sClusterClientsPool | None = None
         apps_repo: RenkuAppsRepository | None = None
         if config.apps.enabled:
+            apps_k8s_pool = FakeK8sClusterClientsPool(namespace=config.k8s_namespace)
             apps_k8s_client = RenkuAppsK8sClient(
-                client=client,
+                client=apps_k8s_pool,
                 cluster_repo=cluster_repo,
                 storage_class=config.nb_config.cloud_storage.storage_class,
                 default_affinity=config.nb_config.sessions.affinity_model,
@@ -393,6 +463,7 @@ class TestDependencyManager(DependencyManager):
             config=config,
             k8s_client=client,
             apps_k8s_client=apps_k8s_client,
+            apps_k8s_pool=apps_k8s_pool,
             apps_repo=apps_repo,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
