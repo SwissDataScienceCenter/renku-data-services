@@ -232,11 +232,12 @@ class DepositSource(StrEnum):
     """The source of a data deposit at a data repository like Zenodo."""
 
     zenodo = "zenodo"
+    envidat = "envidat"
     unknown = "unknown"
 
 
 class DepositStatus(StrEnum):
-    """The stautus of a data deposit at a data repository like Zenodo."""
+    """The status of a data deposit at a data repository like Zenodo."""
 
     upload_complete = "upload_complete"
     complete = "complete"
@@ -286,7 +287,7 @@ class DepositJob:
         return compute_etag_from_fields(self.deposit.updated_at, self.name, str(self.cluster_id), self.deposit.etag)
 
     def to_meta(self, user_id: str, namespace: str) -> K8sObjectMeta:
-        """Return the Kubernetes meta object to represent the Job for the deposit."""
+        """Return the Kubernetes metaobject to represent the Job for the deposit."""
         return K8sObjectMeta(
             name=self.name,
             namespace=namespace,

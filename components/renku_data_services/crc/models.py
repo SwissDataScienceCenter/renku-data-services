@@ -83,6 +83,26 @@ class NodeAffinity:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class FirecrestClassRemote:
+    """FirecREST-only overrides that can be set per resource class."""
+
+    system_name: str | None = None
+    partition: str | None = None
+    forward_resource_values: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert this instance into a dictionary."""
+        result: dict[str, Any] = {
+            "forward_resource_values": self.forward_resource_values,
+        }
+        if self.system_name is not None:
+            result["system_name"] = self.system_name
+        if self.partition is not None:
+            result["partition"] = self.partition
+        return result
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedResourceClass(ResourcesCompareMixin):
     """Model for a resource class yet to be saved."""
 
@@ -96,6 +116,7 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
     quota_enforced: bool = False
+    remote: FirecrestClassRemote | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -117,6 +138,7 @@ class ResourceClass(ResourcesCompareMixin):
     usage_hours_remaining: float | None = None
     usage_hours_total: float | None = None
     quota_enforced: bool = False
+    remote: FirecrestClassRemote | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -133,6 +155,7 @@ class ResourceClassPatch:
     node_affinities: list[NodeAffinity] | None = None
     tolerations: list[str] | None = None
     quota_enforced: bool | None = None
+    remote: FirecrestClassRemote | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -333,6 +356,10 @@ class UnsavedResourcePool:
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = None
     cluster_id: ClusterId | None = None
     platform: RuntimePlatform
+    cpu_limit_factor: float | None = None
+    """Used to assign cpu limits based on the cpu value in the resource classes in the pool.
+    If the value is zero or unset then cpu limits are not set.
+    """
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -352,6 +379,10 @@ class ResourcePool:
     cluster: SavedClusterSettings | None = None
     platform: RuntimePlatform
     credits_used: int | None = None
+    cpu_limit_factor: float | None = None
+    """Used to assign cpu limits based on the cpu value in the resource classes in the pool.
+    If the value is zero or unset then cpu limits are not set.
+    """
 
     def get_resource_class(self, resource_class_id: int) -> ResourceClass | None:
         """Find a specific resource class in the resource pool by the resource class id."""
@@ -389,6 +420,7 @@ class ResourcePoolPatch:
     remote: RemoteConfigurationPatch | None = None
     cluster_id: ClusterId | ResetType | None = None
     platform: RuntimePlatform | None = None
+    cpu_limit_factor: float | None | ResetType = None
 
 
 class RemoteConfigurationKind(StrEnum):

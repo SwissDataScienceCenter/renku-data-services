@@ -38,6 +38,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
+from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.client_interfaces import K8sClient
@@ -60,6 +61,10 @@ from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTE
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.notifications.db import NotificationsRepository
+from renku_data_services.persisted_logs.db import (
+    AmaltheaSessionPersistedLogsReadRepository,
+    ImageBuildPersistedLogsReadRepository,
+)
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -77,7 +82,6 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
-from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
@@ -137,7 +141,6 @@ class DependencyManager:
     authz: Authz
     member_repo: MemberRepository
     rp_repo: ResourcePoolRepository
-    storage_repo: StorageRepository
     project_repo: ProjectRepository
     project_migration_repo: ProjectMigrationRepository
     group_repo: GroupRepository
@@ -170,7 +173,10 @@ class DependencyManager:
     occurrence_repo: OccurrenceRepository
     resource_requests_repo: ResourceRequestsRepo
     resource_usage_service: ResourceUsageService
+    session_logs_repo: AmaltheaSessionPersistedLogsReadRepository
+    build_logs_repo: ImageBuildPersistedLogsReadRepository
     zenodo_client: ZenodoAPIClient
+    envidat_client: EnvidatClient
     job_client: DepositUploadJobClient
     secret_client: K8sSecretClient
     internal_token_mint: RenkuSelfTokenMint
@@ -205,6 +211,7 @@ class DependencyManager:
             renku_data_services.notifications.__file__,
             renku_data_services.capacity_reservation.__file__,
             renku_data_services.resource_usage.__file__,
+            renku_data_services.persisted_logs.__file__,
             renku_data_services.authn.api.__file__,
         ]
 
@@ -364,12 +371,6 @@ class DependencyManager:
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
-        storage_repo = StorageRepository(
-            session_maker=config.db.async_session_maker,
-            gitlab_client=gitlab_client,
-            user_repo=kc_user_repo,
-            secret_service_public_key=config.secrets.public_key,
-        )
         reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
 
         git_repositories_repo = GitRepositoriesRepository(
@@ -468,6 +469,12 @@ class DependencyManager:
         occurrence_repo = OccurrenceRepository(
             session_maker=config.db.async_session_maker,
         )
+        session_logs_repo = AmaltheaSessionPersistedLogsReadRepository(authz=authz)
+        build_logs_repo = ImageBuildPersistedLogsReadRepository(
+            authz=authz,
+            builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
+        )
         return cls(
             config,
             k8s_client=client,
@@ -480,7 +487,6 @@ class DependencyManager:
             kc_api=kc_api,
             member_repo=member_repo,
             rp_repo=rp_repo,
-            storage_repo=storage_repo,
             reprovisioning_repo=reprovisioning_repo,
             search_updates_repo=search_updates_repo,
             search_reprovisioning=search_reprovisioning,
@@ -514,7 +520,10 @@ class DependencyManager:
             occurrence_repo=occurrence_repo,
             resource_requests_repo=resource_requests_repo,
             resource_usage_service=resource_usage_service,
+            session_logs_repo=session_logs_repo,
+            build_logs_repo=build_logs_repo,
             zenodo_client=ZenodoAPIClient(),
+            envidat_client=EnvidatClient(),
             job_client=job_client,
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,

@@ -17,6 +17,53 @@ from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_cli
 from test.components.renku_data_services.resource_usage.helper import make_resources_request
 from test.utils import KindCluster
 
+
+async def _create_oauth_provider_and_pool(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    *,
+    pool_name: str,
+    class_remote: dict | None = None,
+    remote: dict | None = None,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Create an OAuth provider and a resource pool with one class."""
+    provider_payload = {
+        "id": "some-provider",
+        "kind": "gitlab",
+        "client_id": "some-client-id",
+        "display_name": "my oauth2 application",
+        "scope": "api",
+        "url": "https://example.org",
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=provider_payload)
+    assert res.status_code == 201, res.text
+
+    payload: dict[str, Any] = {
+        "name": pool_name,
+        "default": False,
+        "public": False,
+        "classes": [
+            {
+                "cpu": 2,
+                "memory": 10,
+                "gpu": 0,
+                "name": f"{pool_name}-class",
+                "max_storage": 100,
+                "default_storage": 1,
+                "default": True,
+            }
+        ],
+    }
+    if class_remote:
+        payload["classes"][0]["remote"] = class_remote
+    if remote:
+        payload["remote"] = remote
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201, res.text
+    return res.json, provider_payload
+
+
 resource_pool_payload = [
     (
         {
@@ -166,6 +213,8 @@ async def test_resource_pool_creation_with_remote_firecrest(
         "api_url": "https://example.org",
         "system_name": "my-system",
     }
+    for cls in payload["classes"]:
+        cls["cpu"] = int(cls["cpu"])
 
     _, res = await create_rp(payload, sanic_client)
     assert res.status_code == expected_status_code, res.text
@@ -179,6 +228,240 @@ async def test_resource_pool_creation_with_remote_firecrest(
             "api_url": "https://example.org",
             "system_name": "my-system",
         }
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_put_resource_class_without_kind_keeps_firecrest_kind(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """PUT of a FirecREST class without kind should keep the FirecREST kind."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="firecrest-pool",
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    )
+    rc = rp["classes"][0]
+
+    body = {
+        "name": "updated-class",
+        "default": True,
+        "cpu": 2,
+        "memory": 10,
+        "gpu": 0,
+        "max_storage": 100,
+        "default_storage": 1,
+    }
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/classes/{rc['id']}",
+        headers=admin_headers,
+        json=body,
+    )
+    assert res.status_code == 200, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_put_resource_class_on_firecrest_pool_preserves_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Standalone PUT on a FirecREST class preserves remote_json."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="fc-pool",
+        class_remote={"system_name": "eiger"},
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://firecrest.example.com",
+            "system_name": "eiger",
+        },
+    )
+    pool_id = rp["id"]
+    class_id = rp["classes"][0]["id"]
+
+    _, response = await sanic_client.put(
+        f"/api/data/resource_pools/{pool_id}/classes/{class_id}",
+        headers=admin_headers,
+        json={
+            "name": "fc-class-renamed",
+            "cpu": 4,
+            "memory": 16,
+            "gpu": 0,
+            "max_storage": 100,
+            "default_storage": 1,
+            "default": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json["name"] == "fc-class-renamed"
+    assert response.json.get("remote") is not None
+    assert response.json["remote"]["system_name"] == "eiger"
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_post_resource_class_on_firecrest_pool_preserves_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """POSTing a FirecREST class with a remote block stores the remote config."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="fc-pool-post",
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://firecrest.example.com",
+            "system_name": "eiger",
+        },
+    )
+    pool_id = rp["id"]
+
+    _, response = await sanic_client.post(
+        f"/api/data/resource_pools/{pool_id}/classes",
+        headers=admin_headers,
+        json={
+            "name": "fc-posted-class",
+            "cpu": 2,
+            "memory": 8,
+            "gpu": 0,
+            "max_storage": 100,
+            "default_storage": 1,
+            "default": False,
+            "quota_enforced": False,
+            "remote": {"forward_resource_values": True},
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert "id" in response.json
+    assert response.json["remote"]["forward_resource_values"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_pool_to_firecrest_converts_local_classes(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Patching a local pool to FirecREST converts the class kinds."""
+    rp, provider_payload = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="local-pool",
+    )
+    rc = rp["classes"][0]
+
+    patch = {
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": provider_payload["id"],
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+        "classes": [{"id": rc["id"], "cpu": 2}],
+    }
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_pool_from_firecrest_rejects_when_class_has_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Converting a FirecREST pool to local is rejected if a class has remote data."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="firecrest-pool",
+        class_remote={"system_name": "eiger"},
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    )
+
+    patch = {"remote": {}, "classes": [{"id": rp["classes"][0]["id"], "cpu": 2}]}
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 422, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_pool_from_firecrest_clears_kind_when_class_has_no_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Converting a FirecREST pool to local clears class kind when no remote data is stored."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="firecrest-pool",
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    )
+
+    patch = {"remote": {}, "classes": [{"id": rp["classes"][0]["id"], "cpu": 2}]}
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_pool_from_firecrest_clears_stale_class_remote_json(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """PATCHing a FirecREST pool to local clears remote_json on classes not in the update (Finding 3)."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="firecrest-pool-stale",
+        class_remote={"system_name": "eiger"},
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    )
+    pool_id = rp["id"]
+    class_id = rp["classes"][0]["id"]
+
+    # PATCH the pool to local (reset remote) WITHOUT including the class in the update
+    patch = {"remote": {}}
+    _, response = await sanic_client.patch(
+        f"/api/data/resource_pools/{pool_id}",
+        headers=admin_headers,
+        json=patch,
+    )
+    assert response.status_code == 200, response.text
+
+    # Verify the class's remote_json is cleared (stale data must not persist)
+    _, response = await sanic_client.get(
+        f"/api/data/resource_pools/{pool_id}/classes/{class_id}",
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json.get("remote") is None
 
 
 @pytest.mark.parametrize(
@@ -1867,6 +2150,8 @@ async def test_resource_pools_quota_with_no_usage(
     assert resource_class["usage_hours_total"] == 4.0
 
 
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pool_members_add_group(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -2011,6 +2296,8 @@ async def test_resource_pools_quota_exceeded(
     assert resource_class["usage_hours_total"] == 2.0
 
 
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_pool_members_add_project(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -2147,6 +2434,8 @@ async def test_resource_pools_quota_with_no_limits(
     assert "usage_hours_total" not in resource_class
 
 
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_pool_members_put_replaces(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -2273,6 +2562,8 @@ async def test_resource_pools_quota_with_no_costs(
     assert "usage_hours_total" not in resource_class
 
 
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_pool_members_delete(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -3023,7 +3314,7 @@ async def test_post_resource_pool_with_remote_grants_connected_users(
         "name": "d1-rp",
         "classes": [
             {
-                "cpu": 1.0,
+                "cpu": 1,
                 "memory": 10,
                 "gpu": 0,
                 "name": "class1",
@@ -3108,7 +3399,7 @@ async def test_patch_resource_pool_remote_change_swaps_access(
         "name": "d3-rp",
         "classes": [
             {
-                "cpu": 1.0,
+                "cpu": 1,
                 "memory": 10,
                 "gpu": 0,
                 "name": "class1",

@@ -1,4 +1,5 @@
 AMALTHEA_SESSIONS_VERSION ?= 0.25.0
+SHIPWRIGHT_VERSION ?= 0.15.3
 COMMON_CODEGEN_PARAMS := \
 	--output-model-type pydantic_v2.BaseModel \
 	--use-double-quotes \
@@ -55,6 +56,7 @@ API_SPECS := \
     components/renku_data_services/notifications/apispec.py \
     components/renku_data_services/capacity_reservation/apispec.py \
     components/renku_data_services/resource_usage/apispec.py \
+	components/renku_data_services/persisted_logs/apispec.py \
 	components/renku_data_services/authn/api/apispec.py
 
 schemas: ${API_SPECS}  ## Generate pydantic classes from apispec yaml files
@@ -115,9 +117,10 @@ install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses t
 amalthea_schema:  ## Updates generates pydantic classes from CRDs
 	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/${AMALTHEA_SESSIONS_VERSION}/config/crd/bases/amalthea.dev_amaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/notebooks/cr_amalthea_session.py --base-class renku_data_services.notebooks.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
 
+# NOTE: kubebuilder duration format is not compatible with ISO duration format; we strip the format from the OpenAPI spec with sed
 .PHONY: shipwright_schema
 shipwright_schema:  ## Updates the Shipwright pydantic classes
-	curl https://raw.githubusercontent.com/shipwright-io/build/refs/tags/v0.15.2/deploy/crds/shipwright.io_buildruns.yaml | yq '.spec.versions[] | select(.name == "v1beta1") | .schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/session/cr_shipwright_buildrun.py --base-class renku_data_services.session.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
+	curl https://raw.githubusercontent.com/shipwright-io/build/refs/tags/v${SHIPWRIGHT_VERSION}/deploy/crds/shipwright.io_buildruns.yaml | sed -e 's/format: duration//g' | yq '.spec.versions[] | select(.name == "v1beta1") | .schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/session/cr_shipwright_buildrun.py --base-class renku_data_services.session.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
 
 .PHONY: oci_schema
 oci_schema:  ## Updates the OCI classes

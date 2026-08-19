@@ -1323,6 +1323,8 @@ components:
           $ref: "#/components/schemas/NodeAffinityList"
         quota_enforced:
           $ref: "#/components/schemas/QuotaEnforced"
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
     ResourceClass:
       type: object
       additionalProperties: false
@@ -1349,6 +1351,8 @@ components:
           allOf:
             - $ref: "#/components/schemas/QuotaEnforced"
           default: false
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
       required:
         - name
         - default
@@ -1412,6 +1416,8 @@ components:
           allOf:
             - $ref: "#/components/schemas/QuotaEnforced"
           default: false
+        remote:
+          $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
       required:
         - name
         - default
@@ -1543,6 +1549,8 @@ components:
           $ref: "#/components/schemas/Ulid"
         platform:
           $ref: "#/components/schemas/RuntimePlatform"
+        cpu_limit_factor:
+          $ref: "#/components/schemas/CpuLimitFactor"
       required: ["classes", "name", "public", "default"]
       example:
         quota:
@@ -1595,6 +1603,10 @@ components:
           $ref: "#/components/schemas/Ulid"
         platform:
           $ref: "#/components/schemas/RuntimePlatform"
+        cpu_limit_factor:
+          oneOf:
+            - $ref: "#/components/schemas/CpuLimitFactor"
+            - $ref: "#/components/schemas/RemoveCpuLimitFactor"
       example:
         quota:
           cpu: 50
@@ -1631,6 +1643,10 @@ components:
           $ref: "#/components/schemas/Ulid"
         platform:
           $ref: "#/components/schemas/RuntimePlatform"
+        cpu_limit_factor:
+          oneOf:
+            - $ref: "#/components/schemas/CpuLimitFactor"
+            - $ref: "#/components/schemas/RemoveCpuLimitFactor"
       required: ["classes", "name", "public", "default", "platform"]
       example:
         quota:
@@ -1690,6 +1706,8 @@ components:
           required: ["id"]
         platform:
           $ref: "#/components/schemas/RuntimePlatform"
+        cpu_limit_factor:
+          $ref: "#/components/schemas/CpuLimitFactor"
       required: ["classes", "name", "id", "public", "default", "platform"]
       example:
         quota:
@@ -1748,6 +1766,8 @@ components:
           $ref: "#/components/schemas/RuntimePlatform"
         credits_used:
           $ref: "#/components/schemas/CreditsUsed"
+        cpu_limit_factor:
+          $ref: "#/components/schemas/CpuLimitFactor"
       required: ["classes", "name", "id", "public", "default", "platform"]
       example:
         quota:
@@ -2159,7 +2179,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [ "firecrest" ]
+          enum: ["firecrest"]
           description: Kind of remote resource pool
           example: "firecrest"
         provider_id:
@@ -2174,6 +2194,21 @@ components:
         - kind
         - api_url
         - system_name
+    RemoteClassConfigurationFirecrest:
+      type: object
+      additionalProperties: false
+      properties:
+        system_name:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestSystemName"
+        partition:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestPartition"
+        forward_resource_values:
+          type: boolean
+          default: false
+          description: >
+            When true, Amalthea forwards the resource class CPU, memory, and GPU values to FirecREST.
+            When false (the default), the HPC grid selects the resources; the class values are still
+            used for display and quota matching.
     RemoteConfigurationFirecrestProviderId:
       type: string
       description: |
@@ -2200,7 +2235,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [ "runai" ]
+          enum: ["runai"]
           description: Kind of remote resource pool
           example: "runai"
         base_url:
@@ -2235,7 +2270,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [ "firecrest" ]
+          enum: ["firecrest"]
           description: Kind of remote resource pool
           example: "firecrest"
         provider_id:
@@ -2254,7 +2289,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [ "runai" ]
+          enum: ["runai"]
           description: Kind of remote resource pool
           example: "runai"
         base_url:
@@ -2339,7 +2374,7 @@ components:
       description: A list of k8s labels used for tolerations and/or node affinity
       items:
         $ref: "#/components/schemas/NodeAffinity"
-      example: [{"key": "test-label-1", "required_during_scheduling": false}]
+      example: [{ "key": "test-label-1", "required_during_scheduling": false }]
       uniqueItems: true
       default: []
       minItems: 0
@@ -2348,7 +2383,7 @@ components:
       description: A list of k8s labels used for tolerations and/or node affinity
       items:
         $ref: "#/components/schemas/NodeAffinity"
-      example: [{"key": "test-label-1", "required_during_scheduling": false}]
+      example: [{ "key": "test-label-1", "required_during_scheduling": false }]
       uniqueItems: true
       default: []
       minItems: 0
@@ -2385,11 +2420,11 @@ components:
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
     Protocol:
       description: Allowed Protocol strings
       type: string
-      enum: [ "http", "https" ]
+      enum: ["http", "https"]
     Port:
       type: integer
       minimum: 0
@@ -2411,6 +2446,18 @@ components:
     IngressAnnotations:
       type: object
       additionalProperties: true
+    CpuLimitFactor:
+      type: number
+      format: float
+      minimum: 1
+      maximum: 100
+      description: The value used to multiply cpu requests to get the limit. If unset there will be no cpu limits.
+    RemoveCpuLimitFactor:
+      type: number
+      minimum: 0
+      maximum: 0
+      description: Indicates that the cpu limits should not be set and if a limit is set it should be removed
+      format: float
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses

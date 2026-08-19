@@ -3,7 +3,7 @@
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
@@ -54,14 +54,27 @@ class DBConfig:
 
     @property
     def async_session_maker(self) -> Callable[..., AsyncSession]:
-        """The asynchronous DB engine."""
-        if not DBConfig._async_engine:
-            DBConfig._async_engine = create_async_engine(
-                self.conn_url(),
-                pool_size=self.pool_size,
-                max_overflow=0,
-            )
-        return async_sessionmaker(DBConfig._async_engine, expire_on_commit=False)
+        """A callable that opens a new async DB session bound to the current engine.
+
+        The engine is resolved lazily on every call rather than being bound when this
+        property is read. This means callers that capture the returned callable (e.g. the
+        repositories built once at app-construction time) always talk to whatever engine is
+        current: disposing the engine via ``dispose_connection`` and pointing ``self`` at a
+        different database (as the test suite does per test) is picked up transparently,
+        without rebuilding those callers.
+        """
+        db = self
+
+        def make_session(*args: Any, **kwargs: Any) -> AsyncSession:
+            if DBConfig._async_engine is None:
+                DBConfig._async_engine = create_async_engine(
+                    db.conn_url(),
+                    pool_size=db.pool_size,
+                    max_overflow=0,
+                )
+            return async_sessionmaker(DBConfig._async_engine, expire_on_commit=False)(*args, **kwargs)
+
+        return make_session
 
     @staticmethod
     async def dispose_connection() -> None:

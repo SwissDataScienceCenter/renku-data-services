@@ -10,6 +10,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     Enum,
+    Float,
     Identity,
     Integer,
     MetaData,
@@ -106,6 +107,9 @@ class ResourceClassORM(BaseORM):
         back_populates="classes", default=None, lazy="joined"
     )
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, default=None, init=False)
+    remote_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONVariant, default=None, server_default=None, nullable=True
+    )
     tolerations: Mapped[list[TolerationORM]] = relationship(
         back_populates="resource_class",
         default_factory=list,
@@ -132,6 +136,7 @@ class ResourceClassORM(BaseORM):
             for affinity in new_resource_class.node_affinities
         ]
         tolerations = [TolerationORM(key=toleration) for toleration in new_resource_class.tolerations]
+        remote_json = new_resource_class.remote.to_dict() if new_resource_class.remote is not None else None
         return cls(
             name=new_resource_class.name,
             cpu=new_resource_class.cpu,
@@ -144,6 +149,7 @@ class ResourceClassORM(BaseORM):
             resource_pool_id=resource_pool_id,
             tolerations=tolerations,
             node_affinities=node_affinities,
+            remote_json=remote_json,
         )
 
     def dump(
@@ -158,6 +164,10 @@ class ResourceClassORM(BaseORM):
                 and self.gpu >= matching_criteria.gpu
                 and self.max_storage >= matching_criteria.max_storage
             )
+        remote: models.FirecrestClassRemote | None = None
+        if self.remote_json is not None:
+            remote = models.FirecrestClassRemote(**{k: v for k, v in self.remote_json.items() if k != "kind"})
+        quota = self.resource_pool.quota if self.resource_pool else None
         return models.ResourceClass(
             id=self.id,
             name=self.name,
@@ -170,8 +180,9 @@ class ResourceClassORM(BaseORM):
             node_affinities=[affinity.dump() for affinity in self.node_affinities],
             tolerations=[toleration.key for toleration in self.tolerations],
             matching=matching,
-            quota=self.resource_pool.quota if self.resource_pool else None,
+            quota=quota,
             quota_enforced=self.quota_enforced,
+            remote=remote,
         )
 
 
@@ -254,6 +265,12 @@ class ResourcePoolORM(BaseORM):
     """Resource pool specifies a set of resource classes, users that can access them and a quota."""
 
     __tablename__ = "resource_pools"
+    __table_args__ = (
+        CheckConstraint(
+            "cpu_limit_factor IS NULL OR cpu_limit_factor >= 1.0",
+            name="chk_cpu_limit_factor_gte_1",
+        ),
+    )
     name: Mapped[str] = mapped_column(String(40), index=True)
     quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
     users: Mapped[list[UserORM]] = relationship(
@@ -298,6 +315,11 @@ class ResourcePoolORM(BaseORM):
         Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=literal("linux_amd64")
     )
 
+    cpu_limit_factor: Mapped[Optional[float]] = mapped_column("cpu_limit_factor", Float, default=None, nullable=True)
+    """Used to assign cpu limits based on the cpu value in the resource classes in the pool.
+    If the value is zero or unset then cpu limits are not set.
+    """
+
     @classmethod
     def from_unsaved_model(
         cls,
@@ -329,6 +351,7 @@ class ResourcePoolORM(BaseORM):
             remote_json=remote_json,
             cluster_id=cluster.id if cluster else None,
             platform=new_resource_pool.platform,
+            cpu_limit_factor=new_resource_pool.cpu_limit_factor,
         )
 
     def dump(
@@ -366,6 +389,7 @@ class ResourcePoolORM(BaseORM):
             cluster=cluster,
             platform=self.platform,
             credits_used=credits_used.value if credits_used else None,
+            cpu_limit_factor=self.cpu_limit_factor,
         )
 
     def _dump_remote(self) -> models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | None:

@@ -236,6 +236,7 @@ class ShipwrightClient:
                     )
                 ),
                 retention=retention,
+                serviceAccount=".generate",
             ),
         )
 

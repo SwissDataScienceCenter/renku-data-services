@@ -47,7 +47,7 @@ async def test_get_repository_bad_url(app_manager_instance: DependencyManager) -
     repo = app_manager_instance.git_repositories_repo
 
     for url in test_git_url.invalid_urls:
-        result = await repo.get_repository(url, user, None, user)
+        result = await repo.get_repository(url, user, None)
         assert result.error is not None
         print(result)
 
@@ -58,7 +58,7 @@ async def test_get_repository_public_anon_url(app_manager_instance: DependencyMa
     repo = app_manager_instance.git_repositories_repo
 
     url = "https://github.com/SwissDataScienceCenter/renku"
-    result = await repo.get_repository(url, user, None, user)
+    result = await repo.get_repository(url, user, None)
     assert result.provider is None
     assert result.connection is None
     assert result.error is None
@@ -91,7 +91,7 @@ async def test_get_repository_with_provider(app_manager_instance: DependencyMana
     )
 
     url = "https://github.com/SwissDataScienceCenter/renku"
-    result = await repo.get_repository(url, user, None, user)
+    result = await repo.get_repository(url, user, None)
     assert result.provider == ProviderData(id=provider.id, name=provider.display_name, url=provider.url)
     assert result.connection is None
     assert result.error is None
@@ -110,7 +110,7 @@ async def test_get_repository_with_pending_connection_public_repo(app_manager_in
     (provider, connOrm) = await _setup_connection(app_manager_instance, ConnectionStatus.pending)
 
     url = "https://github.com/SwissDataScienceCenter/renku"
-    result = await repo.get_repository(url, user, None, user)
+    result = await repo.get_repository(url, user, None)
     assert result.provider
     assert result.provider.id == provider.id
     assert result.connection
@@ -132,7 +132,7 @@ async def test_get_repository_with_bad_token_public_repo(app_manager_instance: D
     (provider, connOrm) = await _setup_connection(app_manager_instance, ConnectionStatus.connected)
 
     url = "https://github.com/SwissDataScienceCenter/renku"
-    result = await repo.get_repository(url, user, None, user)
+    result = await repo.get_repository(url, user, None)
     assert result.provider
     assert result.provider.id == provider.id
     assert result.connection
@@ -161,7 +161,7 @@ async def test_get_repository_with_bad_metadata_response(app_manager_instance: D
     )
     repo = GitRepositoriesRepository(deps.config.db.async_session_maker, factory, None, False)
 
-    result = await repo.get_repository(private_repo_url, user, None, user)
+    result = await repo.get_repository(private_repo_url, user, None)
     assert result.provider
     assert result.provider.id == provider.id
     assert result.connection
@@ -183,7 +183,7 @@ async def test_get_repository_with_unauthorized_repo(app_manager_instance: Depen
     )
     repo = GitRepositoriesRepository(deps.config.db.async_session_maker, factory, None, False)
 
-    result = await repo.get_repository(private_repo_url, user, None, user)
+    result = await repo.get_repository(private_repo_url, user, None)
     assert result.provider
     assert result.provider.id == provider.id
     assert result.connection

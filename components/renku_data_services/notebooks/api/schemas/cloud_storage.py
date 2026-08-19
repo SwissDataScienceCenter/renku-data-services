@@ -3,15 +3,13 @@
 import json
 from configparser import ConfigParser
 from io import StringIO
-from pathlib import PurePosixPath
-from typing import Any, Final, Optional, Protocol, Self
+from typing import Any, Final, Optional, Protocol
 
 from kubernetes import client
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema
 
 from renku_data_services.k8s.models import sanitizer
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
-from renku_data_services.storage.models import CloudStorage
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -73,41 +71,6 @@ class RCloneStorage(ICloudStorageRequest):
         self.storage_class = storage_class
         validator = RCloneValidator()
         validator.inject_default_values(self.configuration)
-
-    @classmethod
-    async def storage_from_schema(
-        cls,
-        data: dict[str, Any],
-        work_dir: PurePosixPath,
-        saved_storage: CloudStorage | None,
-        storage_class: str,
-        user_secret_key: str | None = None,
-    ) -> Self:
-        """Create storage object from request."""
-        name = None
-        if saved_storage:
-            configuration = {**saved_storage.configuration.model_dump(), **(data.get("configuration", {}))}
-            readonly = saved_storage.readonly
-            name = saved_storage.name
-        else:
-            source_path = data["source_path"]
-            target_path = data["target_path"]
-            configuration = data["configuration"]
-            readonly = data.get("readonly", True)
-
-        # NOTE: This is used only in Renku v1, there we do not save secrets for storage
-        secrets: dict[str, str] = {}
-        mount_folder = str(work_dir / target_path)
-        return cls(
-            source_path=source_path,
-            configuration=configuration,
-            readonly=readonly,
-            mount_folder=mount_folder,
-            name=name,
-            storage_class=storage_class,
-            secrets=secrets,
-            user_secret_key=user_secret_key,
-        )
 
     def pvc(
         self,

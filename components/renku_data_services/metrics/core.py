@@ -4,6 +4,7 @@ from renku_data_services.base_models.core import APIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.metrics import MetricsEvent, MetricsMetadata, MetricsService, UserIdentity
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.metrics.utils import anonymize_user_id
+from renku_data_services.notebooks.models import LauncherType
 from renku_data_services.users.models import UserInfo
 
 
@@ -82,13 +83,21 @@ class StagingMetricsService(MetricsService):
         await self._store_event(MetricsEvent.session_stopped, user, metadata)
 
     async def session_launcher_created(
-        self, user: APIUser, environment_kind: str, environment_image_source: str
+        self,
+        user: APIUser,
+        environment_kind: str,
+        environment_image_source: str,
+        session_type: LauncherType,
     ) -> None:
         """Store session launcher created event in staging table."""
         await self._store_event(
             MetricsEvent.session_launcher_created,
             user,
-            {"environment_kind": environment_kind, "environment_image_source": environment_image_source},
+            {
+                "environment_kind": environment_kind,
+                "environment_image_source": environment_image_source,
+                "session_type": session_type.value.lower(),
+            },
         )
 
     async def project_created(self, user: APIUser, metadata: MetricsMetadata) -> None:

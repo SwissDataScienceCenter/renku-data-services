@@ -39,7 +39,6 @@ from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
 
 logger = logging.getLogger(__name__)
@@ -64,7 +63,6 @@ class NotebooksNewBP(CustomBlueprint):
     project_session_secret_repo: ProjectSessionSecretRepository
     rp_repo: ResourcePoolRepository
     session_repo: SessionRepository
-    storage_repo: StorageRepository
     user_repo: UserRepo
     metrics: MetricsService
     git_repositories_repo: GitRepositoriesRepository
@@ -215,18 +213,16 @@ class NotebooksNewBP(CustomBlueprint):
     def check_docker_image(self) -> BlueprintFactoryResponse:
         """Return the availability of the docker image."""
 
-        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
+        @authenticate(self.authenticator)
         @validate(query=apispec.SessionsImagesGetParametersQuery)
         async def _check_docker_image(
             request: Request,
             user: AnonymousAPIUser | AuthenticatedAPIUser,
-            internal_gitlab_user: APIUser,
             query: apispec.SessionsImagesGetParametersQuery,
         ) -> JSONResponse:
             image = Image.from_path(query.image_url)
             result = await self.image_check_repo.check_image(
                 user=user,
-                gitlab_user=internal_gitlab_user,
                 image_src=image,
             )
             logger.info(f"Checked image {query.image_url}: {result}")

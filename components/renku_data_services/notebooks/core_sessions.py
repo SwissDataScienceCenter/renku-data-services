@@ -6,8 +6,9 @@ import base64
 import json
 import os
 from collections.abc import AsyncIterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from math import ceil
 from pathlib import PurePosixPath
 from typing import Protocol, TypeVar, cast
 from urllib.parse import urljoin, urlparse
@@ -40,7 +41,7 @@ from renku_data_services.data_connectors.db import (
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import ValidationError, errors
 from renku_data_services.k8s.models import ClusterConnection, K8sSecret, sanitizer
-from renku_data_services.notebooks import apispec, core
+from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_extras
 from renku_data_services.notebooks.api.classes.image import Image
@@ -116,7 +117,7 @@ from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.models import SessionLauncher
+from renku_data_services.session.models import Environment, SessionLauncher
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import get_effective_quota
 
@@ -481,10 +482,12 @@ async def request_session_secret_creation(
             )
 
 
-def resources_patch_from_resource_class(resource_class: ResourceClass) -> ResourcesPatch:
+def resources_patch_from_resource_class(
+    resource_class: ResourceClass, cpu_limit_factor: float | None = None
+) -> ResourcesPatch:
     """Convert the resource class to a k8s resources spec."""
     gpu_name = GpuKind.NVIDIA.value + "/gpu"
-    resources = resources_from_resource_class(resource_class)
+    resources = resources_from_resource_class(resource_class, cpu_limit_factor)
     requests: Mapping[str, Requests | RequestsStr | ResetType] | ResetType | None = None
     limits: Mapping[str, Limits | LimitsStr | ResetType] | ResetType | None = None
     defaul_requests = {"memory": RESET, "cpu": RESET, gpu_name: RESET}
@@ -496,8 +499,15 @@ def resources_patch_from_resource_class(resource_class: ResourceClass) -> Resour
     return ResourcesPatch(requests=requests, limits=limits)
 
 
-def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
-    """Convert the resource class to a k8s resources spec."""
+def resources_from_resource_class(resource_class: ResourceClass, cpu_limit_factor: float | None = None) -> Resources:
+    """Convert the resource class to a k8s resources spec.
+
+    The cpu limit factor is optional beacuse cpu is burstable in Kubernetes with
+    low risk of oversubscription causing problems to the node. We always apply
+    limits for memory beacuse it can cause problems on the node and affect other pods
+    when the node is oversubscribed. And for GPUs the limits simply have to be defined
+    and equal to the requests, oversubscription is not possible for GPUs.
+    """
     requests: dict[str, Requests | RequestsStr] = {
         "cpu": RequestsStr(str(round(resource_class.cpu * 1000)) + "m"),
         "memory": RequestsStr(f"{resource_class.memory}Gi"),
@@ -509,6 +519,8 @@ def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
         # NOTE: GPUs have to be set in limits too since GPUs cannot be overcommited, if
         # not on some clusters this will cause the session to fully fail to start.
         limits[gpu_name] = Limits(resource_class.gpu)
+    if cpu_limit_factor is not None and cpu_limit_factor >= 1.0:
+        limits["cpu"] = LimitsStr(str(round(resource_class.cpu * cpu_limit_factor * 1000)) + "m")
     return Resources(requests=requests, limits=limits if len(limits) > 0 else None)
 
 
@@ -675,7 +687,7 @@ async def __get_connected_services_image_pull_secret(
     user: APIUser,
 ) -> ExtraSecret | None:
     """Return a secret for accessing the image if one is available for the given user."""
-    image_check_result = await image_check_repo.check_image(user=user, gitlab_user=None, image_src=launcher)
+    image_check_result = await image_check_repo.check_image(user=user, image_src=launcher)
 
     if not image_check_result.accessible:
         return None
@@ -705,7 +717,7 @@ async def __get_private_image_build_secret(
         return None
 
     try:
-        await image_check_repo.check_built_image_accessibility(user=user, gitlab_user=None, launcher=launcher)
+        await image_check_repo.check_built_image_accessibility(user=user, launcher=launcher)
     except (errors.ValidationError, errors.ProgrammingError, errors.ForbiddenError):
         return None
 
@@ -792,7 +804,33 @@ def get_remote_secret(
     return ExtraSecret(secret)
 
 
+def _firecrest_resource_env_items(
+    resource_class: ResourceClass,
+    pool_remote: RemoteConfigurationFirecrest,
+) -> list[SessionEnvItem]:
+    """Build FirecREST-specific env vars for a remote session.
+
+    Resource class CPU, memory and GPU values are passed to Amalthea through
+    the CRD, so they are never emitted as env vars. Class-level system and
+    partition override the pool defaults. ``forward_resource_values`` is always
+    emitted: when true Amalthea forwards the CRD CPU/memory/GPU values to
+    FirecREST; when false (the default) the HPC grid picks the resources.
+    """
+    class_remote = resource_class.remote
+    system_name = (class_remote.system_name if class_remote is not None else None) or pool_remote.system_name
+    partition = (class_remote.partition if class_remote is not None else None) or pool_remote.partition
+    forward = class_remote.forward_resource_values if class_remote is not None else False
+    env: list[SessionEnvItem] = [
+        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=system_name),
+        SessionEnvItem(name="RSC_FIRECREST_FORWARD_RESOURCE_VALUES", value=str(forward).lower()),
+    ]
+    if partition:
+        env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=partition))
+    return env
+
+
 def get_remote_env(
+    resource_class: ResourceClass,
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
@@ -800,15 +838,10 @@ def get_remote_env(
         SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value),
     ]
     if isinstance(remote, RemoteConfigurationRunai):
-        env.append(
-            SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url),
-        )
+        env.append(SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url))
     else:
-        env.append(SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value))
         env.append(SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url))
-        env.append(SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote.system_name))
-        if remote.partition:
-            env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote.partition))
+        env.extend(_firecrest_resource_env_items(resource_class, remote))
     return env
 
 
@@ -826,6 +859,27 @@ async def _check_quota(resource_usage_service: ResourceUsageService, resource_po
         raise errors.ValidationError(
             message="Cannot start the session because your quota in the selected resource pool is exhausted."
         )
+
+
+async def get_mount_work_dir(
+    user: APIUser, environment: Environment, image_check_repo: ImageCheckRepository
+) -> tuple[PurePosixPath, PurePosixPath]:
+    """Get the storage mount and work directories."""
+    work_dir = environment.working_directory
+    if not work_dir:
+        parsed_image = Image.from_path(environment.container_image)
+        image_workdir = await image_check_repo.image_workdir(user, parsed_image)
+        work_dir_fallback = PurePosixPath("/home/jovyan/work")
+        work_dir = image_workdir or work_dir_fallback
+    # NOTE: The fallback should have /work appended to the path to avoid collisions
+    # between the mount and workdir and for backwards compatibility reasons.
+    # If /work is not added then we overwrite the workdir from the image which may contain files that are needed.
+    storage_mount_fallback = work_dir / "work"
+    storage_mount = environment.mount_directory or storage_mount_fallback
+    if storage_mount == PurePosixPath("/"):
+        # NOTE: Mounting the volume for the session at / will essentially wipe everything out from the image
+        storage_mount = PurePosixPath("/work")
+    return storage_mount, work_dir
 
 
 async def start_session(
@@ -919,13 +973,7 @@ async def start_session(
 
     environment = launcher.environment
     image = environment.container_image
-    work_dir = environment.working_directory
-    if not work_dir:
-        image_workdir = await core.docker_image_workdir(nb_config, environment.container_image, internal_gitlab_user)
-        work_dir_fallback = PurePosixPath("/home/jovyan")
-        work_dir = image_workdir or work_dir_fallback
-    storage_mount_fallback = work_dir / "work"
-    storage_mount = launcher.environment.mount_directory or storage_mount_fallback
+    storage_mount, work_dir = await get_mount_work_dir(user, environment, image_check_repo)
     secrets_mount_directory = storage_mount / project.secrets_mount_directory
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id
@@ -1070,6 +1118,8 @@ async def start_session(
         SessionEnvItem(name="RENKU_PROJECT_ID", value=str(project.id)),
         SessionEnvItem(name="RENKU_PROJECT_PATH", value=project.path.serialize()),
         SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
+        # NOTE: CNB_APP_DIR sets the working directory for images built with cloud native buildpacks
+        SessionEnvItem(name="CNB_APP_DIR", value=work_dir.as_posix()),
     ]
     if session_type.is_interactive:
         env.extend(
@@ -1090,11 +1140,9 @@ async def start_session(
         )
     if session_location == SessionLocation.remote:
         assert resource_pool.remote is not None
-        env.extend(
-            get_remote_env(
-                remote=resource_pool.remote,
-            )
-        )
+        if resource_pool.remote.kind == RemoteConfigurationKind.firecrest:
+            resource_class = replace(resource_class, cpu=ceil(resource_class.cpu))
+        env.extend(get_remote_env(resource_class, resource_pool.remote))
     launcher_env_variables = get_launcher_env_variables(launcher, launch_request)
     env.extend(launcher_env_variables)
 
@@ -1149,7 +1197,7 @@ async def start_session(
                 workingDir=work_dir.as_posix(),
                 runAsUser=environment.uid,
                 runAsGroup=environment.gid,
-                resources=resources_from_resource_class(resource_class),
+                resources=resources_from_resource_class(resource_class, resource_pool.cpu_limit_factor),
                 extraVolumeMounts=session_extras.volume_mounts,
                 command=command,
                 args=args,
@@ -1212,6 +1260,7 @@ async def start_session(
             "resource_pool_id": resource_pool.id or "",
             "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
             "session_id": server_name,
+            "session_type": session_type.value.lower(),
         },
     )
     return session, True
@@ -1303,7 +1352,7 @@ async def patch_session(
         patch.spec.template = TemplatePatch(metadata=TemplateMetadataPatch(annotations=annotations))
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
-        patch.spec.session.resources = resources_patch_from_resource_class(rc)
+        patch.spec.session.resources = resources_patch_from_resource_class(rc, rp.cpu_limit_factor)
         # Tolerations
         patch.spec.tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
         # Affinities
@@ -1372,13 +1421,7 @@ async def patch_session(
     launcher = await session_repo.get_launcher(user, session.launcher_id)
     project = await project_repo.get_project(user=user, project_id=session.project_id)
     environment = launcher.environment
-    work_dir = environment.working_directory
-    if not work_dir:
-        image_workdir = await core.docker_image_workdir(nb_config, environment.container_image, internal_gitlab_user)
-        work_dir_fallback = PurePosixPath("/home/jovyan")
-        work_dir = image_workdir or work_dir_fallback
-    storage_mount_fallback = work_dir / "work"
-    storage_mount = launcher.environment.mount_directory or storage_mount_fallback
+    storage_mount, work_dir = await get_mount_work_dir(user, environment, image_check_repo)
     secrets_mount_directory = storage_mount / project.secrets_mount_directory
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id

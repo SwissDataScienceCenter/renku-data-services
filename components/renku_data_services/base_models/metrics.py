@@ -3,10 +3,13 @@
 from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import sha1
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.users.models import UserInfo
+
+if TYPE_CHECKING:
+    from renku_data_services.notebooks.models import LauncherType
 
 
 class MetricsEvent(StrEnum):
@@ -96,7 +99,11 @@ class MetricsService(Protocol):
         ...
 
     async def session_launcher_created(
-        self, user: APIUser, environment_kind: str, environment_image_source: str
+        self,
+        user: APIUser,
+        environment_kind: str,
+        environment_image_source: str,
+        session_type: "LauncherType",
     ) -> None:
         """Send session launcher created event to metrics."""
         ...

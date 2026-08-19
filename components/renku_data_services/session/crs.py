@@ -48,9 +48,10 @@ class BuildRun(_BuildRun):
     metadata: Metadata  # type: ignore[assignment]
 
     def __get_param_value(self, key: str) -> str | None:
-        if not self.spec.paramValues:
+        paramValues = self.spec.paramValues or (self.spec.build.spec.paramValues if self.spec.build.spec else None)
+        if not paramValues:
             return None
-        res = next((i for i in self.spec.paramValues if i.name == key), None)
+        res = next((i for i in paramValues if i.name == key), None)
         if not res:
             return None
         return res.value

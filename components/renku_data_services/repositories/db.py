@@ -75,7 +75,6 @@ class GitRepositoriesRepository:
         repository_url: str,
         user: base_models.APIUser,
         etag: str | None,
-        internal_gitlab_user: base_models.APIUser,
     ) -> models.RepositoryDataResult:
         """Get metadata about one repository."""
 
@@ -98,17 +97,6 @@ class GitRepositoriesRepository:
                 else await self._get_repository_anonymously(repository_url=valid_url, client=provider, etag=etag)
             )
             result = result.with_metadata(repo_meta)
-
-        else:
-            if self._is_internal_gitlab(valid_url) and self.internal_gitlab_url:
-                provider_data = models.ProviderData(id="INTERNAL_GITLAB", name="GitLab", url=self.internal_gitlab_url)
-                repo_meta = await self._get_repository_from_internal_gitlab(
-                    repository_url=valid_url,
-                    user=internal_gitlab_user,
-                    etag=etag,
-                    internal_gitlab_url=self.internal_gitlab_url,
-                )
-                result = result.with_metadata(repo_meta).with_provider(provider_data)
 
         if not result.metadata:
             repo_err = await self._check_arbitrary_git_repo(valid_url)

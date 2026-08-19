@@ -30,6 +30,7 @@ from renku_data_services.data_connectors.blueprints import DataConnectorsBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.notebooks.blueprints import NotebooksNewBP
 from renku_data_services.notifications.blueprints import NotificationsBP
+from renku_data_services.persisted_logs.blueprints import PersistedLogsBP
 from renku_data_services.platform.blueprints import PlatformConfigBP, PlatformUrlRedirectBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
@@ -38,7 +39,7 @@ from renku_data_services.search.blueprints import SearchBP
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
-from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
+from renku_data_services.storage.blueprints import StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
 
 
@@ -119,12 +120,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         kc_user_repo=dm.kc_user_repo,
     )
     clusters = ClustersBP(name="clusters", url_prefix=url_prefix, repo=dm.cluster_repo, authenticator=dm.authenticator)
-    storage = StorageBP(
-        name="storage",
-        url_prefix=url_prefix,
-        storage_repo=dm.storage_repo,
-        authenticator=dm.gitlab_authenticator,
-    )
     storage_schema = StorageSchemaBP(
         name="storage_schema",
         url_prefix=url_prefix,
@@ -229,7 +224,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         project_session_secret_repo=dm.project_session_secret_repo,
         rp_repo=dm.rp_repo,
         session_repo=dm.session_repo,
-        storage_repo=dm.storage_repo,
         user_repo=dm.kc_user_repo,
         git_repositories_repo=dm.git_repositories_repo,
         builds_config=dm.config.builds,
@@ -276,6 +270,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         metrics=dm.metrics,
         zenodo_client=dm.zenodo_client,
+        envidat_client=dm.envidat_client,
         connected_services_repo=dm.connected_services_repo,
         job_client=dm.job_client,
         secret_client=dm.secret_client,
@@ -307,6 +302,18 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         rp_repo=dm.rp_repo,
     )
+    persisted_logs = (
+        PersistedLogsBP(
+            name="persisted_logs",
+            url_prefix=url_prefix,
+            session_logs_repo=dm.session_logs_repo,
+            build_logs_repo=dm.build_logs_repo,
+            authenticator=dm.authenticator,
+            session_maker=dm.config.db.async_session_maker,
+        )
+        if dm.config.persisted_logs.enabled
+        else None
+    )
     internal_authentication = InternalAuthenticationBP(
         name="internal_authentication",
         url_prefix=url_prefix,
@@ -325,7 +332,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             user_secrets.blueprint(),
             user_resource_pools.blueprint(),
             clusters.blueprint(),
-            storage.blueprint(),
             storage_schema.blueprint(),
             user_preferences.blueprint(),
             misc.blueprint(),
@@ -350,6 +356,8 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     )
     if builds is not None:
         app.blueprint(builds.blueprint())
+    if persisted_logs is not None:
+        app.blueprint(persisted_logs.blueprint())
 
     # We need to patch sanic_ext as since version 24.12 they only send a string representation of errors
     import sanic_ext.extras.validation.setup
