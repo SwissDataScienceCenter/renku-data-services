@@ -14,6 +14,7 @@ from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_db_ids, validate_query
+from renku_data_services.base_models.core import Slug
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc import apispec
 from renku_data_services.crc.core import (
@@ -140,6 +141,16 @@ class ResourcePoolsBP(CustomBlueprint):
             return validated_json(apispec.ResourcePoolWithId, rp)
 
         return "/resource_pools/<resource_pool_id>", ["PATCH"], _patch
+
+    def get_group_rp(self) -> BlueprintFactoryResponse:
+        """Get all resource pools that a specific group has access to."""
+
+        @authenticate(self.authenticator)
+        async def _get(_: Request, user: base_models.APIUser, group_slug: Slug) -> HTTPResponse:
+            rps = await self.member_repo.get_group_resource_pools(user, group_slug)
+            return validated_json(apispec.ResourcePoolsWithIdFiltered, rps)
+
+        return "/groups/<group_slug:renku_slug>/resource_pools", ["GET"], _get
 
 
 @dataclass(kw_only=True)

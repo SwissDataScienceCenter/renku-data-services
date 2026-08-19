@@ -27,7 +27,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope
 from renku_data_services.base_models import RESET
-from renku_data_services.base_models.core import ResetType, ResourceType
+from renku_data_services.base_models.core import ResetType, ResourceType, Slug
 from renku_data_services.connected_services.models import ConnectionStatus
 from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2ConnectionORM
 from renku_data_services.crc import models
@@ -1700,6 +1700,32 @@ class MemberRepository(_Base):
                     else:
                         await self._unprohibit_resource_pool_users(api_user, rp_id, [keycloak_id], session=session)
             return user.dump()
+
+    async def get_group_resource_pools(
+        self, api_user: base_models.APIUser, group_slug: Slug
+    ) -> list[models.ResourcePool]:
+        """Get resource pools that a specific group has access to."""
+        group = await self.group_repo.get_group(api_user, group_slug)
+        authorized = await self.authz.has_permission(api_user, ResourceType.group, group.id, Scope.DIRECT_MEMBER)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"The group with slug {group_slug} does not exist or you do not have access to it"
+            )
+
+        async with self.session_maker() as session, session.begin():
+            allowed_ids = [int(rp) async for rp in self.authz.get_group_resource_pools(str(group.id))]
+            stmt = (
+                select(schemas.ResourcePoolORM)
+                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .where(schemas.ResourcePoolORM.id.in_(allowed_ids))
+            )
+            res = await session.execute(stmt)
+            rps: Sequence[schemas.ResourcePoolORM] = res.scalars().all()
+            output: list[models.ResourcePool] = []
+            for rp in rps:
+                quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
+                output.append(rp.dump(quota))
+            return output
 
 
 @dataclass
