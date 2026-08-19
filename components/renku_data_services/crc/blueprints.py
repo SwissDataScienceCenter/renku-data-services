@@ -107,7 +107,13 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPut
         ) -> HTTPResponse:
-            put = validate_resource_pool_put_or_patch(body=body, method="PUT")
+            existing = await self.rp_repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
+            put = validate_resource_pool_put_or_patch(
+                body=body,
+                method="PUT",
+                existing_pool_kind=existing.remote.kind if existing.remote else None,
+                existing_classes=existing.classes,
+            )
             rp = await self.rp_repo.update_resource_pool(api_user=user, resource_pool_id=resource_pool_id, update=put)
             return validated_json(apispec.ResourcePoolWithId, rp)
 
@@ -123,7 +129,13 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPatch
         ) -> HTTPResponse:
-            patch = validate_resource_pool_put_or_patch(body=body, method="PATCH")
+            existing = await self.rp_repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
+            patch = validate_resource_pool_put_or_patch(
+                body=body,
+                method="PATCH",
+                existing_pool_kind=existing.remote.kind if existing.remote else None,
+                existing_classes=existing.classes,
+            )
             rp = await self.rp_repo.update_resource_pool(api_user=user, resource_pool_id=resource_pool_id, update=patch)
             return validated_json(apispec.ResourcePoolWithId, rp)
 
@@ -453,7 +465,9 @@ class ClassesBP(CustomBlueprint):
         async def _post(
             _: Request, user: base_models.APIUser, body: apispec.ResourceClass, resource_pool_id: int
         ) -> HTTPResponse:
-            cls = validate_resource_class(body=body)
+            pool = await self.repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
+            pool_kind = pool.remote.kind if pool.remote else None
+            cls = validate_resource_class(body=body, pool_kind=pool_kind)
             res = await self.repo.insert_resource_class(
                 api_user=user, new_resource_class=cls, resource_pool_id=resource_pool_id
             )
@@ -512,12 +526,15 @@ class ClassesBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, body: apispec.ResourceClass, resource_pool_id: int, class_id: int
         ) -> HTTPResponse:
-            put = validate_resource_class_patch_or_put(body=body, method="PUT")
+            pool = await self.repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
+            pool_kind = pool.remote.kind if pool.remote else None
+            put = validate_resource_class_patch_or_put(body=body, method="PUT", existing_kind=pool_kind)
             rc = await self.repo.update_resource_class(
                 api_user=user,
                 resource_pool_id=resource_pool_id,
                 resource_class_id=class_id,
                 update=put,
+                pool_kind=pool_kind,
             )
             return validated_json(apispec.ResourceClassWithId, rc)
 
@@ -537,12 +554,15 @@ class ClassesBP(CustomBlueprint):
             resource_pool_id: int,
             class_id: int,
         ) -> HTTPResponse:
-            patch = validate_resource_class_patch_or_put(body=body, method="PATCH")
+            pool = await self.repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
+            pool_kind = pool.remote.kind if pool.remote else None
+            patch = validate_resource_class_patch_or_put(body=body, method="PATCH", existing_kind=pool_kind)
             rc = await self.repo.update_resource_class(
                 api_user=user,
                 resource_pool_id=resource_pool_id,
                 resource_class_id=class_id,
                 update=patch,
+                pool_kind=pool_kind,
             )
             return validated_json(apispec.ResourceClassWithId, rc)
 

@@ -550,7 +550,6 @@ class ResourcePoolRepository(_Base):
             resource_class = schemas.ResourceClassORM.from_unsaved_model(
                 new_resource_class=new_resource_class, resource_pool_id=resource_pool_id
             )
-            print(f"resource_class = {resource_class.resource_pool_id}")
 
             if resource_pool_id is not None:
                 stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
@@ -670,12 +669,28 @@ class ResourcePoolRepository(_Base):
                 quota = await self.quotas_repo.update_quota(quota=updated_quota, cluster_id=cluster_id)
                 rp.quota = quota.id
 
+            # Compute the effective pool kind after this update.
+            if update.remote is RESET:
+                effective_pool_kind: models.RemoteConfigurationKind | None = None
+            elif update.remote is not None:
+                effective_pool_kind = update.remote.kind
+            else:
+                effective_pool_kind = None
+                if rp.remote_json is not None:
+                    remote_kind = rp.remote_json.get("kind")
+                    if remote_kind is not None:
+                        effective_pool_kind = models.RemoteConfigurationKind(remote_kind)
+
             new_classes_coroutines = []
             if update.classes is not None:
                 for rc in update.classes:
                     new_classes_coroutines.append(
                         self.update_resource_class(
-                            api_user=api_user, resource_pool_id=resource_pool_id, resource_class_id=rc.id, update=rc
+                            api_user=api_user,
+                            resource_pool_id=resource_pool_id,
+                            resource_class_id=rc.id,
+                            update=rc,
+                            pool_kind=effective_pool_kind,
                         )
                     )
 
@@ -699,6 +714,14 @@ class ResourcePoolRepository(_Base):
                 rp.remote_json = remote_json
 
             await gather(*new_classes_coroutines)
+
+            # Clear stale class remote_json when the pool is not FirecREST
+            if effective_pool_kind != models.RemoteConfigurationKind.firecrest:
+                updated_class_ids = {rc.id for rc in (update.classes or [])}
+                for cls_orm in rp.classes:
+                    if cls_orm.id not in updated_class_ids and cls_orm.remote_json is not None:
+                        cls_orm.remote_json = None
+
             await session.flush()
             await session.refresh(rp)
             transaction_result = rp.dump(quota=quota)
@@ -814,6 +837,8 @@ class ResourcePoolRepository(_Base):
         resource_pool_id: int,
         resource_class_id: int,
         update: models.ResourceClassPatch,
+        *,
+        pool_kind: models.RemoteConfigurationKind | None = None,
     ) -> models.ResourceClass:
         """Update a specific resource class."""
         async with self.session_maker() as session, session.begin():
@@ -835,6 +860,11 @@ class ResourcePoolRepository(_Base):
                     )
                 )
 
+            if pool_kind is None and cls.resource_pool is not None and cls.resource_pool.remote_json is not None:
+                remote_kind = cls.resource_pool.remote_json.get("kind")
+                if remote_kind is not None:
+                    pool_kind = models.RemoteConfigurationKind(remote_kind)
+
             validate_resource_class_update(existing=cls.dump(), update=update)
 
             # NOTE: updating the 'default' field is not supported, so it is skipped below
@@ -852,6 +882,10 @@ class ResourcePoolRepository(_Base):
                 cls.default_storage = update.default_storage
             if update.quota_enforced is not None:
                 cls.quota_enforced = update.quota_enforced
+            if pool_kind is None or pool_kind != models.RemoteConfigurationKind.firecrest:
+                cls.remote_json = None
+            if update.remote is not None:
+                cls.remote_json = update.remote.to_dict()
 
             if update.node_affinities is not None:
                 existing_affinities: dict[str, schemas.NodeAffinityORM] = {i.key: i for i in cls.node_affinities}
