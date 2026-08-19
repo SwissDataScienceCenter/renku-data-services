@@ -623,6 +623,49 @@ components:
       required:
         - enabled
         - max_size
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
+    CreationDate:
+      description: The date and time the resource was created (in UTC and ISO-8601 format)
+      type: string
+      format: date-time
+      example: "2023-11-01T17:32:28Z"
+    UserId:
+      type: string
+      description: Keycloak user ID
+      example: f74a228b-1790-4276-af5f-25c2424e9b0c
+      pattern: "^[A-Za-z0-9]{1}[A-Za-z0-9-]+$"
+    ETag:
+      type: string
+      description: Entity Tag
+      example: "9EE498F9D565D0C41E511377425F32F3"
+    PaginationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        page:
+          description: Result's page number starting from 1
+          type: integer
+          minimum: 1
+          default: 1
+        per_page:
+          description: The number of results per page
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+    ProjectSlug:
+      type: string
+      description: The slug used to identify a project
+      minLength: 3
+      example: "user/my-project"
+      # limitations based on allowed characters in project slugs from Gitlab from here:
+      # https://docs.gitlab.com/ee/user/reserved_names.html
+      pattern: "^[a-zA-Z0-9]+([_.\\-/][a-zA-Z0-9]+)*[_.\\-/]?[a-zA-Z0-9]$"
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
@@ -630,3 +673,11 @@ components:
         "application/json":
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+  parameters:
+    If-Match:
+      in: header
+      name: If-Match
+      description: If-Match header, for avoiding mid-air collisions
+      required: true
+      schema:
+        $ref: "#/components/schemas/ETag"
