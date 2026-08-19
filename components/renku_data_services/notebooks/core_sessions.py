@@ -1541,20 +1541,6 @@ async def patch_session(
             await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
         )
 
-    # When resuming, we need to check for a project storage and disable it if it has been removed
-    if is_being_resumed:
-        project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
-        pvc = await project_storage_k8s.get_volume(session.project_id)
-        if not pvc:
-            ## remove it from the session extra mounts
-            mount_name = f"ps-{session.project_id}-0".lower()
-            if not patch.spec.session:
-                patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
-            patch.spec.session.extraVolumeMounts = [
-                e for e in (session.spec.session.extraVolumeMounts or []) if e.name != mount_name
-            ]
-            patch.spec.extraVolumes = [e for e in (session.spec.extraVolumes or []) if e.name != mount_name]
-
     # Patching the image pull secret
     image_pull_secret = await get_image_pull_secret(
         launcher=launcher,
@@ -1590,6 +1576,22 @@ async def patch_session(
     patch.spec.session.extraVolumeMounts = _make_patch_spec_list(
         existing=session.spec.session.extraVolumeMounts or [], updated=session_extras.volume_mounts
     )
+    # ^^^
+    # When resuming, we need to check for a project storage and disable it if it has been removed
+    if is_being_resumed:
+        project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
+        pvc = await project_storage_k8s.get_volume(session.project_id)
+        if not pvc:
+            ## remove it from the session extra mounts
+            mount_name = f"ps-{session.project_id}-0".lower()
+            if not patch.spec.session:
+                patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
+            patch.spec.session.extraVolumeMounts = [
+                e for e in (session.spec.session.extraVolumeMounts or []) if e.name != mount_name
+            ]
+            patch.spec.extraVolumes = [e for e in (session.spec.extraVolumes or []) if e.name != mount_name]
+
+
 
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
