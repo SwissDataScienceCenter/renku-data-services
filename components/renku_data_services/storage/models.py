@@ -1,16 +1,24 @@
-"""Models for cloud storage."""
+"""Models for storage."""
 
 from __future__ import annotations
 
 from collections.abc import Generator, MutableMapping
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import ParseResult, urlparse
 
 from pydantic import BaseModel, Field, PrivateAttr, model_serializer, model_validator
+from ulid import ULID
 
 from renku_data_services import errors
+from renku_data_services.base_models.bytesize import ByteSize
+from renku_data_services.base_models.core import (
+    ProjectPath,
+)
 from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.utils.etag import compute_etag_from_fields
 
 
 class RCloneConfig(BaseModel, MutableMapping):
@@ -150,3 +158,109 @@ def storage_url_parser(storage_url: str) -> tuple[RCloneConfig, PurePosixPath]:
             return _from_ambiguous_url(parsed_url)
         case _:
             raise errors.ValidationError(message=f"Scheme '{parsed_url.scheme}' is not supported.")
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedProjectStorage:
+    """Project storage definition."""
+
+    namespace_path: ProjectPath
+    size: ByteSize
+    mount_path: PurePosixPath
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStoragePatch:
+    """Model for changes requested on a project storage."""
+
+    size: ByteSize | None
+    mount_path: PurePosixPath | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorage:
+    """Stored project storage information."""
+
+    id: ULID
+    project_id: ULID
+    storage_class: str
+    size: ByteSize
+    mount_path: PurePosixPath
+    created_by: str
+    creation_date: datetime
+    updated_at: datetime
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project storage object."""
+        return compute_etag_from_fields(
+            self.updated_at, self.project_id, self.storage_class, self.size.to_bytes(), self.mount_path.as_posix()
+        )
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class DeletedProjectStorage:
+    """A project storage that has been deleted."""
+
+    project_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllow:
+    """Allowed project storage with max size."""
+
+    project_id: ULID
+    max_size: ByteSize
+    updated_at: datetime
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project storage allow object."""
+        return compute_etag_from_fields(self.updated_at, self.project_id, self.max_size.to_bytes())
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllowDetail:
+    """Allowed project storage with max size."""
+
+    project_id: ULID
+    max_size: ByteSize
+    name: str
+    namespace_path: ProjectPath
+    updated_at: datetime
+
+    @classmethod
+    def create(
+        cls,
+        project_id: ULID,
+        max_size: ByteSize,
+        name: str,
+        namespace_slug: str,
+        project_slug: str,
+        updated_at: datetime,
+    ) -> ProjectStorageAllowDetail:
+        """Create an instance with the project path given as two strings."""
+        np = ProjectPath.from_strings(namespace_slug, project_slug)
+        return ProjectStorageAllowDetail(
+            project_id=project_id, max_size=max_size, name=name, namespace_path=np, updated_at=updated_at
+        )
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project storage allow object."""
+        return compute_etag_from_fields(self.updated_at, self.project_id, self.max_size.to_bytes())
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllowPatch:
+    """Model for changes requested on a project storage allow entry."""
+
+    max_size: ByteSize | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllowUpdate:
+    """Return data when updating an allow entry."""
+
+    old: ProjectStorageAllowDetail
+    new: ProjectStorageAllowDetail
