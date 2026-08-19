@@ -1004,7 +1004,7 @@ async def test_patch_storage_allow_min_size(
     _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 422, response.text
-    assert "at least 1GB" in response.text
+    assert "should be greater than 0" in response.text
 
 
 @pytest.mark.asyncio
