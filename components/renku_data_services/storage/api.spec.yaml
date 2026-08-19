@@ -589,6 +589,11 @@ components:
         - name
         - namespace
         - etag
+    ProjectStorageList:
+      description: A list of project storages.
+      type: array
+      items:
+        $ref: "#/components/schemas/ProjectStorage"
     ProjectStorageAllowList:
       description: |
         A list of project storage allow entries.
