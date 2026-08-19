@@ -40,6 +40,7 @@ from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.users.db import UserRepo
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ class NotebooksNewBP(CustomBlueprint):
     image_check_repo: ImageCheckRepository
     project_repo: ProjectRepository
     project_session_secret_repo: ProjectSessionSecretRepository
+    project_storage_repo: ProjectStorageRepository
     rp_repo: ResourcePoolRepository
     session_repo: SessionRepository
     user_repo: UserRepo
@@ -96,6 +98,7 @@ class NotebooksNewBP(CustomBlueprint):
                 data_connector_repo=self.data_connector_repo,
                 project_repo=self.project_repo,
                 project_session_secret_repo=self.project_session_secret_repo,
+                project_storage_repo=self.project_storage_repo,
                 rp_repo=self.rp_repo,
                 session_repo=self.session_repo,
                 user_repo=self.user_repo,

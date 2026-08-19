@@ -45,7 +45,6 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
-from renku_data_services.data_connectors.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.errors import ValidationError, errors
 from renku_data_services.k8s.models import ClusterConnection, K8sSecret, sanitizer
 from renku_data_services.notebooks import apispec
@@ -126,6 +125,8 @@ from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import Environment, SessionLauncher
+from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import get_effective_quota
 
@@ -192,14 +193,14 @@ async def get_extra_containers(
 async def get_project_storage(
     user: APIUser,
     project_storage_k8s: ProjectStorageK8s,
-    data_connector_repo: DataConnectorRepository,
+    project_storage_repo: ProjectStorageRepository,
     project_id: ULID,
     storage_mount: PurePosixPath,
     cluster: ClusterConnection,
     authz: Authz,
 ) -> SessionExtraResources:
     """If applicable, fetch the project storage and return it as SessionExtras."""
-    project_storage = await data_connector_repo.get_storage_to(user, project_id)
+    project_storage = await project_storage_repo.get_storage_to(user, project_id)
     if not project_storage:
         logger.debug(f"Project {project_id} has no project storage.")
         return SessionExtraResources()
@@ -943,6 +944,7 @@ async def start_session(
     data_connector_secret_repo: DataConnectorSecretRepository,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
+    project_storage_repo: ProjectStorageRepository,
     rp_repo: ResourcePoolRepository,
     session_repo: SessionRepository,
     user_repo: UserRepo,
@@ -1083,7 +1085,7 @@ async def start_session(
     project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
     session_extras = session_extras.concat(
         await get_project_storage(
-            user, project_storage_k8s, data_connector_repo, project.id, storage_mount, cluster, authz
+            user, project_storage_k8s, project_storage_repo, project.id, storage_mount, cluster, authz
         )
     )
 

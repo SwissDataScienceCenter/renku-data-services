@@ -23,7 +23,6 @@ from renku_data_services.base_models.core import Slug
 from renku_data_services.base_models.metrics import MetricsService, ProjectCreationType
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.data_connectors.db import DataConnectorRepository
-from renku_data_services.data_connectors.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
 from renku_data_services.project import models as project_models
@@ -42,6 +41,7 @@ from renku_data_services.project.db import (
     ProjectSessionSecretRepository,
 )
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
 
 

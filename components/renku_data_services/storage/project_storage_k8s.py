@@ -3,9 +3,9 @@
 from ulid import ULID
 
 from renku_data_services.app_config import logging
-from renku_data_services.data_connectors.models import DeletedProjectStorage, ProjectStorage
 from renku_data_services.k8s.models import ClusterConnection, K8sPersistentVolumeClaim
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
+from renku_data_services.storage.models import DeletedProjectStorage, ProjectStorage
 
 logger = logging.getLogger(__name__)
 
