@@ -193,6 +193,47 @@
             pytest --disable-warnings --no-cov -s -p no:warnings $@
           ''
         )
+        (
+          writeShellScriptBin "openapi-lint" ''
+            ${redocly}/bin/redocly lint \
+              --skip-rule operation-operationId \
+              --skip-rule security-defined \
+              --skip-rule info-license \
+              --skip-rule operation-4xx-response \
+              "$@"
+          ''
+        )
+        (
+          writeShellScriptBin "openapi-lint-all" ''
+            rm -f openapi-lint-all-result.json
+            error_count=0
+            warn_count=0
+            for f in $(find . -type f -name "api.spec.yaml"); do
+                echo "Running redocly lint on $f ..."
+                result=$(openapi-lint --format json "$f")
+                echo "$result" >> openapi-lint-all-result.json
+                errors=$(echo "$result" | jq -r '.totals|.errors')
+                warns=$(echo "$result" | jq -r '.totals|.warnings')
+                error_count=$(($error_count + $errors))
+                warn_count=$(($warn_count + $warns))
+            done
+
+            echo ">> ERRORS: $error_count"
+            echo ">> WARNINGS: $warn_count"
+
+            ## test merged file
+            cat > /tmp/make_spec.py <<-EOF
+            from renku_data_services.data_api.dependencies import DependencyManager
+            import json
+
+            aps = DependencyManager.load_apispec()
+            print(json.dumps(aps))
+            EOF
+            python /tmp/make_spec.py | jq > /tmp/merged_api_spec.json
+            echo "Created merged api spec in /tmp/merged_api_spec.json"
+            openapi-lint /tmp/merged_api_spec.json
+          ''
+        )
       ];
     in {
       formatter = pkgs.alejandra;
