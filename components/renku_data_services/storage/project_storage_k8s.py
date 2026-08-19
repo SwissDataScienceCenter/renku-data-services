@@ -22,6 +22,12 @@ class ProjectStorageK8s:
         else:
             return f"pv-{storage.project_id}-0".lower()
 
+    async def get_volume(self, project_id: ULID) -> K8sPersistentVolumeClaim | None:
+        """Get the pvc making the storage of the given project."""
+
+        name = self.__pvc_name(project_id)
+        return await self.__k8s_client.get_persistent_volume_claim(name)
+
     async def get_or_create_volume(
         self, storage: ProjectStorage, cluster: ClusterConnection
     ) -> K8sPersistentVolumeClaim:
