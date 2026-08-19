@@ -336,7 +336,8 @@ components:
     MaxStorageSize:
       type: integer
       format: int64
-      exclusiveMinimum: 0
+      minimum: 0
+      exclusiveMinimum: true
       description: Maximum size in GB
     RCloneConfig:
       type: object
