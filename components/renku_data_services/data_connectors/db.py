@@ -30,6 +30,7 @@ from renku_data_services.base_models.core import (
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.data_connectors.core import validate_unsaved_global_data_connector
+from renku_data_services.data_connectors.doi.metadata import get_metadata
 from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.namespace import orm as ns_schemas
@@ -38,7 +39,7 @@ from renku_data_services.namespace.models import ProjectNamespace
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project
 from renku_data_services.project.orm import ProjectORM
-from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.db import GlobalDataConnector, SearchUpdatesRepo
 from renku_data_services.search.decorators import update_search_document
 from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.models import SecretKind
@@ -111,7 +112,7 @@ class DataConnectorRepository:
         if not authorized:
             raise errors.MissingResourceError(message=not_found_msg)
 
-        async with self.session_maker() as session:
+        async with self.session_maker() as session, session.begin():
             result = await session.scalars(
                 select(schemas.DataConnectorORM)
                 .where(schemas.DataConnectorORM.id == data_connector_id)
@@ -124,7 +125,23 @@ class DataConnectorRepository:
             data_connector = result.one_or_none()
             if data_connector is None:
                 raise errors.MissingResourceError(message=not_found_msg)
-            return data_connector.dump()
+            output = data_connector.dump()
+
+            # Check if the data connector is global and if it is expired, update its expiry date
+            now = datetime.now(UTC)
+            if isinstance(output, GlobalDataConnector) and output.expires_at is not None and output.expires_at <= now:
+                metadata = await get_metadata(output.doi) if output.doi is not None else None
+                fresh_expiry_date = metadata.dataset.expires_at() if metadata is not None else None
+                if fresh_expiry_date is not None and fresh_expiry_date > output.expires_at:
+                    data_connector.expires_at = fresh_expiry_date
+                    # Flush so that the DB-side onupdate for updated_at fires, then read it back.
+                    # dump() -> etag is derived from updated_at, so dumping before this would
+                    # return a stale ETag and the client would get a 304 for changed data.
+                    await session.flush()
+                    await session.refresh(data_connector, ["updated_at"])
+                    output = data_connector.dump()
+
+            return output
 
     async def get_data_connectors_names_and_ids(
         self,

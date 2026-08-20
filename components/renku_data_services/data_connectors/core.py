@@ -244,6 +244,7 @@ async def prevalidate_unsaved_global_data_connector(
             doi=doi,
             publisher_url=None if doi_metadata.dataset.publisher is None else doi_metadata.dataset.publisher.url,
             publisher_name=None if doi_metadata.dataset.publisher is None else doi_metadata.dataset.publisher.name,
+            expires_at=doi_metadata.dataset.expires_at(),
         ),
     )
 

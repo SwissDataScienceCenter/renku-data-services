@@ -142,7 +142,22 @@ class SchemaOrgDataset(BaseModel):
 
     def to_doi_metadata(self) -> DOIMetadata:
         """Convert to an alternative metdata representation."""
-        return DOIMetadata(name=self.name, description=self.description or "", keywords=self.keywords)
+        return DOIMetadata(
+            name=self.name,
+            description=self.description or "",
+            keywords=self.keywords,
+            expires_at=self.expires_at(),
+        )
+
+    def expires_at(self) -> datetime | None:
+        """Indicates when the dataset expired.
+
+        If there is no expiry date None is returned.
+        If there are multiple entries in the distribution then the earliest, non-null entry is returned.
+        """
+        expiry_dates = [i.expires for i in self.distribution if i.expires is not None]
+        earliest_expiry = min(expiry_dates) if len(expiry_dates) > 0 else None
+        return earliest_expiry
 
 
 class SchemaOrgPublisher(BaseModel):

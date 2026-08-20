@@ -128,7 +128,6 @@ class PrevalidatedGlobalDataConnector:
     """Global data connector model that is unsaved but has been pre-validated."""
 
     data_connector: UnsavedGlobalDataConnector
-    expires_at: datetime | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
