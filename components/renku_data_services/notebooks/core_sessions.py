@@ -1347,6 +1347,8 @@ async def patch_session(
     internal_token_mint: RenkuSelfTokenMint,
     resource_usage_service: ResourceUsageService,
     resource_requests_repo: ResourceRequestsRepo,
+    project_storage_repo: ProjectStorageRepository,
+    authz: Authz,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -1561,13 +1563,22 @@ async def patch_session(
     if session_type.is_non_interactive:
         session_extras = session_extras.extra_container_as_sidecars()
 
-    #  When resuming, we need to check for a project storage and disable it if it has been removed
+    # When resuming, we need to check for a project storage and disable it if it has been removed
     remove_mounts: list[str] | None = None
     if is_being_resumed:
         project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
         pvc = await project_storage_k8s.get_volume(session.project_id)
         if not pvc:
-            remove_mounts = [f"ps-{session.project_id}-0".lower()]
+            logger.debug(f"Removing project storage mounts on project {project.id}")
+            remove_mounts = [f"ps-{project.id}-0".lower()]
+        else:
+            # but if a project storage has been added, we need to add it to the resumed session
+            logger.debug(f"Adding storage to resumed session for project {project.id}")
+            session_extras = session_extras.concat(
+                await get_project_storage(
+                    user, project_storage_k8s, project_storage_repo, project.id, storage_mount, cluster, authz
+                )
+            )
 
     # Construct session patch
     patch.spec.extraContainers = _make_patch_spec_list(
