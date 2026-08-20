@@ -55,21 +55,13 @@ from renku_data_services.data_connectors.doi.metadata import (
     get_metadata,
 )
 from renku_data_services.data_connectors.doi.models import DOI
-    create_envidat_metadata_url,
-    create_scicat_metadata_url,
-    get_dataset_metadata,
-)
-from renku_data_services.data_connectors.doi.models import DOI, SchemaOrgDataset
 from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectMeta
 from renku_data_services.notebooks.data_sources import DataSourceRepository
-from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
-from renku_data_services.storage.rclone import RCloneValidator, parse_storage_url
-from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER, SCICAT_V1_PROVDER
-from renku_data_services.storage.rclone import RCloneDOIMetadata, RCloneValidator
+from renku_data_services.storage.rclone import RCloneValidator, parse_storage_url
 from renku_data_services.utils.core import get_openbis_pat
 
 if TYPE_CHECKING:
@@ -139,8 +131,8 @@ async def _convert_rclone_doi_config(
             configuration = converted_storage.configuration
             source_path = converted_storage.source_path or "/"
             storage_type = ENVIDAT_V1_PROVIDER
-        case "doi.psi.ch" | "www.doi.psi.ch":
-            converted_storage = await convert_scicat_v1_data_connector_to_s3(storage)
+        case DOIProviders.scicat_v1:
+            converted_storage = await convert_scicat_v1_data_connector_to_s3(storage, metadata)
             configuration = converted_storage.configuration
             source_path = converted_storage.source_path or "/"
             storage_type = SCICAT_V1_PROVDER
@@ -312,7 +304,7 @@ async def validate_unsaved_global_data_connector(
         doi=data_connector.doi,
         publisher_name=data_connector.publisher_name,
         publisher_url=data_connector.publisher_url,
-        expires_at=metadata.expires_at if metadata is not None else None,
+        expires_at=data_connector.expires_at,
     )
 
 
@@ -473,45 +465,13 @@ async def convert_envidat_v1_data_connector_to_s3(
 
 
 async def convert_scicat_v1_data_connector_to_s3(
-    payload: apispec.CloudStorageCorePost,
+    payload: apispec.CloudStorageCorePost, metadata: ParsedDOIMetadata
 ) -> apispec.CloudStorageCorePost:
     """Converts a doi-like configuration for Scicat to S3."""
-    config = payload.configuration
-    doi = config.get("doi")
-    if not isinstance(doi, str):
-        if doi is None:
-            raise errors.ValidationError(
-                message="Cannot get configuration for SciCat data connector because "
-                "the doi is missing from the payload."
-            )
-        raise errors.ValidationError(
-            message=f"Cannot get configuration for SciCat data connector because the doi '{doi}' "
-            "in the payload is not a string."
-        )
-    if len(doi) == 0:
-        raise errors.ValidationError(
-            message="Cannot get configuration for SciCat data connector because the doi is a string with zero length."
-        )
-    doi = DOI(doi)
-
     new_config = payload.model_copy(deep=True)
     new_config.configuration = {}
-
-    scicat_url = create_scicat_metadata_url(doi)
-    headers = {"accept": "application/ld+json"}
-
-    clnt = httpx.AsyncClient(follow_redirects=True, timeout=5)
-    async with clnt:
-        res = await clnt.get(scicat_url, headers=headers)
-        if res.status_code != 200:
-            raise errors.ValidationError(
-                message="Cannot get configuration for Scicat data connector because SciCat responded "
-                f"with an unexpected {res.status_code} status code at {res.url}.",
-                detail=f"Response from SciCat: {res.text}",
-            )
-    dataset = SchemaOrgDataset.model_validate_json(res.text)
     s3_config = schema_org.get_rclone_config(
-        dataset,
+        metadata.dataset,
         schema_org.DatasetProvider.scicat,
     )
     new_config.configuration = dict(s3_config.rclone_config)

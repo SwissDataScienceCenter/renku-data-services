@@ -1,7 +1,7 @@
 """data data connector expiry date
 
 Revision ID: fc1a97661d0c
-Revises: 36435401b2e7
+Revises: 2338deb8c428
 Create Date: 2026-08-05 09:07:29.527268
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "fc1a97661d0c"
-down_revision = "36435401b2e7"
+down_revision = "2338deb8c428"
 branch_labels = None
 depends_on = None
 
