@@ -1653,8 +1653,9 @@ def _make_patch_spec_list(
             else:
                 patch_list.append(upsert_item)
 
-
-    if remove and patch_list:
+    if remove:
+        if not patch_list:
+            patch_list = list(existing)
         logger.debug(f">> patch list before: {patch_list}")
         patch_list = [e for e in patch_list if e.name not in remove]
         logger.debug(f">> patch list after: {patch_list}")
