@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime
 from hashlib import md5
@@ -10,6 +10,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 import httpx
+import kr8s
 from ulid import ULID
 
 from renku_data_services import errors
@@ -19,7 +20,14 @@ from renku_data_services.crc.models import ResourceClass
 from renku_data_services.data_connectors.models import DataConnectorWithSecrets
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, DUMMY_RENKU_APP_USER_ID, ClusterId
-from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObjectFilter, K8sObjectMeta, sanitizer
+from renku_data_services.k8s.models import (
+    GVK,
+    ClusterConnection,
+    K8sObject,
+    K8sObjectFilter,
+    K8sObjectMeta,
+    sanitizer,
+)
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.crs import Affinity, Toleration
@@ -39,6 +47,10 @@ logger = logging.getLogger(__name__)
 KNATIVE_SERVICE_GVK = GVK(kind="Service", group="serving.knative.dev", version="v1")
 _SECRET_GVK = GVK(kind="Secret", version="v1")
 _PVC_GVK = GVK(kind="PersistentVolumeClaim", version="v1")
+_POD_GVK = GVK(kind="Pod", version="v1")
+
+_KNATIVE_SERVICE_LABEL = "serving.knative.dev/service"
+_LOGS_UNAVAILABLE_STATUS_CODES = frozenset({400, 404})
 
 _DEFAULT_WORK_DIR = PurePosixPath("/home/jovyan")
 
@@ -253,6 +265,32 @@ class RenkuAppsK8sClient:
             return _extract_runtime_state(KnativeService.model_validate(obj.manifest))
         return None
 
+    async def get_app_logs(self, app_name: str, max_log_lines: int | None = None) -> dict[str, str]:
+        """Read the logs of every container of every pod backing the app, keyed by "<pod>/<container>"."""
+        cluster = await self.__client.cluster_by_id(self.__cluster_id)
+        obj_filter = K8sObjectFilter(
+            name=None,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            gvk=_POD_GVK,
+            label_selector={_KNATIVE_SERVICE_LABEL: app_name},
+        )
+        pods = [pod async for pod in self.__client.list(obj_filter)]
+
+        logs: dict[str, str] = {}
+        for pod in sorted(pods, key=_pod_creation_timestamp, reverse=True):
+            meta = K8sObjectMeta(name=pod.name, namespace=pod.namespace, cluster=pod.cluster, gvk=_POD_GVK)
+            try:
+                container_streams = await self.__client.logs(meta, max_log_lines)
+            except errors.MissingResourceError:
+                logger.info("Pod %s of app %s went away before its logs could be read", pod.name, app_name)
+                continue
+            for container, stream in container_streams.items():
+                container_logs = await _drain_log_stream(stream)
+                if container_logs is not None:
+                    logs[f"{pod.name}/{container}"] = container_logs
+        return logs
+
     async def delete_app_deployment(self, app_name: str) -> None:
         """Delete the deployment for the given app name."""
         cluster = await self.__client.cluster_by_id(self.__cluster_id)
@@ -278,6 +316,29 @@ class RenkuAppsK8sClient:
         )
         async for obj in self.__client.list(obj_filter):
             yield _extract_runtime_state(KnativeService.model_validate(obj.manifest))
+
+
+def _pod_creation_timestamp(pod: K8sObject) -> str:
+    """Sort key ordering pods by creation time; pods without a timestamp sort oldest."""
+    return str(pod.manifest.get("metadata", {}).get("creationTimestamp") or "")
+
+
+async def _drain_log_stream(stream: AsyncIterator[str]) -> str | None:
+    """Read a container's log stream, returning None when it has no readable logs yet."""
+    try:
+        return "\n".join([line async for line in stream])
+    except httpx.ResponseNotRead:
+        return None
+    except httpx.HTTPStatusError as err:
+        if err.response.status_code in _LOGS_UNAVAILABLE_STATUS_CODES:
+            return None
+        raise
+    except kr8s.NotFoundError:
+        return None
+    except kr8s.ServerError as err:
+        if err.response is not None and err.response.status_code in _LOGS_UNAVAILABLE_STATUS_CODES:
+            return None
+        raise
 
 
 def _resources_from_resource_class(resource_class: ResourceClass) -> dict[str, Any]:
