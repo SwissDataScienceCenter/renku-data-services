@@ -1561,6 +1561,14 @@ async def patch_session(
     if session_type.is_non_interactive:
         session_extras = session_extras.extra_container_as_sidecars()
 
+    #  When resuming, we need to check for a project storage and disable it if it has been removed
+    remove_mounts: list[str] | None = None
+    if is_being_resumed:
+        project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
+        pvc = await project_storage_k8s.get_volume(session.project_id)
+        if not pvc:
+            remove_mounts = [f"ps-{session.project_id}-0".lower()]
+
     # Construct session patch
     patch.spec.extraContainers = _make_patch_spec_list(
         existing=session.spec.extraContainers or [], updated=session_extras.containers
@@ -1569,29 +1577,15 @@ async def patch_session(
         existing=session.spec.initContainers or [], updated=session_extras.init_containers
     )
     patch.spec.extraVolumes = _make_patch_spec_list(
-        existing=session.spec.extraVolumes or [], updated=session_extras.volumes
+        existing=session.spec.extraVolumes or [], updated=session_extras.volumes, remove=remove_mounts
     )
     if not patch.spec.session:
         patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
     patch.spec.session.extraVolumeMounts = _make_patch_spec_list(
-        existing=session.spec.session.extraVolumeMounts or [], updated=session_extras.volume_mounts
+        existing=session.spec.session.extraVolumeMounts or [],
+        updated=session_extras.volume_mounts,
+        remove=remove_mounts,
     )
-    # ^^^
-    # When resuming, we need to check for a project storage and disable it if it has been removed
-    if is_being_resumed:
-        project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
-        pvc = await project_storage_k8s.get_volume(session.project_id)
-        if not pvc:
-            ## remove it from the session extra mounts
-            mount_name = f"ps-{session.project_id}-0".lower()
-            if not patch.spec.session:
-                patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
-            patch.spec.session.extraVolumeMounts = [
-                e for e in (session.spec.session.extraVolumeMounts or []) if e.name != mount_name
-            ]
-            patch.spec.extraVolumes = [e for e in (session.spec.extraVolumes or []) if e.name != mount_name]
-
-
 
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
@@ -1627,7 +1621,9 @@ class _NamedResource(Protocol):
 _T = TypeVar("_T", bound=_NamedResource)
 
 
-def _make_patch_spec_list(existing: Sequence[_T], updated: Sequence[_T]) -> list[_T] | None:
+def _make_patch_spec_list(
+    existing: Sequence[_T], updated: Sequence[_T], remove: list[str] | None = None
+) -> list[_T] | None:
     """Merges updated into existing by upserting items identified by their name.
 
     This method is used to construct session patches, merging session resources by name (containers, volumes, etc.).
@@ -1645,6 +1641,10 @@ def _make_patch_spec_list(existing: Sequence[_T], updated: Sequence[_T]) -> list
                 patch_list[idx] = upsert_item
             else:
                 patch_list.append(upsert_item)
+
+    if remove and patch_list:
+        patch_list = [e for e in patch_list if e.name not in remove]
+
     return patch_list
 
 
