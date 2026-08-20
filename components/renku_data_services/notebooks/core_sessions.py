@@ -1566,7 +1566,6 @@ async def patch_session(
     # When resuming, we need to check for a project storage and disable it if it has been removed
     remove_mounts: list[str] | None = None
     if is_being_resumed:
-        project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
         storage_db = await project_storage_repo.get_storage_to(user, project.id)
         if storage_db is None:
             logger.debug(f"Removing project storage mounts on project {project.id}")
@@ -1574,6 +1573,7 @@ async def patch_session(
         else:
             # but if a project storage has been added, we need to add it to the resumed session
             logger.debug(f"Adding storage to resumed session for project {project.id}")
+            project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
             session_extras = session_extras.concat(
                 await get_project_storage(
                     user, project_storage_k8s, project_storage_repo, project.id, storage_mount, cluster, authz
@@ -1653,8 +1653,11 @@ def _make_patch_spec_list(
             else:
                 patch_list.append(upsert_item)
 
+
     if remove and patch_list:
+        logger.debug(f">> patch list before: {patch_list}")
         patch_list = [e for e in patch_list if e.name not in remove]
+        logger.debug(f">> patch list after: {patch_list}")
 
     return patch_list
 
