@@ -50,6 +50,7 @@ _PVC_GVK = GVK(kind="PersistentVolumeClaim", version="v1")
 _POD_GVK = GVK(kind="Pod", version="v1")
 
 _KNATIVE_SERVICE_LABEL = "serving.knative.dev/service"
+_APP_CONTAINER_NAME = "user-container"
 _LOGS_UNAVAILABLE_STATUS_CODES = frozenset({400, 404})
 
 _DEFAULT_WORK_DIR = PurePosixPath("/home/jovyan")
@@ -266,7 +267,7 @@ class RenkuAppsK8sClient:
         return None
 
     async def get_app_logs(self, app_name: str, max_log_lines: int | None = None) -> dict[str, str]:
-        """Read the logs of every container of every pod backing the app, keyed by "<pod>/<container>"."""
+        """Read the app container's logs from every pod backing the app, keyed by "<pod>/<container>"."""
         cluster = await self.__client.cluster_by_id(self.__cluster_id)
         obj_filter = K8sObjectFilter(
             name=None,
@@ -285,10 +286,12 @@ class RenkuAppsK8sClient:
             except errors.MissingResourceError:
                 logger.info("Pod %s of app %s went away before its logs could be read", pod.name, app_name)
                 continue
-            for container, stream in container_streams.items():
-                container_logs = await _drain_log_stream(stream)
-                if container_logs is not None:
-                    logs[f"{pod.name}/{container}"] = container_logs
+            stream = container_streams.get(_APP_CONTAINER_NAME)
+            if stream is None:
+                continue
+            container_logs = await _drain_log_stream(stream)
+            if container_logs is not None:
+                logs[f"{pod.name}/{_APP_CONTAINER_NAME}"] = container_logs
         return logs
 
     async def delete_app_deployment(self, app_name: str) -> None:
@@ -426,6 +429,7 @@ def _build_app_deployment_manifest(
     environment = session_launcher.environment
 
     container: dict[str, Any] = {
+        "name": _APP_CONTAINER_NAME,
         "image": environment.container_image,
         "ports": [{"containerPort": environment.port}],
         "securityContext": {

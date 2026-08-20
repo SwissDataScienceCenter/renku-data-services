@@ -174,10 +174,11 @@ components:
 
     AppLogsResponse:
       description: |
-        The logs of every container of every pod currently backing the app, keyed by
+        The logs of the app container of every pod currently backing the app, keyed by
         "<pod name>/<container name>". Unlike a session, an app can be served by more
-        than one pod, so the pod name is part of the key. An app that has scaled to
-        zero has no pods and therefore no logs.
+        than one pod, so the pod name is part of the key. Only the app's own container
+        is included; the platform sidecars that share the pod are not. An app that has
+        scaled to zero has no pods and therefore no logs.
       type: object
       additionalProperties:
         type: string
