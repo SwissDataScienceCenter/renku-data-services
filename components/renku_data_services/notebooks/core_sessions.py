@@ -1638,6 +1638,7 @@ def _make_patch_spec_list(
     """Merges updated into existing by upserting items identified by their name.
 
     This method is used to construct session patches, merging session resources by name (containers, volumes, etc.).
+    The `remove` is a set of names that are not taken from the existing or updated sequences.
     """
     patch_list = None
     if updated:
@@ -1656,9 +1657,7 @@ def _make_patch_spec_list(
     if remove:
         if not patch_list:
             patch_list = list(existing)
-        logger.debug(f">> patch list before: {patch_list}")
         patch_list = [e for e in patch_list if e.name not in remove]
-        logger.debug(f">> patch list after: {patch_list}")
 
     return patch_list
 
