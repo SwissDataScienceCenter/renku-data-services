@@ -1567,8 +1567,8 @@ async def patch_session(
     remove_mounts: list[str] | None = None
     if is_being_resumed:
         project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
-        pvc = await project_storage_k8s.get_volume(session.project_id)
-        if not pvc:
+        storage_db = await project_storage_repo.get_storage_to(user, project.id)
+        if storage_db is None:
             logger.debug(f"Removing project storage mounts on project {project.id}")
             remove_mounts = [f"ps-{project.id}-0".lower()]
         else:
