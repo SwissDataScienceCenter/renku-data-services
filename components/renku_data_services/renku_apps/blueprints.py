@@ -59,6 +59,23 @@ class RenkuAppBP(CustomBlueprint):
 
         return "/apps/<app_name>", ["GET"], _get_one
 
+    def get_logs(self) -> BlueprintFactoryResponse:
+        """Retrieve the logs of an app by name."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(query=apispec.AppsAppNameLogsGetParametersQuery)
+        async def _get_logs(
+            _: Request,
+            user: base_models.APIUser,
+            app_name: str,
+            query: apispec.AppsAppNameLogsGetParametersQuery,
+        ) -> JSONResponse:
+            logs = await self.apps_repo.get_app_logs(user=user, app_name=app_name, max_log_lines=query.max_lines)
+            return validated_json(apispec.AppLogsResponse, logs)
+
+        return "/apps/<app_name>/logs", ["GET"], _get_logs
+
     def delete_one(self) -> BlueprintFactoryResponse:
         """Delete an app by name."""
 

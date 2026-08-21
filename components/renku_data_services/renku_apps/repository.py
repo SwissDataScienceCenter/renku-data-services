@@ -90,6 +90,23 @@ class RenkuAppsRepository:
         launcher = await self.session_repo.get_launcher(user, runtime_state.launcher_id)
         return build_app(launcher, runtime_state)
 
+    async def get_app_logs(
+        self, user: base_models.APIUser, app_name: str, max_log_lines: int | None = None
+    ) -> dict[str, str]:
+        """Read the logs of an app; only users who can write to its project may see them."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        runtime_state = await self.k8s_client.get_app_deployment(app_name)
+        if runtime_state is None:
+            raise errors.MissingResourceError(message=_app_not_found_message(app_name))
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, runtime_state.project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(message=_app_not_found_message(app_name))
+
+        return await self.k8s_client.get_app_logs(app_name, max_log_lines)
+
     async def delete_app(self, user: base_models.APIUser, app_name: str) -> None:
         """Delete an app by its name."""
         if not user.is_authenticated or user.id is None:
