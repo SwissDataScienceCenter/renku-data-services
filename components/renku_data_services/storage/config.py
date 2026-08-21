@@ -29,10 +29,7 @@ class ProjectStorageConfig:
         maximum_size = os.environ.get("PROJECT_STORAGE_MAX_SIZE_GB") or "10"
         maximum_size = ByteSize.from_gibi(int(maximum_size))
 
-        # TODO: set defaults for easier PR/CI deployments for now
-        enabled = True
-        storage_class = "azurefile"
         if enabled and not storage_class:
             raise errors.ConfigurationError(message="A storage_class is required for enabled project storage")
 
-        return ProjectStorageConfig(enabled, storage_class=storage_class, maximum_size=maximum_size)
+        return ProjectStorageConfig(enabled, storage_class=storage_class or "", maximum_size=maximum_size)
