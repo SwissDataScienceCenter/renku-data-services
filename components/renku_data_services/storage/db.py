@@ -227,7 +227,13 @@ class ProjectStorageRepository:
             case base_models.ProjectPath() as p:
                 existing_project_query = (
                     select(schemas.ProjectORM)
-                    .join(ns_schemas.EntitySlugORM, ns_schemas.EntitySlugORM.project_id == schemas.ProjectORM.id)
+                    .join(
+                        ns_schemas.EntitySlugORM,
+                        and_(
+                            ns_schemas.EntitySlugORM.project_id == schemas.ProjectORM.id,
+                            ns_schemas.EntitySlugORM.data_connector_id.is_(None),
+                        ),
+                    )
                     .join(ns_schemas.NamespaceORM, ns_schemas.NamespaceORM.id == ns_schemas.EntitySlugORM.namespace_id)
                     .where(
                         and_(
