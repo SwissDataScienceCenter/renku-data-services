@@ -352,7 +352,14 @@ class ProjectStorageBP(CustomBlueprint):
 
     @staticmethod
     def _dump_project_storage_allow_post(ps: models.ProjectStorageAllow) -> apispec.ProjectStorageAllowPost:
+        pref: apispec.ProjectIdRef | apispec.ProjectSlugRef
+        match ps.project_ref.ref:
+            case ULID() as id:
+                pref = apispec.ProjectIdRef(id=str(id))
+            case base_models.ProjectPath() as p:
+                pref = apispec.ProjectSlugRef(slug=p.serialize())
+
         return apispec.ProjectStorageAllowPost(
-            project_id=str(ps.project_id),
+            project_ref=pref,
             max_size=int(ps.max_size.to_gibi()),
         )

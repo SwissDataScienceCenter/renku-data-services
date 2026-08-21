@@ -209,14 +209,14 @@ class DeletedProjectStorage:
 class ProjectStorageAllow:
     """Allowed project storage with max size."""
 
-    project_id: ULID
+    project_ref: ProjectRef
     max_size: ByteSize
     updated_at: datetime
 
     @property
     def etag(self) -> str:
         """Entity tag value for this project storage allow object."""
-        return compute_etag_from_fields(self.updated_at, self.project_id, self.max_size.to_bytes())
+        return compute_etag_from_fields(self.updated_at, self.project_ref, self.max_size.to_bytes())
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -264,3 +264,33 @@ class ProjectStorageAllowUpdate:
 
     old: ProjectStorageAllowDetail
     new: ProjectStorageAllowDetail
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectRef:
+    """A reference to a project."""
+
+    ref: ULID | ProjectPath
+
+    def __str__(self) -> str:
+        return f"ProjectRef({self.ref})"
+
+    @classmethod
+    def from_id(cls, id: ULID) -> ProjectRef:
+        """Create a project ref from an id."""
+        return ProjectRef(ref=id)
+
+    @classmethod
+    def from_id_str(cls, id: str) -> ProjectRef:
+        """Create a project ref from an id."""
+        return cls.from_id(ULID.from_str(id))
+
+    @classmethod
+    def from_slug(cls, slug: ProjectPath) -> ProjectRef:
+        """Create a project ref from a path."""
+        return ProjectRef(ref=slug)
+
+    @classmethod
+    def from_slug_str(cls, slug: str) -> ProjectRef:
+        """Create a project ref from a path."""
+        return ProjectRef(ref=ProjectPath.parse(slug))

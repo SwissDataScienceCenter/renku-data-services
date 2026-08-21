@@ -221,15 +221,32 @@ class ProjectStorageRepository:
         if user.id is None or not user.is_admin:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
+        match input.project_ref.ref:
+            case ULID() as id:
+                existing_project_query = select(schemas.ProjectORM).where(schemas.ProjectORM.id == id)
+            case base_models.ProjectPath() as p:
+                existing_project_query = (
+                    select(schemas.ProjectORM)
+                    .join(ns_schemas.EntitySlugORM, ns_schemas.EntitySlugORM.project_id == schemas.ProjectORM.id)
+                    .join(ns_schemas.NamespaceORM, ns_schemas.NamespaceORM.id == ns_schemas.EntitySlugORM.namespace_id)
+                    .where(
+                        and_(
+                            ns_schemas.NamespaceORM.slug == p.first.value,
+                            ns_schemas.EntitySlugORM.slug == p.second.value,
+                        )
+                    )
+                )
+
+        existing_project = await session.execute(existing_project_query)
+        existing_project = existing_project.scalar_one_or_none()
+        if not existing_project:
+            raise errors.MissingResourceError(message=f"The project {input.project_ref} doesn't exist.")
+
         existing = await session.execute(
-            select(exists().where(schemas.ProjectStorageAllowORM.project_id == input.project_id))
+            select(exists().where(schemas.ProjectStorageAllowORM.project_id == existing_project.id))
         )
         if existing.scalar():
-            raise errors.ValidationError(message=f"Project {input.project_id} is already in the allow list.")
-
-        existing_project = await session.execute(select(exists().where(schemas.ProjectORM.id == input.project_id)))
-        if not existing_project.scalar():
-            raise errors.MissingResourceError(message=f"The project {input.project_id} doesn't exist.")
+            raise errors.ValidationError(message=f"Project {existing_project.id} is already in the allow list.")
 
         if input.max_size > self.project_storage_config.maximum_size:
             raise errors.ValidationError(
@@ -240,7 +257,7 @@ class ProjectStorageRepository:
             )
 
         new_allow = schemas.ProjectStorageAllowORM(
-            project_id=input.project_id,
+            project_id=existing_project.id,
             max_size=input.max_size,
         )
         session.add(new_allow)
