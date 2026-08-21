@@ -250,7 +250,7 @@ async def test_post_storage_success(
     namespace = f"{project['namespace']}/{project['slug']}"
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -275,7 +275,7 @@ async def test_post_storage_unauthenticated_fails(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -306,7 +306,7 @@ async def test_post_storage_duplicate_fails(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status == 201
 
@@ -327,7 +327,7 @@ async def test_get_one_storage_success(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -365,7 +365,7 @@ async def test_get_one_storage_etag(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -401,7 +401,7 @@ async def test_get_storage_to_project_success(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status == 201
 
@@ -431,7 +431,7 @@ async def test_delete_storage_success(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -456,7 +456,7 @@ async def test_delete_storage_unauthenticated_fails(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -477,13 +477,13 @@ async def test_post_storage_allow_success(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
 
     assert response.status_code == 201, response.text
     assert response.json is not None
     allow = response.json
-    assert allow.get("project_id") == project_id
+    assert allow.get("project_ref").get("id") == project_id
     assert allow.get("max_size") == 10
 
 
@@ -493,7 +493,7 @@ async def test_post_storage_allow_requires_admin(
 ) -> None:
     project = await create_project(sanic_client, "Test Project")
 
-    payload = {"project_id": project["id"], "max_size": 10}
+    payload = {"project_ref": {"id": project["id"]}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=user_headers, json=payload)
 
     assert response.status_code == 403, response.text
@@ -505,7 +505,7 @@ async def test_post_storage_allow_unauthenticated_fails(
 ) -> None:
     project = await create_project(sanic_client, "Test Project")
 
-    payload = {"project_id": project["id"], "max_size": 10}
+    payload = {"project_ref": {"id": project["id"]}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", json=payload)
 
     assert response.status_code == 401, response.text
@@ -518,7 +518,7 @@ async def test_post_storage_allow_duplicate_fails(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -534,7 +534,7 @@ async def test_delete_storage_allow_success(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -554,7 +554,7 @@ async def test_delete_storage_allow_requires_admin(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -570,7 +570,7 @@ async def test_get_storage_allow_success(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -601,7 +601,7 @@ async def test_get_storage_allow_unauthenticated(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -618,7 +618,7 @@ async def test_patch_storage_success(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -650,7 +650,7 @@ async def test_patch_storage_mount_path(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -681,7 +681,7 @@ async def test_patch_storage_both_fields(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -712,7 +712,7 @@ async def test_patch_storage_without_if_match_header(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -737,7 +737,7 @@ async def test_patch_storage_with_invalid_etag(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -783,7 +783,7 @@ async def test_patch_storage_unauthenticated_fails(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -806,7 +806,7 @@ async def test_patch_storage_exceeds_max_size(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -831,7 +831,7 @@ async def test_patch_storage_invalid_mount_path(
     namespace = f"{project['namespace']}/{project['slug']}"
 
     project_id = project["id"]
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -855,7 +855,7 @@ async def test_patch_storage_allow_success(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -883,7 +883,7 @@ async def test_patch_storage_allow_requires_admin(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -907,7 +907,7 @@ async def test_patch_storage_allow_without_if_match_header(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -926,7 +926,7 @@ async def test_patch_storage_allow_with_invalid_etag(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -972,7 +972,7 @@ async def test_patch_storage_allow_unauthenticated_fails(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -989,7 +989,7 @@ async def test_patch_storage_allow_min_size(
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 
@@ -1013,8 +1013,9 @@ async def test_get_all_storage_allow(
 ) -> None:
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
+    slug = f"{project["namespace"]}/{project["slug"]}"
 
-    payload = {"project_id": project_id, "max_size": 10}
+    payload = {"project_ref": {"slug": slug}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
     assert response.status_code == 201, response.text
 

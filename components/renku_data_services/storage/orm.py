@@ -57,7 +57,7 @@ class ProjectStorageAllowORM(BaseORM):
     def dump(self) -> models.ProjectStorageAllow:
         """Convert the ORM row to a ProjectStorageAllow model."""
         return models.ProjectStorageAllow(
-            project_id=self.project_id,
+            project_ref=models.ProjectRef.from_id(self.project_id),
             max_size=self.max_size,
             updated_at=self.updated_at,
         )

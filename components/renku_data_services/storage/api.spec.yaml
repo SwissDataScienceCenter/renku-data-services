@@ -561,12 +561,12 @@ components:
         A project to be added to the storage allow list.
       additionalProperties: false
       properties:
-        project_id:
-          $ref: "#/components/schemas/Ulid"
+        project_ref:
+          $ref: "#/components/schemas/ProjectRef"
         max_size:
           $ref: "#/components/schemas/MaxStorageSize"
       required:
-        - project_id
+        - project_ref
         - max_size
     ProjectStorageAllow:
       description: |
@@ -666,6 +666,28 @@ components:
       # limitations based on allowed characters in project slugs from Gitlab from here:
       # https://docs.gitlab.com/ee/user/reserved_names.html
       pattern: "^[a-zA-Z0-9]+([_.\\-/][a-zA-Z0-9]+)*[_.\\-/]?[a-zA-Z0-9]$"
+    ProjectIdRef:
+      type: object
+      description: A reference to a project using its id
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+      required:
+        - id
+    ProjectSlugRef:
+      type: object
+      description: A reference to a project using its slug
+      additionalProperties: false
+      properties:
+        slug:
+          $ref: "#/components/schemas/ProjectSlug"
+      required:
+        - slug
+    ProjectRef:
+      oneOf:
+        - $ref: "#/components/schemas/ProjectIdRef"
+        - $ref: "#/components/schemas/ProjectSlugRef"
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
