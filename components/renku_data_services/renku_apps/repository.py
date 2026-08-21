@@ -120,13 +120,16 @@ class RenkuAppsRepository:
         return None
 
     async def delete_apps_for_project(self, project_id: ULID) -> None:
-        """Delete every app belonging to the given project (e.g. when it becomes private)."""
-        async for runtime_state in self.k8s_client.list_app_deployments(project_id):
-            await self.k8s_client.delete_app_deployment(runtime_state.name)
+        """Delete every app belonging to the given project (e.g. when it becomes private or is deleted)."""
+        app_names = [state.name async for state in self.k8s_client.list_app_deployments(project_id)]
+        for app_name in app_names:
+            await self.k8s_client.delete_app_deployment(app_name)
+            logger.info(f"App with name {app_name} was deleted as part of cleaning up project {project_id}.")
 
     async def list_apps(self, user: base_models.APIUser, project_id: ULID | None = None) -> list[App]:
         """List all apps, optionally filtered by project."""
 
+        # TODO: without a project_id this scans every app, costing a DB and an authz call each.
         apps: list[App] = []
         async for runtime_state in self.k8s_client.list_app_deployments(project_id):
             try:
