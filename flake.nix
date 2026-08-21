@@ -327,7 +327,7 @@
             SOLR_CORE = "renku-search-dev";
 
             #AMALTHEA_SESSIONS_VERSION = "refs/heads/eikek/non-interactive-session";
-            RENKU_ENV = "renku-ci-ds-1378";
+            RENKU_ENV = "renku-ci-ds-1419";
             K8S_NAMESPACE = "default";
             KUBERNETES_NAMESPACE = "default";
             DEBUG_LOGGING = "renku_data_services";
