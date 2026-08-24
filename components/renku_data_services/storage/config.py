@@ -18,6 +18,7 @@ class ProjectStorageConfig:
 
     enabled: bool
     storage_class: str
+    """If set to "" then no storage class will be used and the PVC can bind only to a pre-existing PV."""
     maximum_size: ByteSize
 
     @classmethod
