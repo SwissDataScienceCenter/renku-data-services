@@ -496,9 +496,4 @@ class NotebookK8sClient(SecretClient):
     async def create_persistent_volume(self, pvc: K8sPersistentVolumeClaim) -> None:
         """Create a persistent volume for the given project storage."""
 
-        if pvc.get_storage_class() != "azurefile":
-            raise errors.ValidationError(
-                message=f"Currently only azurefile is supported as a storage class, got: {pvc.get_storage_class()}"
-            )
-
         await self.__client.create(pvc, True)
