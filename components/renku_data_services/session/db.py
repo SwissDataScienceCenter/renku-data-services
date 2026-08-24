@@ -1144,6 +1144,15 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
             environment = build.environment
             environment.container_image = build.result_image
+
+            # Do not overwrite `command` and `args` for jobs
+            is_non_interactive = False
+            launcher = await session.scalar(
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.environment_id == environment.id)
+            )
+            if launcher and launcher.launcher_type == models.LauncherType.non_interactive:
+                is_non_interactive = True
+
             build_env = models.BUILD_ENVIRONMENT_CONFIGS.get(frontend_var) if frontend_var else None
             if build_env:
                 # NOTE: This is necessary because if the environment changed from jupyterlab to ttyd (for example)
@@ -1156,8 +1165,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 environment.gid = build_env.gid
                 environment.working_directory = build_env.working_directory
                 environment.mount_directory = build_env.mount_directory
-                environment.command = build_env.command
-                environment.args = build_env.args
+                if not is_non_interactive:
+                    environment.command = build_env.command
+                    environment.args = build_env.args
             else:
                 logger.error(
                     f"Build {build.id}: could not find frontend variant '{frontend_var}' "
@@ -1273,6 +1283,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             frontend=build_parameters.frontend_variant,
             git_repository_revision=git_repository_revision,
             context_dir=context_dir,
+            build_insecure_output_enabled=self.builds_config.build_insecure_output_enabled,
             insecure_registries=self.builds_config.build_insecure_registries,
         )
 

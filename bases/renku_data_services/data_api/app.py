@@ -30,6 +30,7 @@ from renku_data_services.data_connectors.blueprints import DataConnectorsBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.notebooks.blueprints import NotebooksNewBP
 from renku_data_services.notifications.blueprints import NotificationsBP
+from renku_data_services.persisted_logs.blueprints import PersistedLogsBP
 from renku_data_services.platform.blueprints import PlatformConfigBP, PlatformUrlRedirectBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.renku_apps.blueprints import RenkuAppBP
@@ -312,6 +313,18 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         rp_repo=dm.rp_repo,
     )
+    persisted_logs = (
+        PersistedLogsBP(
+            name="persisted_logs",
+            url_prefix=url_prefix,
+            session_logs_repo=dm.session_logs_repo,
+            build_logs_repo=dm.build_logs_repo,
+            authenticator=dm.authenticator,
+            session_maker=dm.config.db.async_session_maker,
+        )
+        if dm.config.persisted_logs.enabled
+        else None
+    )
     internal_authentication = InternalAuthenticationBP(
         name="internal_authentication",
         url_prefix=url_prefix,
@@ -354,6 +367,8 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     )
     if builds is not None:
         app.blueprint(builds.blueprint())
+    if persisted_logs is not None:
+        app.blueprint(persisted_logs.blueprint())
     if renku_apps is not None:
         app.blueprint(renku_apps.blueprint())
 

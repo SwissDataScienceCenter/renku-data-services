@@ -6,8 +6,9 @@ import base64
 import json
 import os
 from collections.abc import AsyncIterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from math import ceil
 from pathlib import PurePosixPath
 from typing import Protocol, TypeVar, cast
 from urllib.parse import urljoin, urlparse
@@ -803,7 +804,33 @@ def get_remote_secret(
     return ExtraSecret(secret)
 
 
+def _firecrest_resource_env_items(
+    resource_class: ResourceClass,
+    pool_remote: RemoteConfigurationFirecrest,
+) -> list[SessionEnvItem]:
+    """Build FirecREST-specific env vars for a remote session.
+
+    Resource class CPU, memory and GPU values are passed to Amalthea through
+    the CRD, so they are never emitted as env vars. Class-level system and
+    partition override the pool defaults. ``forward_resource_values`` is always
+    emitted: when true Amalthea forwards the CRD CPU/memory/GPU values to
+    FirecREST; when false (the default) the HPC grid picks the resources.
+    """
+    class_remote = resource_class.remote
+    system_name = (class_remote.system_name if class_remote is not None else None) or pool_remote.system_name
+    partition = (class_remote.partition if class_remote is not None else None) or pool_remote.partition
+    forward = class_remote.forward_resource_values if class_remote is not None else False
+    env: list[SessionEnvItem] = [
+        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=system_name),
+        SessionEnvItem(name="RSC_FIRECREST_FORWARD_RESOURCE_VALUES", value=str(forward).lower()),
+    ]
+    if partition:
+        env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=partition))
+    return env
+
+
 def get_remote_env(
+    resource_class: ResourceClass,
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
@@ -811,15 +838,10 @@ def get_remote_env(
         SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value),
     ]
     if isinstance(remote, RemoteConfigurationRunai):
-        env.append(
-            SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url),
-        )
+        env.append(SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url))
     else:
-        env.append(SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value))
         env.append(SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url))
-        env.append(SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote.system_name))
-        if remote.partition:
-            env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote.partition))
+        env.extend(_firecrest_resource_env_items(resource_class, remote))
     return env
 
 
@@ -1118,11 +1140,9 @@ async def start_session(
         )
     if session_location == SessionLocation.remote:
         assert resource_pool.remote is not None
-        env.extend(
-            get_remote_env(
-                remote=resource_pool.remote,
-            )
-        )
+        if resource_pool.remote.kind == RemoteConfigurationKind.firecrest:
+            resource_class = replace(resource_class, cpu=ceil(resource_class.cpu))
+        env.extend(get_remote_env(resource_class, resource_pool.remote))
     launcher_env_variables = get_launcher_env_variables(launcher, launch_request)
     env.extend(launcher_env_variables)
 

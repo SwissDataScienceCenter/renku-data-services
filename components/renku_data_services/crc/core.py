@@ -38,7 +38,10 @@ def validate_quota_put_patch(body: apispec.QuotaWithId | apispec.QuotaPatch) -> 
     )
 
 
-def validate_resource_class(body: apispec.ResourceClass) -> models.UnsavedResourceClass:
+def validate_resource_class(
+    body: apispec.ResourceClass,
+    pool_kind: models.RemoteConfigurationKind | None = None,
+) -> models.UnsavedResourceClass:
     """Validate a resource class object."""
     if len(body.name) > 40:
         # TODO: Should this be added to the API spec instead?
@@ -54,6 +57,22 @@ def validate_resource_class(body: apispec.ResourceClass) -> models.UnsavedResour
         key=lambda x: (x.key, x.required_during_scheduling),
     )
     tolerations = sorted(t.root for t in body.tolerations or [])
+
+    if pool_kind != models.RemoteConfigurationKind.firecrest and body.remote is not None:
+        raise errors.ValidationError(
+            message="Resource class remote configuration is only allowed for FirecREST classes."
+        )
+    remote: models.FirecrestClassRemote | None = None
+    if pool_kind == models.RemoteConfigurationKind.firecrest and body.remote is not None:
+        remote = models.FirecrestClassRemote(
+            system_name=body.remote.system_name,
+            partition=body.remote.partition,
+            forward_resource_values=body.remote.forward_resource_values,
+        )
+
+    if pool_kind == models.RemoteConfigurationKind.firecrest and not body.cpu.is_integer():
+        raise errors.ValidationError(message="FirecREST resource classes require an integer value for cpu.")
+
     return models.UnsavedResourceClass(
         name=body.name,
         cpu=body.cpu,
@@ -65,19 +84,26 @@ def validate_resource_class(body: apispec.ResourceClass) -> models.UnsavedResour
         node_affinities=node_affinities,
         tolerations=tolerations,
         quota_enforced=body.quota_enforced,
+        remote=remote,
     )
 
 
 @overload
 def validate_resource_class_patch_or_put(
-    body: apispec.ResourceClassPatch | apispec.ResourceClass, method: Literal["PATCH", "PUT"]
-) -> models.ResourceClassPatch: ...
+    body: apispec.ResourceClassPatchWithId | apispec.ResourceClassWithId,
+    method: Literal["PATCH", "PUT"],
+    *,
+    existing_kind: models.RemoteConfigurationKind | None = None,
+) -> models.ResourceClassPatchWithId: ...
 
 
 @overload
 def validate_resource_class_patch_or_put(
-    body: apispec.ResourceClassPatchWithId | apispec.ResourceClassWithId, method: Literal["PATCH", "PUT"]
-) -> models.ResourceClassPatchWithId: ...
+    body: apispec.ResourceClassPatch | apispec.ResourceClass,
+    method: Literal["PATCH", "PUT"],
+    *,
+    existing_kind: models.RemoteConfigurationKind | None = None,
+) -> models.ResourceClassPatch: ...
 
 
 def validate_resource_class_patch_or_put(
@@ -86,9 +112,16 @@ def validate_resource_class_patch_or_put(
     | apispec.ResourceClass
     | apispec.ResourceClassWithId,
     method: Literal["PATCH", "PUT"],
+    *,
+    existing_kind: models.RemoteConfigurationKind | None = None,
 ) -> models.ResourceClassPatch | models.ResourceClassPatchWithId:
-    """Validate the patch to a resource class."""
+    """Validate the patch/put of a resource class."""
     rc_id = body.id if isinstance(body, (apispec.ResourceClassPatchWithId, apispec.ResourceClassWithId)) else None
+    kind = existing_kind
+
+    if body.name is not None and len(body.name) > 40:
+        raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
+
     node_affinities: list[models.NodeAffinity] | None = [] if method == "PUT" else None
     if body.node_affinities:
         node_affinities = sorted(
@@ -101,6 +134,19 @@ def validate_resource_class_patch_or_put(
     tolerations: list[str] | None = [] if method == "PUT" else None
     if body.tolerations:
         tolerations = sorted(t.root for t in body.tolerations or [])
+    remote: models.FirecrestClassRemote | None = None
+    if body.remote is not None:
+        if kind != models.RemoteConfigurationKind.firecrest:
+            raise errors.ValidationError(
+                message="Resource class remote configuration is only allowed for FirecREST classes."
+            )
+        remote = models.FirecrestClassRemote(
+            system_name=body.remote.system_name,
+            partition=body.remote.partition,
+            forward_resource_values=body.remote.forward_resource_values,
+        )
+    if kind == models.RemoteConfigurationKind.firecrest and body.cpu is not None and not body.cpu.is_integer():
+        raise errors.ValidationError(message="FirecREST resource classes require an integer value for cpu.")
     if rc_id:
         return models.ResourceClassPatchWithId(
             id=rc_id,
@@ -114,6 +160,7 @@ def validate_resource_class_patch_or_put(
             node_affinities=node_affinities,
             tolerations=tolerations,
             quota_enforced=body.quota_enforced,
+            remote=remote,
         )
     return models.ResourceClassPatch(
         name=body.name,
@@ -126,6 +173,7 @@ def validate_resource_class_patch_or_put(
         node_affinities=node_affinities,
         tolerations=tolerations,
         quota_enforced=body.quota_enforced,
+        remote=remote,
     )
 
 
@@ -179,7 +227,9 @@ def validate_resource_pool_post(body: apispec.ResourcePool) -> models.UnsavedRes
         hibernation_warning_period = None
 
     quota = validate_quota(body=body.quota) if body.quota else None
-    classes = [validate_resource_class(body=new_cls) for new_cls in body.classes]
+    remote = validate_remote(body=body.remote) if body.remote else None
+    pool_kind = remote.kind if remote is not None else None
+    classes = [validate_resource_class(body=new_cls, pool_kind=pool_kind) for new_cls in body.classes]
 
     default_classes: list[models.UnsavedResourceClass] = []
     for cls in classes:
@@ -192,7 +242,6 @@ def validate_resource_pool_post(body: apispec.ResourcePool) -> models.UnsavedRes
     if len(default_classes) != 1:
         raise errors.ValidationError(message="One default class is required in each resource pool.")
 
-    remote = validate_remote(body=body.remote) if body.remote else None
     platform = __validate_runtime_platform(body=body.platform)
 
     return models.UnsavedResourcePool(
@@ -210,13 +259,69 @@ def validate_resource_pool_post(body: apispec.ResourcePool) -> models.UnsavedRes
     )
 
 
+def _resolve_pool_kind_after_update(
+    method: Literal["PATCH"] | Literal["PUT"],
+    body: apispec.ResourcePoolPatch | apispec.ResourcePoolPut,
+    existing_pool_kind: models.RemoteConfigurationKind | None,
+) -> models.RemoteConfigurationKind | None:
+    """Determine the pool kind that will apply after this patch/put is processed."""
+    match body.remote:
+        case apispec.RemoteConfigurationPatchReset():
+            return None
+        case apispec.RemoteConfigurationFirecrest() | apispec.RemoteConfigurationFirecrestPatch():
+            return models.RemoteConfigurationKind.firecrest
+        case apispec.RemoteConfigurationRunai() | apispec.RemoteConfigurationRunaiPatch():
+            return models.RemoteConfigurationKind.runai
+        case None:
+            if method == "PUT":
+                return None
+            return existing_pool_kind
+
+
+def _validate_classes_against_pool_kind(
+    classes: list[models.ResourceClassPatchWithId],
+    new_pool_kind: models.RemoteConfigurationKind | None,
+    existing_classes: list[models.ResourceClass] | None = None,
+) -> None:
+    """Ensure existing classes can be converted to the new pool kind."""
+    existing_by_id = {rc.id: rc for rc in (existing_classes or [])}
+    for rc in classes:
+        existing = existing_by_id.get(rc.id) if isinstance(rc, models.ResourceClassPatchWithId) else None
+        # Reject class-level remote data when the new pool kind is not FirecREST.
+        has_remote = rc.remote is not None or (existing is not None and existing.remote is not None)
+        if new_pool_kind != models.RemoteConfigurationKind.firecrest and has_remote:
+            raise errors.ValidationError(
+                message="Remove class-level remote configuration before converting the pool away from FirecREST."
+            )
+        # FirecREST requires integer CPU.
+        cpu = rc.cpu if rc.cpu is not None else (existing.cpu if existing is not None else None)
+        if new_pool_kind == models.RemoteConfigurationKind.firecrest and cpu is not None and not cpu.is_integer():
+            raise errors.ValidationError(message="FirecREST resource classes require an integer value for cpu.")
+
+
 def validate_resource_pool_put_or_patch(
-    method: Literal["PATCH"] | Literal["PUT"], body: apispec.ResourcePoolPatch | apispec.ResourcePoolPut
+    method: Literal["PATCH"] | Literal["PUT"],
+    body: apispec.ResourcePoolPatch | apispec.ResourcePoolPut,
+    *,
+    existing_pool_kind: models.RemoteConfigurationKind | None = None,
+    existing_classes: list[models.ResourceClass] | None = None,
 ) -> models.ResourcePoolPatch:
     """Validate the patch to a resource pool."""
+    new_pool_kind = _resolve_pool_kind_after_update(method=method, body=body, existing_pool_kind=existing_pool_kind)
+
     classes = (
-        [validate_resource_class_patch_or_put(body=rc, method=method) for rc in body.classes] if body.classes else None
+        [
+            validate_resource_class_patch_or_put(body=rc, method=method, existing_kind=new_pool_kind)
+            for rc in body.classes
+        ]
+        if body.classes
+        else None
     )
+    if classes is not None:
+        _validate_classes_against_pool_kind(
+            classes=classes, new_pool_kind=new_pool_kind, existing_classes=existing_classes
+        )
+
     quota = validate_quota_put_patch(body=body.quota) if body.quota else RESET if method == "PUT" else None
     remote = None
     match body.remote:
@@ -299,6 +404,9 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
                 message=f"Resource class '{rc.id}' does not exist in resource pool '{existing.id}'."
             )
         idx, existing_rc = found
+        class_remote = existing_rc.remote
+        if rc.remote is not None:
+            class_remote = rc.remote
         classes[idx] = models.ResourceClass(
             name=rc.name if rc.name is not None else existing_rc.name,
             cpu=rc.cpu if rc.cpu is not None else existing_rc.cpu,
@@ -310,6 +418,7 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             default_storage=rc.default_storage if rc.default_storage is not None else existing_rc.default_storage,
             node_affinities=rc.node_affinities if rc.node_affinities is not None else existing_rc.node_affinities,
             tolerations=rc.tolerations if rc.tolerations is not None else existing_rc.tolerations,
+            remote=class_remote,
         )
     quota: models.Quota | models.UnsavedQuota | ResetType = existing.quota if existing.quota else RESET
     if update.quota is RESET:

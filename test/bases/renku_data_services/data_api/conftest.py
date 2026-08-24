@@ -3,7 +3,7 @@ import contextlib
 import json
 from collections.abc import AsyncGenerator, Callable, Coroutine
 from copy import deepcopy
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Protocol
 
 import pytest
@@ -11,6 +11,7 @@ import pytest_asyncio
 from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
+from sqlalchemy import select
 from ulid import ULID
 
 import renku_data_services.search.core as search_core
@@ -33,6 +34,8 @@ from renku_data_services.project.apispec import Project as ApiProject
 from renku_data_services.search.apispec import SearchResult
 from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
 from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager
+from renku_data_services.session import models as session_models
+from renku_data_services.session import orm as session_schemas
 from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import DefaultSolrAdminClient, DefaultSolrClient
 from renku_data_services.solr.solr_migrate import SchemaMigrator
@@ -601,6 +604,35 @@ async def create_session_launcher(sanic_client: SanicASGITestClient, user_header
         return res.json
 
     return create_session_launcher_helper
+
+
+@pytest.fixture
+def finish_image_build(app_manager_instance: DependencyManager):
+    async def finish_image_build_helper(build_id: str):
+        async_session_maker = app_manager_instance.config.db.async_session_maker
+        async with async_session_maker() as session, session.begin():
+            stmt = select(session_schemas.BuildORM).where(session_schemas.BuildORM.id == build_id)
+            build_orm = await session.scalar(stmt)
+            assert build_orm is not None
+            build_orm.status = session_models.BuildStatus.succeeded
+            build_orm.completed_at = datetime.now(tz=UTC)
+            build_orm.result_image = "some_built_image:latest"
+            build_orm.result_repository_url = "https://github.com/some/repo.git"
+            build_orm.result_repository_git_commit_sha = "some_git_commit_sha"
+            environment = build_orm.environment
+            environment.container_image = build_orm.result_image
+            build_env = session_models.BUILD_ENVIRONMENT_CONFIGS["vscodium"]
+            environment.default_url = build_env.default_url
+            environment.strip_path_prefix = build_env.strip_path_prefix
+            environment.port = build_env.port
+            environment.uid = build_env.uid
+            environment.gid = build_env.gid
+            environment.working_directory = build_env.working_directory
+            environment.mount_directory = build_env.mount_directory
+            environment.command = build_env.command
+            environment.args = build_env.args
+
+    return finish_image_build_helper
 
 
 @pytest_asyncio.fixture
