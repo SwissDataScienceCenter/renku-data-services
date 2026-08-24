@@ -83,6 +83,31 @@ def test_build_image_prefix_handling(monkeypatch, prefix, private_prefix, must_r
         _ = BuildsConfig.from_env()
 
 
+@pytest.mark.parametrize(
+    "private_registries,private_prefix,must_raise",
+    [
+        (None, None, False),  # Defaults will be used
+        ("my.registry.org:5000", "other.registry.org/dummy/private-image-prefix", False),
+        (None, "other.registry.org/dummy/private-image-prefix", False),
+        ("my.registry.org:5000", None, False),
+        ("other.registry.org", "other.registry.org/dummy/private-image-prefix", True),
+        ("registry.org:5000,other.registry.org", "other.registry.org/dummy/private-image-prefix", True),
+    ],
+)
+def test_insecure_registries_handling(monkeypatch, private_registries, private_prefix, must_raise) -> None:
+    monkeypatch.setenv("BUILD_PRIVATE_REPO_BUILDS_ENABLED", True)
+    if private_registries is not None:
+        monkeypatch.setenv("BUILD_INSECURE_REGISTRIES", private_registries)
+    if private_prefix is not None:
+        monkeypatch.setenv("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX", private_prefix)
+
+    if must_raise:
+        with pytest.raises(ValidationError):
+            _ = BuildsConfig.from_env()
+    else:
+        _ = BuildsConfig.from_env()
+
+
 @pytest.mark.asyncio
 async def test_get_all_session_environments(
     sanic_client: SanicASGITestClient, unauthorized_headers, create_session_environment, snapshot

@@ -36,6 +36,7 @@ class BuildsConfig:
     build_builder_image: str | None = None
     build_run_image: str | None = None
     build_strategy_name: str | None = None
+    build_insecure_output_enabled: bool = False
     build_insecure_registries: str = ""
     build_platform_overrides: dict[str, BuildPlatformOverrides] | None = None
     push_secret_name: str = constants.BUILD_DEFAULT_PUSH_SECRET_NAME
@@ -52,6 +53,7 @@ class BuildsConfig:
         """Create a config from environment variables."""
         enabled = os.environ.get("IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
         private_builds_enabled = os.environ.get("BUILD_PRIVATE_REPO_BUILDS_ENABLED", "false").lower() == "true"
+        build_insecure_output_enabled = os.environ.get("BUILD_INSECURE_OUTPUT_ENABLED", "false").lower() == "true"
 
         build_output_image_prefix = (
             os.environ.get("BUILD_OUTPUT_IMAGE_PREFIX") or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
@@ -59,6 +61,7 @@ class BuildsConfig:
         build_output_private_image_prefix = (
             os.environ.get("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX") or constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
         )
+        build_insecure_registries = os.environ.get("BUILD_INSECURE_REGISTRIES", "")
 
         if private_builds_enabled:
             if build_output_image_prefix == build_output_private_image_prefix:
@@ -68,14 +71,23 @@ class BuildsConfig:
             if build_output_image_prefix.startswith(build_output_private_image_prefix):
                 raise ValidationError("Public builds cannot use the same prefix as private builds")
 
+            if build_insecure_output_enabled and build_insecure_registries:
+                logger.warn(
+                    f"Trusting insecure registries, this is not recommended in production: {build_insecure_registries}"
+                )
+
+            if build_insecure_registries and any(
+                [
+                    build_output_private_image_prefix.startswith(registry)
+                    for registry in build_insecure_registries.split(",")
+                ]
+            ):
+                raise ValidationError("The registry for private builds should not be listed in the insecure registries")
+
         build_builder_image = os.environ.get("BUILD_BUILDER_IMAGE")
         build_run_image = os.environ.get("BUILD_RUN_IMAGE")
         build_strategy_name = os.environ.get("BUILD_STRATEGY_NAME")
-        build_insecure_registries = os.environ.get("BUILD_INSECURE_REGISTRIES", "")
-        if build_insecure_registries:
-            logger.warn(
-                f"Trusting insecure registries, this is not recommended in production: {build_insecure_registries}"
-            )
+
         push_secret_name = os.environ.get("BUILD_PUSH_SECRET_NAME") or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
         push_private_secret_name = (
             os.environ.get("BUILD_PUSH_PRIVATE_SECRET_NAME") or constants.BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME
@@ -155,6 +167,7 @@ class BuildsConfig:
             build_builder_image=build_builder_image,
             build_run_image=build_run_image,
             build_strategy_name=build_strategy_name or None,
+            build_insecure_output_enabled=build_insecure_output_enabled,
             build_insecure_registries=build_insecure_registries,
             build_platform_overrides=build_platform_overrides,
             push_secret_name=push_secret_name,
