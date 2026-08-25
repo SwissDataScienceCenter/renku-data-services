@@ -828,6 +828,25 @@ class Authz:
 
             yield member
 
+    async def get_group_resource_pools(
+        self,
+        group_id: str,
+        *,
+        zed_token: ZedToken | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """Get all resource pools that a group has access to."""
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        rel_filter = RelationshipFilter(
+            resource_type=ResourceType.resource_pool.value,
+            optional_relation=_Relation.group_viewer.value,
+            optional_subject_filter=SubjectFilter(subject_type=ResourceType.group.value, optional_subject_id=group_id),
+        )
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+        )
+        async for response in responses:
+            yield response.relationship.resource.object_id
+
     @staticmethod
     def authz_change(
         op: AuthzOperation, resource: ResourceType
