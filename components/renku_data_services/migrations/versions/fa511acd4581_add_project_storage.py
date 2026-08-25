@@ -24,7 +24,7 @@ def upgrade() -> None:
         "project_storage",
         sa.Column("id", ULIDType(), server_default=sa.text("generate_ulid()"), nullable=False),
         sa.Column("project_id", ULIDType(), nullable=False),
-        sa.Column("storage_class", sa.String(length=20), nullable=False),
+        sa.Column("storage_class", sa.String(length=253), nullable=False),
         sa.Column("size_limit", ByteSizeType(), nullable=False),
         sa.Column("target_path", sa.String(), nullable=False),
         sa.Column("created_by_id", sa.String(length=36), nullable=False),

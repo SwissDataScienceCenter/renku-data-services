@@ -76,7 +76,7 @@ class ProjectStorageORM(BaseORM):
     )
     """ID of the project (must exist in project_storage_allow)."""
 
-    storage_class: Mapped[str] = mapped_column("storage_class", String(20))
+    storage_class: Mapped[str] = mapped_column("storage_class", String(253))
     """The storage class (e.g. azurefile)."""
 
     size_limit: Mapped[ByteSize] = mapped_column("size_limit", ByteSizeType())
