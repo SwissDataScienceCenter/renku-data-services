@@ -67,6 +67,8 @@ from renku_data_services.project.db import (
     ProjectRepository,
     ProjectSessionSecretRepository,
 )
+from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
+from renku_data_services.renku_apps.repository import RenkuAppsRepository
 from renku_data_services.repositories import models as repositories_models
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.git_url import GitUrl, GitUrlError
@@ -80,6 +82,7 @@ from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
+from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users import models as user_preferences_models
 from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -385,9 +388,32 @@ class TestDependencyManager(DependencyManager):
         )
         project_storage_k8s = ProjectStorageK8s(config.nb_config.k8s_v2_client)
 
+        apps_k8s_client: RenkuAppsK8sClient | None = None
+        apps_repo: RenkuAppsRepository | None = None
+        if config.apps.enabled:
+            apps_k8s_client = RenkuAppsK8sClient(
+                client=client,
+                cluster_repo=cluster_repo,
+                storage_class=config.nb_config.cloud_storage.storage_class,
+                default_affinity=config.nb_config.sessions.affinity_model,
+                default_tolerations=config.nb_config.sessions.tolerations_model,
+            )
+            apps_repo = RenkuAppsRepository(
+                authz=authz,
+                session_repo=session_repo,
+                rp_repo=rp_repo,
+                project_repo=project_repo,
+                k8s_client=apps_k8s_client,
+                dc_secret_repo=data_connector_secret_repo,
+                validator=RCloneValidator(),
+            )
+            project_repo.apps_cleanup = apps_repo
+            session_repo.apps_cleanup = apps_repo
         return cls(
             config=config,
             k8s_client=client,
+            apps_k8s_client=apps_k8s_client,
+            apps_repo=apps_repo,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
             internal_authenticator=internal_authenticator,

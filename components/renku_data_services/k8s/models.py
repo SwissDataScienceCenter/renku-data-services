@@ -16,7 +16,7 @@ from kubernetes.client import V1Secret
 
 from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.errors import ProgrammingError, errors
-from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
+from renku_data_services.k8s.constants import DUMMY_RENKU_APP_USER_ID, DUMMY_TASK_RUN_USER_ID, ClusterId
 
 sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 K8sPatch = dict[str, Any]
@@ -441,6 +441,8 @@ class APIObjectInCluster:
                 return labels.get("renku.io/safe-username", None)
             case "taskrun":
                 return DUMMY_TASK_RUN_USER_ID
+            case "service" if self.obj.version == "serving.knative.dev/v1":
+                return DUMMY_RENKU_APP_USER_ID
             case _:
                 return None
 
