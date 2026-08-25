@@ -22,6 +22,7 @@ from renku_data_services.renku_apps.config import AppsConfig
 from renku_data_services.secrets.config import PublicSecretsConfig
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.solr.solr_client import SolrClientConfig
+from renku_data_services.storage.config import ProjectStorageConfig
 from renku_data_services.users.config import UserPreferencesConfig
 
 
@@ -52,6 +53,7 @@ class Config:
     alertmanager_webhook_role: str
     deposit_config: DepositConfig
     persisted_logs: PersistedLogsConfig
+    project_storage_config: ProjectStorageConfig
 
     @classmethod
     def from_env(cls, db: DBConfig | None = None) -> Self:
@@ -104,4 +106,5 @@ class Config:
             alertmanager_webhook_role=os.environ.get("ALERTMANAGER_WEBHOOK_ROLE", "alertmanager-webhook"),
             deposit_config=DepositConfig.from_env(nb_config.sessions.renku_url),
             persisted_logs=PersistedLogsConfig.from_env(namespace=k8s_namespace),
+            project_storage_config=ProjectStorageConfig.from_env(),
         )

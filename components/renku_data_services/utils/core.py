@@ -82,9 +82,37 @@ def with_db_transaction(
                 kwargs["session"] = session
                 return await f(self, *args, **kwargs)
         else:
-            return await f(self, *args, **kwargs)
+            existing_session: AsyncSession = cast(AsyncSession, session_kwarg)
+            if existing_session.in_transaction():
+                return await f(self, *args, **kwargs)
+            else:
+                async with existing_session.begin():
+                    return await f(self, *args, **kwargs)
 
     return transaction_wrapper
+
+
+def with_db_session(
+    f: Callable[Concatenate[_WithSessionMaker, _P], Awaitable[_T]],
+) -> Callable[Concatenate[_WithSessionMaker, _P], Awaitable[_T]]:
+    """Initializes a session (but not a transaction)."""
+
+    @functools.wraps(f)
+    async def session_wrapper(self: _WithSessionMaker, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        session_kwarg = kwargs.get("session")
+        if "session" in kwargs and session_kwarg is not None and not isinstance(session_kwarg, AsyncSession):
+            raise errors.ProgrammingError(
+                message="The decorator that starts a DB transaction encountered an existing session "
+                f"in the keyword arguments but the session is of an unexpected type {type(session_kwarg)}"
+            )
+        if session_kwarg is None:
+            async with self.session_maker() as session:
+                kwargs["session"] = session
+                return await f(self, *args, **kwargs)
+        else:
+            return await f(self, *args, **kwargs)
+
+    return session_wrapper
 
 
 def _get_openbis_url(openbis_host: str) -> str:

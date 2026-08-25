@@ -85,6 +85,8 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
+from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -187,6 +189,8 @@ class DependencyManager:
     secret_client: K8sSecretClient
     internal_token_mint: RenkuSelfTokenMint
     internal_scope_verifier: ScopeVerifier
+    project_storage_k8s: ProjectStorageK8s
+    project_storage_repo: ProjectStorageRepository
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -381,6 +385,14 @@ class DependencyManager:
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
+        project_storage_k8s = ProjectStorageK8s(config.nb_config.k8s_v2_client)
+        project_storage_repo = ProjectStorageRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            project_repo=project_repo,
+            group_repo=group_repo,
+            project_storage_config=config.project_storage_config,
+        )
         reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
 
         git_repositories_repo = GitRepositoriesRepository(
@@ -562,4 +574,6 @@ class DependencyManager:
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,
             internal_scope_verifier=internal_scope_verifier,
+            project_storage_k8s=project_storage_k8s,
+            project_storage_repo=project_storage_repo,
         )

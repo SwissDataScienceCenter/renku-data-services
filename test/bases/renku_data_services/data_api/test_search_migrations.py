@@ -35,6 +35,8 @@ def app_manager(monkeypatch, worker_id, dummy_users, solr_core):
     monkeypatch.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
     monkeypatch.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
     monkeypatch.setenv("V1_SESSIONS_ENABLED", "true")
+    monkeypatch.setenv("PROJECT_STORAGE_ENABLED", "true")
+    monkeypatch.setenv("PROJECT_STORAGE_STORAGE_CLASS", "azurefile")
 
     dm = TestDependencyManager.from_env(dummy_users)
 
