@@ -232,6 +232,10 @@ async def app_manager(
     monkeysession.setenv("RENKU_URL", "http://test-renku-url.io")
     monkeysession.setenv("KUBERNETES_NAMESPACE", "default")
     monkeysession.setenv("BUILD_PUSH_SECRET_NAME", constants.BUILD_DEFAULT_PUSH_SECRET_NAME)
+    monkeysession.setenv("PROJECT_STORAGE_ENABLED", "true")
+    # NOTE: The storage class here is just a placeholder. The tests do not support running
+    # sessions with read-write-many shared storage.
+    monkeysession.setenv("PROJECT_STORAGE_STORAGE_CLASS", "azurefile")
 
     monkeysession.setenv("CREATE_BUILDS_CLIENT", str(builds_enabled))
     if builds_enabled:

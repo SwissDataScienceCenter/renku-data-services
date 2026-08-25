@@ -39,7 +39,7 @@ from renku_data_services.search.blueprints import SearchBP
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
-from renku_data_services.storage.blueprints import StorageSchemaBP
+from renku_data_services.storage.blueprints import ProjectStorageBP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
 
 
@@ -145,6 +145,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         session_repo=dm.session_repo,
         session_secret_repo=dm.project_session_secret_repo,
         metrics=dm.metrics,
+        project_storage_k8s=dm.project_storage_k8s,
     )
     project_session_secrets = ProjectSessionSecretBP(
         name="project_session_secrets",
@@ -222,6 +223,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         oauth_client_factory=dm.oauth_http_client_factory,
         project_repo=dm.project_repo,
         project_session_secret_repo=dm.project_session_secret_repo,
+        project_storage_repo=dm.project_storage_repo,
         rp_repo=dm.rp_repo,
         session_repo=dm.session_repo,
         user_repo=dm.kc_user_repo,
@@ -230,6 +232,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         internal_token_mint=dm.internal_token_mint,
         resource_usage_service=dm.resource_usage_service,
         resource_requests_repo=dm.resource_requests_repo,
+        authz=dm.authz,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",
@@ -321,6 +324,13 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         internal_token_mint=dm.internal_token_mint,
         internal_scope_verifier=dm.internal_scope_verifier,
     )
+    project_storage = ProjectStorageBP(
+        name="project_storage",
+        url_prefix=url_prefix,
+        project_storage_k8s=dm.project_storage_k8s,
+        project_storage_repo=dm.project_storage_repo,
+        authenticator=dm.authenticator,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -352,6 +362,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             capacity_reservation.blueprint(),
             resource_usage.blueprint(),
             internal_authentication.blueprint(),
+            project_storage.blueprint(),
         ]
     )
     if builds is not None:

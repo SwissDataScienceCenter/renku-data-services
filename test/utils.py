@@ -78,6 +78,8 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
+from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users import models as user_preferences_models
 from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -336,6 +338,13 @@ class TestDependencyManager(DependencyManager):
             secret_service_public_key=config.secrets.public_key,
             authz=authz,
         )
+        project_storage_repo = ProjectStorageRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            project_repo=project_repo,
+            group_repo=group_repo,
+            project_storage_config=config.project_storage_config,
+        )
         search_reprovisioning = SearchReprovision(
             search_updates_repo=search_updates_repo,
             reprovisioning_repo=reprovisioning_repo,
@@ -374,6 +383,7 @@ class TestDependencyManager(DependencyManager):
             builds_config=config.builds,
             git_repositories_repo=git_repositories_repo,
         )
+        project_storage_k8s = ProjectStorageK8s(config.nb_config.k8s_v2_client)
 
         return cls(
             config=config,
@@ -428,6 +438,8 @@ class TestDependencyManager(DependencyManager):
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,
             internal_scope_verifier=internal_scope_verifier,
+            project_storage_k8s=project_storage_k8s,
+            project_storage_repo=project_storage_repo,
         )
 
     def __post_init__(self) -> None:

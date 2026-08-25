@@ -1420,7 +1420,7 @@ async def test_delete_data_connector_after_linking(
 
 @pytest.mark.asyncio
 async def test_delete_project_after_linking(
-    sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
+    sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers, cluster
 ) -> None:
     data_connector = await create_data_connector("Data connector 1")
     project = await create_project(sanic_client, "Project A")
