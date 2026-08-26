@@ -1706,8 +1706,8 @@ class MemberRepository(_Base):
     ) -> list[models.ResourcePool]:
         """Get resource pools that a specific group has access to."""
         group = await self.group_repo.get_group(api_user, group_slug)
-        authorized = await self.authz.has_permission(api_user, ResourceType.group, group.id, Scope.WRITE)
-        if not authorized:
+        authorized = await self.authz.has_permission(api_user, ResourceType.group, group.id, Scope.DIRECT_MEMBER)
+        if not authorized and not api_user.is_admin:
             return []
 
         async with self.session_maker() as session, session.begin():

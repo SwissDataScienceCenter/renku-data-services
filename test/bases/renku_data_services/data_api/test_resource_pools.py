@@ -3474,12 +3474,14 @@ async def test_get_group_resource_pools(
 ) -> None:
     # Create public and private resource pools
     resource_pool_public = deepcopy(valid_resource_pool_payload)
+    resource_pool_public["name"] = "test-public-pool"
     resource_pool_public["default"] = False
     resource_pool_public["public"] = True
     _, res = await create_rp(resource_pool_public, sanic_client)
     assert res.status_code == 201
 
     resource_pool_private = deepcopy(valid_resource_pool_payload)
+    resource_pool_private["name"] = "test-private-pool"
     resource_pool_private["default"] = False
     resource_pool_private["public"] = False
     _, res = await create_rp(resource_pool_private, sanic_client)
@@ -3514,9 +3516,18 @@ async def test_get_group_resource_pools(
     assert len(group_rps) == 1
     assert {rp["id"] for rp in group_rps} == {rp_private["id"]}
 
-    # Check that a user not in the group gets a 404 error
+    # Check that an admin can see the resource pool for the group
+    _, response = await sanic_client.get(f"/api/data/groups/{group['slug']}/resource_pools", headers=admin_headers)
+    assert response.status_code == 200
+    group_rps = response.json
+    assert len(group_rps) == 1
+    assert {rp["id"] for rp in group_rps} == {rp_private["id"]}
+
+    # Check that a user not in the group gets no resource pools
     _, response = await sanic_client.get(f"/api/data/groups/{group['slug']}/resource_pools", headers=member_2_headers)
-    assert response.status_code == 404
+    assert response.status_code == 200
+    group_rps = response.json
+    assert len(group_rps) == 0
 
     # Test route with a non-existent group slug
     _, response = await sanic_client.get("/api/data/groups/nonexistent-group/resource_pools", headers=member_1_headers)
