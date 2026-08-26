@@ -20,7 +20,7 @@ class DatasetProvider(StrEnum):
 class S3Config:
     """Configuration for a location on S3 storage."""
 
-    rclone_config: dict[str, str]
+    rclone_config: dict[str, str] | dict[str, dict[str, str]]
     bucket: str
     prefix: str
 
@@ -84,9 +84,12 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
 
     A single dataset may contain more than one S3 url.
     The S3 information is encoded in the distribution, in fields where the name is 'S3 URI'.
+    See https://rclone.org/union/.
+    When Rclone does the union if there are collisions in files then the newest file wins.
     """
-    output: list[S3Config] = []
-    for dist in dataset.distribution:
+    configs: dict[str, dict[str, str]] = {}
+    union_remote_upstreams = []
+    for idist, dist in enumerate(sorted(dataset.distribution, key=lambda x: x.content_url)):
         if dist.name and dist.name == "S3 URI":
             parsed = urlparse(dist.content_url)
             query_parsed = parse_qs(parsed.query)
@@ -96,16 +99,22 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
                 raise errors.ValidationError(message="The S3 bucket from scicat metadata cannot be found")
             if not prefix:
                 raise errors.ValidationError(message="The S3 prefix from scicat metadata cannot be found")
-            output.append(
-                S3Config(
-                    rclone_config={
-                        "type": "s3",
-                        "provider": "Other",
-                        "endpoint": f"{parsed.scheme}://{parsed.hostname}",
-                    },
-                    bucket=bucket,
-                    prefix=prefix,
-                )
-            )
-    # TODO: Handle multiple remotes
-    return output[0]
+            configs[str(idist)] = {
+                "type": "s3",
+                "provider": "Other",
+                "endpoint": f"{parsed.scheme}://{parsed.hostname}",
+            }
+            union_remote_upstreams.append(f"{idist}:{prefix}:ro")
+
+    configs["union"] = {
+        "type": "union",
+        "upstreams": " ".join(union_remote_upstreams),
+        "search_policy": "newest",
+    }
+    output = S3Config(
+        rclone_config=configs,
+        bucket="union",
+        prefix="",
+    )
+
+    return output
