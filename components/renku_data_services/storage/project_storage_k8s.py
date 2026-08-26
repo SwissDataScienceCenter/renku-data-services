@@ -3,6 +3,8 @@
 from ulid import ULID
 
 from renku_data_services.app_config import logging
+from renku_data_services.base_models.bytesize import ByteSize
+from renku_data_services.errors import errors
 from renku_data_services.k8s.models import ClusterConnection, K8sPersistentVolumeClaim
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.storage.models import DeletedProjectStorage, ProjectStorage
@@ -53,3 +55,18 @@ class ProjectStorageK8s:
 
         name = self.__pvc_name(project)
         await self.__k8s_client.delete_persistent_volume(name)
+
+    async def extend_volume(self, project_id: ULID, new_size: ByteSize) -> K8sPersistentVolumeClaim:
+        """Extends the size of an existing volume."""
+        existing_pvc = await self.get_volume(project_id)
+        new_size_str = f"{new_size.to_gibi()}Gi"
+        name = self.__pvc_name(project_id)
+        if existing_pvc:
+            logger.info(f"Extending pvc {name} to size {new_size_str}")
+            await self.__k8s_client.patch_persistent_volume(
+                existing_pvc.meta, {"spec": {"resources": {"requests": {"storage": new_size_str}}}}
+            )
+            existing_pvc.manifest.spec.resources.requests.storage = new_size_str
+            return existing_pvc
+        else:
+            raise errors.MissingResourceError(message=f"PVC {name} not found")

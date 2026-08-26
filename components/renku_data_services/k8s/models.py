@@ -505,6 +505,17 @@ class K8sPersistentVolumeClaim(K8sObject):
             manifest=manifest,
         )
 
+    @property
+    def meta(self) -> K8sObjectMeta:
+        """Extract the metadata."""
+        return K8sObjectMeta(
+            name=self.name,
+            namespace=self.namespace,
+            cluster=self.cluster,
+            gvk=self.gvk,
+            user_id=self.user_id,
+        )
+
     @classmethod
     def new(
         cls,

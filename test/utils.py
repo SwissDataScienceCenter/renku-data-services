@@ -19,6 +19,7 @@ from kubernetes import watch
 from kubernetes.client import V1ObjectMeta
 from sanic import Request
 from sanic_testing.testing import ASGI_HOST, ASGI_PORT, SanicASGITestClient, TestingResponse
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.authn.api.core import ScopeVerifier
@@ -26,6 +27,7 @@ from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 from renku_data_services.connected_services.db import ConnectedServicesRepository
@@ -48,10 +50,12 @@ from renku_data_services.k8s.clients import (
 )
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
 from renku_data_services.k8s.db import K8sDbCache
+from renku_data_services.k8s.models import K8sPersistentVolumeClaim
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.api.classes.data_service import GitProviderHelper
+from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
@@ -88,6 +92,15 @@ from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI
+
+
+class TestProjectStorageK8s(ProjectStorageK8s):
+    def __init__(self, k8s_client: NotebookK8sClient) -> None:
+        super().__init__(k8s_client)
+
+    async def extend_volume(self, project_id: ULID, new_size: ByteSize) -> K8sPersistentVolumeClaim:
+        """Extends the size of an existing volume."""
+        return None
 
 
 @dataclass
@@ -386,7 +399,7 @@ class TestDependencyManager(DependencyManager):
             builds_config=config.builds,
             git_repositories_repo=git_repositories_repo,
         )
-        project_storage_k8s = ProjectStorageK8s(config.nb_config.k8s_v2_client)
+        project_storage_k8s = TestProjectStorageK8s(config.nb_config.k8s_v2_client)
 
         apps_k8s_client: RenkuAppsK8sClient | None = None
         apps_repo: RenkuAppsRepository | None = None

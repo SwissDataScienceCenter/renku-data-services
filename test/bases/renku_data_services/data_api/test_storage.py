@@ -5,6 +5,7 @@ import pytest
 import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
+from ulid import ULID
 
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.data_api.app import register_all_handlers
@@ -349,8 +350,6 @@ async def test_get_one_storage_success(
 
 @pytest.mark.asyncio
 async def test_get_one_storage_not_found(sanic_client: SanicASGITestClient, user_headers: dict[str, str]) -> None:
-    from ulid import ULID
-
     non_existent_id = str(ULID())
     _, response = await sanic_client.get(f"/api/data/storage/{non_existent_id}", headers=user_headers)
 
@@ -612,7 +611,10 @@ async def test_get_storage_allow_unauthenticated(
 
 @pytest.mark.asyncio
 async def test_patch_storage_success(
-    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+    sanic_client: SanicASGITestClient,
+    create_project,
+    user_headers: dict[str, str],
+    admin_headers: dict[str, str],
 ) -> None:
     project = await create_project(sanic_client, "Test Project")
     namespace = f"{project['namespace']}/{project['slug']}"
@@ -765,8 +767,6 @@ async def test_patch_storage_with_invalid_etag(
 
 @pytest.mark.asyncio
 async def test_patch_storage_not_found(sanic_client: SanicASGITestClient, user_headers: dict[str, str]) -> None:
-    from ulid import ULID
-
     non_existent_id = str(ULID())
     headers = merge_headers(user_headers, {"If-Match": "some-etag"})
     patch = {"size": 20}
