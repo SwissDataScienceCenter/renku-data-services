@@ -65,13 +65,17 @@ def validate_project_storage_patch(
     existing: models.ProjectStorage, body: apispec.ProjectStoragePatch
 ) -> models.ProjectStoragePatch:
     """Validate a patch of a project storage entry."""
-    size = ByteSize.from_gibi(body.size) if body.size else None
-    if size and size < ByteSize.from_gibi(1):
+    new_size = ByteSize.from_gibi(body.size) if body.size else None
+    if new_size and new_size < ByteSize.from_gibi(1):
         raise errors.ValidationError(message="The size must be at least 1GB")
+    if new_size and new_size < existing.size:
+        raise errors.ValidationError(
+            message=f"The storage cannot be downsized ({existing.size} -> {new_size}), only extended."
+        )
     mount_path = PurePosixPath(body.mount_path) if body.mount_path else None
     if mount_path:
         _validate_mount_path(body.mount_path)
-    return models.ProjectStoragePatch(size=size, mount_path=mount_path)
+    return models.ProjectStoragePatch(size=new_size, mount_path=mount_path)
 
 
 def validate_project_storage_allow_post(body: apispec.ProjectStorageAllowPost) -> models.ProjectStorageAllow:

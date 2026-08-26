@@ -25,6 +25,7 @@ from renku_data_services.k8s.models import (
     K8sObject,
     K8sObjectFilter,
     K8sObjectMeta,
+    K8sPatch,
     K8sPatches,
     K8sPersistentVolumeClaim,
     K8sSecret,
@@ -497,3 +498,8 @@ class NotebookK8sClient(SecretClient):
         """Create a persistent volume for the given project storage."""
 
         await self.__client.create(pvc, True)
+
+    async def patch_persistent_volume(self, pvc: K8sObjectMeta, patch: K8sPatch) -> None:
+        """Create a persistent volume for the given project storage."""
+
+        await self.__client.patch(pvc, patch)

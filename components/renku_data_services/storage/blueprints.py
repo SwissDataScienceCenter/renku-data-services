@@ -212,6 +212,9 @@ class ProjectStorageBP(CustomBlueprint):
             updated_storage = await self.project_storage_repo.update_project_storage(
                 user=user, storage_id=storage_id, patch=storage_patch, etag=etag
             )
+            if updated_storage.size > existing_storage.size:
+                await self.project_storage_k8s.extend_volume(updated_storage.project_id, updated_storage.size)
+
             headers = {"ETag": updated_storage.etag}
             return validated_json(
                 apispec.ProjectStorage,
