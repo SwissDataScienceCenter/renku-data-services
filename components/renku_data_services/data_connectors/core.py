@@ -75,11 +75,15 @@ def dump_storage_with_sensitive_fields(
 ) -> models.CloudStorageCoreWithSensitiveFields:
     """Add sensitive fields to a storage configuration."""
     try:
-        body = models.CloudStorageCoreWithSensitiveFields(
-            sensitive_fields=[
+        if storage.storage_type == SCICAT_V1_PROVDER:
+            sensitive_fields = []
+        else:
+            sensitive_fields = [
                 apispec.RCloneOption.model_validate(option.model_dump(exclude_none=True, by_alias=True))
                 for option in validator.get_private_fields(storage.configuration)
-            ],
+            ]
+        body = models.CloudStorageCoreWithSensitiveFields(
+            sensitive_fields=sensitive_fields,
             **asdict(storage),
         )
     except PydanticValidationError as err:

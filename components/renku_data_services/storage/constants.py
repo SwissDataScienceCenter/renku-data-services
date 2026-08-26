@@ -85,7 +85,8 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
     # Not validated
     "cloudinary": StorageConfig(allowed=False),
     # "combine" refers to other rclone configs
-    "combine": StorageConfig(allowed=False),
+    # Used to handle multi-remote storage configs for SciCat
+    "combine": StorageConfig(allowed=True, options={"upstreams": True, "description": True}),
     # "compress" refers to other rclone configs
     "compress": StorageConfig(allowed=False),
     # "crypt" refers to other rclone configs

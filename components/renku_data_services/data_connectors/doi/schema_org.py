@@ -20,7 +20,7 @@ class DatasetProvider(StrEnum):
 class S3Config:
     """Configuration for a location on S3 storage."""
 
-    rclone_config: dict[str, str]
+    rclone_config: dict[str, str] | dict[str, dict[str, str]]
     bucket: str
     prefix: str
 
@@ -84,9 +84,11 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
 
     A single dataset may contain more than one S3 url.
     The S3 information is encoded in the distribution, in fields where the name is 'S3 URI'.
+    See https://rclone.org/combine/.
     """
-    output: list[S3Config] = []
-    for dist in dataset.distribution:
+    configs: dict[str, dict[str, str]] = {}
+    remote_upstreams = []
+    for idist, dist in enumerate(sorted(dataset.distribution, key=lambda x: x.content_url)):
         if dist.name and dist.name == "S3 URI":
             parsed = urlparse(dist.content_url)
             query_parsed = parse_qs(parsed.query)
@@ -96,16 +98,25 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
                 raise errors.ValidationError(message="The S3 bucket from scicat metadata cannot be found")
             if not prefix:
                 raise errors.ValidationError(message="The S3 prefix from scicat metadata cannot be found")
-            output.append(
-                S3Config(
-                    rclone_config={
-                        "type": "s3",
-                        "provider": "Other",
-                        "endpoint": f"{parsed.scheme}://{parsed.hostname}",
-                    },
-                    bucket=bucket,
-                    prefix=prefix,
-                )
-            )
-    # TODO: Handle multiple remotes
-    return output[0]
+            configs[str(idist)] = {
+                "type": "s3",
+                "provider": "Other",
+                "endpoint": f"{parsed.scheme}://{parsed.hostname}",
+            }
+            # NOTE: Rclone does not support `/` in the directory names for combine
+            dir_name = prefix.replace("/", "_")
+            remote_upstreams.append(f'"{dir_name}={idist}:{prefix}"')
+
+    configs["combine"] = {
+        "type": "combine",
+        "upstreams": " ".join(remote_upstreams),
+    }
+    # NOTE: When you use combine the bucket and prefix are not relevant to pathing
+    # and should be left blank.
+    output = S3Config(
+        rclone_config=configs,
+        bucket="",
+        prefix="",
+    )
+
+    return output
