@@ -1706,11 +1706,9 @@ class MemberRepository(_Base):
     ) -> list[models.ResourcePool]:
         """Get resource pools that a specific group has access to."""
         group = await self.group_repo.get_group(api_user, group_slug)
-        authorized = await self.authz.has_permission(api_user, ResourceType.group, group.id, Scope.DIRECT_MEMBER)
+        authorized = await self.authz.has_permission(api_user, ResourceType.group, group.id, Scope.WRITE)
         if not authorized:
-            raise errors.MissingResourceError(
-                message=f"The group with slug {group_slug} does not exist or you do not have access to it"
-            )
+            return []
 
         async with self.session_maker() as session, session.begin():
             allowed_ids = [int(rp) async for rp in self.authz.get_group_resource_pools(str(group.id))]
