@@ -143,3 +143,8 @@ def test_content_all() -> None:
     assert (
         st.content_all("ab    cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^2 OR nameKeyword:ab\\ \\ \\ \\ cd^10)"
     )
+
+async def test_content_all_query() -> None:
+    query_str = "namespace: SDSC AND keyword: ecology"
+    t = st.content_all(query_str)
+    print(f"RESULT: {t}")
