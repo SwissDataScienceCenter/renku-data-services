@@ -17,6 +17,9 @@ SolrToken = NewType("SolrToken", str)
 # https://github.com/apache/solr/blob/bcb9f144974ed07aa3b66766302474542067b522/solr/solrj/src/java/org/apache/solr/client/solrj/util/ClientUtils.java#L163
 __defaultSpecialChars = '\\+-!():^[]"{}~*?|&;/'
 
+# Remove these words from textual queries
+__query_words = ["or", "and"]
+
 
 def __escape(input: str, bad_chars: str) -> str:
     output = ""
@@ -198,7 +201,7 @@ def content_all(text: str) -> SolrToken:
     from all matching clauses are summed, so name/title hits rank above generic
     content matches.
     """
-    words = [w for w in re.split(r"\s+", text) if w != ""]
+    words = [w for w in re.split(r"\s+", text) if w != "" and w.lower() not in __query_words]
     fuzzy = " ".join(f"{__escape_query(w)}~" for w in words)
     clauses = [
         f"{Fields.content_all}:({fuzzy})",
