@@ -6,9 +6,10 @@ import asyncio
 import json
 import tempfile
 from collections.abc import Generator, MutableMapping
+from configparser import ConfigParser
 from copy import deepcopy
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast, overload
 from urllib.parse import ParseResult, urlparse
 
@@ -91,9 +92,9 @@ class RCloneValidator:
                 )
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
-            config = "\n".join(f"{k}={v}" for k, v in transformed_config.items())
-            f.write(f"[temp]\n{config}")
-            f.close()
+            test_conf = configuration if isinstance(configuration, RCloneConfig) else RCloneConfig(config=configuration)
+            test_conf.write(PurePosixPath(f.name), name="temp")
+            # Handle SFTP retries, see https://github.com/SwissDataScienceCenter/renku-data-services/issues/893
             args = [
                 "lsf",
                 "--low-level-retries=1",  # Connection tests should fail fast.
@@ -102,7 +103,6 @@ class RCloneValidator:
                 f.name,
                 f"temp:{source_path}",
             ]
-            # Handle SFTP retries, see https://github.com/SwissDataScienceCenter/renku-data-services/issues/893
             storage_type = cast(str, configuration.get("type"))
             if storage_type == "sftp":
                 args.extend(["--low-level-retries", "1"])
@@ -576,6 +576,50 @@ class RCloneConfig(BaseModel, MutableMapping):
         Needed for pydantic to properly serialize the object.
         """
         yield from self.config.keys()
+
+    def _stringify_bool(value: Any) -> str:
+        """Converts booleans to a rclone compliant values."""
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value)
+
+    def write(self, path: PurePosixPath, name: str = "temp") -> None:
+        """Write the configuration as an rclone ini-style config file.
+
+        If the config contains multiple remotes,
+        the name given name is assigned to the remote that combines all remotes.
+        The name of the remote that combine all others is expected to be "combine" or "union".
+        If the config containss a single remote the name you provide is assigned to the remote.
+        When the config has multiple remotes it is assumed that the keys of teh dictionary are the remote names.
+        """
+
+        def _stringify_bool(value: Any) -> str:
+            """Converts booleans to a rclone compliant values."""
+            if isinstance(value, bool):
+                return "true" if value else "false"
+            return str(value)
+
+        multiple_remotes = all([isinstance(i, dict) for i in self.config.values()])
+
+        if not multiple_remotes and not name:
+            raise errors.ValidationError(
+                message="Cannot write rclone configuration that has a single remote and no name."
+            )
+
+        to_write = cast(dict[str, dict[str, Any]], self.config) if multiple_remotes else {name: self.config}
+
+        parser = ConfigParser(interpolation=None)
+        parser.add_section(name)
+
+        for section_name, section in to_write.items():
+            if multiple_remotes and section_name in ["union", "combine"]:
+                section_name = name
+            parser.add_section(section_name)
+            for k, v in section.items():
+                parser.set(section_name, k, _stringify_bool(v))
+
+        with open(path, "w") as f:
+            parser.write(f)
 
 
 def parse_storage_url(storage_url: str) -> tuple[RCloneConfig, str]:

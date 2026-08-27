@@ -84,11 +84,10 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
 
     A single dataset may contain more than one S3 url.
     The S3 information is encoded in the distribution, in fields where the name is 'S3 URI'.
-    See https://rclone.org/union/.
-    When Rclone does the union if there are collisions in files then the newest file wins.
+    See https://rclone.org/combine/.
     """
     configs: dict[str, dict[str, str]] = {}
-    union_remote_upstreams = []
+    remote_upstreams = []
     for idist, dist in enumerate(sorted(dataset.distribution, key=lambda x: x.content_url)):
         if dist.name and dist.name == "S3 URI":
             parsed = urlparse(dist.content_url)
@@ -104,16 +103,15 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
                 "provider": "Other",
                 "endpoint": f"{parsed.scheme}://{parsed.hostname}",
             }
-            union_remote_upstreams.append(f"{idist}:{prefix}:ro")
+            remote_upstreams.append(f'"{prefix}={idist}:{prefix}"')
 
-    configs["union"] = {
-        "type": "union",
-        "upstreams": " ".join(union_remote_upstreams),
-        "search_policy": "newest",
+    configs["combine"] = {
+        "type": "combine",
+        "upstreams": " ".join(remote_upstreams),
     }
     output = S3Config(
         rclone_config=configs,
-        bucket="union",
+        bucket="combine",
         prefix="",
     )
 

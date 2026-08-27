@@ -63,7 +63,6 @@ class RCloneStorage(ICloudStorageRequest):
         secrets: dict[str, str],  # "Mapping between secret ID (key) and secret name (value)
         storage_class: str,
         user_secret_key: str | None = None,
-        multiple_remotes: bool = False,
     ) -> None:
         """Creates a cloud storage instance without validating the configuration."""
         self.source_path = source_path
@@ -78,7 +77,6 @@ class RCloneStorage(ICloudStorageRequest):
         configuration = validator.inject_default_values(configuration)
         configuration = convert_rclone_configuration(configuration)
         self.configuration = configuration
-        self.multiple_remotes = multiple_remotes
 
     def pvc(
         self,
@@ -130,11 +128,14 @@ class RCloneStorage(ICloudStorageRequest):
         user_secret_key: str | None = None,
     ) -> client.V1Secret:
         """The secret containing the configuration for the rclone csi driver."""
+        # A Rclone config that contains multiple remotes will be of shape dict[str, dict[str, Any]]
+        # A regular Rclone config with a single remote will be like dict[str, Any]
+        multiple_remotes = all([isinstance(i, dict) for i in self.configuration.values()])
         string_data = {
             "remote": self.name or base_name,
             "remotePath": self.source_path,
             "configData": self._config_string_multi_remote()
-            if self.multiple_remotes
+            if multiple_remotes
             else self._config_string_single_remote(self.name or base_name),
         }
         string_data.update(self.mount_options())
