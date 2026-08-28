@@ -30,7 +30,7 @@ from renku_data_services.errors.errors import (
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.solr.solr_migrate import SchemaMigrator
-from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.storage.rclone import get_rclone_validator
 from renku_data_services.utils.middleware import validate_null_byte
 
 if TYPE_CHECKING:
@@ -176,7 +176,7 @@ def create_app() -> Sanic:
 
     @app.before_server_start
     async def setup_rclone_validator(app: Sanic) -> None:
-        validator = RCloneValidator()
+        validator = get_rclone_validator()
         app.ext.dependency(validator)
 
     @app.after_server_start

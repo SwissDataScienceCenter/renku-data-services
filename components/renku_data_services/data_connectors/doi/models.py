@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Self
+from typing import Annotated, Any, Literal, Self
 from urllib.parse import urlparse
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, PrivateAttr, ValidationError
 
 from renku_data_services.errors import errors
 
@@ -89,60 +89,6 @@ class DOIMetadata:
     keywords: list[str]
 
 
-class InvenioRecordMetadata(BaseModel):
-    """Representation of a record's metadata."""
-
-    title: str | None = Field(default=None)
-    description: str | None = Field(default=None)
-    keywords: list[str] | None = Field(default=None)
-
-
-class InvenioRecord(BaseModel):
-    """Schema for the representation of a record from the InvenioRDM API."""
-
-    metadata: InvenioRecordMetadata | None = Field(default=None)
-
-
-class DataverseMetadataBlockCitationField(BaseModel):
-    """A metadata field of citation metadata."""
-
-    type_name: str = Field(alias="typeName")
-    multiple: bool = Field()
-    type_class: str = Field(alias="typeClass")
-    value: Any = Field()  # TODO: can we find better types here?
-
-
-class DataverseMetadataBlockCitation(BaseModel):
-    """Representation of citation metadata."""
-
-    fields: list[DataverseMetadataBlockCitationField] = Field(default_factory=list)
-
-
-class DataverseMetadataBlocks(BaseModel):
-    """Represents metadata of a Dataverse dataset."""
-
-    citation: DataverseMetadataBlockCitation | None = Field()
-
-
-class DataverseDatasetVersion(BaseModel):
-    """Representation of a dataset version."""
-
-    metadata_blocks: DataverseMetadataBlocks | None = Field(alias="metadataBlocks")
-
-
-class DataverseDataset(BaseModel):
-    """Representation of a dataset in Dataverse."""
-
-    latest_version: DataverseDatasetVersion | None = Field(alias="latestVersion")
-
-
-class DataverseDatasetResponse(BaseModel):
-    """DataverseDatasetResponse is returned by the Dataverse dataset API."""
-
-    status: str = Field()
-    data: DataverseDataset | None = Field()
-
-
 class SchemaOrgDistribution(BaseModel):
     """The distribution field of a schema.org dataset."""
 
@@ -160,11 +106,46 @@ class SchemaOrgDataset(BaseModel):
     description: str | None = None
     raw_keywords: str = Field(alias="keywords", default="")
     publisher: SchemaOrgPublisher | None = None
+    provider: SchemaOrgProvider | None = None
+    _parsed_keywords: list[str] | None = PrivateAttr(default=None, init=False)
+
+    @staticmethod
+    def _parse_keywords(val: Any) -> list[str]:
+        if isinstance(val, str):
+            values = [val]
+        elif isinstance(val, list):
+            if not all([isinstance(i, str) for i in val]):
+                raise errors.ValidationError(message=f"Cannot parse keywords {val} for Schema.org dataset")
+            values = val
+        else:
+            raise errors.ValidationError(
+                message=f"The keywords have an unexpected type: {val}, expected list or string."
+            )
+        output: list[str] = []
+        for value in values:
+            output.extend([i.strip() for i in value.split(",") if len(i) > 0])
+        return output
+
+    def model_post_init(self, __context: Any) -> None:
+        """Run post init cleanup."""
+        self._parsed_keywords = self._parse_keywords(self.raw_keywords)
 
     @property
     def keywords(self) -> list[str]:
         """Split the single keywords string into a list."""
-        return [i.strip() for i in self.raw_keywords.split(",")]
+        if self._parsed_keywords is not None:
+            return self._parsed_keywords
+        self._parsed_keywords = self._parse_keywords(self.raw_keywords)
+        return self._parsed_keywords
+
+    @keywords.setter
+    def keywords(self, value: list[str]) -> None:
+        """Set the keywords."""
+        self._parsed_keywords = self._parse_keywords(value)
+
+    def to_doi_metadata(self) -> DOIMetadata:
+        """Convert to an alternative metdata representation."""
+        return DOIMetadata(name=self.name, description=self.description or "", keywords=self.keywords)
 
 
 class SchemaOrgPublisher(BaseModel):
@@ -186,3 +167,49 @@ class SchemaOrgPublisher(BaseModel):
         if parsed.scheme not in ["http", "https"]:
             return None
         return self.id.rstrip("/")
+
+
+class SchemaOrgProvider(BaseModel):
+    """The schema.org provider field in a dataset."""
+
+    model_config = ConfigDict(extra="ignore")
+    type: str | None = Field(alias="@type", default=None)
+    name: str
+
+
+class DOIHandles(BaseModel):
+    """The response from the doi handles endpoint."""
+
+    model_config = ConfigDict(extra="ignore")
+    values: list[Annotated[DOIHandlesUrl | DOIHandlesUndefined, Field(union_mode="left_to_right")]]
+
+    @property
+    def url(self) -> AnyHttpUrl | None:
+        """Get the provider url the doi would resolve to."""
+        for i in self.values:
+            if isinstance(i, DOIHandlesUrl):
+                return i.data.value
+        return None
+
+
+class DOIHandlesUrl(BaseModel):
+    """The url from the doi handles endpoint."""
+
+    model_config = ConfigDict(extra="ignore")
+    type: Literal["URL"]
+    data: DOIHandlesUrlData
+
+
+class DOIHandlesUndefined(BaseModel):
+    """Can contain arbitrary data from the doi handles endpoint."""
+
+    model_config = ConfigDict(extra="ignore")
+    type: str
+
+
+class DOIHandlesUrlData(BaseModel):
+    """The url from the doi handles endpoint."""
+
+    model_config = ConfigDict(extra="ignore")
+    format: Literal["string"]
+    value: AnyHttpUrl
