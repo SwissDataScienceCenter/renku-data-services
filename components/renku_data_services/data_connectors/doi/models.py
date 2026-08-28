@@ -111,13 +111,20 @@ class SchemaOrgDataset(BaseModel):
 
     @staticmethod
     def _parse_keywords(val: Any) -> list[str]:
-        if isinstance(val, list):
+        if isinstance(val, str):
+            values = [val]
+        elif isinstance(val, list):
             if not all([isinstance(i, str) for i in val]):
                 raise errors.ValidationError(message=f"Cannot parse keywords {val} for Schema.org dataset")
-            return [i.strip() for i in val if len(i) > 0]
-        elif isinstance(val, str):
-            return [i.strip() for i in val.split(",") if len(i) > 0]
-        raise errors.ValidationError(message=f"Cannot parse keywords {val} for Schema.org dataset")
+            values = val
+        else:
+            raise errors.ValidationError(
+                message=f"The keywords have an unexpected type: {val}, expected list or string."
+            )
+        output: list[str] = []
+        for value in values:
+            output.extend([i.strip() for i in value.split(",") if len(i) > 0])
+        return output
 
     def model_post_init(self, __context: Any) -> None:
         """Run post init cleanup."""

@@ -229,7 +229,7 @@ class DataSourceRepository:
         if connection is None:
             logger.info(
                 f"Skipping data connector {str(data_connector.id)} of type "
-                f"{data_connector.storage.configuration['type']} "
+                f"{data_connector.storage.configuration["type"]} "
                 f"because no active connection was found; user needs to connect with {provider.provider.id}."
             )
             return None
