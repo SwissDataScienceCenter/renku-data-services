@@ -1,7 +1,13 @@
+import json
+from datetime import datetime
+
 import pytest
 
 from renku_data_services.data_connectors.doi.models import DOI
+from renku_data_services.data_connectors.models import CloudStorageCore
+from renku_data_services.data_connectors.orm import DataConnectorORM
 from renku_data_services.errors import errors
+from renku_data_services.storage.rclone import RCloneValidator
 
 
 @pytest.mark.parametrize(
@@ -40,3 +46,28 @@ def test_valid_doi_parsing(raw_doi: str, expected_value: str) -> None:
 def test_invalid_doi_parsing(raw_doi: str) -> None:
     with pytest.raises(errors.ValidationError):
         DOI(raw_doi)
+
+
+def test_storage_configs() -> None:
+    storage_from_db = DataConnectorORM(
+        name="giab",
+        visibility="private",
+        storage_type="s3",
+        configuration=json.loads('{"type": "s3", "provider": "AWS"}'),
+        source_path="giab",
+        target_path="external_storage/giab",
+        created_by_id="d18366ec-de3a-4275-828b-c1df8e53da86",
+        description=None,
+        keywords=None,
+        readonly=True,
+        creation_date=datetime.fromisoformat("2024-10-22 11:02:10.864+0200"),
+        updated_at=datetime.fromisoformat("2024-10-22 11:02:10.864+0200"),
+        doi=None,
+        publisher_name=None,
+        publisher_url=None,
+        global_slug="test",
+    )
+    dumped = storage_from_db.dump()
+    assert isinstance(dumped.storage, CloudStorageCore)
+    validator = RCloneValidator()
+    validator.validate(dumped.storage.configuration)

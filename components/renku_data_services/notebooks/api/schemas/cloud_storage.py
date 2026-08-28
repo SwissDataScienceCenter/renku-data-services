@@ -10,7 +10,7 @@ from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_sche
 
 from renku_data_services.k8s.models import sanitizer
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
-from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.storage.rclone import convert_rclone_configuration, get_rclone_validator
 
 
 class RCloneStorageRequest(Schema):
@@ -44,7 +44,11 @@ class RCloneStorageRequestOverride(Protocol):
 
 
 class RCloneStorage(ICloudStorageRequest):
-    """RClone based storage."""
+    """RClone based storage.
+
+    Note at initialization time this class converts the RClone configuration to pure
+    RClone configuration, it removes and converts all renku-specific providers and properties.
+    """
 
     pvc_secret_annotation_name: Final[str] = "csi-rclone.dev/secretName"
 
@@ -60,7 +64,6 @@ class RCloneStorage(ICloudStorageRequest):
         user_secret_key: str | None = None,
     ) -> None:
         """Creates a cloud storage instance without validating the configuration."""
-        self.configuration = configuration
         self.source_path = source_path
         self.mount_folder = mount_folder
         self.readonly = readonly
@@ -69,8 +72,10 @@ class RCloneStorage(ICloudStorageRequest):
         self.base_name: str | None = None
         self.user_secret_key = user_secret_key
         self.storage_class = storage_class
-        validator = RCloneValidator()
-        validator.inject_default_values(self.configuration)
+        validator = get_rclone_validator()
+        configuration = validator.inject_default_values(configuration)
+        configuration = convert_rclone_configuration(configuration)
+        self.configuration = configuration
 
     def pvc(
         self,
@@ -192,48 +197,6 @@ class RCloneStorage(ICloudStorageRequest):
         """
         if not self.configuration:
             raise ValidationError("Missing configuration for cloud storage")
-
-        # TODO Use RCloneValidator.get_real_configuration(...) instead.
-        # Transform configuration for polybox, switchDrive, openbis or sftp
-        storage_type = self.configuration.get("type", "")
-        access = self.configuration.get("provider", "")
-
-        if storage_type == "polybox" or storage_type == "switchDrive":
-            self.configuration["type"] = "webdav"
-            self.configuration["provider"] = ""
-            # NOTE: Without the vendor field mounting storage and editing files results in the modification
-            # time for touched files to be temporarily set to `1999-09-04` which causes the text
-            # editor to complain that the file has changed and whether it should overwrite new changes.
-            self.configuration["vendor"] = "owncloud"
-        elif storage_type == "s3" and access == "Switch":
-            # Switch is a fake provider we add for users, we need to replace it since rclone itself
-            # doesn't know it
-            self.configuration["provider"] = "Other"
-        elif storage_type == "openbis":
-            self.configuration["type"] = "sftp"
-            self.configuration["port"] = "2222"
-            self.configuration["user"] = "?"
-            self.configuration["pass"] = self.configuration.pop("session_token", None) or self.configuration["pass"]
-
-        if storage_type == "sftp" or storage_type == "openbis":
-            # Do not allow retries for sftp
-            # Reference: https://rclone.org/docs/#globalconfig
-            self.configuration["override.low_level_retries"] = 1
-
-        if access == "shared" and storage_type == "polybox":
-            self.configuration["url"] = "https://polybox.ethz.ch/public.php/webdav/"
-        elif access == "shared" and storage_type == "switchDrive":
-            self.configuration["url"] = "https://drive.switch.ch/public.php/webdav/"
-        elif access == "personal" and storage_type == "polybox":
-            self.configuration["url"] = "https://polybox.ethz.ch/remote.php/webdav/"
-        elif access == "personal" and storage_type == "switchDrive":
-            self.configuration["url"] = "https://drive.switch.ch/remote.php/webdav/"
-
-        # Extract the user from the public link
-        if access == "shared" and storage_type in {"polybox", "switchDrive"}:
-            public_link = self.configuration.get("public_link", "")
-            user_identifier = public_link.split("/")[-1]
-            self.configuration["user"] = user_identifier
 
         parser = ConfigParser(interpolation=None)
         parser.add_section(name)
