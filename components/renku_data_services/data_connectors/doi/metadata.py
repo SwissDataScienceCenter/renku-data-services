@@ -1,5 +1,7 @@
 """Metadata handling for DOIs."""
 
+from __future__ import annotations
+
 import contextlib
 import re
 from dataclasses import dataclass
@@ -15,53 +17,6 @@ from renku_data_services.data_connectors import apispec
 from renku_data_services.data_connectors.doi import models
 from renku_data_services.errors import errors
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
-
-
-def create_envidat_metadata_url(doi: models.DOI) -> str:
-    """Create the metadata url for envidat from a DOI."""
-    url = "https://envidat.ch/converters-api/internal-dataset/convert/jsonld"
-    params = urlencode({"query": doi})
-    return f"{url}?{params}"
-
-
-async def _get_envidat_metadata(metadata_url: str) -> models.SchemaOrgDataset | None:
-    """Get metadata about the envidat dataset."""
-    clnt = httpx.AsyncClient(follow_redirects=True, timeout=5)
-    headers = {"accept": "application/json"}
-    async with clnt:
-        try:
-            res = await clnt.get(metadata_url, headers=headers)
-        except httpx.HTTPError:
-            return None
-    if res.status_code != 200:
-        return None
-    try:
-        parsed_metadata = models.SchemaOrgDataset.model_validate_json(res.text)
-    except PydanticValidationError:
-        return None
-    return parsed_metadata
-
-
-class DOIProviders(StrEnum):
-    """List of supported doi providers."""
-
-    doi = "doi"
-    "Supported by Rclone"
-    envidat_v1 = ENVIDAT_V1_PROVIDER
-    "Only supported by Renku"
-
-
-@dataclass
-class ParsedDOIMetadata:
-    """DOI metadata that has been parsed."""
-
-    dataset: models.SchemaOrgDataset
-    provider: DOIProviders
-
-
-def _host_is(host: str, domain: str) -> bool:
-    """Check whether host is exactly domain or a subdomain of domain."""
-    return host == domain or host.endswith(f".{domain}")
 
 
 async def get_metadata(doi: models.DOI) -> ParsedDOIMetadata | None:
@@ -113,6 +68,53 @@ async def get_metadata(doi: models.DOI) -> ParsedDOIMetadata | None:
     dataset.keywords = keywords
 
     return ParsedDOIMetadata(dataset=dataset, provider=provider)
+
+
+def create_envidat_metadata_url(doi: models.DOI) -> str:
+    """Create the metadata url for envidat from a DOI."""
+    url = "https://envidat.ch/converters-api/internal-dataset/convert/jsonld"
+    params = urlencode({"query": doi})
+    return f"{url}?{params}"
+
+
+async def _get_envidat_metadata(metadata_url: str) -> models.SchemaOrgDataset | None:
+    """Get metadata about the envidat dataset."""
+    clnt = httpx.AsyncClient(follow_redirects=True, timeout=5)
+    headers = {"accept": "application/json"}
+    async with clnt:
+        try:
+            res = await clnt.get(metadata_url, headers=headers)
+        except httpx.HTTPError:
+            return None
+    if res.status_code != 200:
+        return None
+    try:
+        parsed_metadata = models.SchemaOrgDataset.model_validate_json(res.text)
+    except PydanticValidationError:
+        return None
+    return parsed_metadata
+
+
+class DOIProviders(StrEnum):
+    """List of supported doi providers."""
+
+    doi = "doi"
+    "Supported by Rclone"
+    envidat_v1 = ENVIDAT_V1_PROVIDER
+    "Only supported by Renku"
+
+
+@dataclass
+class ParsedDOIMetadata:
+    """DOI metadata that has been parsed."""
+
+    dataset: models.SchemaOrgDataset
+    provider: DOIProviders
+
+
+def _host_is(host: str, domain: str) -> bool:
+    """Check whether host is exactly domain or a subdomain of domain."""
+    return host == domain or host.endswith(f".{domain}")
 
 
 def _html_to_text(html: str) -> str:
