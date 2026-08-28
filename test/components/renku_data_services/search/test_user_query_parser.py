@@ -7,7 +7,6 @@ import string
 import pytest
 from parsy import ParseError
 
-import renku_data_services.search.solr_token as solr_token
 from renku_data_services.authz.models import Role, Visibility
 from renku_data_services.base_models.nel import Nel
 from renku_data_services.search.user_query import (
