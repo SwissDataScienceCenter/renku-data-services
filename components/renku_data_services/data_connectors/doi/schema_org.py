@@ -103,7 +103,9 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
                 "provider": "Other",
                 "endpoint": f"{parsed.scheme}://{parsed.hostname}",
             }
-            remote_upstreams.append(f'"{prefix}={idist}:{prefix}"')
+            # NOTE: Rclone does not support `/` in the directory names for combine
+            dir_name = prefix.replace("/", "_")
+            remote_upstreams.append(f'"{dir_name}={idist}:{prefix}"')
 
     configs["combine"] = {
         "type": "combine",
