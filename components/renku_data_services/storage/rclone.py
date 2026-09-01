@@ -43,24 +43,24 @@ class RCloneValidator:
         apply_patches(spec)
         self.providers = RCloneValidator._get_providers(spec)
 
-    def validate(self, configuration: Union[RCloneConfig, dict[str, Any]], keep_sensitive: bool = False) -> None:
+    @staticmethod
+    def _is_multi_remote(config: RCloneConfig | dict[str, Any]) -> bool:
+        conf = config.config if isinstance(config, RCloneConfig) else config
+        return all([isinstance(i, dict) for i in conf.values()])
+
+    def validate(self, configuration: RCloneConfig | dict[str, Any], keep_sensitive: bool = False) -> None:
         """Validates an RClone config."""
-        provider = self.get_provider(configuration)
+        is_multi_remote = self._is_multi_remote(configuration)
+        config = configuration.config if isinstance(configuration, RCloneConfig) else configuration
+        if is_multi_remote:
+            config = cast(dict[str, dict[str, Any]], config)
+            remotes = list(config.values())
+        else:
+            remotes = [config]
 
-        provider.validate_config(configuration, keep_sensitive=keep_sensitive)
-
-    def validate_sensitive_data(
-        self, configuration: Union[RCloneConfig, dict[str, Any]], sensitive_data: dict[str, str]
-    ) -> None:
-        """Validates whether the provided sensitive data is marked as sensitive in the rclone schema."""
-        sensitive_options = self.get_provider(configuration).sensitive_options
-        sensitive_options_name_lookup = [o.name for o in sensitive_options]
-        sensitive_data_counter = 0
-        for key, value in sensitive_data.items():
-            if len(value) > 0 and key in sensitive_options_name_lookup:
-                sensitive_data_counter += 1
-                continue
-            raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
+        for remote in remotes:
+            provider = self.get_provider(remote)
+            provider.validate_config(remote, keep_sensitive=keep_sensitive)
 
     async def test_connection(
         self,
@@ -121,19 +121,16 @@ class RCloneValidator:
         self, configuration: Union[RCloneConfig, dict[str, Any]]
     ) -> Union[RCloneConfig, dict[str, Any]]:
         """Obscure secrets in rclone config."""
+        if self._is_multi_remote(configuration):
+            raise NotImplementedError("Cannot obscure secrets for multi remote configurations")
         provider = self.get_provider(configuration)
         result = await provider.obscure_password_options(configuration)
         return result
 
-    def remove_sensitive_options_from_config(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> None:
-        """Remove sensitive fields from a config, e.g. when turning a private storage public."""
-
-        provider = self.get_provider(configuration)
-
-        provider.remove_sensitive_options_from_config(configuration)
-
     def get_provider(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> RCloneProviderSchema:
         """Get a provider for configuration."""
+        if self._is_multi_remote(configuration):
+            raise NotImplementedError("Cannot get single provider for multi remote configurations")
 
         storage_type = cast(str | None, configuration.get("type"))
 
@@ -158,6 +155,8 @@ class RCloneValidator:
         self, configuration: Union[RCloneConfig, dict[str, Any]]
     ) -> Generator[RCloneOption, None, None]:
         """Get private field descriptions for storage."""
+        if self._is_multi_remote(configuration):
+            raise NotImplementedError("Cannot handle private fields for multi remote configurations")
         provider = self.get_provider(configuration)
         return provider.get_private_fields(configuration)
 
@@ -167,21 +166,36 @@ class RCloneValidator:
     def inject_default_values(self, config: dict[str, Any]) -> dict[str, Any]: ...
     def inject_default_values(self, config: Union[RCloneConfig, dict[str, Any]]) -> Union[RCloneConfig, dict[str, Any]]:
         """Adds default values for required options that are not provided in the config."""
-        output: dict[str, Any] = deepcopy(config.config) if isinstance(config, RCloneConfig) else deepcopy(config)
-        provider = self.get_provider(output)
-        cfg_provider: str | None = output.get("provider")
+        is_multi_remote = self._is_multi_remote(config)
+        if is_multi_remote:
+            remotes = config.config if isinstance(config, RCloneConfig) else config
+            remotes = cast(dict[str, dict[str, Any]], remotes)
+        else:
+            remotes = {"main": config.config if isinstance(config, RCloneConfig) else config}
 
-        for opt in provider.options:
-            if not opt.required or not opt.default or opt.name in output or not opt.matches_provider(cfg_provider):
-                continue
+        output: dict[str, Any] = {}
+        for id, remote in remotes.items():
+            ioutput: dict[str, Any] = deepcopy(remote)
+            provider = self.get_provider(ioutput)
+            cfg_provider: str | None = ioutput.get("provider")
 
-            match opt.default:
-                case RCloneTriState() as ts:
-                    def_val: Any = ts.value
-                case v:
-                    def_val = v
+            for opt in provider.options:
+                if not opt.required or not opt.default or opt.name in ioutput or not opt.matches_provider(cfg_provider):
+                    continue
 
-            output.update({opt.name: def_val})
+                match opt.default:
+                    case RCloneTriState() as ts:
+                        def_val: Any = ts.value
+                    case v:
+                        def_val = v
+
+                ioutput.update({opt.name: def_val})
+
+            if is_multi_remote:
+                output = ioutput
+                break
+            else:
+                output[id] = ioutput
 
         return RCloneConfig(config=output) if isinstance(config, RCloneConfig) else output
 
