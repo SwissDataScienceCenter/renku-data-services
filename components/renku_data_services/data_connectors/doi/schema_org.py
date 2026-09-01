@@ -111,9 +111,11 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
         "type": "combine",
         "upstreams": " ".join(remote_upstreams),
     }
+    # NOTE: When you use combine the bucket and prefix are not relevant to pathing
+    # and should be left blank.
     output = S3Config(
         rclone_config=configs,
-        bucket="combine",
+        bucket="",
         prefix="",
     )
 
