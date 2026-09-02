@@ -2443,31 +2443,25 @@ def envidat_doi_metadata() -> ParsedDOIMetadata:
                 SchemaOrgDistribution.model_validate(
                     {
                         "@type": "DataDownload",
-                        "contentUrl": "https://envidat-doi.os.zhdk.cloud.switch.ch/?prefix=10.16904_12",
+                        "contentUrl": "https://zhc-c.s3.cloud.switch.ch/envidat-doi/?prefix=10.16904_12",
+                    }
+                ),
+                SchemaOrgDistribution.model_validate(
+                    {"@type": "DataDownload", "contentUrl": "http://ch2014-impacts.ch/"}
+                ),
+                SchemaOrgDistribution.model_validate(
+                    {"@type": "DataDownload", "contentUrl": "https://envicloud.wsl.ch/#/?prefix=doi/12/ch2014/"}
+                ),
+                SchemaOrgDistribution.model_validate(
+                    {
+                        "@type": "DataDownload",
+                        "contentUrl": "https://www.envidat.ch/dataset/c8696023-5622-481d-952a-13f88c35e9fe/resource/41555ebb-435b-40a3-b338-826e1c3172e3/download/graubunden_input.tar.bz2",
                     }
                 ),
                 SchemaOrgDistribution.model_validate(
                     {
                         "@type": "DataDownload",
-                        "contentUrl": "https://os.zhdk.cloud.switch.ch/envidat-doi/10.16904_12/CH2014 REPORT.html",
-                    }
-                ),
-                SchemaOrgDistribution.model_validate(
-                    {
-                        "@type": "DataDownload",
-                        "contentUrl": "https://os.zhdk.cloud.switch.ch/envidat-doi/10.16904_12/Dataset.html",
-                    }
-                ),
-                SchemaOrgDistribution.model_validate(
-                    {
-                        "@type": "DataDownload",
-                        "contentUrl": "https://os.zhdk.cloud.switch.ch/envidat-doi/10.16904_12/graubunden_input.tar.bz2",
-                    }
-                ),
-                SchemaOrgDistribution.model_validate(
-                    {
-                        "@type": "DataDownload",
-                        "contentUrl": "https://os.zhdk.cloud.switch.ch/envidat-doi/10.16904_12/aare_input.tar.bz2",
+                        "contentUrl": "https://www.envidat.ch/dataset/c8696023-5622-481d-952a-13f88c35e9fe/resource/ad886f54-bc18-4972-9fd0-db9bda3f7dd5/download/aare_input.tar.bz2",
                     }
                 ),
             ],
@@ -2502,8 +2496,8 @@ async def test_validate_envidat_data_connector(
     config = res.data_connector.storage.configuration
     assert config["type"] == "s3"
     assert config["provider"] == "Other"
-    assert config["endpoint"].find("zhdk.cloud.switch.ch") >= 0
-    assert res.data_connector.storage.source_path == "/envidat-doi/10.16904_12"
+    assert config["endpoint"].find("s3.cloud.switch.ch") >= 0
+    assert res.data_connector.storage.source_path == "/zhc-c/10.16904_12"
     assert res.data_connector.doi is not None
     assert res.data_connector.publisher_url is not None
     assert res.data_connector.publisher_name is not None

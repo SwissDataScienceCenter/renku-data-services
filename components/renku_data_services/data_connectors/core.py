@@ -263,6 +263,10 @@ async def validate_unsaved_global_data_connector(
     )
     if not connection_result.success:
         raise errors.ValidationError(
+            message=f"The provided storage configuration is not currently working: {dict(configuration=data_connector.storage.configuration, source_path=data_connector.storage.source_path or "/")}"
+        )
+
+        raise errors.ValidationError(
             message="The provided storage configuration is not currently working", detail=connection_result.error
         )
 
