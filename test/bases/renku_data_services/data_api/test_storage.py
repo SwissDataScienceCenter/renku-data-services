@@ -321,6 +321,33 @@ async def test_post_storage_duplicate_fails(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("size", [0, -1, -20])
+async def test_post_storage_negative_size_fails(
+    sanic_client: SanicASGITestClient,
+    create_project,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    size: int,
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": -1, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+
+    assert response.status_code == 422, response.text
+    assert response.json is not None
+    assert response.json.get("error") is not None
+    error = response.json["error"]
+    assert "size: Input should be greater than or equal to 1" in error.get("message")
+
+
+@pytest.mark.asyncio
 async def test_get_one_storage_success(
     sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
 ) -> None:
