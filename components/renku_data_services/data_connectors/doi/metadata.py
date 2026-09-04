@@ -48,7 +48,7 @@ def _create_scicat_metadata_url(doi: models.DOI) -> str:
 
 async def _get_scicat_metadata(metadata_url: str) -> models.SchemaOrgDataset | None:
     """Get metadata about the scicat dataset."""
-    clnt = httpx.AsyncClient(follow_redirects=True, timeout=5)
+    clnt = httpx.AsyncClient(follow_redirects=True, timeout=15)
     headers = {"accept": "application/ld+json"}
     async with clnt:
         try:

@@ -1,16 +1,15 @@
 """Schema for cloudstorage config."""
 
+import io
 import json
-from configparser import ConfigParser
-from io import StringIO
-from typing import Any, Final, Optional, Protocol
+from typing import Any, Final, Protocol
 
 from kubernetes import client
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema
 
 from renku_data_services.k8s.models import sanitizer
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
-from renku_data_services.storage.rclone import convert_rclone_configuration, get_rclone_validator
+from renku_data_services.storage.rclone import RCloneConfig, convert_rclone_configuration, get_rclone_validator
 
 
 class RCloneStorageRequest(Schema):
@@ -58,7 +57,7 @@ class RCloneStorage(ICloudStorageRequest):
         configuration: dict[str, Any],
         readonly: bool,
         mount_folder: str,
-        name: Optional[str],
+        name: str | None,
         secrets: dict[str, str],  # "Mapping between secret ID (key) and secret name (value)
         storage_class: str,
         user_secret_key: str | None = None,
@@ -127,10 +126,13 @@ class RCloneStorage(ICloudStorageRequest):
         user_secret_key: str | None = None,
     ) -> client.V1Secret:
         """The secret containing the configuration for the rclone csi driver."""
+        config = io.StringIO()
+        rc = RCloneConfig(config=self.configuration)
+        rc.write(config, name=self.name or base_name)
         string_data = {
             "remote": self.name or base_name,
             "remotePath": self.source_path,
-            "configData": self.config_string(self.name or base_name),
+            "configData": config,
         }
         string_data.update(self.mount_options())
         # NOTE: in Renku v1 this function is not directly called so the base name
@@ -189,28 +191,6 @@ class RCloneStorage(ICloudStorageRequest):
             }
         )
         return patches
-
-    def config_string(self, name: str) -> str:
-        """Convert configuration object to string representation.
-
-        Needed to create RClone compatible INI files.
-        """
-        if not self.configuration:
-            raise ValidationError("Missing configuration for cloud storage")
-
-        parser = ConfigParser(interpolation=None)
-        parser.add_section(name)
-
-        def _stringify(value: Any) -> str:
-            if isinstance(value, bool):
-                return "true" if value else "false"
-            return str(value)
-
-        for k, v in self.configuration.items():
-            parser.set(name, k, _stringify(v))
-        stringio = StringIO()
-        parser.write(stringio)
-        return stringio.getvalue()
 
     def with_override(self, override: RCloneStorageRequestOverride) -> "RCloneStorage":
         """Override certain fields on the storage."""
