@@ -61,6 +61,7 @@ class DataConnector(BaseDataConnector):
     id: ULID
     namespace: UserNamespace | GroupNamespace | ProjectNamespace
     updated_at: datetime
+    expires_at: datetime | None = None
 
     @property
     def etag(self) -> str:
@@ -99,6 +100,7 @@ class GlobalDataConnector(BaseDataConnector):
     publisher_name: str | None = None
     publisher_url: str | None = None
     doi: DOI | None = None
+    expires_at: datetime | None = None
 
     @property
     def etag(self) -> str:
@@ -118,6 +120,7 @@ class UnsavedGlobalDataConnector(BaseDataConnector):
     publisher_name: str | None = None
     publisher_url: str | None = None
     doi: DOI | None = None
+    expires_at: datetime | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
