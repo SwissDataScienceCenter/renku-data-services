@@ -9,8 +9,8 @@ from collections.abc import Awaitable, Callable, Generator, MutableMapping
 from configparser import ConfigParser
 from copy import deepcopy
 from functools import lru_cache
-from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast, overload
+from pathlib import Path
+from typing import IO, TYPE_CHECKING, Any, NamedTuple, Union, cast, overload
 from urllib.parse import ParseResult, urlparse
 
 from pydantic import BaseModel, Field, PrivateAttr, ValidationError, model_serializer, model_validator
@@ -90,7 +90,7 @@ class RCloneValidator:
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
             test_conf = configuration if isinstance(configuration, RCloneConfig) else RCloneConfig(config=configuration)
-            test_conf.write(PurePosixPath(f.name), name="temp")
+            test_conf.write(f, name="temp")
             # Handle SFTP retries, see https://github.com/SwissDataScienceCenter/renku-data-services/issues/893
             args = [
                 "lsf",
@@ -625,7 +625,7 @@ class RCloneConfig(BaseModel, MutableMapping):
             return "true" if value else "false"
         return str(value)
 
-    def write(self, path: PurePosixPath, name: str = "temp") -> None:
+    def write(self, output: IO[str], name: str = "temp") -> None:
         """Write the configuration as an rclone ini-style config file.
 
         If the config contains multiple remotes,
@@ -659,8 +659,7 @@ class RCloneConfig(BaseModel, MutableMapping):
             for k, v in section.items():
                 parser.set(section_name, k, _stringify_bool(v))
 
-        with open(path, "w") as f:
-            parser.write(f)
+            parser.write(output)
 
 
 def parse_storage_url(storage_url: str) -> tuple[RCloneConfig, str]:

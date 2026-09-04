@@ -1,17 +1,15 @@
 """Schema for cloudstorage config."""
 
+import io
 import json
-from configparser import ConfigParser
-from io import StringIO
 from typing import Any, Final, Protocol
 
 from kubernetes import client
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema
 
-from renku_data_services.errors import errors
 from renku_data_services.k8s.models import sanitizer
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
-from renku_data_services.storage.rclone import convert_rclone_configuration, get_rclone_validator
+from renku_data_services.storage.rclone import RCloneConfig, convert_rclone_configuration, get_rclone_validator
 
 
 class RCloneStorageRequest(Schema):
@@ -128,15 +126,13 @@ class RCloneStorage(ICloudStorageRequest):
         user_secret_key: str | None = None,
     ) -> client.V1Secret:
         """The secret containing the configuration for the rclone csi driver."""
-        # A Rclone config that contains multiple remotes will be of shape dict[str, dict[str, Any]]
-        # A regular Rclone config with a single remote will be like dict[str, Any]
-        multiple_remotes = all([isinstance(i, dict) for i in self.configuration.values()])
+        config = io.StringIO()
+        rc = RCloneConfig(config=self.configuration)
+        rc.write(config, name=self.name or base_name)
         string_data = {
             "remote": self.name or base_name,
             "remotePath": self.source_path,
-            "configData": self._config_string_multi_remote()
-            if multiple_remotes
-            else self._config_string_single_remote(self.name or base_name),
+            "configData": config,
         }
         string_data.update(self.mount_options())
         # NOTE: in Renku v1 this function is not directly called so the base name
@@ -195,77 +191,6 @@ class RCloneStorage(ICloudStorageRequest):
             }
         )
         return patches
-
-    @staticmethod
-    def _stringify_bool(value: Any) -> str:
-        """Converts booleans to a rclone compliant values."""
-        if isinstance(value, bool):
-            return "true" if value else "false"
-        return str(value)
-
-    def _config_string_multi_remote(self) -> str:
-        """Convert configuration object to string representation.
-
-        Used when the configuration contains multiple remotes.
-        Expects the dictionary to be like configuration[remote][remote_property] = "value"
-        So an rclone config that should turn out like this:
-            [remote1]
-            type = s3
-            endpoint = https://os.zhdk.cloud.switch.ch
-            provider = Other
-
-            [remote2]
-            type = s3
-            provider = AWS
-        Will be in a configuration like this:
-        {
-            "remote1": {"type": "s3", "endpoint": "https://os.zhdk.cloud.switch.ch", "provider": "Other"},
-            "remote2": {"type": "s3", "provider": "AWS"},
-        }
-        Needed to create RClone compatible INI files.
-        """
-        if not self.configuration:
-            raise ValidationError("Missing configuration for cloud storage")
-
-        # Validate that the structure makes sense
-        if not all([isinstance(i, dict) for i in self.configuration.values()]):
-            raise errors.ValidationError(
-                message="The rclone configuration that contains multiple remotes was expected but the format "
-                "looks like a single remote."
-            )
-
-        parser = ConfigParser(interpolation=None)
-
-        for section_name, section in self.configuration.items():
-            parser.add_section(section_name)
-            for k, v in section.items():
-                parser.set(section_name, k, self._stringify_bool(v))
-
-        stringio = StringIO()
-        parser.write(stringio)
-        return stringio.getvalue()
-
-    def _config_string_single_remote(self, name: str) -> str:
-        """Convert configuration object to string representation.
-
-        A single remote configuration looks like this: {"type": "s3", "provider": "AWS"},
-        If the name is "remote1" then it is converted to a configuration like this:
-            [remote1]
-            type = s3
-            provider = AWS
-        Needed to create RClone compatible INI files.
-        """
-        if not self.configuration:
-            raise ValidationError("Missing configuration for cloud storage")
-
-        parser = ConfigParser(interpolation=None)
-        parser.add_section(name)
-
-        for k, v in self.configuration.items():
-            parser.set(name, k, self._stringify_bool(v))
-        stringio = StringIO()
-        parser.write(stringio)
-        return stringio.getvalue()
 
     def with_override(self, override: RCloneStorageRequestOverride) -> "RCloneStorage":
         """Override certain fields on the storage."""
