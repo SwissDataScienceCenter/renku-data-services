@@ -873,6 +873,7 @@ def _firecrest_resource_env_items(
     env: list[SessionEnvItem] = [
         SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=system_name),
         SessionEnvItem(name="RSC_FIRECREST_FORWARD_RESOURCE_VALUES", value=str(forward).lower()),
+        SessionEnvItem(name="RSC_FAKE_START", value=str(True).lower()),
     ]
     if partition:
         env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=partition))
@@ -1151,24 +1152,25 @@ async def start_session(
     # Remote session configuration
     remote_secret = None
     if session_location == SessionLocation.remote:
-        assert resource_pool.remote is not None
-        if resource_pool.remote.kind == RemoteConfigurationKind.firecrest:
-            assert isinstance(resource_pool.remote, RemoteConfigurationFirecrest)
-            if resource_pool.remote.provider_id is None:
-                raise errors.ProgrammingError(
-                    message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_provider_id')."  # noqa E501
-                )
-            # This way of authenticating with the remote session controller is only compatible with Firecrest for now
-            remote_secret = get_remote_secret(
-                user=user,
-                config=nb_config,
-                server_name=server_name,
-                remote_provider_id=resource_pool.remote.provider_id,
-                git_providers=git_providers,
-                internal_token_mint=internal_token_mint,
-            )
-        if remote_secret is not None:
-            session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
+        pass
+        # assert resource_pool.remote is not None
+        # if resource_pool.remote.kind == RemoteConfigurationKind.firecrest:
+        #     assert isinstance(resource_pool.remote, RemoteConfigurationFirecrest)
+        #     if resource_pool.remote.provider_id is None:
+        #         raise errors.ProgrammingError(
+        #             message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_provider_id')."  # noqa E501
+        #         )
+        #     # This way of authenticating with the remote session controller is only compatible with Firecrest for now
+        #     remote_secret = get_remote_secret(
+        #         user=user,
+        #         config=nb_config,
+        #         server_name=server_name,
+        #         remote_provider_id=resource_pool.remote.provider_id,
+        #         git_providers=git_providers,
+        #         internal_token_mint=internal_token_mint,
+        #     )
+        # if remote_secret is not None:
+        #     session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
 
     # Raise an error if there are invalid environment variables in the request body
     verify_launcher_env_variable_overrides(launcher, launch_request)
