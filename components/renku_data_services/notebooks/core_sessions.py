@@ -874,6 +874,10 @@ def _firecrest_resource_env_items(
         SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=system_name),
         SessionEnvItem(name="RSC_FIRECREST_FORWARD_RESOURCE_VALUES", value=str(forward).lower()),
         SessionEnvItem(name="RSC_FAKE_START", value=str(True).lower()),
+        SessionEnvItem(name="RSC_AUTH_KIND", value="client_credentials"),
+        SessionEnvItem(name="RSC_AUTH_TOKEN_URI", value="https://dev.renku.ch/"),
+        SessionEnvItem(name="RSC_AUTH_FIRECREST_CLIENT_ID", value="fake"),
+        SessionEnvItem(name="RSC_AUTH_FIRECREST_CLIENT_SECRET", value="fake"),
     ]
     if partition:
         env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=partition))
