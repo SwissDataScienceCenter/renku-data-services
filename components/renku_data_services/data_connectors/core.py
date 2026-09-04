@@ -60,7 +60,7 @@ from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectMeta
 from renku_data_services.notebooks.data_sources import DataSourceRepository
-from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
+from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER, SCICAT_V1_PROVIDER
 from renku_data_services.storage.rclone import RCloneValidator, parse_storage_url
 from renku_data_services.utils.core import get_openbis_pat
 
@@ -131,6 +131,11 @@ async def _convert_rclone_doi_config(
             configuration = converted_storage.configuration
             source_path = converted_storage.source_path or "/"
             storage_type = ENVIDAT_V1_PROVIDER
+        case DOIProviders.scicat_v1:
+            converted_storage = await convert_scicat_v1_data_connector_to_s3(storage, metadata)
+            configuration = converted_storage.configuration
+            source_path = converted_storage.source_path or "/"
+            storage_type = SCICAT_V1_PROVIDER
         case _:
             # Most likely supported by rclone doi provider, you have to call validator.get_doi_metadata to confirm
             configuration = storage.configuration
@@ -239,6 +244,7 @@ async def prevalidate_unsaved_global_data_connector(
             doi=doi,
             publisher_url=None if doi_metadata.dataset.publisher is None else doi_metadata.dataset.publisher.url,
             publisher_name=None if doi_metadata.dataset.publisher is None else doi_metadata.dataset.publisher.name,
+            expires_at=doi_metadata.dataset.expires_at(),
         ),
     )
 
@@ -299,6 +305,7 @@ async def validate_unsaved_global_data_connector(
         doi=data_connector.doi,
         publisher_name=data_connector.publisher_name,
         publisher_url=data_connector.publisher_url,
+        expires_at=data_connector.expires_at,
     )
 
 
@@ -451,6 +458,22 @@ async def convert_envidat_v1_data_connector_to_s3(
     s3_config = schema_org.get_rclone_config(
         metadata.dataset,
         schema_org.DatasetProvider.envidat,
+    )
+    new_config.configuration = dict(s3_config.rclone_config)
+    new_config.source_path = s3_config.path
+    new_config.storage_type = "s3"
+    return new_config
+
+
+async def convert_scicat_v1_data_connector_to_s3(
+    payload: apispec.CloudStorageCorePost, metadata: ParsedDOIMetadata
+) -> apispec.CloudStorageCorePost:
+    """Converts a doi-like configuration for Scicat to S3."""
+    new_config = payload.model_copy(deep=True)
+    new_config.configuration = {}
+    s3_config = schema_org.get_rclone_config(
+        metadata.dataset,
+        schema_org.DatasetProvider.scicat,
     )
     new_config.configuration = dict(s3_config.rclone_config)
     new_config.source_path = s3_config.path

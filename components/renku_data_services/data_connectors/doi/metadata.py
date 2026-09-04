@@ -13,11 +13,10 @@ from pydantic import ValidationError as PydanticValidationError
 
 from renku_data_services.data_connectors import apispec
 from renku_data_services.data_connectors.doi import models
-from renku_data_services.errors import errors
-from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
+from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER, SCICAT_V1_PROVIDER
 
 
-def create_envidat_metadata_url(doi: models.DOI) -> str:
+def _create_envidat_metadata_url(doi: models.DOI) -> str:
     """Create the metadata url for envidat from a DOI."""
     url = "https://envidat.ch/converters-api/internal-dataset/convert/jsonld"
     params = urlencode({"query": doi})
@@ -42,13 +41,38 @@ async def _get_envidat_metadata(metadata_url: str) -> models.SchemaOrgDataset | 
     return parsed_metadata
 
 
+def _create_scicat_metadata_url(doi: models.DOI) -> str:
+    """Create the metadata url for SciCat from a DOI."""
+    return f"https://doi.psi.ch/detail/{doi}"
+
+
+async def _get_scicat_metadata(metadata_url: str) -> models.SchemaOrgDataset | None:
+    """Get metadata about the scicat dataset."""
+    clnt = httpx.AsyncClient(follow_redirects=True, timeout=5)
+    headers = {"accept": "application/ld+json"}
+    async with clnt:
+        try:
+            res = await clnt.get(metadata_url, headers=headers)
+        except httpx.HTTPError:
+            return None
+    if res.status_code != 200:
+        return None
+    try:
+        parsed_metadata = models.SchemaOrgDataset.model_validate_json(res.text)
+    except PydanticValidationError:
+        return None
+    return parsed_metadata
+
+
 class DOIProviders(StrEnum):
     """List of supported doi providers."""
 
     doi = "doi"
     "Supported by Rclone"
     envidat_v1 = ENVIDAT_V1_PROVIDER
-    "Only supported by Renku"
+    "Envidat is only supported by Renku"
+    scicat_v1 = SCICAT_V1_PROVIDER
+    "Scicat is only supported by Renku"
 
 
 @dataclass
@@ -79,9 +103,12 @@ async def get_metadata(doi: models.DOI) -> ParsedDOIMetadata | None:
         case AnyHttpUrl(host=None):
             dataset = await doi.metadata()
         case AnyHttpUrl(host=host) if host and _host_is(host, "psi.ch"):
-            raise errors.ValidationError(message="Datasets from PSI or SciCat are not supported yet.")
+            metadata_url = _create_scicat_metadata_url(doi)
+            dataset = await _get_scicat_metadata(metadata_url)
+            provider = DOIProviders.scicat_v1
         case AnyHttpUrl(host=host) if host and _host_is(host, "envidat.ch"):
-            dataset = await _get_envidat_metadata(create_envidat_metadata_url(doi))
+            metadata_url = _create_envidat_metadata_url(doi)
+            dataset = await _get_envidat_metadata(metadata_url)
             provider = DOIProviders.envidat_v1
         case AnyHttpUrl(host=host) if host and _host_is(host, "zenodo.org"):
             dataset = await doi.metadata()

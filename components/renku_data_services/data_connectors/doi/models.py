@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Annotated, Any, Literal, Self
 from urllib.parse import urlparse
 
@@ -87,6 +88,7 @@ class DOIMetadata:
     name: str
     description: str
     keywords: list[str]
+    expires_at: datetime | None = None
 
 
 class SchemaOrgDistribution(BaseModel):
@@ -95,6 +97,8 @@ class SchemaOrgDistribution(BaseModel):
     model_config = ConfigDict(extra="ignore")
     type: str = Field(alias="@type")
     content_url: str = Field(alias="contentUrl")
+    name: str | None = None
+    expires: datetime | None = None
 
 
 class SchemaOrgDataset(BaseModel):
@@ -138,7 +142,22 @@ class SchemaOrgDataset(BaseModel):
 
     def to_doi_metadata(self) -> DOIMetadata:
         """Convert to an alternative metdata representation."""
-        return DOIMetadata(name=self.name, description=self.description or "", keywords=self.keywords)
+        return DOIMetadata(
+            name=self.name,
+            description=self.description or "",
+            keywords=self.keywords,
+            expires_at=self.expires_at(),
+        )
+
+    def expires_at(self) -> datetime | None:
+        """Indicates when the dataset expired.
+
+        If there is no expiry date None is returned.
+        If there are multiple entries in the distribution then the earliest, non-null entry is returned.
+        """
+        expiry_dates = [i.expires for i in self.distribution if i.expires is not None]
+        earliest_expiry = min(expiry_dates) if len(expiry_dates) > 0 else None
+        return earliest_expiry
 
 
 class SchemaOrgPublisher(BaseModel):

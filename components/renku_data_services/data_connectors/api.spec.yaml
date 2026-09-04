@@ -697,6 +697,13 @@ components:
         publisher_url:
           type: string
           description: The URL for the publisher of the dataset.
+        expires_at:
+          $ref: "#/components/schemas/CreationDate"
+          description: |
+            If set to a value, it indicates the date until the data is available.
+            When the data connector expires, users have to take action and trigger a workflow
+            on the external data connector provider in order to get the data back.
+            If it is unset, it indicates that the data never expires.
       required:
         - id
         - name
