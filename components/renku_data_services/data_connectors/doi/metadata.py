@@ -13,7 +13,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from renku_data_services.data_connectors import apispec
 from renku_data_services.data_connectors.doi import models
-from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER, SCICAT_V1_PROVDER
+from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER, SCICAT_V1_PROVIDER
 
 
 def _create_envidat_metadata_url(doi: models.DOI) -> str:
@@ -71,7 +71,7 @@ class DOIProviders(StrEnum):
     "Supported by Rclone"
     envidat_v1 = ENVIDAT_V1_PROVIDER
     "Envidat is only supported by Renku"
-    scicat_v1 = SCICAT_V1_PROVDER
+    scicat_v1 = SCICAT_V1_PROVIDER
     "Scicat is only supported by Renku"
 
 

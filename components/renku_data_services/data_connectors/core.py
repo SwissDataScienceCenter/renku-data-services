@@ -60,7 +60,7 @@ from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectMeta
 from renku_data_services.notebooks.data_sources import DataSourceRepository
-from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER, SCICAT_V1_PROVDER
+from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER, SCICAT_V1_PROVIDER
 from renku_data_services.storage.rclone import RCloneValidator, parse_storage_url
 from renku_data_services.utils.core import get_openbis_pat
 
@@ -135,7 +135,7 @@ async def _convert_rclone_doi_config(
             converted_storage = await convert_scicat_v1_data_connector_to_s3(storage, metadata)
             configuration = converted_storage.configuration
             source_path = converted_storage.source_path or "/"
-            storage_type = SCICAT_V1_PROVDER
+            storage_type = SCICAT_V1_PROVIDER
         case _:
             # Most likely supported by rclone doi provider, you have to call validator.get_doi_metadata to confirm
             configuration = storage.configuration
