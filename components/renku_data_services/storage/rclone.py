@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
-from collections.abc import Awaitable, Callable, Generator, MutableMapping
+from collections.abc import Generator, MutableMapping
 from configparser import ConfigParser
 from copy import deepcopy
 from functools import lru_cache
@@ -43,20 +43,24 @@ class RCloneValidator:
         apply_patches(spec)
         self.providers = RCloneValidator._get_providers(spec)
 
-    @staticmethod
-    def _is_multi_remote(config: RCloneConfig | dict[str, Any]) -> bool:
-        conf = config.config if isinstance(config, RCloneConfig) else config
-        return all([isinstance(i, dict) for i in conf.values()])
-
-    def validate(self, configuration: RCloneConfig | dict[str, Any], keep_sensitive: bool = False) -> None:
+    def validate(self, configuration: Union[RCloneConfig, dict[str, Any]], keep_sensitive: bool = False) -> None:
         """Validates an RClone config."""
+        provider = self.get_provider(configuration)
 
-        def _transform(conf: RCloneConfig | dict[str, Any]) -> RCloneConfig | dict[str, Any]:
-            provider = self.get_provider(conf)
-            provider.validate_config(conf, keep_sensitive=keep_sensitive)
-            return conf
+        provider.validate_config(configuration, keep_sensitive=keep_sensitive)
 
-        self._apply_transform_sync(configuration, _transform)
+    def validate_sensitive_data(
+        self, configuration: Union[RCloneConfig, dict[str, Any]], sensitive_data: dict[str, str]
+    ) -> None:
+        """Validates whether the provided sensitive data is marked as sensitive in the rclone schema."""
+        sensitive_options = self.get_provider(configuration).sensitive_options
+        sensitive_options_name_lookup = [o.name for o in sensitive_options]
+        sensitive_data_counter = 0
+        for key, value in sensitive_data.items():
+            if len(value) > 0 and key in sensitive_options_name_lookup:
+                sensitive_data_counter += 1
+                continue
+            raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
 
     async def test_connection(
         self,
@@ -66,11 +70,10 @@ class RCloneValidator:
         data_source_repo: DataSourceRepository | None = None,
     ) -> ConnectionResult:
         """Tests connecting with an RClone config."""
-        if not self._is_multi_remote(configuration):
-            try:
-                self.get_provider(configuration)
-            except errors.ValidationError as e:
-                return ConnectionResult(False, str(e))
+        try:
+            self.get_provider(configuration)
+        except errors.ValidationError as e:
+            return ConnectionResult(False, str(e))
 
         # Obscure configuration and transform if needed
         transformed_config = await self.obscure_config(configuration)
@@ -100,9 +103,6 @@ class RCloneValidator:
                 f.name,
                 f"temp:{source_path}",
             ]
-            storage_type = cast(str, configuration.get("type"))
-            if storage_type == "sftp":
-                args.extend(["--low-level-retries", "1"])
             logger.debug(f"Execute: rclone {' '.join(args)}")
             proc = await asyncio.create_subprocess_exec(
                 "rclone",
@@ -118,17 +118,19 @@ class RCloneValidator:
         self, configuration: Union[RCloneConfig, dict[str, Any]]
     ) -> Union[RCloneConfig, dict[str, Any]]:
         """Obscure secrets in rclone config."""
+        provider = self.get_provider(configuration)
+        result = await provider.obscure_password_options(configuration)
+        return result
 
-        async def _transform(configuration: RCloneConfig | dict[str, Any]) -> RCloneConfig | dict[str, Any]:
-            provider = self.get_provider(configuration)
-            return await provider.obscure_password_options(configuration)
+    def remove_sensitive_options_from_config(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> None:
+        """Remove sensitive fields from a config, e.g. when turning a private storage public."""
 
-        return await self._apply_transform_async(configuration, _transform)
+        provider = self.get_provider(configuration)
+
+        provider.remove_sensitive_options_from_config(configuration)
 
     def get_provider(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> RCloneProviderSchema:
         """Get a provider for configuration."""
-        if self._is_multi_remote(configuration):
-            raise NotImplementedError("Cannot get single provider for multi remote configurations")
 
         storage_type = cast(str | None, configuration.get("type"))
 
@@ -153,8 +155,6 @@ class RCloneValidator:
         self, configuration: Union[RCloneConfig, dict[str, Any]]
     ) -> Generator[RCloneOption, None, None]:
         """Get private field descriptions for storage."""
-        if self._is_multi_remote(configuration):
-            raise NotImplementedError("Cannot handle private fields for multi remote configurations")
         provider = self.get_provider(configuration)
         return provider.get_private_fields(configuration)
 
@@ -164,37 +164,21 @@ class RCloneValidator:
     def inject_default_values(self, config: dict[str, Any]) -> dict[str, Any]: ...
     def inject_default_values(self, config: Union[RCloneConfig, dict[str, Any]]) -> Union[RCloneConfig, dict[str, Any]]:
         """Adds default values for required options that are not provided in the config."""
-        is_multi_remote = self._is_multi_remote(config)
-        if is_multi_remote:
-            remotes = config.config if isinstance(config, RCloneConfig) else config
-            remotes = cast(dict[str, dict[str, Any]], remotes)
-        else:
-            remotes = {"main": config.config if isinstance(config, RCloneConfig) else config}
+        output: dict[str, Any] = deepcopy(config.config) if isinstance(config, RCloneConfig) else deepcopy(config)
+        provider = self.get_provider(output)
+        cfg_provider: str | None = output.get("provider")
 
-        output: dict[str, Any] = {}
-        for id, remote in remotes.items():
-            ioutput: dict[str, Any] = deepcopy(remote)
-            provider = self.get_provider(ioutput)
-            cfg_provider: str | None = ioutput.get("provider")
+        for opt in provider.options:
+            if not opt.required or not opt.default or opt.name in output or not opt.matches_provider(cfg_provider):
+                continue
 
-            for opt in provider.options:
-                if not opt.required or not opt.default or opt.name in ioutput or not opt.matches_provider(cfg_provider):
-                    continue
+            match opt.default:
+                case RCloneTriState() as ts:
+                    def_val: Any = ts.value
+                case v:
+                    def_val = v
 
-                match opt.default:
-                    case RCloneTriState() as ts:
-                        def_val: Any = ts.value
-                    case v:
-                        def_val = v
-
-                ioutput.update({opt.name: def_val})
-
-            if is_multi_remote:
-                output[id] = ioutput
-            else:
-                # NOTE: This makes the arbitrary "main" key from above not matter and still work.
-                output = ioutput
-                break
+            output.update({opt.name: def_val})
 
         return RCloneConfig(config=output) if isinstance(config, RCloneConfig) else output
 
@@ -219,36 +203,6 @@ class RCloneValidator:
                 raise
 
         return providers
-
-    async def _apply_transform_async(
-        self,
-        configuration: RCloneConfig | dict[str, Any],
-        transformation: Callable[[RCloneConfig | dict[str, Any]], Awaitable[RCloneConfig | dict[str, Any]]],
-    ) -> RCloneConfig | dict[str, Any]:
-        is_multi_remote = self._is_multi_remote(configuration)
-        config = configuration.config if isinstance(configuration, RCloneConfig) else configuration
-        output = deepcopy(config)
-        if not is_multi_remote:
-            return await transformation(output)
-        output = cast(dict[str, dict[str, Any] | RCloneConfig], output)
-        for id, remote in output.items():
-            output[id] = await transformation(remote)
-        return output
-
-    def _apply_transform_sync(
-        self,
-        configuration: RCloneConfig | dict[str, Any],
-        transformation: Callable[[RCloneConfig | dict[str, Any]], RCloneConfig | dict[str, Any]],
-    ) -> RCloneConfig | dict[str, Any]:
-        is_multi_remote = self._is_multi_remote(configuration)
-        config = configuration.config if isinstance(configuration, RCloneConfig) else configuration
-        output = deepcopy(config)
-        if not is_multi_remote:
-            return transformation(output)
-        output = cast(dict[str, dict[str, Any] | RCloneConfig], output)
-        for id, remote in output.items():
-            output[id] = transformation(remote)
-        return output
 
 
 @lru_cache(maxsize=1)
@@ -619,12 +573,6 @@ class RCloneConfig(BaseModel, MutableMapping):
         Needed for pydantic to properly serialize the object.
         """
         yield from self.config.keys()
-
-    def _stringify_bool(value: Any) -> str:
-        """Converts booleans to a rclone compliant values."""
-        if isinstance(value, bool):
-            return "true" if value else "false"
-        return str(value)
 
     def write(self, output: IO[str], name: str = "temp") -> None:
         """Write the configuration as an rclone ini-style config file.

@@ -75,7 +75,7 @@ def dump_storage_with_sensitive_fields(
 ) -> models.CloudStorageCoreWithSensitiveFields:
     """Add sensitive fields to a storage configuration."""
     try:
-        if storage.storage_type == SCICAT_V1_PROVDER:
+        if storage.storage_type == SCICAT_V1_PROVIDER:
             sensitive_fields = []
         else:
             sensitive_fields = [

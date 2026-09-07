@@ -20,7 +20,7 @@ class DatasetProvider(StrEnum):
 class S3Config:
     """Configuration for a location on S3 storage."""
 
-    rclone_config: dict[str, str] | dict[str, dict[str, str]]
+    rclone_config: dict[str, str]
     bucket: str
     prefix: str
 
@@ -113,8 +113,9 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
     }
     # NOTE: When you use combine the bucket and prefix are not relevant to pathing
     # and should be left blank.
+    # TODO: Combine to a single remote config by inlining the s3 configs in the combine stanza
     output = S3Config(
-        rclone_config=configs,
+        rclone_config=configs["combine"],
         bucket="",
         prefix="",
     )
