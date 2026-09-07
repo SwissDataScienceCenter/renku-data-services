@@ -736,6 +736,85 @@ async def create_deposit_upload(
             ),
         )
 
+    def _create_scicat_upload_job_manifest(
+        deposit_config: DepositConfig,
+        deposit_job: models.DepositJob,
+        api_key_secret_name: str,
+        work_dir: PurePosixPath,
+        pvc_name: str,
+        labels: dict[str, str] | None = None,
+        suspended: bool = False,
+    ) -> V1Job:
+        # TODO: Implement SciCat upload job manifest creation
+        mount_path = PurePosixPath("/" + pvc_name)
+        copy_source = mount_path
+        if deposit_job.deposit.path is not None:
+            copy_source = mount_path / (
+                deposit_job.deposit.path.relative_to("/")
+                if deposit_job.deposit.path.is_absolute()
+                else deposit_job.deposit.path
+            )
+
+        return V1Job(
+            metadata=V1ObjectMeta(
+                name=deposit_job.name,
+                namespace=deposit_config.namespace,
+                labels=labels,
+            ),
+            spec=V1JobSpec(
+                backoff_limit=0,
+                ttl_seconds_after_finished=3600 * 6,
+                suspend=suspended,
+                template=V1PodTemplateSpec(
+                    metadata=V1ObjectMeta(labels=labels),
+                    spec=V1PodSpec(
+                        restart_policy="Never",
+                        tolerations=deposit_config.tolerations,
+                        node_selector=deposit_config.node_selector,
+                        containers=[
+                            V1Container(
+                                security_context=V1SecurityContext(
+                                    privileged=False,
+                                    run_as_non_root=True,
+                                    capabilities=V1Capabilities(drop=["ALL"]),
+                                    run_as_user=1000,
+                                    run_as_group=1000,
+                                ),
+                                name="upload-deposit",
+                                image=deposit_config.image,
+                                env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=api_key_secret_name))],
+                                env=[
+                                    V1EnvVar(name="RUST_LOG", value="info"),
+                                    V1EnvVar(name="RENKU_CLI_RENKU_URL", value=deposit_config.renku_url),
+                                    V1EnvVar(name="ZENODO_URL", value=deposit_config.zenodo_url),
+                                ],
+                                args=[
+                                    "dataset",
+                                    "deposit",
+                                    "cp",
+                                    copy_source.as_posix(),
+                                    deposit_job.deposit.original_id,
+                                ],
+                                working_dir=work_dir.as_posix(),
+                                volume_mounts=[
+                                    V1VolumeMount(mount_path=mount_path.as_posix(), read_only=True, name=pvc_name)
+                                ],
+                            )
+                        ],
+                        volumes=[
+                            V1Volume(
+                                name=pvc_name,
+                                persistent_volume_claim=V1PersistentVolumeClaimVolumeSource(
+                                    claim_name=pvc_name,
+                                    read_only=True,
+                                ),
+                            )
+                        ],
+                    ),
+                ),
+            ),
+        )
+
     def _create_pvc_manifest(
         name: str,
         namespace: str,
@@ -900,6 +979,16 @@ async def create_deposit_upload(
                 labels=labels,
                 pvc_name=pvc_name,
             )
+        case models.DepositSource.scicat:
+            job = _create_scicat_upload_job_manifest(
+                deposit_config=deposit_config,
+                deposit_job=deposit_job,
+                api_key_secret_name=base_name,
+                work_dir=work_dir,
+                suspended=True,
+                labels=labels,
+                pvc_name=pvc_name,
+            )
         case x:
             raise errors.ValidationError(message=f"Received unknown deposit source {x}")
     created_job = await job_client.create(
@@ -923,6 +1012,11 @@ async def create_deposit_upload(
             if deposit_api_key is None:
                 raise errors.ProgrammingError(message="A Zenodo deposit requires an API key.")
             job_secret_data = {"ZENODO_API_KEY": deposit_api_key}
+        case models.DepositSource.scicat:
+            # TODO:
+            # if deposit_api_key is None:
+            #     raise errors.ProgrammingError(message="A SciCat deposit requires an API key.")
+            job_secret_data = {"SCICAT_TOKEN": "scicat_token"}
         case x:
             raise errors.ValidationError(message=f"Received unknown deposit source {x}")
     job_secret = _create_secret_manifest(

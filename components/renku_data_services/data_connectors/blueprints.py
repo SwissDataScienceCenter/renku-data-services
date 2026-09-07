@@ -658,6 +658,11 @@ class DataConnectorsBP(CustomBlueprint):
                     original_id = str(zenodo_dep.id)
                     deposit_api_key = token
 
+                case apispec.DepositProvider.scicat:
+                    original_id = str(ULID())
+                    # TODO: deposit_api_key = await self.__get_scicat_token(user)
+                    deposit_api_key = None
+
                 case x:
                     raise errors.ValidationError(
                         message=f"Received unknown deposit provider {x} when creating deposit."
