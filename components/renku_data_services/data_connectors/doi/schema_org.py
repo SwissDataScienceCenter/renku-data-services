@@ -5,7 +5,7 @@ from enum import StrEnum
 from pathlib import PurePosixPath
 from urllib.parse import parse_qs, urlparse
 
-from renku_data_services.data_connectors.doi.models import SchemaOrgDataset
+from renku_data_services.data_connectors.doi.models import SchemaOrgDataset, SchemaOrgDistribution
 from renku_data_services.errors import errors
 
 
@@ -87,6 +87,24 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
     See https://rclone.org/combine/.
     """
     remote_upstreams: list[str] = []
+    # TODO: Remove when tape machine is fixed and retrieval works
+    if len(dataset.distribution) == 0:
+        dataset.distribution = [
+            SchemaOrgDistribution.model_validate(
+                {
+                    "name": "S3 URI",
+                    "content_url": "https://s3.amazonaws.com/giab/?prefix=data",
+                    "@type": "DataDownload",
+                }
+            ),
+            SchemaOrgDistribution.model_validate(
+                {
+                    "name": "S3 URI",
+                    "content_url": "https://s3.amazonaws.com/giab/?prefix=tools",
+                    "@type": "DataDownload",
+                }
+            ),
+        ]
     if len(dataset.distribution) == 0:
         raise errors.ValidationError(
             message="Cannot create a rclone configuration for a Scicat dataset that has no distributions",
@@ -96,16 +114,18 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
         if dist.name and dist.name == "S3 URI":
             parsed = urlparse(dist.content_url)
             query_parsed = parse_qs(parsed.query)
-            bucket = parsed.path
+            bucket = parsed.path.strip("/")
             prefix = query_parsed.get("prefix", [None])[0]
             if not bucket:
                 raise errors.ValidationError(message="The S3 bucket from scicat metadata cannot be found")
             if not prefix:
                 raise errors.ValidationError(message="The S3 prefix from scicat metadata cannot be found")
-            endpoint = (f"{parsed.scheme}://{parsed.hostname}",)
+            prefix = prefix.strip("/")
+            endpoint = f"{parsed.scheme}://{parsed.hostname}"
             # NOTE: Rclone does not support `/` in the directory names for combine
             dir_name = prefix.replace("/", "_")
-            remote_upstreams.append(f"{dir_name}=:s3,provider=Other,endpoint={endpoint}:{prefix}")
+            # NOTE: Rclone will get confused about the ':' in the endpoint URL if you do not put quotes around it.
+            remote_upstreams.append(f"{dir_name}=:s3,provider=Other,endpoint='{endpoint}':{bucket}/{prefix}")
 
     if len(remote_upstreams) == 0:
         raise errors.ValidationError(
@@ -120,5 +140,4 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
         prefix="",
     )
 
-    breakpoint()
     return output
