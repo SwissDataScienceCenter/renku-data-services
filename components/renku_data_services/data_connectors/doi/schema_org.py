@@ -86,9 +86,13 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
     The S3 information is encoded in the distribution, in fields where the name is 'S3 URI'.
     See https://rclone.org/combine/.
     """
-    configs: dict[str, dict[str, str]] = {}
-    remote_upstreams = []
-    for idist, dist in enumerate(sorted(dataset.distribution, key=lambda x: x.content_url)):
+    remote_upstreams: list[str] = []
+    if len(dataset.distribution) == 0:
+        raise errors.ValidationError(
+            message="Cannot create a rclone configuration for a Scicat dataset that has no distributions",
+            detail="This can happen if the dataset is expired and needs to be retrieved.",
+        )
+    for _, dist in enumerate(sorted(dataset.distribution, key=lambda x: x.content_url)):
         if dist.name and dist.name == "S3 URI":
             parsed = urlparse(dist.content_url)
             query_parsed = parse_qs(parsed.query)
@@ -98,26 +102,23 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
                 raise errors.ValidationError(message="The S3 bucket from scicat metadata cannot be found")
             if not prefix:
                 raise errors.ValidationError(message="The S3 prefix from scicat metadata cannot be found")
-            configs[str(idist)] = {
-                "type": "s3",
-                "provider": "Other",
-                "endpoint": f"{parsed.scheme}://{parsed.hostname}",
-            }
+            endpoint = (f"{parsed.scheme}://{parsed.hostname}",)
             # NOTE: Rclone does not support `/` in the directory names for combine
             dir_name = prefix.replace("/", "_")
-            remote_upstreams.append(f'"{dir_name}={idist}:{prefix}"')
+            remote_upstreams.append(f"{dir_name}=:s3,provider=Other,endpoint={endpoint}:{prefix}")
 
-    configs["combine"] = {
-        "type": "combine",
-        "upstreams": " ".join(remote_upstreams),
-    }
+    if len(remote_upstreams) == 0:
+        raise errors.ValidationError(
+            message="Cannot create a rclone configuration for a Scicat dataset that does no valid distribituions",
+            detail="This can happen if the dataset is expired and needs to be retrieved.",
+        )
     # NOTE: When you use combine the bucket and prefix are not relevant to pathing
     # and should be left blank.
-    # TODO: Combine to a single remote config by inlining the s3 configs in the combine stanza
     output = S3Config(
-        rclone_config=configs["combine"],
+        rclone_config={"type": "combine", "upstreams": " ".join(remote_upstreams)},
         bucket="",
         prefix="",
     )
 
+    breakpoint()
     return output
