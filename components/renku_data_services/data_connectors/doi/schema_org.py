@@ -5,7 +5,7 @@ from enum import StrEnum
 from pathlib import PurePosixPath
 from urllib.parse import parse_qs, urlparse
 
-from renku_data_services.data_connectors.doi.models import SchemaOrgDataset, SchemaOrgDistribution
+from renku_data_services.data_connectors.doi.models import SchemaOrgDataset
 from renku_data_services.errors import errors
 
 
@@ -87,24 +87,6 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
     See https://rclone.org/combine/.
     """
     remote_upstreams: list[str] = []
-    # TODO: Remove when tape machine is fixed and retrieval works
-    if len(dataset.distribution) == 0:
-        dataset.distribution = [
-            SchemaOrgDistribution.model_validate(
-                {
-                    "name": "S3 URI",
-                    "content_url": "https://s3.amazonaws.com/giab/?prefix=data",
-                    "@type": "DataDownload",
-                }
-            ),
-            SchemaOrgDistribution.model_validate(
-                {
-                    "name": "S3 URI",
-                    "content_url": "https://s3.amazonaws.com/giab/?prefix=tools",
-                    "@type": "DataDownload",
-                }
-            ),
-        ]
     if len(dataset.distribution) == 0:
         raise errors.ValidationError(
             message="Cannot create a rclone configuration for a Scicat dataset that has no distributions",

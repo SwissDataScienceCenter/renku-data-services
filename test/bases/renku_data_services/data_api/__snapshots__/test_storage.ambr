@@ -959,6 +959,52 @@
       'prefix': 'azureblob',
     }),
     dict({
+      'description': 'Combine several remotes into one',
+      'name': 'combine',
+      'options': list([
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': '''
+            Upstreams for combining
+            
+            These should be in the form
+            
+                dir=remote:path dir2=remote2:path
+            
+            Where before the = is specified the root directory and after is the remote to
+            put there.
+            
+            Embedded spaces can be added using quotes
+            
+                "dir=remote:path with space" "dir2=remote2:path with space"
+            
+  
+          ''',
+          'ispassword': False,
+          'name': 'upstreams',
+          'required': True,
+          'sensitive': False,
+          'type': 'SpaceSepList',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'Description of the remote.',
+          'ispassword': False,
+          'name': 'description',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+      ]),
+      'prefix': 'combine',
+    }),
+    dict({
       'description': 'DOI datasets',
       'name': 'doi',
       'options': list([
