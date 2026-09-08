@@ -85,6 +85,7 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
+from renku_data_services.session_runners.db import SessionRunnersRepository
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
@@ -183,6 +184,7 @@ class DependencyManager:
     resource_usage_service: ResourceUsageService
     session_logs_repo: AmaltheaSessionPersistedLogsReadRepository
     build_logs_repo: ImageBuildPersistedLogsReadRepository
+    session_runners_repo: SessionRunnersRepository
     zenodo_client: ZenodoAPIClient
     envidat_client: EnvidatClient
     job_client: DepositUploadJobClient
@@ -519,6 +521,9 @@ class DependencyManager:
             builds_config=config.builds,
             git_repositories_repo=git_repositories_repo,
         )
+        session_runners_repo = SessionRunnersRepository(
+            authz=authz,
+        )
         return cls(
             config,
             k8s_client=client,
@@ -568,6 +573,7 @@ class DependencyManager:
             resource_usage_service=resource_usage_service,
             session_logs_repo=session_logs_repo,
             build_logs_repo=build_logs_repo,
+            session_runners_repo=session_runners_repo,
             zenodo_client=ZenodoAPIClient(),
             envidat_client=EnvidatClient(),
             job_client=job_client,
