@@ -6,8 +6,9 @@ from collections.abc import AsyncIterator, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from asyncpg.exceptions import DataError as PgDataError
 from sqlalchemy import delete, select
-from sqlalchemy.exc import DatabaseError
+from sqlalchemy.exc import DatabaseError, DBAPIError
 from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession
 from ulid import ULID
 
@@ -169,6 +170,11 @@ class AmaltheaSessionPersistedLogsWriteRepository:
                 await self._insert_log_line(session=session, log=log)
             except DatabaseError as err:
                 logger.warning(f"Could not process log line {log.id}: {err}")
+            except DBAPIError as err:
+                if isinstance(err.__cause__, PgDataError):
+                    logger.warning(f"Could not process log line {log.id}: {err}")
+                else:
+                    raise
 
         return models.LogStreamMetadata(log_count=log_count, last_timestamp=last_timestamp)
 
@@ -361,6 +367,11 @@ class ImageBuildPersistedLogsWriteRepository:
                 await self._insert_log_line(session=session, log=log)
             except DatabaseError as err:
                 logger.warning(f"Could not process log line {log.id}: {err}")
+            except DBAPIError as err:
+                if isinstance(err.__cause__, PgDataError):
+                    logger.warning(f"Could not process log line {log.id}: {err}")
+                else:
+                    raise
 
         return models.LogStreamMetadata(log_count=log_count, last_timestamp=last_timestamp)
 
