@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, NamedTuple, Union, cast, overload
 from urllib.parse import ParseResult, urlparse
 
-from pydantic import BaseModel, Field, PrivateAttr, ValidationError, model_serializer, model_validator
+from pydantic import BaseModel, Field, InstanceOf, ValidationError, model_serializer, model_validator
 
 from renku_data_services import errors
 from renku_data_services.app_config import logging
@@ -37,11 +37,12 @@ class ConnectionResult(NamedTuple):
 class RCloneValidator:
     """Class for validating RClone configs."""
 
-    def __init__(self) -> None:
+    def __init__(self, additional_allowed_storages: set[str] | None = None) -> None:
         """Initialize with contained schema file."""
         spec = self._get_spec()
         apply_patches(spec)
         self.providers = RCloneValidator._get_providers(spec)
+        self._additional_allowed_storages = additional_allowed_storages or set()
 
     def validate(self, configuration: Union[RCloneConfig, dict[str, Any]], keep_sensitive: bool = False) -> None:
         """Validates an RClone config."""
@@ -138,7 +139,7 @@ class RCloneValidator:
             raise errors.ValidationError(
                 message="Expected a `type` field in the RClone configuration, but didn't find it."
             )
-        if storage_type in BLOCKED_STORAGES:
+        if storage_type in BLOCKED_STORAGES and storage_type not in self._additional_allowed_storages:
             raise errors.ValidationError(message=f"Storage '{storage_type}' is not supported.")
 
         provider = self.providers.get(storage_type)
@@ -539,13 +540,12 @@ class RCloneConfig(BaseModel, MutableMapping):
     """Class for RClone configuration that is valid."""
 
     config: dict[str, Any] = Field(exclude=True)
-
-    _validator: RCloneValidator = PrivateAttr(default_factory=get_rclone_validator)
+    validator: InstanceOf[RCloneValidator] = Field(default_factory=get_rclone_validator, exclude=True, repr=False)
 
     @model_validator(mode="after")
     def check_rclone_schema(self) -> RCloneConfig:
         """Validate that the reclone config is valid."""
-        self._validator.validate(self.config)
+        self.validator.validate(self.config)
         return self
 
     @model_serializer
@@ -561,11 +561,11 @@ class RCloneConfig(BaseModel, MutableMapping):
 
     def __setitem__(self, key: str, value: Any) -> None:
         self.config[key] = value
-        self._validator.validate(self.config)
+        self.validator.validate(self.config)
 
     def __delitem__(self, key: str) -> None:
         del self.config[key]
-        self._validator.validate(self.config)
+        self.validator.validate(self.config)
 
     def __iter__(self) -> Generator[str, None, None]:  # type: ignore[override]
         """Iterate method.

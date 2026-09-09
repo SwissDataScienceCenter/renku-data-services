@@ -9,7 +9,12 @@ from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_sche
 
 from renku_data_services.k8s.models import sanitizer
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
-from renku_data_services.storage.rclone import RCloneConfig, convert_rclone_configuration, get_rclone_validator
+from renku_data_services.storage.rclone import (
+    RCloneConfig,
+    RCloneValidator,
+    convert_rclone_configuration,
+    get_rclone_validator,
+)
 
 
 class RCloneStorageRequest(Schema):
@@ -61,6 +66,7 @@ class RCloneStorage(ICloudStorageRequest):
         secrets: dict[str, str],  # "Mapping between secret ID (key) and secret name (value)
         storage_class: str,
         user_secret_key: str | None = None,
+        validator: RCloneValidator | None = None,
     ) -> None:
         """Creates a cloud storage instance without validating the configuration."""
         self.source_path = source_path
@@ -71,7 +77,11 @@ class RCloneStorage(ICloudStorageRequest):
         self.base_name: str | None = None
         self.user_secret_key = user_secret_key
         self.storage_class = storage_class
-        validator = get_rclone_validator()
+        if validator is None:
+            self.validator = None
+            validator = get_rclone_validator()
+        else:
+            self.validator = validator
         configuration = validator.inject_default_values(configuration)
         configuration = convert_rclone_configuration(configuration)
         self.configuration = configuration
@@ -127,7 +137,7 @@ class RCloneStorage(ICloudStorageRequest):
     ) -> client.V1Secret:
         """The secret containing the configuration for the rclone csi driver."""
         config = io.StringIO()
-        rc = RCloneConfig(config=self.configuration)
+        rc = RCloneConfig(config=self.configuration, validator=self.validator or get_rclone_validator())
         rc.write(config, name=self.name or base_name)
         string_data = {
             "remote": self.name or base_name,
@@ -204,6 +214,7 @@ class RCloneStorage(ICloudStorageRequest):
             secrets=self.secrets,
             storage_class=self.storage_class,
             user_secret_key=self.user_secret_key,
+            validator=self.validator,
         )
 
     def mount_options(self) -> dict[str, str]:
