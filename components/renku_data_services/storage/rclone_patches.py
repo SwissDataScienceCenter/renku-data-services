@@ -274,7 +274,10 @@ def __patch_schema_add_openbis_type(spec: list[dict[str, Any]]) -> None:
 
 
 def __patch_schema_combine_remote_default(spec: list[dict[str, Any]]) -> None:
-    """Make endpoint required for 'Other' provider."""
+    """Add default value for the "combine" remote.
+
+    Without this if the remote is used then Pydantic schema validation fails.
+    """
     for storage in spec:
         if storage["Prefix"] == "combine":
             for option in storage["Options"]:
