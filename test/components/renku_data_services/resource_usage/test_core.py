@@ -54,11 +54,6 @@ async def test_record_empty_resource_requests(app_manager_instance: DependencyMa
     assert len(all) == 0
 
 
-# import logging
-# logging.basicConfig()
-# logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
-
-
 @pytest.mark.asyncio
 async def test_record_resource_requests(app_manager_instance: DependencyManager) -> None:
     run_migrations_for_app("common")
