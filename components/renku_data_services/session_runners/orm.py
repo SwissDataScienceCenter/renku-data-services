@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, MetaData, func, text
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from ulid import ULID
 
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
@@ -49,6 +49,9 @@ class SessionRunnerORM(BaseORM):
     )
     """User ID of the owner of the runner."""
 
+    user: Mapped[UserORM] = relationship(init=False, repr=False)
+    """The owner of the runner."""
+
     resource_pool_id: Mapped[int] = mapped_column(
         ForeignKey(ResourcePoolORM.id, ondelete="CASCADE"), index=True, nullable=False
     )
@@ -59,6 +62,7 @@ class SessionRunnerORM(BaseORM):
     )
     """The creation date and time of the runner."""
 
+    # TODO: registration_token: Mapped[str | None] = mapped_column(unique=True, nullable=True)
     registration_token: Mapped[str | None] = mapped_column(index=True, nullable=True)
     """The session UID for this session run."""
 

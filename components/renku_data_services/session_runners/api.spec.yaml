@@ -12,7 +12,7 @@ paths:
     post:
       summary: Create a new session runner
       description: TODO
-      requestBody: 
+      requestBody:
         required: true
         content:
           application/json:
@@ -25,6 +25,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SessionRunner"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_runners
+  /session_runners/register:
+    post:
+      summary: Register a session runner
+      description: TODO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRunnerRegisterPost"
+      responses:
+        "200":
+          description: The session runner was registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRunnerRegisterResponse"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -44,7 +65,7 @@ components:
           $ref: "#/components/schemas/SessionRunnerStatus"
         registration_token:
           type: string
-      required: 
+      required:
         - id
         - resource_pool_id
         - status
@@ -52,11 +73,32 @@ components:
       description: Data required to create a session runner
       type: object
       additionalProperties: false
-      properties: 
+      properties:
         resource_pool_id:
           type: integer
       required:
         - resource_pool_id
+    SessionRunnerRegisterPost:
+      description: Data required to register a session runner
+      type: object
+      additionalProperties: false
+      properties:
+        registration_token:
+          type: string
+      required:
+        - registration_token
+    SessionRunnerRegisterResponse:
+      description: The result of registering a session runner
+      type: object
+      additionalProperties: false
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+      required:
+        - access_token
+        - refresh_token
     SessionRunnerStatus:
       description: The status of a session runner
       type: string

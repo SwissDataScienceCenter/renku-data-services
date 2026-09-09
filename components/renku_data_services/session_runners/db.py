@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import base64
 import random
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from ulid import ULID
 
 from renku_data_services import base_models, errors
@@ -44,12 +46,20 @@ class SessionRunnersRepository:
         """Insert a new session runner into the database."""
         if not user.is_authenticated or not user.id:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
-        authorized = await self.authz.has_permission(
-            user=user, resource_type=ResourceType.resource_pool, resource_id=runner.resource_pool_id, scope=Scope.READ
+        authorized = (
+            await self.authz.has_permission(
+                user=user,
+                resource_type=ResourceType.resource_pool,
+                resource_id=runner.resource_pool_id,
+                scope=Scope.READ,
+            )
+            if runner.resource_pool_id > 0
+            else False
         )
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Resource pool id '{runner.resource_pool_id}' does not exist or you do not have access to it."
+                message=f"Resource pool with id '{runner.resource_pool_id}' "
+                "does not exist or you do not have access to it."
             )
         registration_token = self._generate_registration_token()
         runner_orm = schemas.SessionRunnerORM(
@@ -62,8 +72,41 @@ class SessionRunnersRepository:
         await session.flush()
         return runner_orm.dump(include_registration_token=True)
 
+    async def register_runner(
+        self, session: AsyncSession, registration_token: str
+    ) -> tuple[models.SessionRunner, base_models.AuthenticatedAPIUser]:
+        """Register a new session runner and update it in the database."""
+        stmt = (
+            select(schemas.SessionRunnerORM)
+            .where(schemas.SessionRunnerORM.registration_token == registration_token)
+            .options(selectinload(schemas.SessionRunnerORM.user))
+        )
+        res = await session.scalars(stmt)
+        runner_orm = res.one_or_none()
+        if runner_orm is None:
+            raise errors.MissingResourceError(
+                message=f"Session runner with registration token '{registration_token}' "
+                "does not exist or you do not have access to it."
+            )
+        user_orm = runner_orm.user
+        user_orm.dump()
+        user = base_models.AuthenticatedAPIUser(
+            is_admin=False,
+            id=user_orm.keycloak_id,
+            access_token="",  # nosec B106
+            first_name=user_orm.first_name,
+            last_name=user_orm.last_name,
+            email=user_orm.email or "",
+            access_token_expires_at=None,
+            roles=[],
+        )
+        runner_orm.status = models.RunnerStatus.initializing
+        runner_orm.last_contact = datetime.now(tz=UTC)
+        await session.flush()
+        return runner_orm.dump(), user
+
     @staticmethod
-    def _generate_registration_token(size: int = 16) -> str:
+    def _generate_registration_token(size: int = 18) -> str:
         """Returns a random code to use as a registration token."""
         rand = random.SystemRandom()
-        return base64.b64encode(rand.randbytes(size)).decode()
+        return base64.urlsafe_b64encode(rand.randbytes(size)).decode()
