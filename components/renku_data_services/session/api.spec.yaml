@@ -296,7 +296,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
-  /session_launchers/{launcher_id}/connectors:
+  /session_launchers/{launcher_id}/data_connectors:
     parameters:
       - in: path
         name: launcher_id
@@ -322,7 +322,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
-  /session_launchers/{launcher_id}/connectors/{connector_id}:
+  /session_launchers/{launcher_id}/data_connectors/{data_connector_id}:
     parameters:
       - in: path
         name: launcher_id
@@ -330,7 +330,7 @@ paths:
         schema:
           $ref: "#/components/schemas/Ulid"
       - in: path
-        name: connector_id
+        name: data_connector_id
         required: true
         schema:
           $ref: "#/components/schemas/Ulid"
@@ -385,7 +385,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
-  /session_launchers/{launcher_id}/secrets/{secret_id}:
+  /session_launchers/{launcher_id}/secrets/{secret_slot_id}:
     parameters:
       - in: path
         name: launcher_id
@@ -393,7 +393,7 @@ paths:
         schema:
           $ref: "#/components/schemas/Ulid"
       - in: path
-        name: secret_id
+        name: secret_slot_id
         required: true
         schema:
           $ref: "#/components/schemas/Ulid"
@@ -413,7 +413,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/LauncherSecret"
         "404":
-          description: The session launcher or the secret does not exist
+          description: The session launcher or the session secret slot does not exist
           content:
             application/json:
               schema:
@@ -813,13 +813,13 @@ components:
       allOf:
         - type: object
           properties:
-            connector_id:
+            data_connector_id:
               $ref: "#/components/schemas/Ulid"
             name:
               $ref: "#/components/schemas/DataConnectorName"
         - $ref: "#/components/schemas/DataConnectorAccessPolicy"
       required:
-        - connector_id
+        - data_connector_id
         - name
     LauncherDataConnectorPatch:
       description: |
@@ -901,13 +901,13 @@ components:
       description: A list of session launcher secrets
       type: array
       items:
-        $ref: "#/components/schemas/SessionSecret"
+        $ref: "#/components/schemas/LauncherSecret"
     LauncherSecret:
       description: A secret in a session launcher
       allOf:
         - type: object
           properties:
-            secret_id:
+            secret_slot_id:
               $ref: "#/components/schemas/Ulid"
             name:
               $ref: "#/components/schemas/SecretSlotName"
