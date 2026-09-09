@@ -233,6 +233,195 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
+  /session_launchers/{launcher_id}/repositories:
+    get:
+      summary: Get a session launcher's repository parameters
+      parameters:
+        - in: path
+          name: launcher_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+      responses:
+        "200":
+          description: List of repository parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LauncherRepositoryList"
+        "404":
+          description: The session launcher does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+  /session_launchers/{launcher_id}/repositories/{repo_id}:
+    parameters:
+      - in: path
+        name: launcher_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+      - in: path
+        name: repo_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    patch:
+      summary: Patch a session launchers' repository parameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LauncherRepositoryPatch"
+      responses:
+        "200":
+          description: The updated parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LauncherRepository"
+        "404":
+          description: The session launcher or the repository does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+  /session_launchers/{launcher_id}/connectors:
+    parameters:
+      - in: path
+        name: launcher_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    get:
+      summary: Get a session launchers' list of data connectors
+      responses:
+        "200":
+          description: List of sessions launcher data connector parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LauncherDataConnectorList"
+        "404":
+          description: The session launcher does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+  /session_launchers/{launcher_id}/connectors/{connector_id}:
+    parameters:
+      - in: path
+        name: launcher_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+      - in: path
+        name: connector_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    patch:
+      summary: Patch a session launchers' data connector parameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LauncherDataConnectorPatch"
+      responses:
+        "200":
+          description: A sessions launcher data connector parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LauncherDataConnector"
+        "404":
+          description: The session launcher or the data connector does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+  /session_launchers/{launcher_id}/secrets:
+    parameters:
+      - in: path
+        name: launcher_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    get:
+      summary: Get a session launchers' list of secrets
+      responses:
+        "200":
+          description: List of sessions launcher secrets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LauncherSecretList"
+        "404":
+          description: The session launcher does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+  /session_launchers/{launcher_id}/secrets/{secret_id}:
+    parameters:
+      - in: path
+        name: launcher_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+      - in: path
+        name: secret_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    patch:
+      summary: Patch a session launchers' secret parameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LauncherSecretPatch"
+      responses:
+        "200":
+          description: A sessions secret parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LauncherSecret"
+        "404":
+          description: The session launcher or the secret does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
   /projects/{project_id}/session_launchers:
     get:
       summary: Get a project's session launchers
@@ -592,6 +781,144 @@ components:
         - environment
         - resource_class_id
         - launcher_type
+    DataConnectorAccessPolicyName:
+      description: Data connector access policy name
+      type: string
+      enum:
+        - disabled
+        - read
+        - write
+    DataConnectorAccessPolicy:
+      description: Data connector access policy config
+      type: object
+      properties:
+        policy:
+          $ref: "#/components/schemas/DataConnectorAccessPolicyName"
+      required:
+        - policy
+    DataConnectorName:
+      description: Renku data connector name
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: "My Remote Data :)"
+    LauncherDataConnectorList:
+      description: A list of data connector properties
+      type: array
+      items:
+        $ref: "#/components/schemas/LauncherDataConnector"
+    LauncherDataConnector:
+      description: |
+        Data connector properties of a Renku 2.0 session
+      allOf:
+        - type: object
+          properties:
+            connector_id:
+              $ref: "#/components/schemas/Ulid"
+            name:
+              $ref: "#/components/schemas/DataConnectorName"
+        - $ref: "#/components/schemas/DataConnectorAccessPolicy"
+      required:
+        - connector_id
+        - name
+    LauncherDataConnectorPatch:
+      description: |
+        Patch git data connector properties of a Renku 2.0 session
+      allOf:
+        - $ref: "#/components/schemas/DataConnectorAccessPolicy"
+    RepositoryAccessPolicyName:
+      description: Repository access policy name
+      type: string
+      enum:
+        - disabled
+        - read
+        - write
+    GitReference:
+      description: A git references
+      type: string
+      pattern: "^refs/(heads|tags)/.*$"
+      example: "refs/heads/main"
+    GitReferenceList:
+      description: List of git references
+      type: array
+      nullable: true
+      items:
+        $ref: "#/components/schemas/GitReference"
+    RepositoryAccessPolicy:
+      description: Repository access policy config
+      type: object
+      properties:
+        policy:
+          $ref: "#/components/schemas/RepositoryAccessPolicyName"
+        writable_references:
+          $ref: "#/components/schemas/GitReferenceList"
+      required:
+        - policy
+        - writable_references
+    LauncherRepositoryList:
+      type: array
+      items:
+        $ref: "#/components/schemas/LauncherRepository"
+    LauncherRepository:
+      description: Git repository properties of a Renku 2.0 session
+      allOf:
+        - type: object
+          properties:
+            repository_id:
+              $ref: "#/components/schemas/Ulid"
+            url:
+              $ref: "#/components/schemas/Repository"
+        - $ref: "#/components/schemas/RepositoryAccessPolicy"
+      required:
+      - repository_id
+      - url
+    LauncherRepositoryPatch:
+      description: |
+        Patch git repository properties of a Renku 2.0 session
+      AllOf:
+        - $ref: "#/components/schemas/RepositoryAccessPolicy"
+    SecretSlotName:
+      description: The name of a secret slot
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: API Token
+    SecretAccessPolicyName:
+      description: Secret access policy name
+      type: string
+      enum:
+        - disabled
+        - read
+    SecretAccessPolicy:
+      description: Secret access policy config
+      type: object
+      properties:
+        policy:
+          $ref: "#/components/schemas/SecretAccessPolicyName"
+      required:
+        - policy
+    LauncherSecretList:
+      description: A list of session launcher secrets
+      type: array
+      items:
+        $ref: "#/components/schemas/SessionSecret"
+    LauncherSecret:
+      description: A secret in a session launcher
+      allOf:
+        - type: object
+          properties:
+            secret_id:
+              $ref: "#/components/schemas/Ulid"
+            name:
+              $ref: "#/components/schemas/SecretSlotName"
+        - $ref: "#/components/schemas/SecretAccessPolicy"
+      required:
+        - secret_id
+        - name
+    LauncherSecretPatch:
+      description: Patch a secret in a session launcher
+      allOf:
+        - $ref: "#/components/schemas/SecretAccessPolicy"
     SessionLauncherPost:
       description: Data required to create a session launcher
       type: object
