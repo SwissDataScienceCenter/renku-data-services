@@ -225,6 +225,7 @@ class DependencyManager:
             renku_data_services.capacity_reservation.__file__,
             renku_data_services.resource_usage.__file__,
             renku_data_services.persisted_logs.__file__,
+            renku_data_services.session_runners.__file__,
             renku_data_services.authn.api.__file__,
         ]
 
