@@ -369,12 +369,18 @@ class DependencyManager:
                     namespace=config.k8s_namespace,
                 )
 
+        session_runners_repo = SessionRunnersRepository(
+            authz=authz,
+        )
+
         internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
         internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
         internal_scope_verifier = ScopeVerifier(
             deposit_config=config.deposit_config,
             notebook_k8s_client=config.nb_config.k8s_v2_client,
             job_client=job_client,
+            session_runners_repo=session_runners_repo,
+            session_maker=config.db.async_session_maker,
         )
         resource_requests_repo = ResourceRequestsRepo(
             session_maker=config.db.async_session_maker,
@@ -522,9 +528,7 @@ class DependencyManager:
             builds_config=config.builds,
             git_repositories_repo=git_repositories_repo,
         )
-        session_runners_repo = SessionRunnersRepository(
-            authz=authz,
-        )
+
         return cls(
             config,
             k8s_client=client,

@@ -25,7 +25,9 @@ class SessionRunnersRepository:
     def __init__(self, authz: Authz) -> None:
         self.authz: Authz = authz
 
-    async def get_runner(self, session: AsyncSession, user: base_models.APIUser, id: ULID) -> models.SessionRunner:
+    async def get_runner_or_none(
+        self, session: AsyncSession, user: base_models.APIUser, id: ULID
+    ) -> models.SessionRunner | None:
         """Get a session runner from the database."""
         if not user.is_authenticated or not user.id:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
@@ -35,10 +37,17 @@ class SessionRunnersRepository:
         res = await session.scalars(stmt)
         runner_orm = res.one_or_none()
         if runner_orm is None:
+            return None
+        return runner_orm.dump()
+
+    async def get_runner(self, session: AsyncSession, user: base_models.APIUser, id: ULID) -> models.SessionRunner:
+        """Get a session runner from the database."""
+        runner = await self.get_runner_or_none(session=session, user=user, id=id)
+        if runner is None:
             raise errors.MissingResourceError(
                 message=f"Session runner with id '{id}' does not exist or you do not have access to it."
             )
-        return runner_orm.dump()
+        return runner
 
     async def insert_runner(
         self, session: AsyncSession, user: base_models.APIUser, runner: models.UnsavedSessionRunner
