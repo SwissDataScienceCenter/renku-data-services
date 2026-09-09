@@ -875,7 +875,7 @@ components:
     LauncherRepositoryPatch:
       description: |
         Patch git repository properties of a Renku 2.0 session
-      AllOf:
+      allOf:
         - $ref: "#/components/schemas/RepositoryAccessPolicy"
     SecretSlotName:
       description: The name of a secret slot
