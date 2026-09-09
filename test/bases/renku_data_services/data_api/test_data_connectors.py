@@ -2443,31 +2443,36 @@ def envidat_doi_metadata() -> ParsedDOIMetadata:
                 SchemaOrgDistribution.model_validate(
                     {
                         "@type": "DataDownload",
-                        "contentUrl": "https://envidat-doi.os.zhdk.cloud.switch.ch/?prefix=10.16904_12",
+                        "contentUrl": "https://envidat-doi.zhc-c.s3.cloud.switch.ch/?prefix=10.16904_12",
+                        "name": "S3 URI",
                     }
                 ),
                 SchemaOrgDistribution.model_validate(
                     {
                         "@type": "DataDownload",
-                        "contentUrl": "https://os.zhdk.cloud.switch.ch/envidat-doi/10.16904_12/CH2014 REPORT.html",
+                        "contentUrl": "https://envidat-doi.zhc-c.s3.cloud.switch.ch/10.16904_12/CH2014 REPORT.html",
+                        "name": "CH2014 REPORT",
                     }
                 ),
                 SchemaOrgDistribution.model_validate(
                     {
                         "@type": "DataDownload",
-                        "contentUrl": "https://os.zhdk.cloud.switch.ch/envidat-doi/10.16904_12/Dataset.html",
+                        "contentUrl": "https://envidat-doi.zhc-c.s3.cloud.switch.ch/10.16904_12/Dataset.html",
+                        "name": "Dataset",
                     }
                 ),
                 SchemaOrgDistribution.model_validate(
                     {
                         "@type": "DataDownload",
-                        "contentUrl": "https://os.zhdk.cloud.switch.ch/envidat-doi/10.16904_12/graubunden_input.tar.bz2",
+                        "contentUrl": "https://envidat-doi.zhc-c.s3.cloud.switch.ch/10.16904_12/graubunden_input.tar.bz2",
+                        "name": "Graubunden input",
                     }
                 ),
                 SchemaOrgDistribution.model_validate(
                     {
                         "@type": "DataDownload",
-                        "contentUrl": "https://os.zhdk.cloud.switch.ch/envidat-doi/10.16904_12/aare_input.tar.bz2",
+                        "contentUrl": "https://envidat-doi.zhc-c.s3.cloud.switch.ch/10.16904_12/aare_input.tar.bz2",
+                        "name": "Aare input",
                     }
                 ),
             ],
@@ -2502,7 +2507,7 @@ async def test_validate_envidat_data_connector(
     config = res.data_connector.storage.configuration
     assert config["type"] == "s3"
     assert config["provider"] == "Other"
-    assert config["endpoint"].find("zhdk.cloud.switch.ch") >= 0
+    assert config["endpoint"].find("zhc-c.s3.cloud.switch.ch") >= 0
     assert res.data_connector.storage.source_path == "/envidat-doi/10.16904_12"
     assert res.data_connector.doi is not None
     assert res.data_connector.publisher_url is not None
