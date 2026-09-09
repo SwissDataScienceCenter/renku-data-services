@@ -416,11 +416,12 @@ class RCloneProviderSchema(BaseModel):
                 proc = await asyncio.create_subprocess_exec(
                     "rclone",
                     "obscure",
-                    val,
+                    "-",
+                    stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                result, error = await proc.communicate()
+                result, error = await proc.communicate(input=str(val).encode())
                 success = proc.returncode == 0
                 if not success:
                     raise errors.ConfigurationError(
