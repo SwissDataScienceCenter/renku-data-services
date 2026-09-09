@@ -1,6 +1,8 @@
 """Data connectors blueprint."""
 
+import os
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sanic import Request
@@ -52,6 +54,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
+from renku_data_services.data_connectors.deposits.scicat import ScicatAPIClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
@@ -71,6 +74,7 @@ class DataConnectorsBP(CustomBlueprint):
     secret_client: SecretClient
     zenodo_client: ZenodoAPIClient
     envidat_client: EnvidatClient
+    scicat_client: ScicatAPIClient
     connected_services_repo: ConnectedServicesRepository
     data_source_repo: DataSourceRepository
     dc_storage_class: str
@@ -624,6 +628,12 @@ class DataConnectorsBP(CustomBlueprint):
             )
         return access_token
 
+    async def __get_scicat_token(self, user: base_models.APIUser) -> str:
+        """Get the SciCat token for the user."""
+        # TODO: retrieve connection access_token, then exchange it for a SciCat token using the SciCat API
+        token = os.environ.get("SCICAT_TOKEN", "")
+        return token
+
     def post_deposit(self) -> BlueprintFactoryResponse:
         """Create a deposit."""
 
@@ -659,9 +669,20 @@ class DataConnectorsBP(CustomBlueprint):
                     deposit_api_key = token
 
                 case apispec.DepositProvider.scicat:
-                    original_id = str(ULID())
-                    # TODO: deposit_api_key = await self.__get_scicat_token(user)
-                    deposit_api_key = None
+                    deposit_api_key = await self.__get_scicat_token(user)
+                    deposit_data = {
+                        "contactEmail": user.email,
+                        "creationTime": datetime.now().isoformat(),
+                        "datasetName": body.name,
+                        "description": "",
+                        "owner": user.full_name,
+                        "ownerEmail": user.email,
+                        "ownerGroup": "psi-awi-m2",  # TODO
+                        "sourceFolder": body.path,
+                        "type": "base",
+                    }
+                    scicat_dep = await self.scicat_client.create_deposit(deposit_api_key, deposit_data)
+                    original_id = str(scicat_dep.pid)
 
                 case x:
                     raise errors.ValidationError(
