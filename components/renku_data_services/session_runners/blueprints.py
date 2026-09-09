@@ -30,7 +30,7 @@ class SessionRunnersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(query=apispec.SessionRunnerPost)
+        @validate(json=apispec.SessionRunnerPost)
         async def _post_session_runner(
             _: Request, user: base_models.APIUser, body: apispec.SessionRunnerPost
         ) -> JSONResponse:
