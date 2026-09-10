@@ -135,6 +135,7 @@ class SessionRunnersRepository:
             )
         runner_orm.status = payload.status
         runner_orm.last_contact = datetime.now(tz=UTC)
+        runner_orm.registration_token = None
         # TODO: handle sessions assigned to the runner
         await session.flush()
         return runner_orm.dump()

@@ -92,6 +92,7 @@ class SessionRunnersBP(CustomBlueprint):
 
         @authenticate(self.internal_authenticator)
         @only_authenticated
+        @validate(json=apispec.SessionRunnerContactPost)
         async def _post_session_runner_contact(
             _: Request, user: base_models.APIUser, session_runner_id: ULID, body: apispec.SessionRunnerContactPost
         ) -> JSONResponse:
