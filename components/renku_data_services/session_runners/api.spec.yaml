@@ -50,6 +50,60 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_runners
+  /session_runners/{session_runner_id}:
+    parameters:
+      - in: path
+        name: session_runner_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    get:
+      summary: Get a session runner
+      description: TODO
+      responses:
+        "200":
+          description: The session runner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRunner"
+        "404":
+          description: The session runner does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_runners
+  /session_runners/{session_runner_id}/contact:
+    parameters:
+      - in: path
+        name: session_runner_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    post:
+      summary: Contact endpoint for session runners
+      description: TODO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRunnerContactPost"
+      responses:
+        "200":
+          description: The desired state of the session runner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRunnerContactResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_runners
 components:
   schemas:
     SessionRunner:
@@ -92,13 +146,54 @@ components:
       type: object
       additionalProperties: false
       properties:
-        access_token:
-          type: string
-        refresh_token:
-          type: string
+        runner:
+          $ref: "#/components/schemas/SessionRunner"
+        auth:
+          type: object
+          additionalProperties: false
+          properties:
+            access_token:
+              type: string
+              example: "some_access_token"
+            token_type:
+              type: string
+              example: "Bearer"
+            expires_in:
+              type: integer
+              example: 600
+            refresh_token:
+              type: string
+              example: "some_refresh_token"
+            refresh_expires_in:
+              type: integer
+              example: 3600
+          required:
+            - access_token
+            - token_type
+            - expires_in
+            - refresh_token
       required:
-        - access_token
-        - refresh_token
+        - runner
+        - auth
+    SessionRunnerContactPost:
+      description: Data sent when a session runner contacts the API
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum:
+            - ready
+            - not_ready
+      required:
+        - status
+    SessionRunnerContactResponse:
+      description: Data sent back when a session runner contacts the API
+      type: object
+      additionalProperties: false
+      properties:
+        sessions:
+          $ref: "#/components/schemas/SessionRunnerAssignedSessions"
     SessionRunnerStatus:
       description: The status of a session runner
       type: string
@@ -107,6 +202,13 @@ components:
         - initializing
         - ready
         - not_ready
+    SessionRunnerAssignedSessions:
+      description: The list of sessions assigned to a runner
+      type: array
+      items:
+        $ref: "#/components/schemas/SessionRunnerAssignedSession"
+    SessionRunnerAssignedSession:
+      type: string
     Ulid:
       description: ULID identifier
       type: string

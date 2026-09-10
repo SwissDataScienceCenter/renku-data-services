@@ -334,6 +334,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         session_runners_repo=dm.session_runners_repo,
         authenticator=dm.authenticator,
+        internal_authenticator=dm.internal_authenticator,
         internal_token_mint=dm.internal_token_mint,
         session_maker=dm.config.db.async_session_maker,
     )

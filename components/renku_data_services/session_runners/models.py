@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 from ulid import ULID
 
@@ -38,3 +39,10 @@ class SessionRunner(UnsavedSessionRunner):
     status: RunnerStatus
     # TODO
     registration_token: str | None = None
+
+
+@dataclass(eq=True, frozen=True, kw_only=True)
+class SessionRunnerContactPayload:
+    """Payload sent by a session runner."""
+
+    status: Literal[RunnerStatus.ready] | Literal[RunnerStatus.not_ready]

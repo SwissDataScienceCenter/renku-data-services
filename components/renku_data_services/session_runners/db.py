@@ -114,6 +114,31 @@ class SessionRunnersRepository:
         await session.flush()
         return runner_orm.dump(), user
 
+    async def update_runner_from_contact(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        session_runner_id: ULID,
+        payload: models.SessionRunnerContactPayload,
+    ) -> models.SessionRunner:
+        """Update a session runner based on the contact payload it sent."""
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        stmt = select(schemas.SessionRunnerORM).where(schemas.SessionRunnerORM.id == session_runner_id)
+        if not user.is_admin:
+            stmt = stmt.where(schemas.SessionRunnerORM.user_id == user.id)
+        res = await session.scalars(stmt)
+        runner_orm = res.one_or_none()
+        if runner_orm is None:
+            raise errors.MissingResourceError(
+                message=f"Session runner with id '{id}' does not exist or you do not have access to it."
+            )
+        runner_orm.status = payload.status
+        runner_orm.last_contact = datetime.now(tz=UTC)
+        # TODO: handle sessions assigned to the runner
+        await session.flush()
+        return runner_orm.dump()
+
     @staticmethod
     def _generate_registration_token(size: int = 18) -> str:
         """Returns a random code to use as a registration token."""
