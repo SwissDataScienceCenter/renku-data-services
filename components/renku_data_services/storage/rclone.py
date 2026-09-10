@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import tempfile
 from collections.abc import Generator, MutableMapping
+from configparser import ConfigParser
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast, overload
+from typing import IO, TYPE_CHECKING, Any, NamedTuple, Union, cast, overload
 from urllib.parse import ParseResult, urlparse
 
-from pydantic import BaseModel, Field, PrivateAttr, ValidationError, model_serializer, model_validator
+from pydantic import BaseModel, Field, InstanceOf, ValidationError, model_serializer, model_validator
 
 from renku_data_services import errors
 from renku_data_services.app_config import logging
@@ -36,11 +38,12 @@ class ConnectionResult(NamedTuple):
 class RCloneValidator:
     """Class for validating RClone configs."""
 
-    def __init__(self) -> None:
+    def __init__(self, additional_allowed_storages: set[str] | None = None) -> None:
         """Initialize with contained schema file."""
         spec = self._get_spec()
         apply_patches(spec)
         self.providers = RCloneValidator._get_providers(spec)
+        self._additional_allowed_storages = additional_allowed_storages or set()
 
     def validate(self, configuration: Union[RCloneConfig, dict[str, Any]], keep_sensitive: bool = False) -> None:
         """Validates an RClone config."""
@@ -91,10 +94,10 @@ class RCloneValidator:
                 )
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
-            config = "\n".join(f"{k}={v}" for k, v in transformed_config.items())
-            f.write(f"[temp]\n{config}")
-            f.close()
-            args = [
+            test_conf = configuration if isinstance(configuration, RCloneConfig) else RCloneConfig(config=configuration)
+            test_conf.write(f, name="temp")
+            # Handle SFTP retries, see https://github.com/SwissDataScienceCenter/renku-data-services/issues/893
+            rclone_args = [
                 "lsf",
                 "--low-level-retries=1",  # Connection tests should fail fast.
                 "--retries=1",  # Connection tests should fail fast.
@@ -102,14 +105,10 @@ class RCloneValidator:
                 f.name,
                 f"temp:{source_path}",
             ]
-            # Handle SFTP retries, see https://github.com/SwissDataScienceCenter/renku-data-services/issues/893
-            storage_type = cast(str, configuration.get("type"))
-            if storage_type == "sftp":
-                args.extend(["--low-level-retries", "1"])
-            logger.debug(f"Execute: rclone {' '.join(args)}")
+            logger.debug(f"Execute: rclone {' '.join(rclone_args)}")
             proc = await asyncio.create_subprocess_exec(
                 "rclone",
-                *args,
+                *rclone_args,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -141,7 +140,7 @@ class RCloneValidator:
             raise errors.ValidationError(
                 message="Expected a `type` field in the RClone configuration, but didn't find it."
             )
-        if storage_type in BLOCKED_STORAGES:
+        if storage_type in BLOCKED_STORAGES and storage_type not in self._additional_allowed_storages:
             raise errors.ValidationError(message=f"Storage '{storage_type}' is not supported.")
 
         provider = self.providers.get(storage_type)
@@ -542,13 +541,12 @@ class RCloneConfig(BaseModel, MutableMapping):
     """Class for RClone configuration that is valid."""
 
     config: dict[str, Any] = Field(exclude=True)
-
-    _validator: RCloneValidator = PrivateAttr(default_factory=get_rclone_validator)
+    validator: InstanceOf[RCloneValidator] = Field(default_factory=get_rclone_validator, exclude=True, repr=False)
 
     @model_validator(mode="after")
     def check_rclone_schema(self) -> RCloneConfig:
         """Validate that the reclone config is valid."""
-        self._validator.validate(self.config)
+        self.validator.validate(self.config)
         return self
 
     @model_serializer
@@ -564,11 +562,11 @@ class RCloneConfig(BaseModel, MutableMapping):
 
     def __setitem__(self, key: str, value: Any) -> None:
         self.config[key] = value
-        self._validator.validate(self.config)
+        self.validator.validate(self.config)
 
     def __delitem__(self, key: str) -> None:
         del self.config[key]
-        self._validator.validate(self.config)
+        self.validator.validate(self.config)
 
     def __iter__(self) -> Generator[str, None, None]:  # type: ignore[override]
         """Iterate method.
@@ -576,6 +574,34 @@ class RCloneConfig(BaseModel, MutableMapping):
         Needed for pydantic to properly serialize the object.
         """
         yield from self.config.keys()
+
+    def config_string(self, name: str = "temp") -> str:
+        """Generate an rclone ini-style config string."""
+        config = io.StringIO()
+        self.write(config, name=name)
+        result = config.getvalue()
+        config.close()
+        return result
+
+    def write(self, output: IO[str], name: str = "temp") -> None:
+        """Write the configuration as an rclone ini-style config file."""
+
+        def _stringify_bool(value: Any) -> str:
+            """Converts booleans to a rclone compliant values."""
+            if isinstance(value, bool):
+                return "true" if value else "false"
+            return str(value)
+
+        parser = ConfigParser(interpolation=None)
+
+        parser.add_section(name)
+        for k, v in self.config.items():
+            parser.set(name, k, _stringify_bool(v))
+
+        parser.write(output)
+        # NOTE: If you do not flush the contents of the file may show up too late
+        # for commands that expect to have the config present.
+        output.flush()
 
 
 def parse_storage_url(storage_url: str) -> tuple[RCloneConfig, str]:
