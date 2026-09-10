@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import tempfile
 from collections.abc import Generator, MutableMapping
@@ -573,6 +574,14 @@ class RCloneConfig(BaseModel, MutableMapping):
         Needed for pydantic to properly serialize the object.
         """
         yield from self.config.keys()
+
+    def config_string(self, name: str = "temp") -> str:
+        """Generate an rclone ini-style config string."""
+        config = io.StringIO()
+        self.write(config, name=name)
+        result = config.getvalue()
+        config.close()
+        return result
 
     def write(self, output: IO[str], name: str = "temp") -> None:
         """Write the configuration as an rclone ini-style config file."""

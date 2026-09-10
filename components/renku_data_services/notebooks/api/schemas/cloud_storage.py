@@ -1,6 +1,5 @@
 """Schema for cloudstorage config."""
 
-import io
 import json
 from typing import Any, Final, Protocol
 
@@ -136,15 +135,12 @@ class RCloneStorage(ICloudStorageRequest):
         user_secret_key: str | None = None,
     ) -> client.V1Secret:
         """The secret containing the configuration for the rclone csi driver."""
-        config = io.StringIO()
         rc = RCloneConfig(config=self.configuration, validator=self.validator or get_rclone_validator())
-        rc.write(config, name=self.name or base_name)
         string_data = {
             "remote": self.name or base_name,
             "remotePath": self.source_path,
-            "configData": config.getvalue(),
+            "configData": rc.config_string(name=self.name or base_name),
         }
-        config.close()
         string_data.update(self.mount_options())
         # NOTE: in Renku v1 this function is not directly called so the base name
         # comes from the user_secret_key property on the class instance

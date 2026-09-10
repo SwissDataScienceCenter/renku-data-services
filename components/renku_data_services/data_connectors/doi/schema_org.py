@@ -125,6 +125,8 @@ def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
             # NOTE: Rclone does not support `/` in the directory names for combine
             dir_name = prefix.replace("/", "_")
             # NOTE: Rclone will get confused about the ':' in the endpoint URL if you do not put quotes around it.
+            # NOTE: We inline the upstream configuration as csi-rclone will reject configurations with multiple remotes
+            # See: https://github.com/SwissDataScienceCenter/renku-data-services/pull/1425/changes#r3951060385
             remote_upstreams.append(f"{dir_name}=:s3,provider=Other,endpoint='{endpoint}':{bucket}/{prefix}")
 
         # NOTE: When you use combine the bucket and prefix are not relevant to pathing

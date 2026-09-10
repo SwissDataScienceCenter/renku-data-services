@@ -233,7 +233,7 @@ async def prevalidate_unsaved_global_data_connector(
         # This can be removed when we start using a dedicated sidecar to mount rclone storage for each session and
         # we eliminate the use of CSI rclone.
         doi_validator = deepcopy(validator)
-        validator.providers["combine"] = _UNSAFE_SCICAT_COMBINE_PROVIDER
+        doi_validator.providers["combine"] = _UNSAFE_SCICAT_COMBINE_PROVIDER
         doi_validator.validate(storage.configuration)
     else:
         validator.validate(storage.configuration)
