@@ -1,6 +1,7 @@
 """Data connectors blueprint."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sanic import Request
@@ -52,6 +53,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
+from renku_data_services.data_connectors.deposits.scicat import ScicatAPIClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
@@ -71,6 +73,7 @@ class DataConnectorsBP(CustomBlueprint):
     secret_client: SecretClient
     zenodo_client: ZenodoAPIClient
     envidat_client: EnvidatClient
+    scicat_client: ScicatAPIClient
     connected_services_repo: ConnectedServicesRepository
     data_source_repo: DataSourceRepository
     dc_storage_class: str
@@ -600,27 +603,27 @@ class DataConnectorsBP(CustomBlueprint):
             secret_id=str(secret.secret_id),
         )
 
-    async def __get_zenodo_access_token(self, user: base_models.APIUser) -> str:
-        provider = await self.connected_services_repo.get_provider_for_kind(user, ProviderKind.zenodo)
+    async def __get_provider_access_token(self, user: base_models.APIUser, provider_kind: ProviderKind) -> str:
+        provider = await self.connected_services_repo.get_provider_for_kind(user, provider_kind)
         if not provider:
             raise errors.UnauthorizedError(
-                message="The zenodo provider does not exist, please contact your administrator to set this up."
+                message=f"The {provider_kind.value} provider does not exist, please contact the administrator."
             )
         if not provider.connected_user:
             raise errors.UnauthorizedError(
-                message="You need to connect and authenticate with the zenodo provider to do this"
+                message=f"You need to connect and authenticate with the {provider_kind.value} provider to do this"
             )
         token_set = await self.connected_services_repo.get_token_set(
             user=user, connection_id=provider.connected_user.connection.id
         )
         if not token_set:
             raise errors.UnauthorizedError(
-                message="You need to connect and authenticate with the zenodo provider to do this"
+                message=f"You need to connect and authenticate with the {provider_kind.value} provider to do this"
             )
         access_token = token_set.access_token
         if not access_token:
             raise errors.UnauthorizedError(
-                message="You need to connect and authenticate with the zenodo provider to do this"
+                message=f"You need to connect and authenticate with the {provider_kind.value} provider to do this"
             )
         return access_token
 
@@ -653,10 +656,30 @@ class DataConnectorsBP(CustomBlueprint):
                     deposit_api_key: str | None = None
 
                 case apispec.DepositProvider.zenodo:
-                    token = await self.__get_zenodo_access_token(user)
+                    token = await self.__get_provider_access_token(user, ProviderKind.zenodo)
                     zenodo_dep = await self.zenodo_client.create_deposit(token, body.name)
                     original_id = str(zenodo_dep.id)
                     deposit_api_key = token
+
+                case apispec.DepositProvider.scicat:
+                    token = await self.__get_provider_access_token(user, ProviderKind.scicat)
+                    # Exchange access token for a SciCat token using the SciCat API.
+                    deposit_api_key = await self.scicat_client.get_scicat_token(token)
+
+                    user_groups = await self.scicat_client.get_user_groups(deposit_api_key)
+                    deposit_data = {
+                        "contactEmail": user.email,
+                        "creationTime": datetime.now().isoformat(),
+                        "datasetName": body.name,
+                        "description": "",
+                        "owner": user.full_name,
+                        "ownerEmail": user.email,
+                        "ownerGroup": user_groups[0] if user_groups else "",  # TODO: user input from frontend instead?
+                        "sourceFolder": body.path,
+                        "type": "base",
+                    }
+                    scicat_dep = await self.scicat_client.create_deposit(deposit_api_key, deposit_data)
+                    original_id = str(scicat_dep.pid)
 
                 case x:
                     raise errors.ValidationError(
@@ -747,7 +770,7 @@ class DataConnectorsBP(CustomBlueprint):
                                 message="The deposit needs to be published on Envidat before being marked complete."
                             )
                     case models.DepositSource.zenodo:
-                        token = await self.__get_zenodo_access_token(user)
+                        token = await self.__get_provider_access_token(user, ProviderKind.zenodo)
                         zenodo_dep = await self.zenodo_client.get_deposit(token, saved_dep.deposit.original_id)
                         if not zenodo_dep:
                             raise errors.MissingResourceError(
@@ -794,7 +817,7 @@ class DataConnectorsBP(CustomBlueprint):
                 )
             if saved_dep.deposit.status == models.DepositStatus.in_progress:
                 raise errors.ValidationError(message="Cannot rerun a deposit job that is currently in progress.")
-            token = await self.__get_zenodo_access_token(user)
+            token = await self.__get_provider_access_token(user, ProviderKind.zenodo)
             await self.job_client.delete(saved_dep.to_meta(user.id, self.deposit_config.namespace))
             new_job_name = "deposit-" + str(ULID()).lower()
             saved_dep = await self.data_connector_repo.update_deposit(

@@ -1204,6 +1204,7 @@ components:
       enum:
         - zenodo
         - envidat
+        - scicat
     DepositStatus:
       type: string
       enum:
