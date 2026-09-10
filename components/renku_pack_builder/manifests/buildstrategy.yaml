@@ -1,4 +1,5 @@
 ---
+# IMPORTANT NOTICE: if you update this file, please rename the strategy to `renku-buildpacks-v(N+1)` where `renku-buildpacks-v(N)` is its current name.
 apiVersion: shipwright.io/v1beta1
 kind: BuildStrategy
 metadata:
