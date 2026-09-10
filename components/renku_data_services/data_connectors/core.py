@@ -747,13 +747,13 @@ async def create_deposit_upload(
     ) -> V1Job:
         # TODO: Implement SciCat upload job manifest creation
         mount_path = PurePosixPath("/" + pvc_name)
-        copy_source = mount_path
-        if deposit_job.deposit.path is not None:
-            copy_source = mount_path / (
-                deposit_job.deposit.path.relative_to("/")
-                if deposit_job.deposit.path.is_absolute()
-                else deposit_job.deposit.path
-            )
+        # copy_source = mount_path
+        # if deposit_job.deposit.path is not None:
+        #     copy_source = mount_path / (
+        #         deposit_job.deposit.path.relative_to("/")
+        #         if deposit_job.deposit.path.is_absolute()
+        #         else deposit_job.deposit.path
+        #     )
 
         return V1Job(
             metadata=V1ObjectMeta(
@@ -781,19 +781,14 @@ async def create_deposit_upload(
                                     run_as_group=1000,
                                 ),
                                 name="upload-deposit",
-                                image=deposit_config.image,
+                                image=deposit_config.scicat.image,
                                 env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=api_key_secret_name))],
                                 env=[
-                                    V1EnvVar(name="RUST_LOG", value="info"),
-                                    V1EnvVar(name="RENKU_CLI_RENKU_URL", value=deposit_config.renku_url),
-                                    V1EnvVar(name="ZENODO_URL", value=deposit_config.zenodo_url),
+                                    V1EnvVar(name="SCICAT_URL", value=deposit_config.scicat.url),
                                 ],
                                 args=[
-                                    "dataset",
-                                    "deposit",
-                                    "cp",
-                                    copy_source.as_posix(),
-                                    deposit_job.deposit.original_id,
+                                    # TODO: Add the appropriate command and arguments for SciCat upload
+                                    "--help",
                                 ],
                                 working_dir=work_dir.as_posix(),
                                 volume_mounts=[

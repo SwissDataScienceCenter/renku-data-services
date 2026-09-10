@@ -26,6 +26,7 @@ class DepositConfig:
     renku_url: str
     zenodo_url: str
     envidat: EnvidatConfig
+    scicat: ScicatConfig
     node_selector: dict[str, str] | None = None
     tolerations: list[V1Toleration] | None = None
     cluster_id: Final[ClusterId] = DEFAULT_K8S_CLUSTER
@@ -66,6 +67,7 @@ class DepositConfig:
             namespace=os.environ["KUBERNETES_NAMESPACE"],
             cluster_id=DEFAULT_K8S_CLUSTER,
             zenodo_url=os.environ.get("ZENODO_URL", "https://zenodo.org").rstrip("/"),
+            scicat=ScicatConfig.from_env(),
             envidat=EnvidatConfig.from_env(),
         )
 
@@ -110,3 +112,19 @@ class EnvidatConfig:
                 message="Envidat exports are enabled but not all required parameters are provided."
             )
         return output
+
+
+@dataclass
+class ScicatConfig:
+    """Configuration for SciCat data exports."""
+
+    url: str
+    image: str
+
+    @classmethod
+    def from_env(cls) -> ScicatConfig:
+        """Generate the config from environment variables."""
+        return cls(
+            url=os.environ.get("SCICAT_URL", "https://dacat-qa.psi.ch").rstrip("/"),
+            image=os.environ.get("SCICAT_JOB_IMAGE", "ghcr.io/swissdatasciencecenter/scicat-cli:latest"),
+        )
