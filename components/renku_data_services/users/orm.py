@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
-from renku_data_services.users.models import PinnedProjects, UserInfo, UserPreferences
+from renku_data_services.users.models import KeycloakEventSource, PinnedProjects, UserInfo, UserPreferences
 
 if TYPE_CHECKING:
     from renku_data_services.namespace.orm import NamespaceORM
@@ -72,11 +72,12 @@ class UserMetricsORM(BaseORM):
 
 
 class LastKeycloakEventTimestamp(BaseORM):
-    """The latest event timestamp processed from Keycloak."""
+    """The latest event timestamp processed from Keycloak, per event source."""
 
-    __tablename__ = "last_keycloak_event_timestamp"
-    id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
-    timestamp_utc: Mapped[datetime] = mapped_column(DateTime(timezone=False), default_factory=datetime.utcnow)
+    __tablename__ = "last_keycloak_event_timestamp_v2"
+
+    id: Mapped[KeycloakEventSource] = mapped_column("id", primary_key=True)
+    timestamp_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class UserPreferencesORM(BaseORM):
