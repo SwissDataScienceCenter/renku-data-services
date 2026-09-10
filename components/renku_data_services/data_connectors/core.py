@@ -888,7 +888,7 @@ async def create_deposit_upload(
             if res.status_code >= 300 or res.status_code < 200:
                 raise errors.ProgrammingError(
                     message=f"The secret for data connector with {s_id} could not be "
-                    f"successfully created, the status code was {res.status_code}."
+                    f"successfully created, the status code was {res.status_code}. "
                     "Please contact a Renku administrator.",
                     detail=res.text,
                 )
@@ -1013,10 +1013,9 @@ async def create_deposit_upload(
                 raise errors.ProgrammingError(message="A Zenodo deposit requires an API key.")
             job_secret_data = {"ZENODO_API_KEY": deposit_api_key}
         case models.DepositSource.scicat:
-            # TODO:
-            # if deposit_api_key is None:
-            #     raise errors.ProgrammingError(message="A SciCat deposit requires an API key.")
-            job_secret_data = {"SCICAT_TOKEN": "scicat_token"}
+            if deposit_api_key is None:
+                raise errors.ProgrammingError(message="A SciCat deposit requires an API key.")
+            job_secret_data = {"SCICAT_TOKEN": deposit_api_key}
         case x:
             raise errors.ValidationError(message=f"Received unknown deposit source {x}")
     job_secret = _create_secret_manifest(
