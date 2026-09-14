@@ -81,12 +81,21 @@ components:
           properties:
             code:
               type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
             detail:
               type: string
+              example: "A more detailed optional message showing what the problem was"
             message:
               type: string
-          required: [code, message]
-      required: [error]
+              example: "Something went wrong - please try again later"
+            trace_id:
+              type: string
+              example: "ac93950e9e114a55c67fb8e5ef519bbe"
+              description: Sentry trace ID for linking to corresponding log entries
+          required: ["code", "message"]
+      required: ["error"]
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
