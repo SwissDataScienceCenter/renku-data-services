@@ -38,6 +38,7 @@ from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
 from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
+from renku_data_services.data_connectors.deposits.scicat import ScicatAPIClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
@@ -473,6 +474,7 @@ class TestDependencyManager(DependencyManager):
             build_logs_repo=build_logs_repo,
             zenodo_client=ZenodoAPIClient(),
             envidat_client=EnvidatClient(),
+            scicat_client=ScicatAPIClient(),
             job_client=job_client,
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,

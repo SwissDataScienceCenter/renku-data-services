@@ -231,6 +231,7 @@ class DepositSource(StrEnum):
 
     zenodo = "zenodo"
     envidat = "envidat"
+    scicat = "scicat"
     unknown = "unknown"
 
 

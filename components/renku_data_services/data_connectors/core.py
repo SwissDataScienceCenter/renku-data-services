@@ -525,7 +525,7 @@ async def create_deposit_upload(
     deposit_config: DepositConfig,
     storage_class: str,
     k8s_client: K8sClient,
-    data_service_base_url: str,
+    secrets_storage_service_url: str,
     deposit_job: models.DepositJob,
     job_client: DepositUploadJobClient,
     data_source_repo: DataSourceRepository,
@@ -736,6 +736,80 @@ async def create_deposit_upload(
             ),
         )
 
+    def _create_scicat_upload_job_manifest(
+        deposit_config: DepositConfig,
+        deposit_job: models.DepositJob,
+        api_key_secret_name: str,
+        work_dir: PurePosixPath,
+        pvc_name: str,
+        labels: dict[str, str] | None = None,
+        suspended: bool = False,
+    ) -> V1Job:
+        # TODO: Implement SciCat upload job manifest creation
+        mount_path = PurePosixPath("/" + pvc_name)
+        # copy_source = mount_path
+        # if deposit_job.deposit.path is not None:
+        #     copy_source = mount_path / (
+        #         deposit_job.deposit.path.relative_to("/")
+        #         if deposit_job.deposit.path.is_absolute()
+        #         else deposit_job.deposit.path
+        #     )
+
+        return V1Job(
+            metadata=V1ObjectMeta(
+                name=deposit_job.name,
+                namespace=deposit_config.namespace,
+                labels=labels,
+            ),
+            spec=V1JobSpec(
+                backoff_limit=0,
+                ttl_seconds_after_finished=3600 * 6,
+                suspend=suspended,
+                template=V1PodTemplateSpec(
+                    metadata=V1ObjectMeta(labels=labels),
+                    spec=V1PodSpec(
+                        restart_policy="Never",
+                        tolerations=deposit_config.tolerations,
+                        node_selector=deposit_config.node_selector,
+                        containers=[
+                            V1Container(
+                                security_context=V1SecurityContext(
+                                    privileged=False,
+                                    run_as_non_root=True,
+                                    capabilities=V1Capabilities(drop=["ALL"]),
+                                    run_as_user=1000,
+                                    run_as_group=1000,
+                                ),
+                                name="upload-deposit",
+                                image=deposit_config.scicat.image,
+                                env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=api_key_secret_name))],
+                                env=[
+                                    V1EnvVar(name="SCICAT_URL", value=deposit_config.scicat.url),
+                                ],
+                                args=[
+                                    # TODO: Add the appropriate command and arguments for SciCat upload
+                                    "--help",
+                                ],
+                                working_dir=work_dir.as_posix(),
+                                volume_mounts=[
+                                    V1VolumeMount(mount_path=mount_path.as_posix(), read_only=True, name=pvc_name)
+                                ],
+                            )
+                        ],
+                        volumes=[
+                            V1Volume(
+                                name=pvc_name,
+                                persistent_volume_claim=V1PersistentVolumeClaimVolumeSource(
+                                    claim_name=pvc_name,
+                                    read_only=True,
+                                ),
+                            )
+                        ],
+                    ),
+                ),
+            ),
+        )
+
     def _create_pvc_manifest(
         name: str,
         namespace: str,
@@ -775,16 +849,25 @@ async def create_deposit_upload(
             kind=job.kind,
         )
 
+    def _owner_reference_to_secret_dict(owner_reference: V1OwnerReference) -> dict[str, str | None]:
+        """Build the minimal string-only owner reference shape the secrets-storage-api expects."""
+        return {
+            "apiVersion": owner_reference.api_version,
+            "kind": owner_reference.kind,
+            "name": owner_reference.name,
+            "uid": owner_reference.uid,
+        }
+
     async def _request_saved_secret_creation(
         user: base_models.AuthenticatedAPIUser,
-        data_service_base_url: str,
+        secrets_storage_service_url: str,
         dc_secrets_dict: dict[str, list[models.DataConnectorSecret]],
         deposit_config: DepositConfig,
         pvc_name: str,
         owner_reference: V1OwnerReference,
     ) -> K8sObjectMeta | None:
         """Calls the secret service to request the creation of saved storage secrets."""
-        secrets_url = data_service_base_url + "/api/secrets/kubernetes"
+        secrets_url = secrets_storage_service_url + "/api/secrets/kubernetes"
         headers = {"Authorization": f"bearer {user.access_token}"}
         dc_secrets = list(dc_secrets_dict.items())
         if len(dc_secrets) > 0:
@@ -800,19 +883,19 @@ async def create_deposit_upload(
                 "name": secret_name,
                 "namespace": deposit_config.namespace,
                 "secret_ids": [str(secret.secret_id) for secret in secrets],
-                "owner_references": [sanitizer(owner_reference)],
+                "owner_references": [_owner_reference_to_secret_dict(owner_reference)],
                 "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
                 "cluster_id": str(deposit_config.cluster_id),
             }
             async with httpx.AsyncClient(timeout=10) as client:
                 res = await client.post(secrets_url, headers=headers, json=request_data)
-            if res.status_code >= 300 or res.status_code < 200:
-                raise errors.ProgrammingError(
-                    message=f"The secret for data connector with {s_id} could not be "
-                    f"successfully created, the status code was {res.status_code}."
-                    "Please contact a Renku administrator.",
-                    detail=res.text,
-                )
+                if res.status_code >= 300 or res.status_code < 200:
+                    raise errors.ProgrammingError(
+                        message=f"The secret for data connector with {s_id} could not be "
+                        f"successfully created, the status code was {res.status_code}. "
+                        "Please contact a Renku administrator.",
+                        detail=res.text,
+                    )
             return K8sObjectMeta(
                 name=secret_name,
                 cluster=deposit_config.cluster_id,
@@ -900,6 +983,16 @@ async def create_deposit_upload(
                 labels=labels,
                 pvc_name=pvc_name,
             )
+        case models.DepositSource.scicat:
+            job = _create_scicat_upload_job_manifest(
+                deposit_config=deposit_config,
+                deposit_job=deposit_job,
+                api_key_secret_name=base_name,
+                work_dir=work_dir,
+                suspended=True,
+                labels=labels,
+                pvc_name=pvc_name,
+            )
         case x:
             raise errors.ValidationError(message=f"Received unknown deposit source {x}")
     created_job = await job_client.create(
@@ -923,6 +1016,10 @@ async def create_deposit_upload(
             if deposit_api_key is None:
                 raise errors.ProgrammingError(message="A Zenodo deposit requires an API key.")
             job_secret_data = {"ZENODO_API_KEY": deposit_api_key}
+        case models.DepositSource.scicat:
+            if deposit_api_key is None:
+                raise errors.ProgrammingError(message="A SciCat deposit requires an API key.")
+            job_secret_data = {"SCICAT_TOKEN": deposit_api_key}
         case x:
             raise errors.ValidationError(message=f"Received unknown deposit source {x}")
     job_secret = _create_secret_manifest(
@@ -962,7 +1059,7 @@ async def create_deposit_upload(
     try:
         created_saved_secret = await _request_saved_secret_creation(
             user=user,
-            data_service_base_url=data_service_base_url,
+            secrets_storage_service_url=secrets_storage_service_url,
             dc_secrets_dict=extras.data_connector_secrets,
             deposit_config=deposit_config,
             pvc_name=pvc_name,
