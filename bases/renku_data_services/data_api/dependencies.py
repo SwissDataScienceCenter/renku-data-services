@@ -88,7 +88,7 @@ from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
-from renku_data_services.users.db import UserPreferencesRepository
+from renku_data_services.users.db import SSHKeyRepository, UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
@@ -157,6 +157,7 @@ class DependencyManager:
     apps_k8s_client: RenkuAppsK8sClient | None
     apps_repo: RenkuAppsRepository | None
     user_preferences_repo: UserPreferencesRepository
+    ssh_key_repo: SSHKeyRepository
     kc_user_repo: KcUserRepo
     low_level_user_secrets_repo: LowLevelUserSecretsRepo
     user_secrets_repo: UserSecretsRepo
@@ -430,6 +431,7 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
             user_preferences_config=config.user_preferences,
         )
+        ssh_key_repo = SSHKeyRepository(session_maker=config.db.async_session_maker)
         low_level_user_secrets_repo = LowLevelUserSecretsRepo(
             session_maker=config.db.async_session_maker,
         )
@@ -543,6 +545,7 @@ class DependencyManager:
             apps_k8s_client=apps_k8s_client,
             apps_repo=apps_repo,
             user_preferences_repo=user_preferences_repo,
+            ssh_key_repo=ssh_key_repo,
             kc_user_repo=kc_user_repo,
             user_secrets_repo=user_secrets_repo,
             connected_services_repo=connected_services_repo,
