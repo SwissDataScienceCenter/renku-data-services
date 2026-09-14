@@ -41,7 +41,7 @@ from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import ProjectStorageBP, StorageSchemaBP
-from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
+from renku_data_services.users.blueprints import KCUsersBP, SSHKeysBP, UserPreferencesBP, UserSecretsBP
 
 
 def str_to_slug(value: str) -> Slug:
@@ -98,6 +98,12 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         name="user_secrets",
         url_prefix=url_prefix,
         secret_repo=dm.user_secrets_repo,
+        authenticator=dm.authenticator,
+    )
+    ssh_keys = SSHKeysBP(
+        name="ssh_keys",
+        url_prefix=url_prefix,
+        ssh_key_repo=dm.ssh_key_repo,
         authenticator=dm.authenticator,
     )
     resource_pools_users = ResourcePoolUsersBP(
@@ -351,6 +357,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             resource_pools_members.blueprint(),
             users.blueprint(),
             user_secrets.blueprint(),
+            ssh_keys.blueprint(),
             user_resource_pools.blueprint(),
             clusters.blueprint(),
             storage_schema.blueprint(),
