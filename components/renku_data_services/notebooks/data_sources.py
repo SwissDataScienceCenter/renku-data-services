@@ -6,6 +6,7 @@ import random
 import string
 from collections.abc import AsyncIterator
 from configparser import ConfigParser
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from io import StringIO
@@ -24,6 +25,7 @@ from renku_data_services.connected_services.models import ProviderKind
 from renku_data_services.connected_services.oauth_http import (
     OAuthHttpClientFactory,
 )
+from renku_data_services.data_connectors.constants import _UNSAFE_SCICAT_COMBINE_PROVIDER
 from renku_data_services.data_connectors.models import (
     DataConnector,
     DataConnectorSecret,
@@ -34,6 +36,7 @@ from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.crs import DataSource
 from renku_data_services.notebooks.models import ExtraSecret, SessionDataConnectorOverride, SessionExtraResources
+from renku_data_services.storage.rclone import get_rclone_validator
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import get_encryption_key
 
@@ -296,6 +299,18 @@ class DataSourceRepository:
                 if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
                 else (work_dir / dc.data_connector.storage.target_path).as_posix()
             )
+            validator = None
+            if (
+                isinstance(dc.data_connector, GlobalDataConnector)
+                and dc.data_connector.publisher_name == "PSI Open Data Provider"
+            ):
+                # Only in the scicat case we use the combine remote.
+                # Allowing the combine remote type in other cases is dangerous.
+                # This can be removed when we start using a dedicated sidecar to mount rclone storage for each session
+                # and we eliminate the use of CSI rclone.
+                validator = deepcopy(get_rclone_validator())
+                validator.providers["combine"] = _UNSAFE_SCICAT_COMBINE_PROVIDER
+                validator._additional_allowed_storages = {"combine"}
             dcs[str(dc.data_connector.id)] = RCloneStorage(
                 source_path=dc.data_connector.storage.source_path,
                 mount_folder=mount_folder,
@@ -304,6 +319,7 @@ class DataSourceRepository:
                 name=dc.data_connector.name,
                 secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
                 storage_class=storage_class,
+                validator=validator,
             )
             if len(dc.secrets) > 0:
                 dcs_secrets[str(dc.data_connector.id)] = dc.secrets

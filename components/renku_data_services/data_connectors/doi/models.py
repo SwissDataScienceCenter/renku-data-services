@@ -13,7 +13,7 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, PrivateAttr, Vali
 
 from renku_data_services.errors import errors
 
-_clnt = httpx.AsyncClient(timeout=5, follow_redirects=True)
+_clnt = httpx.AsyncClient(timeout=30, follow_redirects=True)
 
 
 class DOI(str):

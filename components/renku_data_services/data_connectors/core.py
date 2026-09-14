@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import contextlib
 from collections.abc import AsyncIterator
+from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import PurePosixPath
@@ -47,7 +48,10 @@ from renku_data_services.base_models.core import (
 )
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.config import DepositConfig
-from renku_data_services.data_connectors.constants import ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS
+from renku_data_services.data_connectors.constants import (
+    _UNSAFE_SCICAT_COMBINE_PROVIDER,
+    ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS,
+)
 from renku_data_services.data_connectors.doi import schema_org
 from renku_data_services.data_connectors.doi.metadata import (
     DOIProviders,
@@ -75,11 +79,12 @@ def dump_storage_with_sensitive_fields(
 ) -> models.CloudStorageCoreWithSensitiveFields:
     """Add sensitive fields to a storage configuration."""
     try:
+        sensitive_fields = [
+            apispec.RCloneOption.model_validate(option.model_dump(exclude_none=True, by_alias=True))
+            for option in validator.get_private_fields(storage.configuration)
+        ]
         body = models.CloudStorageCoreWithSensitiveFields(
-            sensitive_fields=[
-                apispec.RCloneOption.model_validate(option.model_dump(exclude_none=True, by_alias=True))
-                for option in validator.get_private_fields(storage.configuration)
-            ],
+            sensitive_fields=sensitive_fields,
             **asdict(storage),
         )
     except PydanticValidationError as err:
@@ -222,7 +227,16 @@ async def prevalidate_unsaved_global_data_connector(
     if doi_metadata is None:
         raise errors.ValidationError(message=f"Cannot get metadata for the global data connector with doi {doi}")
     storage = await _convert_rclone_doi_config(body.storage, doi_metadata, doi)
-    validator.validate(storage.configuration)
+    if doi_metadata.provider == DOIProviders.scicat_v1:
+        # Only in the scicat case we use the combine remote and in this case we inline the configuration
+        # for all other remotes. Allowing the combine remote type in other cases is dangerous.
+        # This can be removed when we start using a dedicated sidecar to mount rclone storage for each session and
+        # we eliminate the use of CSI rclone.
+        doi_validator = deepcopy(validator)
+        doi_validator.providers["combine"] = _UNSAFE_SCICAT_COMBINE_PROVIDER
+        doi_validator.validate(storage.configuration)
+    else:
+        validator.validate(storage.configuration)
 
     if storage.storage_type not in ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS:
         raise errors.ValidationError(message="Only doi storage type is allowed for global data connectors")
