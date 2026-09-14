@@ -381,6 +381,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             resource_usage.blueprint(),
             internal_authentication.blueprint(),
             project_storage.blueprint(),
+            dm.ssh_proxy.blueprint(),
         ]
     )
     if builds is not None:

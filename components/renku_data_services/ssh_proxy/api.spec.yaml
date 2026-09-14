@@ -1,0 +1,96 @@
+openapi: 3.0.2
+info:
+  title: Renku SSH Proxy Internal API
+  description: Internal endpoints used by the Renku SSH proxy to authenticate users and authorize sessions.
+  version: v1
+servers:
+  - url: /api/data
+paths:
+  /internal/ssh_keys/identity:
+    post:
+      summary: Resolve the Renku user that owns the provided SSH public key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SSHKeyIdentityRequest"
+      responses:
+        "200":
+          description: The user that owns the key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SSHKeyIdentityResponse"
+        "404":
+          description: No registered key matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags: [ssh]
+  /internal/sessions/{session_id}/authorize:
+    get:
+      summary: Check whether a user may open a session.
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: user_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Authorized
+        "404":
+          description: The session does not exist or is not owned by the user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags: [ssh]
+components:
+  schemas:
+    SSHKeyIdentityRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        public_key:
+          type: string
+      required: [public_key]
+    SSHKeyIdentityResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        user_id:
+          type: string
+      required: [user_id]
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+            detail:
+              type: string
+            message:
+              type: string
+          required: [code, message]
+      required: [error]
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
