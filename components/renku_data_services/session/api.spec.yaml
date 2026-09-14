@@ -844,6 +844,7 @@ components:
       nullable: true
       items:
         $ref: "#/components/schemas/GitReference"
+      uniqueItems: true
     RepositoryAccessPolicy:
       description: Repository access policy config
       type: object
@@ -1132,6 +1133,7 @@ components:
     Repository:
       description: A git repository URL
       type: string
+      example: "https://github.com/SwissDataScienceCenter/repository"
     DefaultUrl:
       description: The default path to open in a session
       type: string
