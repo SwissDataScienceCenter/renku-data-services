@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import random
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -24,6 +25,22 @@ class SessionRunnersRepository:
 
     def __init__(self, authz: Authz) -> None:
         self.authz: Authz = authz
+
+    async def get_all_runners(
+        self, session: AsyncSession, user: base_models.APIUser
+    ) -> AsyncIterator[models.SessionRunner]:
+        """Get all session runners for a user from the database."""
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        # TODO: handle admin users -> can see all runners
+        stmt = (
+            select(schemas.SessionRunnerORM)
+            .where(schemas.SessionRunnerORM.user_id == user.id)
+            .order_by(schemas.SessionRunnerORM.id.desc())
+        )
+        res = await session.stream_scalars(stmt)
+        async for runner_orm in res:
+            yield runner_orm.dump()
 
     async def get_runner_or_none(
         self, session: AsyncSession, user: base_models.APIUser, id: ULID
@@ -139,6 +156,20 @@ class SessionRunnersRepository:
         # TODO: handle sessions assigned to the runner
         await session.flush()
         return runner_orm.dump()
+
+    async def delete_runner(self, session: AsyncSession, user: base_models.APIUser, runner_id: ULID) -> None:
+        """Remove a session runner from the database."""
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        stmt = select(schemas.SessionRunnerORM).where(schemas.SessionRunnerORM.id == runner_id)
+        if not user.is_admin:
+            stmt = stmt.where(schemas.SessionRunnerORM.user_id == user.id)
+        res = await session.scalars(stmt)
+        runner_orm = res.one_or_none()
+        if runner_orm is None:
+            return None
+        await session.delete(runner_orm)
+        return None
 
     @staticmethod
     def _generate_registration_token(size: int = 18) -> str:

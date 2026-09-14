@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from sanic import Request
-from sanic.response import JSONResponse
+from sanic.response import HTTPResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
@@ -31,6 +31,19 @@ class SessionRunnersBP(CustomBlueprint):
     internal_authenticator: RenkuSelfAuthenticator
     internal_token_mint: RenkuSelfTokenMint
     session_maker: Callable[..., AsyncSession]
+
+    def get_all_session_runners(self) -> BlueprintFactoryResponse:
+        """Create a new session runner."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_all_session_runners(_: Request, user: base_models.APIUser) -> JSONResponse:
+            async with self.session_maker() as session, session.begin():
+                runners = self.session_runners_repo.get_all_runners(session=session, user=user)
+                result = [item async for item in runners]
+            return validated_json(apispec.SessionRunners, result)
+
+        return "/session_runners", ["GET"], _get_all_session_runners
 
     def post_session_runner(self) -> BlueprintFactoryResponse:
         """Create a new session runner."""
@@ -86,6 +99,20 @@ class SessionRunnersBP(CustomBlueprint):
             return validated_json(apispec.SessionRunner, runner)
 
         return "/session_runners/<session_runner_id:ulid>", ["GET"], _get_session_runner
+
+    def delete_session_runner(self) -> BlueprintFactoryResponse:
+        """Remove a session runner."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete_session_runner(
+            _: Request, user: base_models.APIUser, session_runner_id: ULID
+        ) -> HTTPResponse:
+            async with self.session_maker() as session, session.begin():
+                await self.session_runners_repo.delete_runner(session=session, user=user, runner_id=session_runner_id)
+            return HTTPResponse(status=204)
+
+        return "/session_runners/<session_runner_id:ulid>", ["DELETE"], _delete_session_runner
 
     def post_session_runner_contact(self) -> BlueprintFactoryResponse:
         """Contact endpoint for session runners."""

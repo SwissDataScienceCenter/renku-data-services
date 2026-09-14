@@ -9,6 +9,20 @@ servers:
   - url: /api/data
 paths:
   /session_runners:
+    get:
+      summary: Get all session runners
+      description: TODO
+      responses:
+        "200":
+          description: A list of session runners
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRunners"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_runners
     post:
       summary: Create a new session runner
       description: TODO
@@ -77,6 +91,16 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_runners
+    delete:
+      summary: Remove a session runner
+      description: TODO
+      responses:
+        "204":
+          description: The session runner was removed or did not exist in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_runners
   /session_runners/{session_runner_id}/contact:
     parameters:
       - in: path
@@ -106,6 +130,11 @@ paths:
         - session_runners
 components:
   schemas:
+    SessionRunners:
+      description: A list of session runners
+      type: array
+      items:
+        $ref: "#/components/schemas/SessionRunner"
     SessionRunner:
       description: A session runner
       type: object

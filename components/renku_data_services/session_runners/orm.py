@@ -90,3 +90,12 @@ class SessionRunnerORM(BaseORM):
             status=self.status,
             registration_token=self.registration_token if include_registration_token else None,
         )
+
+
+# Table: sessions_runners.assigned_sessions
+# - `id`: ID of the session (name), unique, pk
+# - `user_id`: user ID who owns the session
+# - `runner_id`: ID of the session runner assigned for the session, NULL if not yet assigned
+# - `amalthea_status`: status on the amalthea side
+# - `runner_status`: status on the runner side: unknown, running, (hibernated), error
+# - `updated_at`: timestamp of the last row update
