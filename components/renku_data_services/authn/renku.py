@@ -40,14 +40,17 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
     token_field: str = "Authorization"
     anon_id_header_key: str = "Renku-Auth-Anon-Id"
     anon_id_cookie_name: str = "Renku-Auth-Anon-Id"
+    required_scope: str | None = None
+    """If set, the token's `scope` claim must contain this scope item."""
 
     @classmethod
-    def from_config(cls, config: "InternalAuthenticationConfig") -> Self:
+    def from_config(cls, config: "InternalAuthenticationConfig", required_scope: str | None = None) -> Self:
         """Create an instance from a configuration object."""
         return cls(
             secret_key=config.secret_key,
             issuer=config.issuer,
             audience=config.audience,
+            required_scope=required_scope,
         )
 
     async def authenticate(self, access_token: str, request: Request) -> APIUser:
@@ -66,6 +69,11 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
             token_type = parsed.get("typ")
             if str(token_type).lower() != "bearer":
                 raise errors.UnauthorizedError() from None
+
+            if self.required_scope is not None:
+                token_scope = str(parsed.get("scope", ""))
+                if self.required_scope not in token_scope.split():
+                    raise errors.UnauthorizedError() from None
 
             return AuthenticatedAPIUser(
                 is_admin=False,

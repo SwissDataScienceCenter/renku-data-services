@@ -12,6 +12,7 @@ from ulid import ULID
 from renku_data_services.app_config.config import InternalAuthenticationConfig
 from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.base_models import AuthenticatedAPIUser
+from renku_data_services.ssh_proxy.constants import SSH_PROXY_SCOPE
 from test.utils import SanicReusableASGITestClient
 
 if TYPE_CHECKING:
