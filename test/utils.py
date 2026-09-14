@@ -84,7 +84,6 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
-from renku_data_services.ssh_proxy.blueprints import SSHProxyBP
 from renku_data_services.ssh_proxy.constants import SSH_PROXY_SCOPE
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
@@ -327,13 +326,6 @@ class TestDependencyManager(DependencyManager):
             user_preferences_config=config.user_preferences,
         )
         ssh_key_repo = SSHKeyRepository(session_maker=config.db.async_session_maker)
-        ssh_proxy = SSHProxyBP(
-            name="ssh_proxy",
-            url_prefix="/api/data",
-            service_authenticator=service_authenticator,
-            ssh_key_repo=ssh_key_repo,
-            nb_config=config.nb_config,
-        )
         low_level_user_secrets_repo = LowLevelUserSecretsRepo(
             session_maker=config.db.async_session_maker,
         )
@@ -494,7 +486,6 @@ class TestDependencyManager(DependencyManager):
             internal_scope_verifier=internal_scope_verifier,
             project_storage_k8s=project_storage_k8s,
             project_storage_repo=project_storage_repo,
-            ssh_proxy=ssh_proxy,
         )
 
     def __post_init__(self) -> None:
