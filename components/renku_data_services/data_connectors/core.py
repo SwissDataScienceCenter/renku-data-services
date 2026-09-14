@@ -525,7 +525,7 @@ async def create_deposit_upload(
     deposit_config: DepositConfig,
     storage_class: str,
     k8s_client: K8sClient,
-    data_service_base_url: str,
+    secrets_storage_service_url: str,
     deposit_job: models.DepositJob,
     job_client: DepositUploadJobClient,
     data_source_repo: DataSourceRepository,
@@ -849,16 +849,25 @@ async def create_deposit_upload(
             kind=job.kind,
         )
 
+    def _owner_reference_to_secret_dict(owner_reference: V1OwnerReference) -> dict[str, str | None]:
+        """Build the minimal string-only owner reference shape the secrets-storage-api expects."""
+        return {
+            "apiVersion": owner_reference.api_version,
+            "kind": owner_reference.kind,
+            "name": owner_reference.name,
+            "uid": owner_reference.uid,
+        }
+
     async def _request_saved_secret_creation(
         user: base_models.AuthenticatedAPIUser,
-        data_service_base_url: str,
+        secrets_storage_service_url: str,
         dc_secrets_dict: dict[str, list[models.DataConnectorSecret]],
         deposit_config: DepositConfig,
         pvc_name: str,
         owner_reference: V1OwnerReference,
     ) -> K8sObjectMeta | None:
         """Calls the secret service to request the creation of saved storage secrets."""
-        secrets_url = data_service_base_url + "/api/secrets/kubernetes"
+        secrets_url = secrets_storage_service_url + "/api/secrets/kubernetes"
         headers = {"Authorization": f"bearer {user.access_token}"}
         dc_secrets = list(dc_secrets_dict.items())
         if len(dc_secrets) > 0:
@@ -874,19 +883,19 @@ async def create_deposit_upload(
                 "name": secret_name,
                 "namespace": deposit_config.namespace,
                 "secret_ids": [str(secret.secret_id) for secret in secrets],
-                "owner_references": [sanitizer(owner_reference)],
+                "owner_references": [_owner_reference_to_secret_dict(owner_reference)],
                 "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
                 "cluster_id": str(deposit_config.cluster_id),
             }
             async with httpx.AsyncClient(timeout=10) as client:
                 res = await client.post(secrets_url, headers=headers, json=request_data)
-            if res.status_code >= 300 or res.status_code < 200:
-                raise errors.ProgrammingError(
-                    message=f"The secret for data connector with {s_id} could not be "
-                    f"successfully created, the status code was {res.status_code}. "
-                    "Please contact a Renku administrator.",
-                    detail=res.text,
-                )
+                if res.status_code >= 300 or res.status_code < 200:
+                    raise errors.ProgrammingError(
+                        message=f"The secret for data connector with {s_id} could not be "
+                        f"successfully created, the status code was {res.status_code}. "
+                        "Please contact a Renku administrator.",
+                        detail=res.text,
+                    )
             return K8sObjectMeta(
                 name=secret_name,
                 cluster=deposit_config.cluster_id,
@@ -1050,7 +1059,7 @@ async def create_deposit_upload(
     try:
         created_saved_secret = await _request_saved_secret_creation(
             user=user,
-            data_service_base_url=data_service_base_url,
+            secrets_storage_service_url=secrets_storage_service_url,
             dc_secrets_dict=extras.data_connector_secrets,
             deposit_config=deposit_config,
             pvc_name=pvc_name,
