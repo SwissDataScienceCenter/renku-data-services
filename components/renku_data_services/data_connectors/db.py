@@ -377,7 +377,7 @@ class DataConnectorRepository:
         self,
         user: base_models.APIUser,
         prevalidated_dc: models.PrevalidatedGlobalDataConnector,
-        validator: RCloneValidator | None,
+        validator: RCloneValidator,
         *,
         session: AsyncSession | None = None,
     ) -> tuple[models.GlobalDataConnector, bool]:
@@ -404,12 +404,9 @@ class DataConnectorRepository:
             return dc, False
 
         # Fully validate a global data connector before inserting
-        if isinstance(data_connector, models.UnsavedGlobalDataConnector):
-            if validator is None:
-                raise RuntimeError("Could not validate global data connector")
-            data_connector = await validate_unsaved_global_data_connector(
-                prevalidated_dc=prevalidated_dc, validator=validator
-            )
+        data_connector = await validate_unsaved_global_data_connector(
+            prevalidated_dc=prevalidated_dc, validator=validator
+        )
 
         dc = await self._insert_data_connector(user=user, data_connector=data_connector, session=session)
         if not isinstance(dc, models.GlobalDataConnector):

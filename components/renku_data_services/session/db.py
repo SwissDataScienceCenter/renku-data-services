@@ -18,6 +18,7 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.project.apispec import Visibility as ProjectVisibility
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata, RepositoryVisibility
 from renku_data_services.session import constants, models
@@ -28,6 +29,16 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from renku_data_services.session.config import BuildsConfig
+
+
+def _validate_app_launcher_project_visibility(
+    launcher_type: models.LauncherType, project_visibility: ProjectVisibility
+) -> None:
+    """Enforce that an app launcher can only live in a public project."""
+    if not models.app_launcher_project_visibility_is_valid(
+        launcher_type, project_is_public=project_visibility == ProjectVisibility.public
+    ):
+        raise errors.ValidationError(message="An app launcher can only be created in a public project.")
 
 
 class SessionEnvironmentRepositoryProtocol(Protocol):
@@ -41,6 +52,14 @@ class SessionEnvironmentRepositoryProtocol(Protocol):
         self, user: base_models.APIUser, environment: models.UnsavedEnvironment
     ) -> models.Environment:
         """Insert a new session environment."""
+        ...
+
+
+class AppLauncherCleanupProtocol(Protocol):
+    """Protocol for tearing down the app deployment backing a launcher that is going away."""
+
+    async def delete_app_for_launcher_id(self, launcher_id: ULID) -> None:
+        """Delete the app deployment backing the given launcher, if one exists."""
         ...
 
 
@@ -62,6 +81,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         self.shipwright_client = shipwright_client
         self.builds_config = builds_config
         self.git_repositories_repo = git_repositories_repo
+        self.apps_cleanup: AppLauncherCleanupProtocol | None = None
 
     async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
@@ -439,6 +459,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     message=f"Project with id '{project_id}' does not exist or you do not have access to it."
                 )
 
+            _validate_app_launcher_project_visibility(launcher.launcher_type, project.visibility)
+
             environment_id: ULID
             environment: models.Environment
             environment_orm: schemas.EnvironmentORM | None
@@ -589,6 +611,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     message=f"Project with id '{project_id}' does not exist or you do not have access to it."
                 )
 
+            _validate_app_launcher_project_visibility(launcher.launcher_type, project.visibility)
+
             if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:
                 environment = self.__copy_environment(user, session, launcher.environment)
                 environment_id = environment.id
@@ -603,6 +627,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 resource_class_id=launcher.resource_class_id,
                 disk_storage=launcher.disk_storage,
                 env_variables=models.EnvVar.to_dict(launcher.env_variables) if launcher.env_variables else None,
+                launcher_type=launcher.launcher_type,
                 created_by_id=user.id,
                 creation_date=datetime.now(UTC).replace(microsecond=0),
             )
@@ -842,6 +867,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             )
             if not authorized:
                 raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+            if launcher.launcher_type == models.LauncherType.app and self.apps_cleanup is not None:
+                await self.apps_cleanup.delete_app_for_launcher_id(launcher_id=launcher_id)
 
             await session.delete(launcher)
             if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:
@@ -1116,6 +1144,15 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
             environment = build.environment
             environment.container_image = build.result_image
+
+            # Do not overwrite `command` and `args` for jobs
+            is_non_interactive = False
+            launcher = await session.scalar(
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.environment_id == environment.id)
+            )
+            if launcher and launcher.launcher_type == models.LauncherType.non_interactive:
+                is_non_interactive = True
+
             build_env = models.BUILD_ENVIRONMENT_CONFIGS.get(frontend_var) if frontend_var else None
             if build_env:
                 # NOTE: This is necessary because if the environment changed from jupyterlab to ttyd (for example)
@@ -1128,8 +1165,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 environment.gid = build_env.gid
                 environment.working_directory = build_env.working_directory
                 environment.mount_directory = build_env.mount_directory
-                environment.command = build_env.command
-                environment.args = build_env.args
+                if not is_non_interactive:
+                    environment.command = build_env.command
+                    environment.args = build_env.args
             else:
                 logger.error(
                     f"Build {build.id}: could not find frontend variant '{frontend_var}' "
@@ -1245,6 +1283,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             frontend=build_parameters.frontend_variant,
             git_repository_revision=git_repository_revision,
             context_dir=context_dir,
+            build_insecure_output_enabled=self.builds_config.build_insecure_output_enabled,
             insecure_registries=self.builds_config.build_insecure_registries,
         )
 

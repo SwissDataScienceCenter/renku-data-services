@@ -18,6 +18,7 @@ from renku_data_services.resource_usage.orm import BaseORM as resource_usage
 from renku_data_services.search.orm import BaseORM as search
 from renku_data_services.secrets.orm import BaseORM as secrets
 from renku_data_services.session.orm import BaseORM as sessions
+from renku_data_services.storage.orm import BaseORM as storage
 from renku_data_services.users.orm import BaseORM as users
 
 all_metadata = [
@@ -37,6 +38,7 @@ all_metadata = [
     search.metadata,
     secrets.metadata,
     sessions.metadata,
+    storage.metadata,
     users.metadata,
     resource_usage.metadata,
 ]

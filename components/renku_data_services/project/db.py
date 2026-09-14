@@ -7,7 +7,7 @@ import random
 import string
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-from typing import Concatenate, ParamSpec, TypeVar
+from typing import Concatenate, ParamSpec, Protocol, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import ColumnElement, Select, delete, distinct, func, or_, select, update
@@ -43,6 +43,14 @@ from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.core import with_db_transaction
 
 
+class AppsCleanupProtocol(Protocol):
+    """Protocol for tearing down the apps of a project that may no longer host them."""
+
+    async def delete_apps_for_project(self, project_id: ULID) -> None:
+        """Delete every app deployment belonging to the given project."""
+        ...
+
+
 class ProjectRepository:
     """Repository for projects."""
 
@@ -57,6 +65,7 @@ class ProjectRepository:
         self.group_repo: GroupRepository = group_repo
         self.search_updates_repo: SearchUpdatesRepo = search_updates_repo
         self.authz = authz
+        self.apps_cleanup: AppsCleanupProtocol | None = None
 
     async def get_projects(
         self,
@@ -357,6 +366,12 @@ class ProjectRepository:
                 if isinstance(patch.visibility, str)
                 else project_apispec.Visibility(patch.visibility.value)
             )
+            if (
+                visibility_orm != project_apispec.Visibility.public
+                and project.visibility == project_apispec.Visibility.public
+                and self.apps_cleanup is not None
+            ):
+                await self.apps_cleanup.delete_apps_for_project(project_id=project_id)
             project.visibility = visibility_orm
         if patch.repositories is not None:
             project.repositories = [
@@ -407,6 +422,9 @@ class ProjectRepository:
 
         if project is None:
             return None
+
+        if self.apps_cleanup is not None:
+            await self.apps_cleanup.delete_apps_for_project(project_id=project_id)
 
         dcs = await session.execute(
             select(distinct(ns_schemas.EntitySlugORM.data_connector_id))

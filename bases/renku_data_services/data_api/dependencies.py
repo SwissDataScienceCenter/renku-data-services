@@ -17,6 +17,7 @@ import renku_data_services.crc
 import renku_data_services.data_connectors
 import renku_data_services.notifications
 import renku_data_services.platform
+import renku_data_services.renku_apps
 import renku_data_services.repositories
 import renku_data_services.search
 import renku_data_services.storage
@@ -72,6 +73,8 @@ from renku_data_services.project.db import (
     ProjectRepository,
     ProjectSessionSecretRepository,
 )
+from renku_data_services.renku_apps.k8s_client import KNATIVE_SERVICE_GVK, RenkuAppsK8sClient
+from renku_data_services.renku_apps.repository import RenkuAppsRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
@@ -82,6 +85,9 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
+from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
+from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
@@ -148,6 +154,8 @@ class DependencyManager:
     search_updates_repo: SearchUpdatesRepo
     search_reprovisioning: SearchReprovision
     session_repo: SessionRepository
+    apps_k8s_client: RenkuAppsK8sClient | None
+    apps_repo: RenkuAppsRepository | None
     user_preferences_repo: UserPreferencesRepository
     kc_user_repo: KcUserRepo
     low_level_user_secrets_repo: LowLevelUserSecretsRepo
@@ -181,6 +189,8 @@ class DependencyManager:
     secret_client: K8sSecretClient
     internal_token_mint: RenkuSelfTokenMint
     internal_scope_verifier: ScopeVerifier
+    project_storage_k8s: ProjectStorageK8s
+    project_storage_repo: ProjectStorageRepository
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -202,6 +212,7 @@ class DependencyManager:
             renku_data_services.project.__file__,
             renku_data_services.namespace.__file__,
             renku_data_services.session.__file__,
+            renku_data_services.renku_apps.__file__,
             renku_data_services.connected_services.__file__,
             renku_data_services.repositories.__file__,
             renku_data_services.notebooks.__file__,
@@ -278,13 +289,16 @@ class DependencyManager:
 
         k8s_db_cache = K8sDbCache(config.db.async_session_maker)
         default_kubeconfig = KubeConfigEnv()
+        kinds_to_cache = [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK]
+        if config.apps.enabled:
+            kinds_to_cache.append(KNATIVE_SERVICE_GVK)
         client = K8sClusterClientsPool(
             lambda: get_clusters(
                 kube_conf_root_dir=config.k8s_config_root,
                 default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_repo,
                 cache=k8s_db_cache,
-                kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                kinds_to_cache=kinds_to_cache,
             ),
         )
 
@@ -346,7 +360,7 @@ class DependencyManager:
                             default_kubeconfig=default_kubeconfig,
                             cluster_repo=cluster_repo,
                             cache=k8s_db_cache,
-                            kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                            kinds_to_cache=kinds_to_cache,
                         ),
                     ),
                     namespace=config.k8s_namespace,
@@ -370,6 +384,14 @@ class DependencyManager:
             resource_usage_service=resource_usage_service,
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
+        )
+        project_storage_k8s = ProjectStorageK8s(config.nb_config.k8s_v2_client)
+        project_storage_repo = ProjectStorageRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            project_repo=project_repo,
+            group_repo=group_repo,
+            project_storage_config=config.project_storage_config,
         )
         reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
 
@@ -441,6 +463,28 @@ class DependencyManager:
             oauth_client_factory=oauth_http_client_factory,
             internal_token_mint=internal_token_mint,
         )
+        apps_k8s_client: RenkuAppsK8sClient | None = None
+        apps_repo: RenkuAppsRepository | None = None
+        if config.apps.enabled:
+            validator = RCloneValidator()
+            apps_k8s_client = RenkuAppsK8sClient(
+                client=client,
+                cluster_repo=cluster_repo,
+                storage_class=config.nb_config.cloud_storage.storage_class,
+                default_affinity=config.nb_config.sessions.affinity_model,
+                default_tolerations=config.nb_config.sessions.tolerations_model,
+            )
+            apps_repo = RenkuAppsRepository(
+                authz=authz,
+                session_repo=session_repo,
+                rp_repo=rp_repo,
+                project_repo=project_repo,
+                k8s_client=apps_k8s_client,
+                dc_secret_repo=data_connector_secret_repo,
+                validator=validator,
+            )
+            project_repo.apps_cleanup = apps_repo
+            session_repo.apps_cleanup = apps_repo
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
             builds_config=config.builds,
@@ -496,6 +540,8 @@ class DependencyManager:
             project_session_secret_repo=project_session_secret_repo,
             group_repo=group_repo,
             session_repo=session_repo,
+            apps_k8s_client=apps_k8s_client,
+            apps_repo=apps_repo,
             user_preferences_repo=user_preferences_repo,
             kc_user_repo=kc_user_repo,
             user_secrets_repo=user_secrets_repo,
@@ -528,4 +574,6 @@ class DependencyManager:
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,
             internal_scope_verifier=internal_scope_verifier,
+            project_storage_k8s=project_storage_k8s,
+            project_storage_repo=project_storage_repo,
         )

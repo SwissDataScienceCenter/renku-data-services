@@ -250,6 +250,11 @@ class LauncherType(StrEnum):
     app = "app"
 
 
+def app_launcher_project_visibility_is_valid(launcher_type: LauncherType, project_is_public: bool) -> bool:
+    """Whether a launcher of this type may exist in a project with this visibility."""
+    return launcher_type != LauncherType.app or project_is_public
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedSessionLauncher:
     """Session launcher model that has not been persisted in the DB."""
@@ -378,6 +383,7 @@ class ShipwrightBuildRunParams:
     builder_image: str | None = None
     git_repository_revision: str | None = None
     context_dir: str | None = None
+    build_insecure_output_enabled: bool = False
     insecure_registries: str = ""
 
     def with_overrides(self, overrides: config.BuildPlatformOverrides | None) -> ShipwrightBuildRunParams:
@@ -403,6 +409,7 @@ class ShipwrightBuildRunParams:
             builder_image=overrides.builder_image or self.builder_image,
             git_repository_revision=self.git_repository_revision,
             context_dir=self.context_dir,
+            build_insecure_output_enabled=self.build_insecure_output_enabled,
             insecure_registries=self.insecure_registries,
         )
 

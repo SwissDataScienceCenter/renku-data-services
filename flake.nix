@@ -70,7 +70,7 @@
         src = pkgs.fetchFromGitHub {
           owner = "SwissDataScienceCenter";
           repo = "rclone";
-          rev = "v1.71.2+renku-1";
+          tag = "v1.71.2+renku-1";
           sha256 = "sha256-NhPYEGPgpwe56zExrV3SiYsbKLb3/OuX+UOuezgJQ8w=";
         };
       });
@@ -142,7 +142,7 @@
         redis
         postgresql_16
         jq
-        devshellToolsPkgs.openapi-docs
+        #devshellToolsPkgs.openapi-docs
         devshellToolsPkgs.solr
         devshellToolsPkgs.postgres-fg
         spicedb
@@ -164,9 +164,14 @@
         '')
         (
           writeShellScriptBin "poetry-setup" ''
+            set -e
             venv_path="$(poetry env info -p)"
             if [ "$1" == "-c" ]; then
                echo "Removing virtual env at $venv_path"
+               if [ -z "$venv_path" ]; then
+                   echo "No venv path found??? exiting."
+                   exit 1
+               fi
                rm -rf "$venv_path"/*
             fi
             poetry install
@@ -186,6 +191,47 @@
         (
           writeShellScriptBin "ptest" ''
             pytest --disable-warnings --no-cov -s -p no:warnings $@
+          ''
+        )
+        (
+          writeShellScriptBin "openapi-lint" ''
+            ${redocly}/bin/redocly lint \
+              --skip-rule operation-operationId \
+              --skip-rule security-defined \
+              --skip-rule info-license \
+              --skip-rule operation-4xx-response \
+              "$@"
+          ''
+        )
+        (
+          writeShellScriptBin "openapi-lint-all" ''
+            rm -f openapi-lint-all-result.json
+            error_count=0
+            warn_count=0
+            for f in $(find . -type f -name "api.spec.yaml"); do
+                echo "Running redocly lint on $f ..."
+                result=$(openapi-lint --format json "$f")
+                echo "$result" >> openapi-lint-all-result.json
+                errors=$(echo "$result" | jq -r '.totals|.errors')
+                warns=$(echo "$result" | jq -r '.totals|.warnings')
+                error_count=$(($error_count + $errors))
+                warn_count=$(($warn_count + $warns))
+            done
+
+            echo ">> ERRORS: $error_count"
+            echo ">> WARNINGS: $warn_count"
+
+            ## test merged file
+            cat > /tmp/make_spec.py <<-EOF
+            from renku_data_services.data_api.dependencies import DependencyManager
+            import json
+
+            aps = DependencyManager.load_apispec()
+            print(json.dumps(aps))
+            EOF
+            python /tmp/make_spec.py | jq > /tmp/merged_api_spec.json
+            echo "Created merged api spec in /tmp/merged_api_spec.json"
+            openapi-lint /tmp/merged_api_spec.json
           ''
         )
       ];
@@ -281,7 +327,7 @@
             SOLR_CORE = "renku-search-dev";
 
             #AMALTHEA_SESSIONS_VERSION = "refs/heads/eikek/non-interactive-session";
-            RENKU_ENV = "renku-ci-ds-1328";
+            RENKU_ENV = "renku-ci-ds-1419";
             K8S_NAMESPACE = "default";
             KUBERNETES_NAMESPACE = "default";
             DEBUG_LOGGING = "renku_data_services";

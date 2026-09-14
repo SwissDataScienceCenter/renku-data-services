@@ -14,7 +14,10 @@ from typing import Protocol, TypeVar, cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from kubernetes.client import V1ObjectMeta, V1Secret
+from kubernetes.client import (
+    V1ObjectMeta,
+    V1Secret,
+)
 from sanic import Request
 from toml import dumps
 from ulid import ULID
@@ -22,6 +25,8 @@ from yaml import safe_dump
 
 from renku_data_services.app_config import logging
 from renku_data_services.authn.renku import RenkuSelfTokenMint
+from renku_data_services.authz.authz import Authz
+from renku_data_services.authz.models import ResourceType, Scope
 from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
@@ -36,6 +41,7 @@ from renku_data_services.crc.models import (
     SessionProtocol,
 )
 from renku_data_services.data_connectors.db import (
+    DataConnectorRepository,
     DataConnectorSecretRepository,
 )
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
@@ -47,6 +53,7 @@ from renku_data_services.notebooks.api.amalthea_patches.init_containers import u
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
+from renku_data_services.notebooks.cr_amalthea_session import PersistentVolumeClaim
 from renku_data_services.notebooks.crs import (
     AmaltheaMetadata,
     AmaltheaSessionSpec,
@@ -118,6 +125,8 @@ from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import Environment, SessionLauncher
+from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import get_effective_quota
 
@@ -179,6 +188,47 @@ async def get_extra_containers(
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
     return SessionExtraResources(containers=conts)
+
+
+async def get_project_storage(
+    user: APIUser,
+    project_storage_k8s: ProjectStorageK8s,
+    project_storage_repo: ProjectStorageRepository,
+    project_id: ULID,
+    storage_mount: PurePosixPath,
+    cluster: ClusterConnection,
+    authz: Authz,
+) -> SessionExtraResources:
+    """If applicable, fetch the project storage and return it as SessionExtras."""
+    project_storage = await project_storage_repo.get_storage_to(user, project_id)
+    if not project_storage:
+        logger.debug(f"Project {project_id} has no project storage.")
+        return SessionExtraResources()
+
+    pvc = await project_storage_k8s.get_or_create_volume(project_storage, cluster)
+
+    logger.debug(f"Configuring project storage for {project_id}: {project_storage}")
+    mount_path = project_storage.mount_path
+    if not mount_path.is_absolute():
+        mount_path = storage_mount / mount_path
+
+    mount_name = f"ps-{project_id}-0".lower()
+    can_write = await authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+    return SessionExtraResources(
+        volume_mounts=[
+            ExtraVolumeMount(
+                mountPath=mount_path.as_posix(),
+                name=mount_name,
+                readOnly=not can_write,
+            )
+        ],
+        volumes=[
+            ExtraVolume(
+                name=mount_name,
+                persistentVolumeClaim=PersistentVolumeClaim(claimName=pvc.name),
+            )
+        ],
+    )
 
 
 async def get_auth_secret_authenticated(
@@ -890,9 +940,11 @@ async def start_session(
     nb_config: NotebooksConfig,
     git_provider_helper: GitProviderHelperProto,
     cluster_repo: ClusterRepository,
+    data_connector_repo: DataConnectorRepository,
     data_connector_secret_repo: DataConnectorSecretRepository,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
+    project_storage_repo: ProjectStorageRepository,
     rp_repo: ResourcePoolRepository,
     session_repo: SessionRepository,
     user_repo: UserRepo,
@@ -903,6 +955,7 @@ async def start_session(
     builds_config: BuildsConfig,
     internal_token_mint: RenkuSelfTokenMint,
     resource_usage_service: ResourceUsageService,
+    authz: Authz,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -1026,6 +1079,14 @@ async def start_session(
     # Extra containers
     session_extras = session_extras.concat(
         await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
+    )
+
+    # project storage
+    project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
+    session_extras = session_extras.concat(
+        await get_project_storage(
+            user, project_storage_k8s, project_storage_repo, project.id, storage_mount, cluster, authz
+        )
     )
 
     # Cluster settings (ingress, storage class, etc)
@@ -1286,6 +1347,8 @@ async def patch_session(
     internal_token_mint: RenkuSelfTokenMint,
     resource_usage_service: ResourceUsageService,
     resource_requests_repo: ResourceRequestsRepo,
+    project_storage_repo: ProjectStorageRepository,
+    authz: Authz,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -1500,6 +1563,23 @@ async def patch_session(
     if session_type.is_non_interactive:
         session_extras = session_extras.extra_container_as_sidecars()
 
+    # When resuming, we need to check for a project storage and disable it if it has been removed
+    remove_mounts: list[str] | None = None
+    if is_being_resumed:
+        storage_db = await project_storage_repo.get_storage_to(user, project.id)
+        if storage_db is None:
+            logger.debug(f"Removing project storage mounts on project {project.id}")
+            remove_mounts = [f"ps-{project.id}-0".lower()]
+        else:
+            # but if a project storage has been added, we need to add it to the resumed session
+            logger.debug(f"Adding storage to resumed session for project {project.id}")
+            project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
+            session_extras = session_extras.concat(
+                await get_project_storage(
+                    user, project_storage_k8s, project_storage_repo, project.id, storage_mount, cluster, authz
+                )
+            )
+
     # Construct session patch
     patch.spec.extraContainers = _make_patch_spec_list(
         existing=session.spec.extraContainers or [], updated=session_extras.containers
@@ -1508,12 +1588,14 @@ async def patch_session(
         existing=session.spec.initContainers or [], updated=session_extras.init_containers
     )
     patch.spec.extraVolumes = _make_patch_spec_list(
-        existing=session.spec.extraVolumes or [], updated=session_extras.volumes
+        existing=session.spec.extraVolumes or [], updated=session_extras.volumes, remove=remove_mounts
     )
     if not patch.spec.session:
         patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
     patch.spec.session.extraVolumeMounts = _make_patch_spec_list(
-        existing=session.spec.session.extraVolumeMounts or [], updated=session_extras.volume_mounts
+        existing=session.spec.session.extraVolumeMounts or [],
+        updated=session_extras.volume_mounts,
+        remove=remove_mounts,
     )
 
     secrets_to_create = session_extras.secrets or []
@@ -1550,10 +1632,13 @@ class _NamedResource(Protocol):
 _T = TypeVar("_T", bound=_NamedResource)
 
 
-def _make_patch_spec_list(existing: Sequence[_T], updated: Sequence[_T]) -> list[_T] | None:
+def _make_patch_spec_list(
+    existing: Sequence[_T], updated: Sequence[_T], remove: list[str] | None = None
+) -> list[_T] | None:
     """Merges updated into existing by upserting items identified by their name.
 
     This method is used to construct session patches, merging session resources by name (containers, volumes, etc.).
+    The `remove` is a set of names that are not taken from the existing or updated sequences.
     """
     patch_list = None
     if updated:
@@ -1568,6 +1653,12 @@ def _make_patch_spec_list(existing: Sequence[_T], updated: Sequence[_T]) -> list
                 patch_list[idx] = upsert_item
             else:
                 patch_list.append(upsert_item)
+
+    if remove:
+        if not patch_list:
+            patch_list = list(existing)
+        patch_list = [e for e in patch_list if e.name not in remove]
+
     return patch_list
 
 

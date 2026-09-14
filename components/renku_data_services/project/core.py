@@ -13,6 +13,7 @@ from renku_data_services.project import apispec, models
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories import git_url
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.models import LauncherType
 
 logger = logging.getLogger(__file__)
 
@@ -111,6 +112,8 @@ async def copy_project(
     # NOTE: Copy session launchers
     launchers = await session_repo.get_project_launchers(user=user, project_id=source_project_id)
     for launcher in launchers:
+        if launcher.launcher_type == LauncherType.app and project.visibility != Visibility.PUBLIC:
+            continue
         await session_repo.copy_launcher(user=user, project_id=project.id, launcher=launcher)
 
     # NOTE: Copy data connector links. If this operation fails due to lack of permission, still proceed to create the

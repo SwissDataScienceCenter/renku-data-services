@@ -316,6 +316,12 @@ class ProjectPath(__NamespaceCommonMixin):
             raise errors.ValidationError(message=f"Two slug strings are needed to create a project path, got {slugs}.")
         return cls(NamespaceSlug(slugs[0]), ProjectSlug(slugs[1]))
 
+    @classmethod
+    def parse(cls, slug: str) -> Self:
+        """Parses a single string into a ProjectPath."""
+        namespace_split = slug.split("/")
+        return cls.from_strings(*namespace_split)
+
 
 @dataclass(frozen=True, eq=True, repr=False)
 class DataConnectorPath(__NamespaceCommonMixin):

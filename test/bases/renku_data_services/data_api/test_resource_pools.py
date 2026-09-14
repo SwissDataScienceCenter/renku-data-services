@@ -3457,3 +3457,67 @@ async def test_patch_resource_pool_remote_change_swaps_access(
     # Cleanup
     _, res = await sanic_client.delete(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers)
     assert res.status_code == 204, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+async def test_get_group_resource_pools(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    member_1_headers,
+    member_1_user,
+    member_2_user,
+    member_2_headers,
+    cluster: KindCluster,
+) -> None:
+    # Create public and private resource pools
+    resource_pool_public = deepcopy(valid_resource_pool_payload)
+    resource_pool_public["default"] = False
+    resource_pool_public["public"] = True
+    _, res = await create_rp(resource_pool_public, sanic_client)
+    assert res.status_code == 201
+
+    resource_pool_private = deepcopy(valid_resource_pool_payload)
+    resource_pool_private["default"] = False
+    resource_pool_private["public"] = False
+    _, res = await create_rp(resource_pool_private, sanic_client)
+    assert res.status_code == 201
+    rp_private = res.json
+
+    group = await create_group(
+        sanic_client, "test-pool-group", admin=True, members=[{"id": member_1_user.id, "role": "viewer"}]
+    )
+
+    # Check that the route does not return the public resource pool if not explicitly added to the group
+    _, response = await sanic_client.get(f"/api/data/groups/{group['slug']}/resource_pools", headers=member_1_headers)
+    assert response.status_code == 200
+    group_rps = response.json
+    assert len(group_rps) == 0
+
+    # Add the group to the private resource pool via /members
+    member_payload = [{"member_type": "group", "id": group["id"], "role": "group_viewer"}]
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp_private['id']}/members",
+        headers=admin_headers,
+        json=member_payload,
+    )
+    assert res.status_code == 201
+    assert res.json[0]["slug"] == "test-pool-group"
+    assert res.json[0]["name"] == "test-pool-group"
+
+    # GET /groups/{slug}/resource_pools should now return the private resource pool
+    _, response = await sanic_client.get(f"/api/data/groups/{group['slug']}/resource_pools", headers=member_1_headers)
+    assert response.status_code == 200
+    group_rps = response.json
+    assert len(group_rps) == 1
+    assert {rp["id"] for rp in group_rps} == {rp_private["id"]}
+
+    # Check that a user not in the group gets a 404 error
+    _, response = await sanic_client.get(f"/api/data/groups/{group['slug']}/resource_pools", headers=member_2_headers)
+    assert response.status_code == 404
+
+    # Test route with a non-existent group slug
+    _, response = await sanic_client.get("/api/data/groups/nonexistent-group/resource_pools", headers=member_1_headers)
+    assert response.status_code == 404

@@ -14,8 +14,9 @@ from kr8s.asyncio.objects import APIObject
 from kr8s.objects import Secret
 from kubernetes.client import V1Secret
 
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.errors import ProgrammingError, errors
-from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
+from renku_data_services.k8s.constants import DUMMY_RENKU_APP_USER_ID, DUMMY_TASK_RUN_USER_ID, ClusterId
 
 sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 K8sPatch = dict[str, Any]
@@ -440,6 +441,8 @@ class APIObjectInCluster:
                 return labels.get("renku.io/safe-username", None)
             case "taskrun":
                 return DUMMY_TASK_RUN_USER_ID
+            case "service" if self.obj.version == "serving.knative.dev/v1":
+                return DUMMY_RENKU_APP_USER_ID
             case _:
                 return None
 
@@ -482,3 +485,69 @@ class DeletePropagationPolicy(StrEnum):
 
     foreground = "Foreground"
     background = "Background"
+
+
+class K8sPersistentVolumeClaim(K8sObject):
+    """Represents a k8s persistent volume claim."""
+
+    def __init__(
+        self,
+        name: str,
+        namespace: str,
+        cluster: ClusterId,
+        manifest: Box,
+    ) -> None:
+        super().__init__(
+            name=name,
+            namespace=namespace,
+            cluster=cluster,
+            gvk=GVK(version="v1", kind="PersistentVolumeClaim"),
+            manifest=manifest,
+        )
+
+    @property
+    def meta(self) -> K8sObjectMeta:
+        """Extract the metadata."""
+        return K8sObjectMeta(
+            name=self.name,
+            namespace=self.namespace,
+            cluster=self.cluster,
+            gvk=self.gvk,
+            user_id=self.user_id,
+        )
+
+    @classmethod
+    def new(
+        cls,
+        name: str,
+        cluster: ClusterId,
+        namespace: str,
+        accessModes: list[str],
+        storage_class: str,
+        size: ByteSize,
+        labels: dict[str, str],
+    ) -> Self:
+        """Create a new perstistent volume claim."""
+        return cls(
+            name=name,
+            namespace=namespace,
+            cluster=cluster,
+            manifest=Box(
+                {
+                    "metadata": {
+                        "namespace": namespace,
+                        "name": name,
+                        "labels": labels,
+                    },
+                    "spec": {
+                        "accessModes": accessModes,
+                        "storageClassName": storage_class,
+                        "resources": {"requests": {"storage": f"{size.to_gibi()}Gi"}},
+                    },
+                }
+            ),
+        )
+
+    def get_storage_class(self) -> str:
+        """Return the storage class name from the manifest."""
+        return str(self.manifest.spec.storageClassName)

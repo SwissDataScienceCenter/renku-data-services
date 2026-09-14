@@ -18,9 +18,11 @@ from renku_data_services.data_connectors.config import DepositConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.persisted_logs.config import PersistedLogsConfig
+from renku_data_services.renku_apps.config import AppsConfig
 from renku_data_services.secrets.config import PublicSecretsConfig
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.solr.solr_client import SolrClientConfig
+from renku_data_services.storage.config import ProjectStorageConfig
 from renku_data_services.users.config import UserPreferencesConfig
 
 
@@ -34,6 +36,7 @@ class Config:
     k8s_config_root: str
     db: DBConfig
     builds: BuildsConfig
+    apps: AppsConfig
     nb_config: NotebooksConfig
     secrets: PublicSecretsConfig
     sentry: SentryConfig
@@ -50,6 +53,7 @@ class Config:
     alertmanager_webhook_role: str
     deposit_config: DepositConfig
     persisted_logs: PersistedLogsConfig
+    project_storage_config: ProjectStorageConfig
 
     @classmethod
     def from_env(cls, db: DBConfig | None = None) -> Self:
@@ -86,6 +90,7 @@ class Config:
             k8s_config_root=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
             db=db,
             builds=BuildsConfig.from_env(),
+            apps=AppsConfig.from_env(),
             nb_config=nb_config,
             secrets=PublicSecretsConfig.from_env(),
             sentry=SentryConfig.from_env(),
@@ -101,4 +106,5 @@ class Config:
             alertmanager_webhook_role=os.environ.get("ALERTMANAGER_WEBHOOK_ROLE", "alertmanager-webhook"),
             deposit_config=DepositConfig.from_env(nb_config.sessions.renku_url),
             persisted_logs=PersistedLogsConfig.from_env(namespace=k8s_namespace),
+            project_storage_config=ProjectStorageConfig.from_env(),
         )

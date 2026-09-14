@@ -7,9 +7,9 @@ spec:
   parameters:
     - name: platform-api-version
       description: The referenced version is the minimum version that all relevant buildpack implementations support.
-      default: "0.12"
+      default: "0.13"
     - name: insecure-registries
-      description: Comma separated list of registries to consider insecure (http or self-signed certificate).
+      description: Comma separated list of registries to consider insecure (http or self-signed certificate)
       default: ""
     - name: run-image
       description: The image to use as the base for all session images built with this strategy
@@ -27,8 +27,6 @@ spec:
       env:
         - name: CNB_PLATFORM_API
           value: $(params.platform-api-version)
-        - name: CNB_INSECURE_REGISTRIES
-          value: $(params.insecure-registries)
         - name: BP_RENKU_FRONTENDS
           value: $(params.frontend)
         - name: PARAM_SOURCE_CONTEXT
@@ -37,12 +35,33 @@ spec:
           value: $(params.shp-output-image)
         - name: PARAM_RUN_IMAGE
           value: $(params.run-image)
+        - name: PARAM_OUTPUT_INSECURE
+          value: $(params.shp-output-insecure)
+        - name: PARAM_INSECURE_REGISTRIES
+          value: $(params.insecure-registries)
       command:
         - /bin/bash
       args:
         - -c
         - |
           set -euo pipefail
+
+          insecureRegistries="${PARAM_INSECURE_REGISTRIES}"
+
+          if [[ "${PARAM_OUTPUT_INSECURE}" == "true" ]]; then
+            outputImageHost="${PARAM_OUTPUT_IMAGE%%/*}"
+            if [[ "${outputImageHost}" == "${PARAM_OUTPUT_IMAGE}" || ( "${outputImageHost}" != *.* && "${outputImageHost}" != *:* && "${outputImageHost}" != "localhost" ) ]]; then
+              echo "> Output image '${PARAM_OUTPUT_IMAGE}' has no explicit registry host; not adding to insecure registries."
+            else
+              insecureRegistries="${insecureRegistries}${outputImageHost},"
+            fi
+          fi
+
+          if [[ ! -z "$insecureRegistries" ]]; then
+            echo "> Using insecure registries: $insecureRegistries"
+
+            export CNB_INSECURE_REGISTRIES="${insecureRegistries}"
+          fi
 
           echo "> Processing environment variables..."
           ENV_DIR="/platform/env"
@@ -77,6 +96,7 @@ spec:
             -report=/tmp/report.toml \
             -run-image=${PARAM_RUN_IMAGE} \
             ${PARAM_OUTPUT_IMAGE}
+
       volumeMounts:
         - mountPath: /platform/env
           name: platform-env
