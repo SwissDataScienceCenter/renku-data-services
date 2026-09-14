@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Identity, Integer, LargeBinary, MetaData, String, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
+from ulid import ULID
 
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
-from renku_data_services.users.models import PinnedProjects, UserInfo, UserPreferences
+from renku_data_services.users.models import PinnedProjects, SSHKey, UnsavedSSHKey, UserInfo, UserPreferences
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 if TYPE_CHECKING:
     from renku_data_services.namespace.orm import NamespaceORM
@@ -115,4 +117,41 @@ class UserPreferencesORM(BaseORM):
             user_id=self.user_id,
             pinned_projects=PinnedProjects.from_dict(self.pinned_projects),
             show_project_migration_banner=self.show_project_migration_banner,
+        )
+
+
+class SSHKeyORM(BaseORM):
+    """SSH public key registered by a user."""
+
+    __tablename__ = "ssh_keys"
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    user_id: Mapped[str] = mapped_column("user_id", ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), index=True)
+    public_key: Mapped[str] = mapped_column(String(2048))
+    key_type: Mapped[str] = mapped_column(String(64))
+    fingerprint: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    name: Mapped[str | None] = mapped_column(String(256), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default_factory=lambda: datetime.now(UTC))
+
+    def dump(self) -> SSHKey:
+        """Create an SSHKey model from the ORM object."""
+        return SSHKey(
+            id=self.id,
+            user_id=self.user_id,
+            public_key=self.public_key,
+            key_type=self.key_type,
+            fingerprint=self.fingerprint,
+            name=self.name,
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def load(cls, ssh_key: UnsavedSSHKey, user_id: str) -> SSHKeyORM:
+        """Create an ORM object from an unsaved SSH key."""
+        return cls(
+            user_id=user_id,
+            public_key=ssh_key.public_key,
+            key_type=ssh_key.key_type,
+            fingerprint=ssh_key.fingerprint,
+            name=ssh_key.name,
         )
