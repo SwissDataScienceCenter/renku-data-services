@@ -461,7 +461,12 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
 
     default = update.default if update.default is not None else existing.default
     public = update.public if update.public is not None else existing.public
-    remote: models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | ResetType
+    remote: (
+        models.RemoteConfigurationFirecrest
+        | models.RemoteConfigurationRunai
+        | models.RemoteConfigurationRunners
+        | ResetType
+    )
     match (existing.remote, update.remote):
         case (_, ResetType.Reset):
             remote = RESET
@@ -493,6 +498,8 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
                 base_url=base_url,
                 provider_id=update.remote.provider_id,
             )
+        case (None, models.RemoteConfigurationRunnersPatch()):
+            remote = models.RemoteConfigurationRunners()
         case (models.RemoteConfigurationFirecrest(), models.RemoteConfigurationFirecrestPatch()):
             remote = models.RemoteConfigurationFirecrest(
                 provider_id=update.remote.provider_id
@@ -511,6 +518,8 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
                 if update.remote.provider_id is not None
                 else existing.remote.provider_id,
             )
+        case (models.RemoteConfigurationRunners(), models.RemoteConfigurationRunnersPatch()):
+            remote = models.RemoteConfigurationRunners()
         case (models.RemoteConfigurationRunai(), models.RemoteConfigurationFirecrestPatch()):
             raise errors.ValidationError(
                 message="Cannot convert a RunAI remote into a Firecrest one. Please create a brand-new pool."
@@ -519,8 +528,8 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             raise errors.ValidationError(
                 message="Cannot convert a Firecrest remote into a RunAI one. Please create a brand-new pool."
             )
-        case (None, None):
-            remote = RESET
+        case (_, None):
+            remote = existing.remote if existing.remote else RESET
         case _:
             raise errors.ValidationError(
                 message="Received an unexpected patch for the remove configuration of the resource pool. "
