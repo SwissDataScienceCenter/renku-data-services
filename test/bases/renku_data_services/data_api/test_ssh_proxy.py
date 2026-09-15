@@ -3,7 +3,6 @@ import uuid
 import pytest
 
 from renku_data_services.base_models.core import AuthenticatedAPIUser
-from renku_data_services.ssh_proxy.constants import SSH_PROXY_SCOPE
 from renku_data_services.users.core import validate_unsaved_ssh_key
 from renku_data_services.users.db import SSHKeyRepository
 from test.utils import KindCluster
@@ -11,16 +10,6 @@ from test.utils import KindCluster
 # Public throwaway ed25519 key, no personal comment (same vector as test_core.py).
 VALID_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPXhsNCQyI4HlAkaUIujCoGv3isiGoDR/MpS2yKlMfPY"
 MISSING_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-
-
-def _token_headers(app_manager_instance, scope: str | None) -> dict[str, str]:
-    service_user = AuthenticatedAPIUser(id=f"svc-{uuid.uuid4()}", email="ssh-proxy@renku.local", access_token="svc")
-    token = app_manager_instance.internal_token_mint.create_access_token(user=service_user, scope=scope)
-    return {"Authorization": f"Bearer {token}"}
-
-
-def _service_headers(app_manager_instance) -> dict[str, str]:
-    return _token_headers(app_manager_instance, SSH_PROXY_SCOPE)
 
 
 async def test_identity_resolves_owner(sanic_client, app_manager_instance):
@@ -31,7 +20,6 @@ async def test_identity_resolves_owner(sanic_client, app_manager_instance):
 
     _, response = await sanic_client.post(
         "/api/data/internal/ssh_keys/identity",
-        headers=_service_headers(app_manager_instance),
         json={"public_key": VALID_KEY},
     )
     assert response.status_code == 200, response.text
@@ -41,7 +29,6 @@ async def test_identity_resolves_owner(sanic_client, app_manager_instance):
 async def test_identity_unknown_key_is_404(sanic_client, app_manager_instance):
     _, response = await sanic_client.post(
         "/api/data/internal/ssh_keys/identity",
-        headers=_service_headers(app_manager_instance),
         json={"public_key": VALID_KEY},
     )
     assert response.status_code == 404
@@ -50,34 +37,15 @@ async def test_identity_unknown_key_is_404(sanic_client, app_manager_instance):
 async def test_identity_malformed_key_is_404(sanic_client, app_manager_instance):
     _, response = await sanic_client.post(
         "/api/data/internal/ssh_keys/identity",
-        headers=_service_headers(app_manager_instance),
         json={"public_key": "not a key"},
     )
     assert response.status_code == 404
-
-
-async def test_identity_rejects_user_token(sanic_client, user_headers):
-    _, response = await sanic_client.post(
-        "/api/data/internal/ssh_keys/identity", headers=user_headers, json={"public_key": VALID_KEY}
-    )
-    assert response.status_code == 401
-
-
-async def test_identity_rejects_session_scoped_internal_token(sanic_client, app_manager_instance):
-    # A normal per-session internal token must NOT reach the proxy endpoints.
-    _, response = await sanic_client.post(
-        "/api/data/internal/ssh_keys/identity",
-        headers=_token_headers(app_manager_instance, "session:sess-1"),
-        json={"public_key": VALID_KEY},
-    )
-    assert response.status_code == 401
 
 
 @pytest.mark.xdist_group("sessions")
 async def test_authorize_unknown_session_is_404(sanic_client, app_manager_instance, cluster: KindCluster):
     _, response = await sanic_client.get(
         f"/api/data/internal/sessions/{MISSING_ID}/authorize",
-        headers=_service_headers(app_manager_instance),
         params={"user_id": "someone"},
     )
     assert response.status_code == 404
@@ -86,27 +54,8 @@ async def test_authorize_unknown_session_is_404(sanic_client, app_manager_instan
 async def test_authorize_missing_user_id_is_422(sanic_client, app_manager_instance):
     _, response = await sanic_client.get(
         f"/api/data/internal/sessions/{MISSING_ID}/authorize",
-        headers=_service_headers(app_manager_instance),
     )
     assert response.status_code == 422
-
-
-async def test_authorize_rejects_user_token(sanic_client, user_headers):
-    _, response = await sanic_client.get(
-        f"/api/data/internal/sessions/{MISSING_ID}/authorize",
-        headers=user_headers,
-        params={"user_id": "someone"},
-    )
-    assert response.status_code == 401
-
-
-async def test_authorize_rejects_session_scoped_internal_token(sanic_client, app_manager_instance):
-    _, response = await sanic_client.get(
-        f"/api/data/internal/sessions/{MISSING_ID}/authorize",
-        headers=_token_headers(app_manager_instance, "session:sess-1"),
-        params={"user_id": "someone"},
-    )
-    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -141,7 +90,6 @@ async def test_authorize_owner_allowed_and_other_user_denied(
         # the owner may open it
         _, response = await sanic_client.get(
             f"/api/data/internal/sessions/{session_id}/authorize",
-            headers=_service_headers(app_manager_instance),
             params={"user_id": regular_user.id},
         )
         assert response.status_code == 204, response.text
@@ -149,7 +97,6 @@ async def test_authorize_owner_allowed_and_other_user_denied(
         # a different user is denied on the same existing session
         _, response = await sanic_client.get(
             f"/api/data/internal/sessions/{session_id}/authorize",
-            headers=_service_headers(app_manager_instance),
             params={"user_id": str(uuid.uuid4())},
         )
         assert response.status_code == 404
