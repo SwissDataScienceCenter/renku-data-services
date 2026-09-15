@@ -40,6 +40,7 @@ from renku_data_services.search.blueprints import SearchBP
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
+from renku_data_services.ssh_proxy.blueprints import SSHProxyBP
 from renku_data_services.storage.blueprints import ProjectStorageBP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, SSHKeysBP, UserPreferencesBP, UserSecretsBP
 
@@ -105,6 +106,12 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         ssh_key_repo=dm.ssh_key_repo,
         authenticator=dm.authenticator,
+    )
+    ssh_proxy = SSHProxyBP(
+        name="ssh_proxy",
+        url_prefix=url_prefix,
+        ssh_key_repo=dm.ssh_key_repo,
+        nb_config=dm.config.nb_config,
     )
     resource_pools_users = ResourcePoolUsersBP(
         name="resource_pool_users",
@@ -381,6 +388,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             resource_usage.blueprint(),
             internal_authentication.blueprint(),
             project_storage.blueprint(),
+            ssh_proxy.blueprint(),
         ]
     )
     if builds is not None:

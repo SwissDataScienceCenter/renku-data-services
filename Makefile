@@ -59,7 +59,8 @@ API_SPECS := \
     components/renku_data_services/resource_usage/apispec.py \
 	components/renku_data_services/persisted_logs/apispec.py \
     components/renku_data_services/renku_apps/apispec.py \
-	components/renku_data_services/authn/api/apispec.py
+	components/renku_data_services/authn/api/apispec.py \
+    components/renku_data_services/ssh_proxy/apispec.py
 
 schemas: ${API_SPECS}  ## Generate pydantic classes from apispec yaml files
 	@echo "generated classes based on ApiSpec"
