@@ -84,7 +84,6 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
-from renku_data_services.ssh_proxy.constants import SSH_PROXY_SCOPE
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
@@ -237,9 +236,6 @@ class TestDependencyManager(DependencyManager):
 
         authz = NonCachingAuthz(config.authz_config)
         internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
-        service_authenticator = RenkuSelfAuthenticator.from_config(
-            config.internal_authn_config, required_scope=SSH_PROXY_SCOPE
-        )
         internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
         internal_scope_verifier = ScopeVerifier(
             deposit_config=config.deposit_config,
@@ -435,7 +431,6 @@ class TestDependencyManager(DependencyManager):
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
             internal_authenticator=internal_authenticator,
-            service_authenticator=service_authenticator,
             gitlab_client=gitlab_client,
             user_store=user_store,
             quota_repo=quota_repo,
