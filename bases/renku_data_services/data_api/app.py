@@ -110,7 +110,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     ssh_proxy = SSHProxyBP(
         name="ssh_proxy",
         url_prefix=url_prefix,
-        service_authenticator=dm.service_authenticator,
         ssh_key_repo=dm.ssh_key_repo,
         nb_config=dm.config.nb_config,
     )

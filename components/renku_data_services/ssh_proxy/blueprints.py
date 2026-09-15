@@ -6,8 +6,7 @@ from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
 from sanic_ext import validate
 
-from renku_data_services import base_models, errors
-from renku_data_services.base_api.auth import authenticate, only_authenticated
+from renku_data_services import errors
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -20,17 +19,14 @@ from renku_data_services.users.db import SSHKeyRepository
 class SSHProxyBP(CustomBlueprint):
     """Internal endpoints consumed by the Renku SSH proxy."""
 
-    service_authenticator: base_models.Authenticator
     ssh_key_repo: SSHKeyRepository
     nb_config: NotebooksConfig
 
     def identity(self) -> BlueprintFactoryResponse:
         """Resolve the Renku user that owns an SSH public key."""
 
-        @authenticate(self.service_authenticator)
-        @only_authenticated
         @validate(json=apispec.SSHKeyIdentityRequest)
-        async def _identity(_: Request, user: base_models.APIUser, body: apispec.SSHKeyIdentityRequest) -> JSONResponse:
+        async def _identity(_: Request, body: apispec.SSHKeyIdentityRequest) -> JSONResponse:
             fingerprint = fingerprint_ssh_public_key(body.public_key)
             user_id = await self.ssh_key_repo.get_user_id_by_fingerprint(fingerprint) if fingerprint else None
             if user_id is None:
@@ -43,9 +39,7 @@ class SSHProxyBP(CustomBlueprint):
     def authorize(self) -> BlueprintFactoryResponse:
         """Check whether a user may open a session."""
 
-        @authenticate(self.service_authenticator)
-        @only_authenticated
-        async def _authorize(request: Request, user: base_models.APIUser, session_id: str) -> HTTPResponse:
+        async def _authorize(request: Request, session_id: str) -> HTTPResponse:
             user_id = request.args.get("user_id")
             if not user_id:
                 raise errors.ValidationError(message="The user_id query parameter is required.")
