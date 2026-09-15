@@ -272,6 +272,8 @@ def _resolve_pool_kind_after_update(
             return models.RemoteConfigurationKind.firecrest
         case apispec.RemoteConfigurationRunai() | apispec.RemoteConfigurationRunaiPatch():
             return models.RemoteConfigurationKind.runai
+        case apispec.RemoteConfigurationRunners() | apispec.RemoteConfigurationRunnersPatch():
+            return models.RemoteConfigurationKind.runners
         case None:
             if method == "PUT":
                 return None
@@ -331,9 +333,13 @@ def validate_resource_pool_put_or_patch(
             remote = validate_remote_patch(body=r)
         case apispec.RemoteConfigurationRunaiPatch() as r:
             remote = validate_remote_patch(body=r)
+        case apispec.RemoteConfigurationRunnersPatch() as r:
+            remote = validate_remote_patch(body=r)
         case apispec.RemoteConfigurationFirecrest() as r:
             remote = validate_remote_put(r)
         case apispec.RemoteConfigurationRunai() as r:
+            remote = validate_remote_put(r)
+        case apispec.RemoteConfigurationRunners() as r:
             remote = validate_remote_put(r)
 
     platform = __validate_runtime_platform(body=body.platform) if body.platform else None
@@ -617,8 +623,8 @@ def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
 
 
 def validate_remote(
-    body: apispec.RemoteConfigurationFirecrest | apispec.RemoteConfigurationRunai,
-) -> models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai:
+    body: apispec.RemoteConfigurationFirecrest | apispec.RemoteConfigurationRunai | apispec.RemoteConfigurationRunners,
+) -> models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | models.RemoteConfigurationRunners:
     """Validate a remote configuration object."""
     kind = models.RemoteConfigurationKind(body.kind.value)
     match (body, kind):
@@ -636,6 +642,8 @@ def validate_remote(
                 base_url=body.base_url,
                 provider_id=body.provider_id,
             )
+        case (apispec.RemoteConfigurationRunners(), models.RemoteConfigurationKind.runners):
+            return models.RemoteConfigurationRunners()
         case _:
             raise errors.ValidationError(
                 message=f"The kind '{kind}' of remote configuration is not supported.", quiet=True
@@ -643,7 +651,10 @@ def validate_remote(
 
 
 def validate_remote_put(
-    body: apispec.RemoteConfigurationFirecrest | apispec.RemoteConfigurationRunai | None,
+    body: apispec.RemoteConfigurationFirecrest
+    | apispec.RemoteConfigurationRunai
+    | apispec.RemoteConfigurationRunners
+    | None,
 ) -> models.RemoteConfigurationPatch:
     """Validate the PUT update to a remote configuration object."""
     match body:
@@ -663,6 +674,9 @@ def validate_remote_put(
                 base_url=body.base_url,
                 provider_id=remote.provider_id,
             )
+        case apispec.RemoteConfigurationRunners():
+            remote = validate_remote(body=body)
+            return models.RemoteConfigurationRunnersPatch()
         case _:
             raise errors.ValidationError(message=f"Received an unexpected remote put request: {body}")
 
@@ -670,7 +684,8 @@ def validate_remote_put(
 def validate_remote_patch(
     body: apispec.RemoteConfigurationPatchReset
     | apispec.RemoteConfigurationFirecrestPatch
-    | apispec.RemoteConfigurationRunaiPatch,
+    | apispec.RemoteConfigurationRunaiPatch
+    | apispec.RemoteConfigurationRunnersPatch,
 ) -> models.RemoteConfigurationPatch:
     """Validate the patch to a remote configuration object."""
     if isinstance(body, apispec.RemoteConfigurationPatchReset):
@@ -692,6 +707,8 @@ def validate_remote_patch(
                 base_url=body.base_url,
                 provider_id=body.provider_id,
             )
+        case (apispec.RemoteConfigurationRunnersPatch(), models.RemoteConfigurationKind.runners):
+            return models.RemoteConfigurationRunnersPatch()
         case _:
             raise errors.ValidationError(
                 message=f"The kind '{kind}' of remote configuration is not supported.", quiet=True

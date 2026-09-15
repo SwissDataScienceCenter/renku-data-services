@@ -36,6 +36,7 @@ from renku_data_services.crc.models import (
     RemoteConfigurationFirecrest,
     RemoteConfigurationKind,
     RemoteConfigurationRunai,
+    RemoteConfigurationRunners,
     ResourceClass,
     ResourcePool,
     SessionProtocol,
@@ -886,7 +887,7 @@ def _firecrest_resource_env_items(
 
 def get_remote_env(
     resource_class: ResourceClass,
-    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai,
+    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | RemoteConfigurationRunners,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
     env = [
@@ -894,7 +895,7 @@ def get_remote_env(
     ]
     if isinstance(remote, RemoteConfigurationRunai):
         env.append(SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url))
-    else:
+    elif isinstance(remote, RemoteConfigurationFirecrest):
         env.append(SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url))
         env.extend(_firecrest_resource_env_items(resource_class, remote))
     return env

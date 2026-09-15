@@ -16,6 +16,8 @@ from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import ResourceType
+from renku_data_services.crc import models as crc_models
+from renku_data_services.crc import orm as crc_schemas
 from renku_data_services.session_runners import models
 from renku_data_services.session_runners import orm as schemas
 
@@ -87,6 +89,20 @@ class SessionRunnersRepository:
                 message=f"Resource pool with id '{runner.resource_pool_id}' "
                 "does not exist or you do not have access to it."
             )
+        compatible = False
+        rp_stmt = select(crc_schemas.ResourcePoolORM).where(crc_schemas.ResourcePoolORM.id == runner.resource_pool_id)
+        rp_res = await session.scalars(rp_stmt)
+        rp_orm = rp_res.one_or_none()
+        if (
+            rp_orm
+            and rp_orm.remote_json
+            and rp_orm.remote_json.get("kind") == crc_models.RemoteConfigurationKind.runners.value
+        ):
+            compatible = True
+        if not compatible:
+            raise errors.ValidationError(
+                message=f"Resource pool with id '{runner.resource_pool_id}' " "does not accept session runners."
+            )
         registration_token = self._generate_registration_token()
         runner_orm = schemas.SessionRunnerORM(
             user_id=user.id,
@@ -115,7 +131,7 @@ class SessionRunnersRepository:
                 "does not exist or you do not have access to it."
             )
         user_orm = runner_orm.user
-        user_orm.dump()
+        user_orm.dump()  # TODO
         user = base_models.AuthenticatedAPIUser(
             is_admin=False,
             id=user_orm.keycloak_id,

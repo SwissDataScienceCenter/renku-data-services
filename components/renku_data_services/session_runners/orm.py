@@ -34,7 +34,7 @@ class SessionRunnerORM(BaseORM):
     """A runner which can power a session in heterogeneous compute.
 
     At the moment, session runners are single user, i.e. they can run sessions
-    for only one user.
+    for one user only.
     """
 
     __tablename__ = "runners"
