@@ -1,55 +1,31 @@
 openapi: 3.0.2
 info:
   title: Renku SSH Proxy Internal API
-  description: Internal endpoints used by the Renku SSH proxy to authenticate users and authorize sessions.
+  description: Internal endpoint used by the Renku SSH proxy to authorize a connection from a public key and a session.
   version: v1
 servers:
   - url: /api/data
 paths:
-  /internal/ssh_keys/identity:
-    post:
-      summary: Resolve the Renku user that owns the provided SSH public key.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SSHKeyIdentityRequest"
-      responses:
-        "200":
-          description: The user that owns the key
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SSHKeyIdentityResponse"
-        "404":
-          description: No registered key matches
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        default:
-          $ref: "#/components/responses/Error"
-      tags: [ssh]
   /internal/sessions/{session_id}/authorize:
-    get:
-      summary: Check whether a user may open a session.
+    post:
+      summary: Check whether the owner of a public key may open a session.
       parameters:
         - in: path
           name: session_id
           required: true
           schema:
             type: string
-        - in: query
-          name: user_id
-          required: true
-          schema:
-            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionAuthorizeRequest"
       responses:
         "204":
           description: Authorized
         "404":
-          description: The session does not exist or is not owned by the user
+          description: The key is unknown or malformed, or the session does not exist or is not owned by the key's user
           content:
             application/json:
               schema:
@@ -59,20 +35,13 @@ paths:
       tags: [ssh]
 components:
   schemas:
-    SSHKeyIdentityRequest:
+    SessionAuthorizeRequest:
       type: object
       additionalProperties: false
       properties:
         public_key:
           type: string
       required: [public_key]
-    SSHKeyIdentityResponse:
-      type: object
-      additionalProperties: false
-      properties:
-        user_id:
-          type: string
-      required: [user_id]
     ErrorResponse:
       type: object
       properties:
