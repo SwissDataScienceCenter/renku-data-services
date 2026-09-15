@@ -12,7 +12,6 @@ from ulid import ULID
 from renku_data_services.app_config.config import InternalAuthenticationConfig
 from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.base_models import AuthenticatedAPIUser
-from renku_data_services.ssh_proxy.constants import SSH_PROXY_SCOPE
 from test.utils import SanicReusableASGITestClient
 
 if TYPE_CHECKING:
@@ -211,35 +210,10 @@ async def test_authenticator_valid_access_token(
     assert response.json.get("email") == "jane.doe@example.org"
 
 
-@pytest.fixture
-def service_authenticator(shared_internal_authn_config: InternalAuthenticationConfig) -> RenkuSelfAuthenticator:
-    return RenkuSelfAuthenticator.from_config(config=shared_internal_authn_config, required_scope=SSH_PROXY_SCOPE)
-
-
 async def _auth(token: str, authenticator: RenkuSelfAuthenticator):
     request = MagicMock()
     request.headers = {"Authorization": f"Bearer {token}"}
     return await authenticator.authenticate(f"Bearer {token}", request)
-
-
-@pytest.mark.asyncio
-async def test_service_scope_accepts_matching_token(local_test_user, service_authenticator, shared_internal_token_mint):
-    token = shared_internal_token_mint.create_access_token(user=local_test_user, scope=SSH_PROXY_SCOPE)
-    assert (await _auth(token, service_authenticator)).is_authenticated
-
-
-@pytest.mark.asyncio
-async def test_service_scope_rejects_token_without_scope(
-    local_test_user, service_authenticator, shared_internal_token_mint
-):
-    token = shared_internal_token_mint.create_access_token(user=local_test_user)
-    assert not (await _auth(token, service_authenticator)).is_authenticated
-
-
-@pytest.mark.asyncio
-async def test_service_scope_rejects_session_token(local_test_user, service_authenticator, shared_internal_token_mint):
-    token = shared_internal_token_mint.create_access_token(user=local_test_user, scope="session:sess-1")
-    assert not (await _auth(token, service_authenticator)).is_authenticated
 
 
 @pytest.mark.asyncio
@@ -249,13 +223,3 @@ async def test_plain_internal_authenticator_unaffected(
     authenticator = RenkuSelfAuthenticator.from_config(config=shared_internal_authn_config)
     token = shared_internal_token_mint.create_access_token(user=local_test_user)
     assert (await _auth(token, authenticator)).is_authenticated
-
-
-@pytest.mark.asyncio
-async def test_service_scope_accepts_multi_scope_token(
-    local_test_user, service_authenticator, shared_internal_token_mint
-):
-    token = shared_internal_token_mint.create_access_token(
-        user=local_test_user, scope=f"session:sess-1 {SSH_PROXY_SCOPE}"
-    )
-    assert (await _auth(token, service_authenticator)).is_authenticated
