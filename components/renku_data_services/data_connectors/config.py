@@ -13,6 +13,7 @@ from kubernetes.client import ApiClient, V1Toleration
 from renku_data_services.app_config import logging
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
+from renku_data_services.notebooks.config.dynamic import _CustomCaCertsConfig
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class DepositConfig:
     zenodo_url: str
     envidat: EnvidatConfig
     scicat: ScicatConfig
+    ca_certs: _CustomCaCertsConfig
     node_selector: dict[str, str] | None = None
     tolerations: list[V1Toleration] | None = None
     cluster_id: Final[ClusterId] = DEFAULT_K8S_CLUSTER
@@ -69,6 +71,7 @@ class DepositConfig:
             zenodo_url=os.environ.get("ZENODO_URL", "https://zenodo.org").rstrip("/"),
             scicat=ScicatConfig.from_env(),
             envidat=EnvidatConfig.from_env(),
+            ca_certs=_CustomCaCertsConfig.from_env(),
         )
 
 
