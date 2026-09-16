@@ -130,16 +130,27 @@ def test_created_by_exists() -> None:
 
 
 def test_content_all() -> None:
-    assert st.content_all("abc") == "(content_all:(abc~) OR name:(abc~)^2 OR nameKeyword:abc^10 OR slug:abc^5)"
-    assert (
-        st.content_all("a+b+c")
-        == "(content_all:(a\\+b\\+c~) OR name:(a\\+b\\+c~)^2 OR nameKeyword:a\\+b\\+c^10 OR slug:a\\+b\\+c^5)"
+    assert st.content_all("abc") == '(content_all:(abc~) OR name:(abc~)^2 OR nameKeyword:"abc"^10 OR slug:"abc"^5)'
+    assert st.content_all("a+b+c") == (
+        "(content_all:(a\\+b\\+c~) OR name:(a\\+b\\+c~)^2 OR " 'nameKeyword:"a\\+b\\+c"^10)'
     )
     assert (
         st.content_all("Test-Project") == "(content_all:(Test\\-Project~) OR name:(Test\\-Project~)^2 OR "
-        "nameKeyword:Test\\-Project^10 OR slug:test\\-project^5)"
+        'nameKeyword:"Test\\-Project"^10 OR slug:"test\\-project"^5)'
     )
-    assert st.content_all("ab cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^2 OR nameKeyword:ab\\ cd^10)"
+    assert st.content_all("ab cd") == '(content_all:(ab~ cd~) OR name:(ab~ cd~)^2 OR nameKeyword:"ab\\ cd"^10)'
     assert (
-        st.content_all("ab    cd") == "(content_all:(ab~ cd~) OR name:(ab~ cd~)^2 OR nameKeyword:ab\\ \\ \\ \\ cd^10)"
+        st.content_all("ab    cd") == '(content_all:(ab~ cd~) OR name:(ab~ cd~)^2 OR nameKeyword:"ab\\ \\ \\ \\ cd"^10)'
     )
+
+    query_str = "namespace: SDSC AND keyword: ecology"
+    t = st.content_all(query_str)
+    assert t == (
+        "(content_all:(namespace\\:~ SDSC~ and~ keyword\\:~ ecology~) OR "
+        "name:(namespace\\:~ SDSC~ and~ keyword\\:~ ecology~)^2 OR "
+        'nameKeyword:"namespace\\:\\ SDSC\\ AND\\ keyword\\:\\ ecology"^10)'
+    )
+
+    query_str = "AND"
+    t = st.content_all(query_str)
+    assert t == '(content_all:(and~) OR name:(and~)^2 OR nameKeyword:"and"^10 OR slug:"and"^5)'
