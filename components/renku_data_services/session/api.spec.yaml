@@ -266,7 +266,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SessionLauncherRepositoryListPatch"
+              $ref: "#/components/schemas/SessionLauncherRepositoryPatchList"
       responses:
         "200":
           description: The updated repository parameters
