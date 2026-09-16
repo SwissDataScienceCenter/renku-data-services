@@ -667,6 +667,7 @@ class DataConnectorsBP(CustomBlueprint):
                     deposit_api_key = await self.scicat_client.get_scicat_token(token)
 
                     user_groups = await self.scicat_client.get_user_groups(deposit_api_key)
+                    # TODO: use scicat user instead
                     deposit_data = {
                         "contactEmail": user.email,
                         "creationTime": datetime.now().isoformat(),
@@ -705,6 +706,7 @@ class DataConnectorsBP(CustomBlueprint):
                     data_connector_secret_repo=self.data_connector_secret_repo,
                     data_source_repo=self.data_source_repo,
                     deposit_api_key=deposit_api_key,
+                    scicat_client=self.scicat_client,
                 )
 
             unsaved_dep = validate_deposit(body, original_id)
@@ -867,6 +869,7 @@ class DataConnectorsBP(CustomBlueprint):
                 data_connector_repo=self.data_connector_repo,
                 data_connector_secret_repo=self.data_connector_secret_repo,
                 deposit_config=self.deposit_config,
+                scicat_client=self.scicat_client,
             )
             return HTTPResponse(status=201)
 

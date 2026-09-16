@@ -54,6 +54,7 @@ from renku_data_services.base_models.core import (
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.config import DepositConfig
 from renku_data_services.data_connectors.constants import ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS
+from renku_data_services.data_connectors.deposits.scicat import DepositResponse, ScicatAPIClient
 from renku_data_services.data_connectors.doi import schema_org
 from renku_data_services.data_connectors.doi.metadata import (
     DOIProviders,
@@ -511,7 +512,7 @@ def serialize_deposit(deposit: models.DepositJob, deposit_config: DepositConfig)
             )
             external_url = f"{base}/#/workflow?{query_str}"
         case models.DepositSource.scicat:
-            base = "https://discovery-qa.psi.ch"  # TODO: get this from the Scicat config
+            base = deposit_config.scicat.url.rstrip("/")
             external_url = f"{base}/datasets/{quote(deposit.deposit.original_id, safe='')}"
         case _:
             external_url = ""
@@ -541,6 +542,7 @@ async def create_deposit_upload(
     data_source_repo: DataSourceRepository,
     data_connector_repo: DataConnectorRepository,
     data_connector_secret_repo: DataConnectorSecretRepository,
+    scicat_client: ScicatAPIClient,
     deposit_api_key: str | None = None,
 ) -> None:
     """Create the resources required to upload data to a deposit."""
@@ -752,6 +754,7 @@ async def create_deposit_upload(
         deposit_config: DepositConfig,
         deposit_job: models.DepositJob,
         pvc_name: str,
+        metadata: DepositResponse,
         labels: dict[str, str] | None = None,
     ) -> V1ConfigMap:
         mount_path = PurePosixPath("/" + pvc_name)
@@ -763,22 +766,22 @@ async def create_deposit_upload(
                 else deposit_job.deposit.path
             )
 
-        # TODO
-        metadata = {
-            "datasetName": "Updated Test Dataset",
-            "description": "Updated description of the test dataset",
-            "sourceFolder": copy_source.as_posix(),
-            "ownerGroup": "psi-awi-m2",
-            "type": "base",
-        }
-
         return V1ConfigMap(
             metadata=V1ObjectMeta(
                 name=f"{deposit_job.name}-metadata",
                 namespace=deposit_config.namespace,
                 labels=labels,
             ),
-            data={"metadata.json": json.dumps(metadata)},
+            data={
+                "metadata.json": json.dumps(
+                    {
+                        "datasetName": metadata.datasetName,
+                        "sourceFolder": copy_source.as_posix(),
+                        "ownerGroup": metadata.ownerGroup,
+                        "type": metadata.type,
+                    }
+                )
+            },
         )
 
     def _create_ca_certs_init_container(ca_certs: _CustomCaCertsConfig) -> tuple[V1Container, list[V1Volume]]:
@@ -863,7 +866,7 @@ async def create_deposit_upload(
                                     "datasetIngestor",
                                     "--noninteractive",
                                     "--scicat-url",
-                                    f"{deposit_config.scicat.url}/api/v3",
+                                    deposit_config.scicat.api_url,
                                     "--token",
                                     api_key,
                                     "--copy",
@@ -1106,11 +1109,16 @@ async def create_deposit_upload(
         _convert_to_k8s_object(created_job, cluster_id=deposit_config.cluster_id, user_id=user.id)
     ]
     if deposit_job.deposit.source == models.DepositSource.scicat:
+        if deposit_api_key is None:
+            raise errors.ProgrammingError(message="A SciCat deposit requires an API key.")
+
+        metadata = await scicat_client.get_deposit(deposit_api_key, deposit_job.deposit.original_id)
         # Create the configmap manifest that contains the metadata.json for SciCat
         scicat_configmap = _create_scicat_configmap_manifest(
             deposit_config=deposit_config,
             deposit_job=deposit_job,
             pvc_name=pvc_name,
+            metadata=metadata,
             labels=labels,
         )
         resources_to_create.append(
@@ -1129,9 +1137,7 @@ async def create_deposit_upload(
                 raise errors.ProgrammingError(message="A Zenodo deposit requires an API key.")
             job_secret_data = {"ZENODO_API_KEY": deposit_api_key}
         case models.DepositSource.scicat:
-            if deposit_api_key is None:
-                raise errors.ProgrammingError(message="A SciCat deposit requires an API key.")
-            job_secret_data = {"SCICAT_TOKEN": deposit_api_key}  # TODO: token not used in job
+            job_secret_data = {}
         case x:
             raise errors.ValidationError(message=f"Received unknown deposit source {x}")
     job_secret = _create_secret_manifest(
