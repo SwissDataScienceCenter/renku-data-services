@@ -203,6 +203,13 @@ class SessionRunnersSchedulingRepository:
     ) -> None:
         self.session_maker = session_maker
 
+    async def get_all_assigned_sessions(self, session: AsyncSession) -> AsyncIterator[models.AssignedSession]:
+        """Get all assigned sessions from the database."""
+        stmt = select(schemas.AssignedSessionORM).order_by(schemas.AssignedSessionORM.id.asc())
+        res = await session.stream_scalars(stmt)
+        async for session_orm in res:
+            yield session_orm.dump()
+
     async def insert_assigned_session(
         self,
         user: base_models.APIUser,
