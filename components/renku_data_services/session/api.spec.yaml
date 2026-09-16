@@ -749,7 +749,7 @@ components:
       description: Data connector access policy name
       type: string
       enum:
-        - disabled
+        - excluded
         - readOnly
         - readWrite
     DataConnectorKey:
@@ -790,7 +790,7 @@ components:
       description: Repository access policy name
       type: string
       enum:
-        - disabled
+        - excluded
         - readOnly
         - readWrite
     ProjectRepositorySurrogateKey:
@@ -875,7 +875,7 @@ components:
       description: Secret access policy name
       type: string
       enum:
-        - disabled
+        - excluded
         - enabled
     SecretAccessPolicy:
       description: Secret access policy config
