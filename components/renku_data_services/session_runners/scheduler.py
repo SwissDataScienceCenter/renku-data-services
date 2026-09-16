@@ -37,7 +37,6 @@ class SessionRunnerScheduler:
             assigned_sessions = self.session_runners_scheduling_repo.get_all_assigned_sessions(session=session)
             async for assigned_session in assigned_sessions:
                 k8s_session = await self._get_k8s_session(session_id=assigned_session.session_id)
-                logger.warning(f"[SESSION RUNNERS] TODO: handle {assigned_session} <-> {k8s_session}.")
 
                 # Hande session shut down
                 if k8s_session is None:
@@ -51,7 +50,7 @@ class SessionRunnerScheduler:
 
                 # Handle sessions which need a runner
                 if assigned_session.runner_id is None:
-                    pass
+                    await self._pick_runner(session=session, assigned_session=assigned_session)
 
     async def _get_k8s_session(self, session_id: str) -> AmaltheaSessionV1Alpha1 | None:
         """Get a session from the Kubernetes cache."""
@@ -84,4 +83,3 @@ class SessionRunnerScheduler:
             return
 
         logger.warning(f"[SESSION RUNNERS] Could not assign a runner to session {assigned_session.session_id}.")
-        pass
