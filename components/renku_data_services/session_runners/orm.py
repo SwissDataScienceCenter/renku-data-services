@@ -99,3 +99,54 @@ class SessionRunnerORM(BaseORM):
 # - `amalthea_status`: status on the amalthea side
 # - `runner_status`: status on the runner side: unknown, running, (hibernated), error
 # - `updated_at`: timestamp of the last row update
+class AssignedSessionORM(BaseORM):
+    """A session which needs to be assigned to a runner."""
+
+    __tablename__ = "assigned_sessions"
+
+    id: Mapped[str] = mapped_column("id", primary_key=True)
+    """ID of the session (resource name in Kubernetes)."""
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), index=True, nullable=False
+    )
+    """User ID of the owner of the session."""
+
+    resource_pool_id: Mapped[int] = mapped_column(
+        ForeignKey(ResourcePoolORM.id, ondelete="RESTRICT"), index=True, nullable=False
+    )
+    """Resource pool ID of the session."""
+
+    user: Mapped[UserORM] = relationship(init=False, repr=False)
+    """The owner of the session."""
+
+    runner_id: Mapped[ULID | None] = mapped_column(
+        ForeignKey(SessionRunnerORM.id, ondelete="RESTRICT"), index=True, nullable=True
+    )
+    """ID of the runner picked to run the session."""
+
+    runner: Mapped[SessionRunnerORM | None] = relationship(init=False, repr=False)
+    """The runner picked to run the session."""
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
+    )
+    """Row creation timestamp."""
+
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    """Row update timestamp."""
+
+    def dump(self) -> models.AssignedSession:
+        """Create an assigned session model from the AssignedSessionORM."""
+        return models.AssignedSession(
+            session_id=self.id,
+            resource_pool_id=self.resource_pool_id,
+            runner_id=self.runner_id,
+        )

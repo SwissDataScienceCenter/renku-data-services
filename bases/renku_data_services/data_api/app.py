@@ -240,6 +240,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         session_repo=dm.session_repo,
         user_repo=dm.kc_user_repo,
         git_repositories_repo=dm.git_repositories_repo,
+        session_runners_scheduling_repo=dm.session_runners_scheduling_repo,
         builds_config=dm.config.builds,
         internal_token_mint=dm.internal_token_mint,
         resource_usage_service=dm.resource_usage_service,

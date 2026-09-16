@@ -85,7 +85,7 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
-from renku_data_services.session_runners.db import SessionRunnersRepository
+from renku_data_services.session_runners.db import SessionRunnersRepository, SessionRunnersSchedulingRepository
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
@@ -185,6 +185,7 @@ class DependencyManager:
     session_logs_repo: AmaltheaSessionPersistedLogsReadRepository
     build_logs_repo: ImageBuildPersistedLogsReadRepository
     session_runners_repo: SessionRunnersRepository
+    session_runners_scheduling_repo: SessionRunnersSchedulingRepository
     zenodo_client: ZenodoAPIClient
     envidat_client: EnvidatClient
     job_client: DepositUploadJobClient
@@ -371,6 +372,9 @@ class DependencyManager:
 
         session_runners_repo = SessionRunnersRepository(
             authz=authz,
+        )
+        session_runners_scheduling_repo = SessionRunnersSchedulingRepository(
+            session_maker=config.db.async_session_maker
         )
 
         internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
@@ -579,6 +583,7 @@ class DependencyManager:
             session_logs_repo=session_logs_repo,
             build_logs_repo=build_logs_repo,
             session_runners_repo=session_runners_repo,
+            session_runners_scheduling_repo=session_runners_scheduling_repo,
             zenodo_client=ZenodoAPIClient(),
             envidat_client=EnvidatClient(),
             job_client=job_client,
