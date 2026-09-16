@@ -12,6 +12,7 @@ from renku_data_services.k8s.models import (
 )
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
+from renku_data_services.session_runners import models
 from renku_data_services.session_runners.db import SessionRunnersSchedulingRepository
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,21 @@ class SessionRunnerScheduler:
             assigned_sessions = self.session_runners_scheduling_repo.get_all_assigned_sessions(session=session)
             async for assigned_session in assigned_sessions:
                 k8s_session = await self._get_k8s_session(session_id=assigned_session.session_id)
-                logger.warning(f"[SESSION RUNNERS] TODO: handle {assigned_session} <-> {k8s_session}")
+                logger.warning(f"[SESSION RUNNERS] TODO: handle {assigned_session} <-> {k8s_session}.")
+
+                # Hande session shut down
+                if k8s_session is None:
+                    await self.session_runners_scheduling_repo.delete_assigned_session(
+                        session=session, renku_session_id=assigned_session.session_id
+                    )
+                    logger.info(f"[SESSION RUNNERS] Deleted assigned session {assigned_session.session_id}.")
+                    continue
+
+                # TODO (?): handle k8s state update (incl. Hibernated: true)
+
+                # Handle sessions which need a runner
+                if assigned_session.runner_id is None:
+                    pass
 
     async def _get_k8s_session(self, session_id: str) -> AmaltheaSessionV1Alpha1 | None:
         """Get a session from the Kubernetes cache."""
@@ -51,3 +66,22 @@ class SessionRunnerScheduler:
         if k8s_obj is None:
             return None
         return AmaltheaSessionV1Alpha1.model_validate(k8s_obj.manifest)
+
+    async def _pick_runner(self, session: AsyncSession, assigned_session: models.AssignedSession) -> None:
+        """Pick a runner for a given session."""
+        runners = self.session_runners_scheduling_repo.get_viable_runners(
+            session=session, renku_session_id=assigned_session.session_id
+        )
+        async for runner in runners:
+            # TODO: any other check on the runner?
+            assigned_session = await self.session_runners_scheduling_repo.update_assigned_session_set_runner(
+                session=session, renku_session_id=assigned_session.session_id, runner_id=runner.id
+            )
+            logger.info(
+                f"[SESSION RUNNERS] Assigned runner {assigned_session.runner_id} "
+                f"to session {assigned_session.session_id}."
+            )
+            return
+
+        logger.warning(f"[SESSION RUNNERS] Could not assign a runner to session {assigned_session.session_id}.")
+        pass

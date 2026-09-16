@@ -900,6 +900,9 @@ def get_remote_env(
     elif isinstance(remote, RemoteConfigurationFirecrest):
         env.append(SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url))
         env.extend(_firecrest_resource_env_items(resource_class, remote))
+    elif isinstance(remote, RemoteConfigurationRunners):
+        # TODO
+        env.append(SessionEnvItem(name="RSC_FIRECREST_API_URL", value="https://dev.renku.ch"))
     return env
 
 

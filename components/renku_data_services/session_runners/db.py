@@ -210,6 +210,26 @@ class SessionRunnersSchedulingRepository:
         async for session_orm in res:
             yield session_orm.dump()
 
+    async def get_viable_runners(
+        self, session: AsyncSession, renku_session_id: str
+    ) -> AsyncIterator[models.SessionRunner]:
+        """Get all session runners which can run a given session."""
+        stmt_session = select(schemas.AssignedSessionORM).where(schemas.AssignedSessionORM.id == renku_session_id)
+        res_session = await session.scalars(stmt_session)
+        session_orm = res_session.one_or_none()
+        if session_orm is None:
+            return
+        stmt_runners = (
+            select(schemas.SessionRunnerORM)
+            .where(schemas.SessionRunnerORM.user_id == session_orm.user_id)
+            .where(schemas.SessionRunnerORM.resource_pool_id == session_orm.resource_pool_id)
+            .where(schemas.SessionRunnerORM.status == models.RunnerStatus.ready)
+            .order_by(schemas.SessionRunnerORM.id.desc())
+        )
+        res_runners = await session.stream_scalars(stmt_runners)
+        async for runner_orm in res_runners:
+            yield runner_orm.dump()
+
     async def insert_assigned_session(
         self,
         user: base_models.APIUser,
@@ -265,3 +285,26 @@ class SessionRunnersSchedulingRepository:
                 message="You do not have any registered session runner "
                 f"for resource pool {renku_session.resource_pool_id}."
             )
+
+    async def update_assigned_session_set_runner(
+        self, session: AsyncSession, renku_session_id: str, runner_id: ULID
+    ) -> models.AssignedSession:
+        """Update a session by setting its runner."""
+        stmt = select(schemas.AssignedSessionORM).where(schemas.AssignedSessionORM.id == renku_session_id)
+        res = await session.scalars(stmt)
+        session_orm = res.one_or_none()
+        if session_orm is None:
+            raise errors.ValidationError(message=f"The assigned session {renku_session_id} does not exist.")
+        session_orm.runner_id = runner_id
+        await session.flush()
+        return session_orm.dump()
+
+    async def delete_assigned_session(self, session: AsyncSession, renku_session_id: str) -> None:
+        """Remove an assigned session from the database."""
+        stmt = select(schemas.AssignedSessionORM).where(schemas.AssignedSessionORM.id == renku_session_id)
+        res = await session.scalars(stmt)
+        session_orm = res.one_or_none()
+        if session_orm is None:
+            return None
+        await session.delete(session_orm)
+        return None
