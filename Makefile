@@ -58,6 +58,7 @@ API_SPECS := \
     components/renku_data_services/capacity_reservation/apispec.py \
     components/renku_data_services/resource_usage/apispec.py \
 	components/renku_data_services/persisted_logs/apispec.py \
+	components/renku_data_services/session_runners/apispec.py \
     components/renku_data_services/renku_apps/apispec.py \
 	components/renku_data_services/authn/api/apispec.py
 

@@ -85,6 +85,7 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
+from renku_data_services.session_runners.db import SessionRunnersRepository, SessionRunnersSchedulingRepository
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
@@ -183,6 +184,8 @@ class DependencyManager:
     resource_usage_service: ResourceUsageService
     session_logs_repo: AmaltheaSessionPersistedLogsReadRepository
     build_logs_repo: ImageBuildPersistedLogsReadRepository
+    session_runners_repo: SessionRunnersRepository
+    session_runners_scheduling_repo: SessionRunnersSchedulingRepository
     zenodo_client: ZenodoAPIClient
     envidat_client: EnvidatClient
     job_client: DepositUploadJobClient
@@ -223,6 +226,7 @@ class DependencyManager:
             renku_data_services.capacity_reservation.__file__,
             renku_data_services.resource_usage.__file__,
             renku_data_services.persisted_logs.__file__,
+            renku_data_services.session_runners.__file__,
             renku_data_services.authn.api.__file__,
         ]
 
@@ -366,12 +370,21 @@ class DependencyManager:
                     namespace=config.k8s_namespace,
                 )
 
+        session_runners_repo = SessionRunnersRepository(
+            authz=authz,
+        )
+        session_runners_scheduling_repo = SessionRunnersSchedulingRepository(
+            session_maker=config.db.async_session_maker
+        )
+
         internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
         internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
         internal_scope_verifier = ScopeVerifier(
             deposit_config=config.deposit_config,
             notebook_k8s_client=config.nb_config.k8s_v2_client,
             job_client=job_client,
+            session_runners_repo=session_runners_repo,
+            session_maker=config.db.async_session_maker,
         )
         resource_requests_repo = ResourceRequestsRepo(
             session_maker=config.db.async_session_maker,
@@ -519,6 +532,7 @@ class DependencyManager:
             builds_config=config.builds,
             git_repositories_repo=git_repositories_repo,
         )
+
         return cls(
             config,
             k8s_client=client,
@@ -568,6 +582,8 @@ class DependencyManager:
             resource_usage_service=resource_usage_service,
             session_logs_repo=session_logs_repo,
             build_logs_repo=build_logs_repo,
+            session_runners_repo=session_runners_repo,
+            session_runners_scheduling_repo=session_runners_scheduling_repo,
             zenodo_client=ZenodoAPIClient(),
             envidat_client=EnvidatClient(),
             job_client=job_client,

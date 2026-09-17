@@ -353,7 +353,7 @@ class UnsavedResourcePool:
     hibernation_warning_period: int | None = None
     default: bool = False
     public: bool = False
-    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = None
+    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | RemoteConfigurationRunners | None = None
     cluster_id: ClusterId | None = None
     platform: RuntimePlatform
     cpu_limit_factor: float | None = None
@@ -375,7 +375,7 @@ class ResourcePool:
     hibernation_warning_period: int | None = None
     default: bool = False
     public: bool = False
-    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = None
+    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | RemoteConfigurationRunners | None = None
     cluster: SavedClusterSettings | None = None
     platform: RuntimePlatform
     credits_used: int | None = None
@@ -428,6 +428,7 @@ class RemoteConfigurationKind(StrEnum):
 
     firecrest = "firecrest"
     runai = "runai"
+    runners = "runners"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -481,6 +482,25 @@ class RemoteConfigurationRunai:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class RemoteConfigurationRunners:
+    """Model for remote configurations using runners."""
+
+    kind: Final[RemoteConfigurationKind] = field(init=False, default=RemoteConfigurationKind.runners)
+    provider_id: None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        """Convert a dict object into a RemoteConfiguration instance."""
+        return cls()
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert this instance of RemoteConfiguration into a dictionary."""
+        res = asdict(self)
+        res["kind"] = self.kind.value
+        return res
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class RemoteConfigurationFirecrestPatch:
     """Model for remote configurations using the FirecREST API."""
 
@@ -512,7 +532,23 @@ class RemoteConfigurationRunaiPatch:
         return res
 
 
-RemoteConfigurationPatch = ResetType | RemoteConfigurationFirecrestPatch | RemoteConfigurationRunaiPatch
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RemoteConfigurationRunnersPatch:
+    """Model for remote configurations using runners."""
+
+    kind: Final[RemoteConfigurationKind] = field(init=False, default=RemoteConfigurationKind.runners)
+    provider_id: None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert this instance of RemoteConfigurationPatch into a dictionary."""
+        res = asdict(self)
+        res["kind"] = self.kind.value
+        return res
+
+
+RemoteConfigurationPatch = (
+    ResetType | RemoteConfigurationFirecrestPatch | RemoteConfigurationRunaiPatch | RemoteConfigurationRunnersPatch
+)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
