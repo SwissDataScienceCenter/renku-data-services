@@ -19,6 +19,13 @@ def ssh_proxy_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+@pytest.fixture
+def wrong_role_headers() -> dict[str, str]:
+    """A Keycloak token whose realm roles do not include ssh-proxy."""
+    token = json.dumps({"is_admin": False, "id": "some-user", "roles": ["some-other-role"]})
+    return {"Authorization": f"Bearer {token}"}
+
+
 async def test_authorize_no_token_is_401(sanic_client, app_manager_instance):
     _, response = await sanic_client.post(
         f"/api/data/internal/sessions/{MISSING_ID}/authorize",
@@ -45,13 +52,13 @@ async def test_authorize_admin_bypasses_role(sanic_client, app_manager_instance,
     assert response.status_code == 404
 
 
-async def test_authorize_service_account_reaches_handler(sanic_client, app_manager_instance, ssh_proxy_headers):
+async def test_authorize_wrong_role_is_403(sanic_client, app_manager_instance, wrong_role_headers):
     _, response = await sanic_client.post(
         f"/api/data/internal/sessions/{MISSING_ID}/authorize",
-        headers=ssh_proxy_headers,
+        headers=wrong_role_headers,
         json={"public_key": VALID_KEY},
     )
-    assert response.status_code == 404
+    assert response.status_code == 403
 
 
 async def test_authorize_unknown_key_is_404(sanic_client, app_manager_instance, ssh_proxy_headers):
