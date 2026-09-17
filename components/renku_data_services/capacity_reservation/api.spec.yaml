@@ -158,6 +158,9 @@ components:
         resource_class_id:
           type: integer
           example: 42
+        resource_pool_id:
+          type: integer
+          example: 7
         project_template_id:
           $ref: "#/components/schemas/Ulid"
         recurrence:
@@ -183,6 +186,10 @@ components:
         resource_class_id:
           type: integer
           example: 42
+        resource_pool_id:
+          type: integer
+          nullable: true
+          example: 7
         project_template_id:
           type: string
           nullable: true

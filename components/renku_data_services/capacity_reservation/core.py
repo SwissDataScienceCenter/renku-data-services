@@ -66,6 +66,7 @@ def validate_capacity_reservation(
     return models.UnsavedCapacityReservation(
         name=capacity_reservation.name,
         resource_class_id=capacity_reservation.resource_class_id,
+        resource_pool_id=capacity_reservation.resource_pool_id,
         project_template_id=project_template_id,
         recurrence=validate_recurrence_config(capacity_reservation.recurrence),
         provisioning=validate_provisioning_config(capacity_reservation.provisioning),

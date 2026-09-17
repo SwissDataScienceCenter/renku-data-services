@@ -10,7 +10,7 @@ from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
 from renku_data_services import errors
-from renku_data_services.crc.orm import ResourceClassORM
+from renku_data_services.crc.orm import ResourceClassORM, ResourcePoolORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
 from renku_data_services.utils.sqlalchemy import PurePosixPathType, ULIDType
@@ -151,6 +151,15 @@ class SessionLauncherORM(BaseORM):
         index=False,
     )
     """Id of the resource class."""
+
+    resource_pool_id: Mapped[int | None] = mapped_column(
+        "resource_pool_id",
+        ForeignKey(ResourcePoolORM.id, ondelete="SET NULL"),
+        default=None,
+        nullable=True,
+        index=True,
+    )
+    """Id of the resource pool the resource class is used from."""
 
     disk_storage: Mapped[int | None] = mapped_column("disk_storage", BigInteger, default=None, nullable=True)
     """Default value for requested disk storage."""

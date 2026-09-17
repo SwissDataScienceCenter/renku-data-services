@@ -1,5 +1,7 @@
 """crc modules converters and validators."""
 
+from collections.abc import Sequence
+from dataclasses import replace
 from typing import Literal, overload
 from urllib.parse import urlparse
 
@@ -43,9 +45,9 @@ def validate_resource_class(
     pool_kind: models.RemoteConfigurationKind | None = None,
 ) -> models.UnsavedResourceClass:
     """Validate a resource class object."""
-    if len(body.name) > 40:
+    if len(body.name) > 128:
         # TODO: Should this be added to the API spec instead?
-        raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
+        raise errors.ValidationError(message="'name' cannot be longer than 128 characters.")
     if body.default_storage > body.max_storage:
         raise errors.ValidationError(message="The default storage cannot be larger than the max allowable storage.")
     # We need to sort node affinities and tolerations to make '__eq__' reliable
@@ -119,8 +121,8 @@ def validate_resource_class_patch_or_put(
     rc_id = body.id if isinstance(body, (apispec.ResourceClassPatchWithId, apispec.ResourceClassWithId)) else None
     kind = existing_kind
 
-    if body.name is not None and len(body.name) > 40:
-        raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
+    if body.name is not None and len(body.name) > 128:
+        raise errors.ValidationError(message="'name' cannot be longer than 128 characters.")
 
     node_affinities: list[models.NodeAffinity] | None = [] if method == "PUT" else None
     if body.node_affinities:
@@ -178,7 +180,7 @@ def validate_resource_class_patch_or_put(
 
 
 def validate_resource_class_update(
-    existing: models.ResourceClass,
+    existing: models.ResolvedResourceClass,
     update: models.ResourceClassPatch,
 ) -> None:
     """Validate the update to a resource class."""
@@ -189,9 +191,9 @@ def validate_resource_class_update(
     if update.default is not None and existing.default != update.default:
         raise errors.ValidationError(message="Changing the default class in a resource pool is not supported.")
 
-    if len(name) > 40:
+    if len(name) > 128:
         # TODO: Should this be added to the API spec instead?
-        raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
+        raise errors.ValidationError(message="'name' cannot be longer than 128 characters.")
     if default_storage > max_storage:
         raise errors.ValidationError(message="The default storage cannot be larger than the max allowable storage.")
 
@@ -281,7 +283,7 @@ def _resolve_pool_kind_after_update(
 def _validate_classes_against_pool_kind(
     classes: list[models.ResourceClassPatchWithId],
     new_pool_kind: models.RemoteConfigurationKind | None,
-    existing_classes: list[models.ResourceClass] | None = None,
+    existing_classes: Sequence[models.ResourceClass] | None = None,
 ) -> None:
     """Ensure existing classes can be converted to the new pool kind."""
     existing_by_id = {rc.id: rc for rc in (existing_classes or [])}
@@ -304,7 +306,7 @@ def validate_resource_pool_put_or_patch(
     body: apispec.ResourcePoolPatch | apispec.ResourcePoolPut,
     *,
     existing_pool_kind: models.RemoteConfigurationKind | None = None,
-    existing_classes: list[models.ResourceClass] | None = None,
+    existing_classes: Sequence[models.ResourceClass] | None = None,
 ) -> models.ResourcePoolPatch:
     """Validate the patch to a resource pool."""
     new_pool_kind = _resolve_pool_kind_after_update(method=method, body=body, existing_pool_kind=existing_pool_kind)
@@ -407,13 +409,13 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
         class_remote = existing_rc.remote
         if rc.remote is not None:
             class_remote = rc.remote
-        classes[idx] = models.ResourceClass(
+        classes[idx] = replace(
+            existing_rc,
             name=rc.name if rc.name is not None else existing_rc.name,
             cpu=rc.cpu if rc.cpu is not None else existing_rc.cpu,
             memory=rc.memory if rc.memory is not None else existing_rc.memory,
             max_storage=rc.max_storage if rc.max_storage is not None else existing_rc.max_storage,
             gpu=rc.gpu if rc.gpu is not None else existing_rc.gpu,
-            id=existing_rc.id,
             default=rc.default if rc.default is not None else existing_rc.default,
             default_storage=rc.default_storage if rc.default_storage is not None else existing_rc.default_storage,
             node_affinities=rc.node_affinities if rc.node_affinities is not None else existing_rc.node_affinities,

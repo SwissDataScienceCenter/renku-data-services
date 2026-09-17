@@ -12,12 +12,14 @@ from sqlalchemy import (
     Enum,
     Float,
     Identity,
+    Index,
     Integer,
     MetaData,
     String,
     Table,
     false,
     literal,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
@@ -92,20 +94,14 @@ class ResourceClassORM(BaseORM):
     """Resource class specifies a set of resources that can be used in a session."""
 
     __tablename__ = "resource_classes"
-    name: Mapped[str] = mapped_column("name", String(40), index=True)
+    name: Mapped[str] = mapped_column("name", String(128), index=True, unique=True)
     cpu: Mapped[float] = mapped_column()
     memory: Mapped[int] = mapped_column(BigInteger)
     max_storage: Mapped[int] = mapped_column(BigInteger)
     default_storage: Mapped[int] = mapped_column(BigInteger)
-    default: Mapped[bool] = mapped_column(default=False)
     gpu: Mapped[int] = mapped_column(BigInteger, default=0)
     quota_enforced: Mapped[bool] = mapped_column(default=False, server_default=false())
-    resource_pool_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
-    )
-    resource_pool: Mapped[Optional[ResourcePoolORM]] = relationship(
-        back_populates="classes", default=None, lazy="joined"
-    )
+    description: Mapped[str | None] = mapped_column(String(500), default=None, server_default=None, nullable=True)
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, default=None, init=False)
     remote_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONVariant, default=None, server_default=None, nullable=True
@@ -122,11 +118,15 @@ class ResourceClassORM(BaseORM):
         cascade="save-update, merge, delete",
         lazy="selectin",
     )
+    pool_links: Mapped[list[ResourcePoolClassORM]] = relationship(
+        back_populates="resource_class",
+        default_factory=list,
+        lazy="selectin",
+        passive_deletes="all",
+    )
 
     @classmethod
-    def from_unsaved_model(
-        cls, new_resource_class: models.UnsavedResourceClass, resource_pool_id: int | None
-    ) -> ResourceClassORM:
+    def from_unsaved_model(cls, new_resource_class: models.UnsavedResourceClass) -> ResourceClassORM:
         """Create a new ORM object from an unsaved resource class model."""
         node_affinities = [
             NodeAffinityORM(
@@ -142,32 +142,34 @@ class ResourceClassORM(BaseORM):
             cpu=new_resource_class.cpu,
             memory=new_resource_class.memory,
             max_storage=new_resource_class.max_storage,
-            default=new_resource_class.default,
             default_storage=new_resource_class.default_storage,
             gpu=new_resource_class.gpu,
             quota_enforced=new_resource_class.quota_enforced,
-            resource_pool_id=resource_pool_id,
+            description=new_resource_class.description,
             tolerations=tolerations,
             node_affinities=node_affinities,
             remote_json=remote_json,
         )
 
+    def _matches(self, matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None) -> bool | None:
+        if matching_criteria is None:
+            return None
+        return (
+            self.cpu >= matching_criteria.cpu
+            and self.memory >= matching_criteria.memory
+            and self.gpu >= matching_criteria.gpu
+            and self.max_storage >= matching_criteria.max_storage
+        )
+
+    def _dump_remote(self) -> models.FirecrestClassRemote | None:
+        if self.remote_json is None:
+            return None
+        return models.FirecrestClassRemote(**{k: v for k, v in self.remote_json.items() if k != "kind"})
+
     def dump(
         self, matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None
     ) -> models.ResourceClass:
-        """Create a resource class model from the ORM object."""
-        matching: bool | None = None
-        if matching_criteria:
-            matching = (
-                self.cpu >= matching_criteria.cpu
-                and self.memory >= matching_criteria.memory
-                and self.gpu >= matching_criteria.gpu
-                and self.max_storage >= matching_criteria.max_storage
-            )
-        remote: models.FirecrestClassRemote | None = None
-        if self.remote_json is not None:
-            remote = models.FirecrestClassRemote(**{k: v for k, v in self.remote_json.items() if k != "kind"})
-        quota = self.resource_pool.quota if self.resource_pool else None
+        """Create a resource class model."""
         return models.ResourceClass(
             id=self.id,
             name=self.name,
@@ -175,14 +177,78 @@ class ResourceClassORM(BaseORM):
             memory=self.memory,
             max_storage=self.max_storage,
             gpu=self.gpu,
-            default=self.default,
             default_storage=self.default_storage,
+            description=self.description,
             node_affinities=[affinity.dump() for affinity in self.node_affinities],
             tolerations=[toleration.key for toleration in self.tolerations],
-            matching=matching,
-            quota=quota,
+            matching=self._matches(matching_criteria),
+            remote=self._dump_remote(),
+        )
+
+    def dump_in_pool(
+        self,
+        resource_pool: ResourcePoolORM,
+        is_default: bool,
+        matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None,
+    ) -> models.ResolvedResourceClass:
+        """Create a resource class model resolved in the context of one resource pool."""
+        return models.ResolvedResourceClass(
+            id=self.id,
+            name=self.name,
+            cpu=self.cpu,
+            memory=self.memory,
+            max_storage=self.max_storage,
+            gpu=self.gpu,
+            default_storage=self.default_storage,
+            description=self.description,
+            node_affinities=[affinity.dump() for affinity in self.node_affinities],
+            tolerations=[toleration.key for toleration in self.tolerations],
+            matching=self._matches(matching_criteria),
+            remote=self._dump_remote(),
+            resource_pool_id=resource_pool.id,
+            cluster_id=resource_pool.get_cluster_id(),
+            default=is_default,
+            quota=resource_pool.quota,
             quota_enforced=self.quota_enforced,
-            remote=remote,
+        )
+
+
+class ResourcePoolClassORM(BaseORM):
+    """Links a resource class to a resource pool that offers it."""
+
+    __tablename__ = "resource_pool_classes"
+    __table_args__ = (
+        Index(
+            "ix_resource_pool_classes_single_default",
+            "resource_pool_id",
+            unique=True,
+            postgresql_where=text("is_default"),
+        ),
+    )
+    resource_pool_id: Mapped[int] = mapped_column(
+        ForeignKey("resource_pools.id", ondelete="CASCADE"), primary_key=True, index=True, default=None
+    )
+    resource_class_id: Mapped[int] = mapped_column(
+        ForeignKey("resource_classes.id", ondelete="RESTRICT"), primary_key=True, index=True, default=None
+    )
+    is_default: Mapped[bool] = mapped_column(default=False, server_default=false())
+    resource_pool: Mapped[ResourcePoolORM] = relationship(back_populates="class_links", default=None, lazy="selectin")
+    resource_class: Mapped[ResourceClassORM] = relationship(back_populates="pool_links", default=None, lazy="selectin")
+
+    @property
+    def sort_key(self) -> tuple[int, float, int, int, str, int]:
+        """Sort key for ordering the classes inside a pool."""
+        rc = self.resource_class
+        return (rc.gpu, rc.cpu, rc.memory, rc.max_storage, rc.name, rc.id)
+
+    def dump(
+        self,
+        resource_pool: ResourcePoolORM,
+        matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None,
+    ) -> models.ResolvedResourceClass:
+        """Create a resolved resource class model from the link and the pool it belongs to."""
+        return self.resource_class.dump_in_pool(
+            resource_pool=resource_pool, is_default=self.is_default, matching_criteria=matching_criteria
         )
 
 
@@ -279,15 +345,23 @@ class ResourcePoolORM(BaseORM):
         default_factory=list,
         repr=False,
     )
-    classes: Mapped[list[ResourceClassORM]] = relationship(
+    class_links: Mapped[list[ResourcePoolClassORM]] = relationship(
         back_populates="resource_pool",
         default_factory=list,
-        cascade="save-update, merge, delete",
+        cascade="save-update, merge, delete, delete-orphan",
         lazy="selectin",
-        order_by=(
-            "[ResourceClassORM.gpu,ResourceClassORM.cpu,ResourceClassORM.memory,ResourceClassORM.max_storage,"
-            "ResourceClassORM.name,ResourceClassORM.id]"
-        ),
+    )
+    tolerations: Mapped[list[ResourcePoolTolerationORM]] = relationship(
+        back_populates="resource_pool",
+        default_factory=list,
+        cascade="save-update, merge, delete, delete-orphan",
+        lazy="selectin",
+    )
+    node_affinities: Mapped[list[ResourcePoolNodeAffinityORM]] = relationship(
+        back_populates="resource_pool",
+        default_factory=list,
+        cascade="save-update, merge, delete, delete-orphan",
+        lazy="selectin",
     )
     idle_threshold: Mapped[Optional[int]] = mapped_column(default=None)
     hibernation_threshold: Mapped[Optional[int]] = mapped_column(default=None)
@@ -328,8 +402,10 @@ class ResourcePoolORM(BaseORM):
         cluster: models.SavedClusterSettings | None,
     ) -> ResourcePoolORM:
         """Create a new ORM object from an unsaved resource pool model."""
-        classes = [
-            ResourceClassORM.from_unsaved_model(new_resource_class=rc, resource_pool_id=None)
+        class_links = [
+            ResourcePoolClassORM(
+                resource_class=ResourceClassORM.from_unsaved_model(new_resource_class=rc), is_default=rc.default
+            )
             for rc in new_resource_pool.classes
         ]
         remote_provider_id = None
@@ -341,7 +417,7 @@ class ResourcePoolORM(BaseORM):
         return cls(
             name=new_resource_pool.name,
             quota=quota.id if quota else None,
-            classes=classes,
+            class_links=class_links,
             idle_threshold=new_resource_pool.idle_threshold,
             hibernation_threshold=new_resource_pool.hibernation_threshold,
             hibernation_warning_period=new_resource_pool.hibernation_warning_period,
@@ -361,7 +437,7 @@ class ResourcePoolORM(BaseORM):
         credits_used: Credit | None = None,
     ) -> models.ResourcePool:
         """Create a resource pool model from the ORM object and a quota."""
-        classes: list[ResourceClassORM] = self.classes
+        class_links = sorted(self.class_links, key=lambda link: link.sort_key)
         if quota is not None and quota.id != self.quota:
             raise errors.BaseError(
                 message="Unexpected error when dumping a resource pool ORM.",
@@ -379,7 +455,7 @@ class ResourcePoolORM(BaseORM):
             id=self.id,
             name=self.name,
             quota=quota,
-            classes=[resource_class.dump(matching_criteria=class_match_criteria) for resource_class in classes],
+            classes=[link.dump(self, matching_criteria=class_match_criteria) for link in class_links],
             idle_threshold=self.idle_threshold,
             hibernation_threshold=self.hibernation_threshold,
             hibernation_warning_period=self.hibernation_warning_period,
@@ -409,6 +485,35 @@ class ResourcePoolORM(BaseORM):
         if self.cluster_id is None:
             return DEFAULT_K8S_CLUSTER
         return ClusterId(self.cluster_id)
+
+
+class ResourcePoolTolerationORM(BaseORM):
+    """The key for a K8s toleration that applies to every session launched in a resource pool."""
+
+    __tablename__ = "resource_pool_tolerations"
+    key: Mapped[str] = mapped_column(String(63), index=True)
+    resource_pool_id: Mapped[int] = mapped_column(
+        ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
+    )
+    resource_pool: Mapped[ResourcePoolORM] = relationship(back_populates="tolerations", default=None)
+    id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
+
+
+class ResourcePoolNodeAffinityORM(BaseORM):
+    """The key for a K8s node label that applies to every session launched in a resource pool."""
+
+    __tablename__ = "resource_pool_node_affinities"
+    key: Mapped[str] = mapped_column(String(63), index=True)
+    resource_pool_id: Mapped[int] = mapped_column(
+        ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
+    )
+    resource_pool: Mapped[ResourcePoolORM] = relationship(back_populates="node_affinities", default=None)
+    required_during_scheduling: Mapped[bool] = mapped_column(default=False)
+    id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
+
+    def dump(self) -> models.NodeAffinity:
+        """Create a node affinity model from the ORM object."""
+        return models.NodeAffinity(key=self.key, required_during_scheduling=self.required_during_scheduling)
 
 
 class TolerationORM(BaseORM):

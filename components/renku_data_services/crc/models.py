@@ -113,6 +113,7 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     gpu: int
     default: bool = False
     default_storage: int = 1
+    description: str | None = None
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
     quota_enforced: bool = False
@@ -129,16 +130,25 @@ class ResourceClass(ResourcesCompareMixin):
     max_storage: int
     gpu: int
     id: int
-    default: bool = False
     default_storage: int = 1
+    description: str | None = None
     matching: Optional[bool] = None
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
+    remote: FirecrestClassRemote | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResolvedResourceClass(ResourceClass):
+    """A resource class as configured in one resource pool."""
+
+    resource_pool_id: int
+    cluster_id: ClusterId = DEFAULT_K8S_CLUSTER
+    default: bool = False
     quota: str | None = None
+    quota_enforced: bool = False
     usage_hours_remaining: float | None = None
     usage_hours_total: float | None = None
-    quota_enforced: bool = False
-    remote: FirecrestClassRemote | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -152,6 +162,7 @@ class ResourceClassPatch:
     gpu: int | None = None
     default: bool | None = None
     default_storage: int | None = None
+    description: str | None = None
     node_affinities: list[NodeAffinity] | None = None
     tolerations: list[str] | None = None
     quota_enforced: bool | None = None
@@ -367,7 +378,7 @@ class ResourcePool:
     """Resource pool model."""
 
     name: str
-    classes: list[ResourceClass]
+    classes: list[ResolvedResourceClass]
     quota: Quota | None = None
     id: int
     idle_threshold: int | None = None
@@ -384,14 +395,14 @@ class ResourcePool:
     If the value is zero or unset then cpu limits are not set.
     """
 
-    def get_resource_class(self, resource_class_id: int) -> ResourceClass | None:
+    def get_resource_class(self, resource_class_id: int) -> ResolvedResourceClass | None:
         """Find a specific resource class in the resource pool by the resource class id."""
         for rc in self.classes:
             if rc.id == resource_class_id:
                 return rc
         return None
 
-    def get_default_resource_class(self) -> ResourceClass | None:
+    def get_default_resource_class(self) -> ResolvedResourceClass | None:
         """Find the default resource class in the pool."""
         for rc in self.classes:
             if rc.default:

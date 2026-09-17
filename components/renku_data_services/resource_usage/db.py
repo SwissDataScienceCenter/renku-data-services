@@ -136,12 +136,13 @@ class ResourceRequestsRepo:
         """
         stmt = sa.text("""
         select
-          rc.resource_pool_id,
+          rpc.resource_pool_id,
           rc.id as resource_class_id,
           rcc.cost
         from "resource_pools"."resource_classes" rc
+        join "resource_pools"."resource_pool_classes" rpc on rpc.resource_class_id = rc.id
         left join "resource_pools"."resource_class_costs" rcc on rc.id = rcc.resource_class_id
-        where rc.resource_pool_id = :pool_id and rc.id = :class_id
+        where rpc.resource_pool_id = :pool_id and rc.id = :class_id
         """)
         async with self.session_maker() as session:
             result = await session.execute(stmt, {"pool_id": resource_pool_id, "class_id": resource_class_id})

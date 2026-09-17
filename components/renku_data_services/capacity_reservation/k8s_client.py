@@ -67,10 +67,10 @@ class CapacityReservationK8sClient:
     async def _cluster_for_reservation(self, reservation: CapacityReservation) -> ClusterConnection:
         """Resolve the cluster for a reservation, falling back to the default cluster."""
         cluster_id: ClusterId = DEFAULT_K8S_CLUSTER
-        class_id = reservation.resource_class_id
-        resolved = await self.__cluster_repo.get_cluster_id_for_resource_class(class_id)
-        if resolved is not None:
-            cluster_id = resolved
+        if reservation.resource_pool_id is not None:
+            resolved = await self.__cluster_repo.get_cluster_id_for_resource_pool(reservation.resource_pool_id)
+            if resolved is not None:
+                cluster_id = resolved
         return await self.__client.cluster_by_id(cluster_id)
 
     async def create_placeholder_deployment(self, occurrence: Occurrence, reservation: CapacityReservation) -> str:
