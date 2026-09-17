@@ -627,6 +627,12 @@ class DataConnectorsBP(CustomBlueprint):
             )
         return access_token
 
+    async def __get_scicat_token(self, user: base_models.APIUser) -> str:
+        token = await self.__get_provider_access_token(user, ProviderKind.scicat)
+        # Exchange access token for a SciCat token using the SciCat API.
+        deposit_api_key = await self.scicat_client.get_scicat_token(token)
+        return deposit_api_key
+
     def post_deposit(self) -> BlueprintFactoryResponse:
         """Create a deposit."""
 
@@ -662,9 +668,7 @@ class DataConnectorsBP(CustomBlueprint):
                     deposit_api_key = token
 
                 case apispec.DepositProvider.scicat:
-                    token = await self.__get_provider_access_token(user, ProviderKind.scicat)
-                    # Exchange access token for a SciCat token using the SciCat API.
-                    deposit_api_key = await self.scicat_client.get_scicat_token(token)
+                    deposit_api_key = await self.__get_scicat_token(user)
 
                     user_groups = await self.scicat_client.get_user_groups(deposit_api_key)
                     # TODO: use scicat user instead
@@ -784,9 +788,7 @@ class DataConnectorsBP(CustomBlueprint):
                                 "before being completed."
                             )
                     case models.DepositSource.scicat:
-                        token = await self.__get_provider_access_token(user, ProviderKind.scicat)
-                        # Exchange access token for a SciCat token using the SciCat API.
-                        deposit_api_key = await self.scicat_client.get_scicat_token(token)
+                        deposit_api_key = await self.__get_scicat_token(user)
                         scicat_dep = await self.scicat_client.get_deposit(
                             deposit_api_key, saved_dep.deposit.original_id
                         )
@@ -840,9 +842,7 @@ class DataConnectorsBP(CustomBlueprint):
                     token = await self.__get_provider_access_token(user, ProviderKind.zenodo)
                     deposit_api_key = token
                 case models.DepositSource.scicat:
-                    token = await self.__get_provider_access_token(user, ProviderKind.scicat)
-                    # Exchange access token for a SciCat token using the SciCat API.
-                    deposit_api_key = await self.scicat_client.get_scicat_token(token)
+                    deposit_api_key = await self.__get_scicat_token(user)
                 case x:
                     raise errors.ValidationError(
                         message=f"Received unknown deposit provider {x} when rerunning deposit job."
