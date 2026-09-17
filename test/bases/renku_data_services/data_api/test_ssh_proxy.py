@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from renku_data_services.base_models.core import AuthenticatedAPIUser
@@ -10,32 +12,80 @@ VALID_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPXhsNCQyI4HlAkaUIujCoGv3isiGoD
 MISSING_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 
-async def test_authorize_unknown_key_is_404(sanic_client, app_manager_instance):
+@pytest.fixture
+def ssh_proxy_headers() -> dict[str, str]:
+    """A Keycloak service-account token carrying the ssh-proxy realm role."""
+    token = json.dumps({"is_admin": False, "id": "service-account-ssh-proxy", "roles": ["ssh-proxy"]})
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def test_authorize_no_token_is_401(sanic_client, app_manager_instance):
     _, response = await sanic_client.post(
         f"/api/data/internal/sessions/{MISSING_ID}/authorize",
+        json={"public_key": VALID_KEY},
+    )
+    assert response.status_code == 401
+
+
+async def test_authorize_user_token_is_403(sanic_client, app_manager_instance, user_headers):
+    _, response = await sanic_client.post(
+        f"/api/data/internal/sessions/{MISSING_ID}/authorize",
+        headers=user_headers,
+        json={"public_key": VALID_KEY},
+    )
+    assert response.status_code == 403
+
+
+async def test_authorize_admin_bypasses_role(sanic_client, app_manager_instance, admin_headers):
+    _, response = await sanic_client.post(
+        f"/api/data/internal/sessions/{MISSING_ID}/authorize",
+        headers=admin_headers,
         json={"public_key": VALID_KEY},
     )
     assert response.status_code == 404
 
 
-async def test_authorize_malformed_key_is_404(sanic_client, app_manager_instance):
+async def test_authorize_service_account_reaches_handler(sanic_client, app_manager_instance, ssh_proxy_headers):
     _, response = await sanic_client.post(
         f"/api/data/internal/sessions/{MISSING_ID}/authorize",
+        headers=ssh_proxy_headers,
+        json={"public_key": VALID_KEY},
+    )
+    assert response.status_code == 404
+
+
+async def test_authorize_unknown_key_is_404(sanic_client, app_manager_instance, ssh_proxy_headers):
+    _, response = await sanic_client.post(
+        f"/api/data/internal/sessions/{MISSING_ID}/authorize",
+        headers=ssh_proxy_headers,
+        json={"public_key": VALID_KEY},
+    )
+    assert response.status_code == 404
+
+
+async def test_authorize_malformed_key_is_404(sanic_client, app_manager_instance, ssh_proxy_headers):
+    _, response = await sanic_client.post(
+        f"/api/data/internal/sessions/{MISSING_ID}/authorize",
+        headers=ssh_proxy_headers,
         json={"public_key": "not a key"},
     )
     assert response.status_code == 404
 
 
-async def test_authorize_missing_public_key_is_422(sanic_client, app_manager_instance):
+async def test_authorize_missing_public_key_is_422(sanic_client, app_manager_instance, ssh_proxy_headers):
     _, response = await sanic_client.post(
         f"/api/data/internal/sessions/{MISSING_ID}/authorize",
+        headers=ssh_proxy_headers,
         json={},
     )
     assert response.status_code == 422
 
 
-async def test_authorize_missing_body_is_422(sanic_client, app_manager_instance):
-    _, response = await sanic_client.post(f"/api/data/internal/sessions/{MISSING_ID}/authorize")
+async def test_authorize_missing_body_is_422(sanic_client, app_manager_instance, ssh_proxy_headers):
+    _, response = await sanic_client.post(
+        f"/api/data/internal/sessions/{MISSING_ID}/authorize",
+        headers=ssh_proxy_headers,
+    )
     assert response.status_code == 422
 
 
@@ -45,6 +95,7 @@ async def test_authorize_owner_allowed_and_other_key_denied(
     app_manager_instance,
     sanic_client,
     user_headers,
+    ssh_proxy_headers,
     regular_user,
     create_project,
     create_resource_pool,
@@ -76,6 +127,7 @@ async def test_authorize_owner_allowed_and_other_key_denied(
         # the key's owner may open it
         _, response = await sanic_client.post(
             f"/api/data/internal/sessions/{session_id}/authorize",
+            headers=ssh_proxy_headers,
             json={"public_key": VALID_KEY},
         )
         assert response.status_code == 204, response.text
@@ -83,6 +135,7 @@ async def test_authorize_owner_allowed_and_other_key_denied(
         # an unregistered key is denied on the same existing session
         _, response = await sanic_client.post(
             f"/api/data/internal/sessions/{session_id}/authorize",
+            headers=ssh_proxy_headers,
             json={"public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDifferentKeyAAAAAAAAAAAAAAAAAAAAAAAAAAA"},
         )
         assert response.status_code == 404
