@@ -106,6 +106,9 @@ class DataConnectorORM(BaseORM):
     doi: Mapped[str | None] = mapped_column(default=None, server_default=None, index=True, nullable=True)
     publisher_name: Mapped[str | None] = mapped_column(default=None, server_default=None, index=True, nullable=True)
     publisher_url: Mapped[str | None] = mapped_column(default=None, server_default=None, index=True, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(
+        "expires_at", DateTime(timezone=True), nullable=True, default=None
+    )
 
     def dump(self) -> models.DataConnector | models.GlobalDataConnector:
         """Create a data connector model from the DataConnectorORM."""
@@ -124,6 +127,7 @@ class DataConnectorORM(BaseORM):
                 publisher_name=self.publisher_name,
                 publisher_url=self.publisher_url,
                 doi=DOI(self.doi) if self.doi is not None else None,
+                expires_at=self.expires_at,
             )
 
         elif self.slug is None:
@@ -141,6 +145,7 @@ class DataConnectorORM(BaseORM):
             storage=self._dump_storage(),
             description=self.description,
             keywords=self.keywords,
+            expires_at=self.expires_at,
         )
 
     def _dump_visibility(self) -> authz_models.Visibility:

@@ -119,6 +119,11 @@ class LokiLogReader:
                 logger.warning(f"Skipping entry {entry.stream} because of validation error: {err}")
                 continue
 
+            # See: renku_data_services.users.orm.UserORM
+            if len(stream.renku_io_safe_username) > 36:
+                logger.debug(f"Skipping entry {entry.stream} because the user ID is not valid.")
+                continue
+
             try:
                 launcher_id = ULID.from_str(stream.renku_io_launcher_id.upper())
             except ValueError as err:
