@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, MetaData, func, text
@@ -82,6 +83,11 @@ class SessionRunnerORM(BaseORM):
     )
     """The date and time of the last contact with the runner."""
 
+    assigned_sessions: Mapped[Sequence[AssignedSessionORM]] = relationship(
+        back_populates="runner", init=False, collection_class=list
+    )
+    """The assigned sessions for this runner."""
+
     def dump(self, include_registration_token: bool = False) -> models.SessionRunner:
         """Create a session runner model from the SessionRunnerORM."""
         return models.SessionRunner(
@@ -125,7 +131,7 @@ class AssignedSessionORM(BaseORM):
     )
     """ID of the runner picked to run the session."""
 
-    runner: Mapped[SessionRunnerORM | None] = relationship(init=False, repr=False)
+    runner: Mapped[SessionRunnerORM | None] = relationship(init=False, repr=False, back_populates="assigned_sessions")
     """The runner picked to run the session."""
 
     creation_date: Mapped[datetime] = mapped_column(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import random
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -153,7 +153,7 @@ class SessionRunnersRepository:
         user: base_models.APIUser,
         session_runner_id: ULID,
         payload: models.SessionRunnerContactPayload,
-    ) -> models.SessionRunner:
+    ) -> tuple[models.SessionRunner, Sequence[str]]:
         """Update a session runner based on the contact payload it sent."""
         if not user.is_authenticated or not user.id:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
@@ -169,9 +169,18 @@ class SessionRunnersRepository:
         runner_orm.status = payload.status
         runner_orm.last_contact = datetime.now(tz=UTC)
         runner_orm.registration_token = None
-        # TODO: handle sessions assigned to the runner
+
+        # Get the list of sessions assigned to the runner
+        sessions_stmt = stmt = (
+            select(schemas.AssignedSessionORM)
+            .join(schemas.SessionRunnerORM.assigned_sessions)
+            .where(schemas.SessionRunnerORM.id == runner_orm.id)
+        )
+        sessions_res = await session.stream_scalars(sessions_stmt)
+        assigned_session_ids = [assigned_session.id async for assigned_session in sessions_res]
+
         await session.flush()
-        return runner_orm.dump()
+        return runner_orm.dump(), assigned_session_ids
 
     async def delete_runner(self, session: AsyncSession, user: base_models.APIUser, runner_id: ULID) -> None:
         """Remove a session runner from the database."""
@@ -192,6 +201,8 @@ class SessionRunnersRepository:
         """Returns a random code to use as a registration token."""
         rand = random.SystemRandom()
         return base64.urlsafe_b64encode(rand.randbytes(size)).decode()
+
+    # async def get_assigned_sessions_from_runner(self, ):
 
 
 class SessionRunnersSchedulingRepository:

@@ -125,10 +125,9 @@ class SessionRunnersBP(CustomBlueprint):
         ) -> JSONResponse:
             payload = validate_session_runner_contact_payload(payload=body)
             async with self.session_maker() as session, session.begin():
-                await self.session_runners_repo.update_runner_from_contact(
+                _runner, assigned_session_ids = await self.session_runners_repo.update_runner_from_contact(
                     session=session, user=user, session_runner_id=session_runner_id, payload=payload
                 )
-            # TODO: handle sessions assigned to the runner
-            return validated_json(apispec.SessionRunnerContactResponse, {"sessions": []})
+            return validated_json(apispec.SessionRunnerContactResponse, {"sessions": assigned_session_ids})
 
         return "/session_runners/<session_runner_id:ulid>/contact", ["POST"], _post_session_runner_contact
