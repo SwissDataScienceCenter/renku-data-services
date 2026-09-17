@@ -13,6 +13,7 @@ from kubernetes.client import ApiClient, V1Toleration
 from renku_data_services.app_config import logging
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
+from renku_data_services.notebooks.config.dynamic import _CustomCaCertsConfig
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,8 @@ class DepositConfig:
     renku_url: str
     zenodo_url: str
     envidat: EnvidatConfig
+    scicat: ScicatConfig
+    ca_certs: _CustomCaCertsConfig
     node_selector: dict[str, str] | None = None
     tolerations: list[V1Toleration] | None = None
     cluster_id: Final[ClusterId] = DEFAULT_K8S_CLUSTER
@@ -66,7 +69,9 @@ class DepositConfig:
             namespace=os.environ["KUBERNETES_NAMESPACE"],
             cluster_id=DEFAULT_K8S_CLUSTER,
             zenodo_url=os.environ.get("ZENODO_URL", "https://zenodo.org").rstrip("/"),
+            scicat=ScicatConfig.from_env(),
             envidat=EnvidatConfig.from_env(),
+            ca_certs=_CustomCaCertsConfig.from_env(),
         )
 
 
@@ -110,3 +115,21 @@ class EnvidatConfig:
                 message="Envidat exports are enabled but not all required parameters are provided."
             )
         return output
+
+
+@dataclass
+class ScicatConfig:
+    """Configuration for SciCat data exports."""
+
+    url: str
+    api_url: str
+    image: str
+
+    @classmethod
+    def from_env(cls) -> ScicatConfig:
+        """Generate the config from environment variables."""
+        return cls(
+            url=os.environ.get("SCICAT_URL", "https://discovery-qa.psi.ch").rstrip("/"),
+            api_url=os.environ.get("SCICAT_API_URL", "https://dacat-qa.psi.ch/api/v3").rstrip("/"),
+            image=os.environ.get("SCICAT_JOB_IMAGE", "ghcr.io/swissdatasciencecenter/scicat-cli:latest"),
+        )

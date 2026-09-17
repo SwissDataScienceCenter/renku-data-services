@@ -51,11 +51,6 @@ def validate_unsaved_oauth2_client(clnt: apispec.ProviderPost) -> models.Unsaved
     if clnt.image_registry_url is not None:
         validate_image_registry_url(clnt.image_registry_url)
     kind = models.ProviderKind(clnt.kind.value)
-    if clnt.oidc_issuer_url and kind != models.ProviderKind.generic_oidc:
-        raise errors.ValidationError(
-            message=f"The field 'oidc_issuer_url' can only be set when kind is set to {models.ProviderKind.generic_oidc.value}.",  # noqa E501
-            quiet=True,
-        )
     if kind == models.ProviderKind.generic_oidc:
         if not clnt.oidc_issuer_url:
             raise errors.ValidationError(
