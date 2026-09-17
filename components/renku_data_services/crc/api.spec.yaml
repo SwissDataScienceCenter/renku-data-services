@@ -1446,7 +1446,6 @@ components:
           $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
       required:
         - name
-        - default
         - cpu
         - memory
         - gpu

@@ -36,6 +36,7 @@ from renku_data_services.crc.models import (
     RemoteConfigurationFirecrest,
     RemoteConfigurationKind,
     RemoteConfigurationRunai,
+    ResolvedResourceClass,
     ResourceClass,
     ResourcePool,
     SessionProtocol,
@@ -1381,7 +1382,7 @@ async def patch_session(
         is_being_resumed = True
 
     rp: ResourcePool | None = None
-    rc: ResourceClass | None = None
+    rc: ResolvedResourceClass | None = None
     # Resource class
     if body.resource_class_id is not None:
         new_cluster = await nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)

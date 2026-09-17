@@ -461,7 +461,7 @@ class ClassesBP(CustomBlueprint):
         async def _get_all(
             request: Request, user: base_models.APIUser, resource_pool_id: int, query: apispec.ResourceClassParams
         ) -> HTTPResponse:
-            res = await self.repo.get_classes(api_user=user, resource_pool_id=resource_pool_id, name=query.name)
+            res = await self.repo.get_pool_classes(api_user=user, resource_pool_id=resource_pool_id, name=query.name)
             return validated_json(apispec.ResourceClassesWithIdResponse, res)
 
         return "/resource_pools/<resource_pool_id>/classes", ["GET"], _get_all
@@ -492,7 +492,7 @@ class ClassesBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate_db_ids
         async def _get(_: Request, user: base_models.APIUser, resource_pool_id: int, class_id: int) -> HTTPResponse:
-            res = await self.repo.get_classes(api_user=user, resource_pool_id=resource_pool_id, id=class_id)
+            res = await self.repo.get_pool_classes(api_user=user, resource_pool_id=resource_pool_id, id=class_id)
             if len(res) < 1:
                 raise errors.MissingResourceError(
                     message=f"The class with id {class_id} or resource pool with id {resource_pool_id} cannot be found."

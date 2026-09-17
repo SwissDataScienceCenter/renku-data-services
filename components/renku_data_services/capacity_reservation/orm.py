@@ -108,6 +108,9 @@ class CapacityReservationORM(BaseORM):
     project_template_id: Mapped[Optional[ULID]] = mapped_column(
         "project_template_id", ULIDType, nullable=True, index=True, default=None
     )
+    resource_pool_id: Mapped[int | None] = mapped_column(
+        "resource_pool_id", Integer, nullable=True, index=True, default=None
+    )
 
     def dump(self) -> models.CapacityReservation:
         """Create a capacity reservation model from this ORM object."""
@@ -115,6 +118,7 @@ class CapacityReservationORM(BaseORM):
             id=self.id,
             name=self.name,
             resource_class_id=self.resource_class_id,
+            resource_pool_id=self.resource_pool_id,
             project_template_id=self.project_template_id,
             recurrence=_recurrence_from_dict(self.recurrence),
             provisioning=_provisioning_from_dict(self.provisioning),
@@ -126,6 +130,7 @@ class CapacityReservationORM(BaseORM):
         return cls(
             name=new_capacity_reservation.name,
             resource_class_id=new_capacity_reservation.resource_class_id,
+            resource_pool_id=new_capacity_reservation.resource_pool_id,
             project_template_id=new_capacity_reservation.project_template_id,
             recurrence=_recurrence_to_dict(new_capacity_reservation.recurrence),
             provisioning=_provisioning_to_dict(new_capacity_reservation.provisioning),
