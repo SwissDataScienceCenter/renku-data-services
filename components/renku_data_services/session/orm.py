@@ -323,6 +323,7 @@ class BuildORM(BaseORM):
             repository_git_commit_sha=self.result_repository_git_commit_sha,
         )
 
+
 class SessionLauncherRepositoryORM(BaseORM):
     """The repository parameters of a launcher."""
 
@@ -345,14 +346,14 @@ class SessionLauncherRepositoryORM(BaseORM):
         lazy="selectin",
     )
 
-    policy: Mapped[dict[str,Any]] = mapped_column(JSONVariant, nullable=False)
+    policy: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
 
     @classmethod
     def load(cls, link: models.SessionLauncherRepository) -> Self:
         return cls(
             launcher_id=link.launcher_id,
             repository_id=link.repository_id,
-            policy={ "policy": link.policy.value, "writable_references": link.writable_references },
+            policy={"policy": link.policy.value, "writable_references": link.writable_references},
         )
 
     def dump(self) -> models.SessionLauncherRepository:
@@ -387,10 +388,7 @@ class SessionLauncherDataConnectorORM(BaseORM):
 
     __tablename__ = "launcher_data_connectors"
 
-    launcher_id: Mapped[ULID] = mapped_column(
-        ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"),
-        primary_key=True
-    )
+    launcher_id: Mapped[ULID] = mapped_column(ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"), primary_key=True)
 
     data_connector_to_project_link_id: Mapped[ULID] = mapped_column(
         ForeignKey(DataConnectorToProjectLinkORM.id, ondelete="CASCADE"),
@@ -404,14 +402,14 @@ class SessionLauncherDataConnectorORM(BaseORM):
         lazy="selectin",
     )
 
-    policy: Mapped[dict[str,Any]] = mapped_column(JSONVariant, nullable=False)
+    policy: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
 
     @classmethod
     def load(cls, link: models.SessionLauncherDataConnector) -> Self:
         return cls(
             launcher_id=link.launcher_id,
             data_connector_to_project_link_id=link.data_connector_to_project_link_id,
-            policy={ "policy": link.policy.value },
+            policy={"policy": link.policy.value},
         )
 
     def dump(self) -> models.SessionLauncherDataConnector:
@@ -427,10 +425,7 @@ class SessionLauncherDataConnectorORM(BaseORM):
             policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
         except (ValueError, TypeError):
             return models.SessionLauncherPolicy.excluded
-        if (
-            policy.requires_write_access
-            and self.data_connector_to_project_link.data_connector.readonly
-        ):
+        if policy.requires_write_access and self.data_connector_to_project_link.data_connector.readonly:
             return models.SessionLauncherPolicy.read_only
         return policy
 
@@ -441,10 +436,7 @@ class SessionLauncherDataConnectorORM(BaseORM):
         except (ValueError, TypeError):
             return False
 
-        return (
-            not policy.requires_write_access
-            or not self.data_connector_to_project_link.data_connector.readonly
-        )
+        return not policy.requires_write_access or not self.data_connector_to_project_link.data_connector.readonly
 
 
 class SessionLauncherSecretORM(BaseORM):
@@ -476,7 +468,7 @@ class SessionLauncherSecretORM(BaseORM):
         return cls(
             launcher_id=link.launcher_id,
             secret_slot_id=link.secret_slot_id,
-            policy={ "policy": link.policy.value },
+            policy={"policy": link.policy.value},
         )
 
     def dump(self) -> models.SessionLauncherSecret:
@@ -496,7 +488,3 @@ class SessionLauncherSecretORM(BaseORM):
             return policy
         else:
             return models.SessionLauncherPolicy.read_only
-
-
-
-    
