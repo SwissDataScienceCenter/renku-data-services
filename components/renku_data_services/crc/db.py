@@ -124,6 +124,35 @@ def _only_admins(
     return decorated_function
 
 
+async def _get_flavour_orm(session: AsyncSession, flavour_id: ULID) -> schemas.ResourceFlavourORM:
+    """Load a resource flavour or raise if it does not exist."""
+    flavour = await session.scalar(
+        select(schemas.ResourceFlavourORM).where(schemas.ResourceFlavourORM.id == flavour_id)
+    )
+    if flavour is None:
+        raise errors.MissingResourceError(message=f"Resource flavour with id {flavour_id} does not exist.")
+    return flavour
+
+
+async def _apply_flavour_snapshots(session: AsyncSession, classes: Sequence[schemas.ResourceClassORM]) -> None:
+    """Copy the linked flavour's values onto every class that carries a link."""
+    for cls in classes:
+        if cls.resource_flavour_id is None:
+            continue
+        flavour = await _get_flavour_orm(session, cls.resource_flavour_id)
+        cls.resource_flavour = flavour
+        _snapshot_flavour(cls, flavour)
+
+
+def _snapshot_flavour(cls: schemas.ResourceClassORM, flavour: schemas.ResourceFlavourORM) -> None:
+    """Copy a flavour's resource values onto a resource class, on both link and unlink."""
+    cls.cpu = flavour.cpu
+    cls.memory = flavour.memory
+    cls.max_storage = flavour.max_storage
+    cls.default_storage = flavour.default_storage
+    cls.gpu = flavour.gpu
+
+
 class ResourcePoolQueryRepository:
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
@@ -508,6 +537,7 @@ class ResourcePoolRepository(_Base):
         resource_pool = schemas.ResourcePoolORM.from_unsaved_model(
             new_resource_pool=new_resource_pool, quota=quota, cluster=cluster
         )
+        await _apply_flavour_snapshots(session, resource_pool.classes)
         if resource_pool.default:
             stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
             res = await session.execute(stmt)
@@ -549,6 +579,15 @@ class ResourcePoolRepository(_Base):
         async with self.session_maker() as session, session.begin():
             resource_class = schemas.ResourceClassORM.from_unsaved_model(
                 new_resource_class=new_resource_class, resource_pool_id=resource_pool_id
+            )
+            await _apply_flavour_snapshots(session, [resource_class])
+            new_resource_class = replace(
+                new_resource_class,
+                cpu=resource_class.cpu,
+                memory=resource_class.memory,
+                max_storage=resource_class.max_storage,
+                default_storage=resource_class.default_storage,
+                gpu=resource_class.gpu,
             )
 
             if resource_pool_id is not None:
@@ -831,6 +870,34 @@ class ResourcePoolRepository(_Base):
                 await session.delete(cls)
 
     @_only_admins
+    async def unlink_resource_flavour(
+        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int
+    ) -> models.ResourceClass:
+        """Detach a resource class from its resource flavour, keeping the flavour's current values."""
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                select(schemas.ResourceClassORM)
+                .where(schemas.ResourceClassORM.id == resource_class_id)
+                .where(schemas.ResourceClassORM.resource_pool_id == resource_pool_id)
+            )
+            cls = (await session.scalars(stmt)).one_or_none()
+            if cls is None:
+                raise errors.MissingResourceError(
+                    message=(
+                        f"The resource class with id {resource_class_id} does not exist, the resource pool with "
+                        f"id {resource_pool_id} does not exist or the requested resource class is not "
+                        "associated with the resource pool"
+                    )
+                )
+            if cls.resource_flavour_id is not None:
+                _snapshot_flavour(cls, await _get_flavour_orm(session, cls.resource_flavour_id))
+                cls.resource_flavour_id = None
+                cls.resource_flavour = None
+            await session.flush()
+            await session.refresh(cls)
+            return cls.dump()
+
+    @_only_admins
     async def update_resource_class(
         self,
         api_user: base_models.APIUser,
@@ -866,6 +933,27 @@ class ResourcePoolRepository(_Base):
                     pool_kind = models.RemoteConfigurationKind(remote_kind)
 
             validate_resource_class_update(existing=cls.dump(), update=update)
+
+            new_flavour_id = update.resource_flavour_id
+            linked_after = new_flavour_id if new_flavour_id is not None else cls.resource_flavour_id
+            explicit_shape = [
+                name
+                for name in ("cpu", "memory", "max_storage", "default_storage", "gpu")
+                if getattr(update, name) is not None
+            ]
+            if linked_after is not None and explicit_shape:
+                raise errors.ValidationError(
+                    message=(
+                        f"The fields {', '.join(explicit_shape)} cannot be set on a resource class that is linked to "
+                        "a resource flavour. Change the flavour, or unlink the class first."
+                    )
+                )
+
+            if new_flavour_id is not None:
+                flavour = await _get_flavour_orm(session, new_flavour_id)
+                cls.resource_flavour_id = new_flavour_id
+                cls.resource_flavour = flavour
+                _snapshot_flavour(cls, flavour)
 
             # NOTE: updating the 'default' field is not supported, so it is skipped below
             if update.name is not None:
@@ -1879,6 +1967,110 @@ class ClusterRepository:
             cluster = r.one_or_none()
             if cluster is not None:
                 await session.delete(cluster)
+
+
+@dataclass
+class ResourceFlavourRepository:
+    """Repository for resource flavours."""
+
+    session_maker: Callable[..., AsyncSession]
+
+    async def get_flavours(self, name: str | None = None) -> list[models.ResourceFlavour]:
+        """Get all resource flavours from the database."""
+        async with self.session_maker() as session:
+            stmt = select(schemas.ResourceFlavourORM).order_by(schemas.ResourceFlavourORM.name)
+            if name is not None:
+                stmt = stmt.where(schemas.ResourceFlavourORM.name == name)
+            res = await session.scalars(stmt)
+            return [flavour.dump() for flavour in res]
+
+    async def get_flavour(self, flavour_id: ULID) -> models.ResourceFlavour:
+        """Get a specific resource flavour from the database."""
+        async with self.session_maker() as session:
+            flavour = await _get_flavour_orm(session, flavour_id)
+            return flavour.dump()
+
+    @_only_admins
+    async def insert_flavour(
+        self, api_user: base_models.APIUser, new_flavour: models.UnsavedResourceFlavour
+    ) -> models.ResourceFlavour:
+        """Insert a new resource flavour in the database."""
+        async with self.session_maker() as session, session.begin():
+            existing = await session.scalar(
+                select(schemas.ResourceFlavourORM).where(schemas.ResourceFlavourORM.name == new_flavour.name)
+            )
+            if existing is not None:
+                raise errors.ConflictError(
+                    message=f"A resource flavour with the name {new_flavour.name} already exists.", quiet=True
+                )
+            flavour = schemas.ResourceFlavourORM.from_unsaved_model(new_flavour)
+            session.add(flavour)
+            await session.flush()
+            await session.refresh(flavour)
+            return flavour.dump()
+
+    @_only_admins
+    async def update_flavour(
+        self, api_user: base_models.APIUser, flavour_id: ULID, update: models.ResourceFlavourPatch
+    ) -> models.ResourceFlavour:
+        """Update a resource flavour in the database.
+
+        The new values are not copied onto the linked resource classes: they take effect on read.
+        """
+        async with self.session_maker() as session, session.begin():
+            flavour = await _get_flavour_orm(session, flavour_id)
+            if update.name is not None and update.name != flavour.name:
+                existing = await session.scalar(
+                    select(schemas.ResourceFlavourORM).where(schemas.ResourceFlavourORM.name == update.name)
+                )
+                if existing is not None:
+                    raise errors.ConflictError(
+                        message=f"A resource flavour with the name {update.name} already exists.", quiet=True
+                    )
+                flavour.name = update.name
+            if update.cpu is not None:
+                flavour.cpu = update.cpu
+            if update.memory is not None:
+                flavour.memory = update.memory
+            if update.max_storage is not None:
+                flavour.max_storage = update.max_storage
+            if update.default_storage is not None:
+                flavour.default_storage = update.default_storage
+            if update.gpu is not None:
+                flavour.gpu = update.gpu
+            if update.description is RESET:
+                flavour.description = None
+            elif isinstance(update.description, str):
+                flavour.description = update.description
+            if flavour.default_storage > flavour.max_storage:
+                raise errors.ValidationError(
+                    message="The default storage cannot be larger than the max allowable storage."
+                )
+            await session.flush()
+            await session.refresh(flavour)
+            return flavour.dump()
+
+    @_only_admins
+    async def delete_flavour(self, api_user: base_models.APIUser, flavour_id: ULID) -> None:
+        """Delete a resource flavour, unless a resource class is still linked to it."""
+        async with self.session_maker() as session, session.begin():
+            flavour = await session.scalar(
+                select(schemas.ResourceFlavourORM).where(schemas.ResourceFlavourORM.id == flavour_id)
+            )
+            if flavour is None:
+                return
+            linked = await session.scalars(
+                select(schemas.ResourceClassORM).where(schemas.ResourceClassORM.resource_flavour_id == flavour_id)
+            )
+            names = [cls.name for cls in linked]
+            if names:
+                raise errors.ConflictError(
+                    message=(
+                        f"The resource flavour {flavour.name} cannot be deleted because it is still linked to the "
+                        f"resource classes: {', '.join(names)}."
+                    )
+                )
+            await session.delete(flavour)
 
 
 @dataclass

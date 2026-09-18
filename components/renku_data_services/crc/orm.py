@@ -88,6 +88,46 @@ class UserORM(BaseORM):
         return base_models.User(id=self.id, keycloak_id=self.keycloak_id, no_default_access=self.no_default_access)
 
 
+class ResourceFlavourORM(BaseORM):
+    """A named shape that resource classes can link to instead of setting their own values."""
+
+    __tablename__ = "resource_flavours"
+    name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    cpu: Mapped[float] = mapped_column()
+    memory: Mapped[int] = mapped_column(BigInteger)
+    max_storage: Mapped[int] = mapped_column(BigInteger)
+    default_storage: Mapped[int] = mapped_column(BigInteger)
+    gpu: Mapped[int] = mapped_column(BigInteger, default=0)
+    description: Mapped[str | None] = mapped_column(String(500), default=None, nullable=True)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+
+    @classmethod
+    def from_unsaved_model(cls, new_flavour: models.UnsavedResourceFlavour) -> ResourceFlavourORM:
+        """Create a new ORM object from an unsaved resource flavour model."""
+        return cls(
+            name=new_flavour.name,
+            cpu=new_flavour.cpu,
+            memory=new_flavour.memory,
+            max_storage=new_flavour.max_storage,
+            default_storage=new_flavour.default_storage,
+            gpu=new_flavour.gpu,
+            description=new_flavour.description,
+        )
+
+    def dump(self) -> models.ResourceFlavour:
+        """Create a resource flavour model from the ORM object."""
+        return models.ResourceFlavour(
+            id=self.id,
+            name=self.name,
+            cpu=self.cpu,
+            memory=self.memory,
+            max_storage=self.max_storage,
+            default_storage=self.default_storage,
+            gpu=self.gpu,
+            description=self.description,
+        )
+
+
 class ResourceClassORM(BaseORM):
     """Resource class specifies a set of resources that can be used in a session."""
 
@@ -106,6 +146,10 @@ class ResourceClassORM(BaseORM):
     resource_pool: Mapped[Optional[ResourcePoolORM]] = relationship(
         back_populates="classes", default=None, lazy="joined"
     )
+    resource_flavour_id: Mapped[ULID | None] = mapped_column(
+        ForeignKey("resource_flavours.id", ondelete="RESTRICT"), default=None, index=True, nullable=True
+    )
+    resource_flavour: Mapped[Optional[ResourceFlavourORM]] = relationship(default=None, lazy="joined")
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, default=None, init=False)
     remote_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONVariant, default=None, server_default=None, nullable=True
@@ -147,22 +191,29 @@ class ResourceClassORM(BaseORM):
             gpu=new_resource_class.gpu,
             quota_enforced=new_resource_class.quota_enforced,
             resource_pool_id=resource_pool_id,
+            resource_flavour_id=new_resource_class.resource_flavour_id,
             tolerations=tolerations,
             node_affinities=node_affinities,
             remote_json=remote_json,
         )
 
+    @property
+    def shape(self) -> ResourceFlavourORM | ResourceClassORM:
+        """The source of truth for this class's resource values."""
+        return self.resource_flavour if self.resource_flavour is not None else self
+
     def dump(
         self, matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None
     ) -> models.ResourceClass:
         """Create a resource class model from the ORM object."""
+        shape = self.shape
         matching: bool | None = None
         if matching_criteria:
             matching = (
-                self.cpu >= matching_criteria.cpu
-                and self.memory >= matching_criteria.memory
-                and self.gpu >= matching_criteria.gpu
-                and self.max_storage >= matching_criteria.max_storage
+                shape.cpu >= matching_criteria.cpu
+                and shape.memory >= matching_criteria.memory
+                and shape.gpu >= matching_criteria.gpu
+                and shape.max_storage >= matching_criteria.max_storage
             )
         remote: models.FirecrestClassRemote | None = None
         if self.remote_json is not None:
@@ -171,18 +222,19 @@ class ResourceClassORM(BaseORM):
         return models.ResourceClass(
             id=self.id,
             name=self.name,
-            cpu=self.cpu,
-            memory=self.memory,
-            max_storage=self.max_storage,
-            gpu=self.gpu,
+            cpu=shape.cpu,
+            memory=shape.memory,
+            max_storage=shape.max_storage,
+            gpu=shape.gpu,
             default=self.default,
-            default_storage=self.default_storage,
+            default_storage=shape.default_storage,
             node_affinities=[affinity.dump() for affinity in self.node_affinities],
             tolerations=[toleration.key for toleration in self.tolerations],
             matching=matching,
             quota=quota,
             quota_enforced=self.quota_enforced,
             remote=remote,
+            resource_flavour_id=self.resource_flavour_id,
         )
 
 
@@ -284,10 +336,9 @@ class ResourcePoolORM(BaseORM):
         default_factory=list,
         cascade="save-update, merge, delete",
         lazy="selectin",
-        order_by=(
-            "[ResourceClassORM.gpu,ResourceClassORM.cpu,ResourceClassORM.memory,ResourceClassORM.max_storage,"
-            "ResourceClassORM.name,ResourceClassORM.id]"
-        ),
+        # NOTE: ResourcePoolORM.dump sorts by size, using the values resolved from the resource
+        # flavour, which this column order cannot see.
+        order_by="[ResourceClassORM.id]",
     )
     idle_threshold: Mapped[Optional[int]] = mapped_column(default=None)
     hibernation_threshold: Mapped[Optional[int]] = mapped_column(default=None)
@@ -375,11 +426,15 @@ class ResourcePoolORM(BaseORM):
             )
         cluster = None if self.cluster is None else self.cluster.dump()
         remote = self._dump_remote()
+        dumped_classes = sorted(
+            (resource_class.dump(matching_criteria=class_match_criteria) for resource_class in classes),
+            key=lambda c: (c.gpu, c.cpu, c.memory, c.max_storage, c.name, c.id),
+        )
         return models.ResourcePool(
             id=self.id,
             name=self.name,
             quota=quota,
-            classes=[resource_class.dump(matching_criteria=class_match_criteria) for resource_class in classes],
+            classes=dumped_classes,
             idle_threshold=self.idle_threshold,
             hibernation_threshold=self.hibernation_threshold,
             hibernation_warning_period=self.hibernation_warning_period,
