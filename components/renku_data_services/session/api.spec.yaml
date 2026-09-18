@@ -753,13 +753,13 @@ components:
         - readOnly
         - readWrite
     DataConnectorKey:
-      description: Data connector surrogate key
+      description: Surrogate key identifying a data connector to a project relationship
       type: object
       properties:
-        data_connector_id:
+        data_connector_link_id:
           $ref: "#/components/schemas/Ulid"
       required:
-        - data_connector_id
+        - data_connector_link_id
     DataConnectorAccessPolicy:
       description: Data connector access policy config
       type: object
@@ -795,7 +795,7 @@ components:
         - readWrite
     ProjectRepositorySurrogateKey:
       description: |
-        Surrogate key of repository within a project
+        Surrogate key identifying a repository within a project
       type: object
       properties:
         repository_id:
@@ -804,7 +804,7 @@ components:
       required:
         - repository_id
     RepositoryNaturalKey:
-      description: Repository natural key from url
+      description: Natural key identifying a repository from its url
       type: object
       properties:
         url:
@@ -864,7 +864,7 @@ components:
         - $ref: "#/components/schemas/ProjectRepositorySurrogateKey"
         - $ref: "#/components/schemas/RepositoryAccessPolicy"
     SecretSlotKey:
-      description: The surrogate key of a secret slot within the project
+      description: Surrogate key identifying a secret slot within the project
       type: object
       properties:
         secret_slot_id:
