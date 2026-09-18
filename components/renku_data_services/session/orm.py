@@ -1,14 +1,13 @@
 """SQLAlchemy's schemas for the sessions database."""
 
 from datetime import datetime
-from dataclasses import asdict
 from pathlib import PurePosixPath
+from typing import Any, Self
 
 from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Enum, Identity, Integer, MetaData, String, false, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
-from typing import Any, Self, Any
 from ulid import ULID
 
 from renku_data_services import errors
@@ -350,6 +349,8 @@ class SessionLauncherRepositoryORM(BaseORM):
 
     @classmethod
     def load(cls, link: models.SessionLauncherRepository) -> Self:
+        """Create an ORM object from a SessionLauncherRepository object."""
+
         return cls(
             launcher_id=link.launcher_id,
             repository_id=link.repository_id,
@@ -357,6 +358,8 @@ class SessionLauncherRepositoryORM(BaseORM):
         )
 
     def dump(self) -> models.SessionLauncherRepository:
+        """Create a SessionLauncherRepository object from an ORM object."""
+
         return models.SessionLauncherRepository(
             launcher_id=self.launcher_id,
             repository_id=self.repository_id,
@@ -376,7 +379,7 @@ class SessionLauncherRepositoryORM(BaseORM):
     @property
     def _is_policy_valid(self) -> bool:
         try:
-            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
+            _ = models.SessionLauncherPolicy(str(self.policy.get("policy")))
         except (ValueError, TypeError):
             return False
         # TODO: Return False if session launcher escalates the repositoriy's permissions
@@ -406,6 +409,8 @@ class SessionLauncherDataConnectorORM(BaseORM):
 
     @classmethod
     def load(cls, link: models.SessionLauncherDataConnector) -> Self:
+        """Create an ORM object from a SessionLauncherDataConnector object."""
+
         return cls(
             launcher_id=link.launcher_id,
             data_connector_to_project_link_id=link.data_connector_to_project_link_id,
@@ -413,6 +418,8 @@ class SessionLauncherDataConnectorORM(BaseORM):
         )
 
     def dump(self) -> models.SessionLauncherDataConnector:
+        """Create a SessionLauncherDataConnector object from an ORM object."""
+
         return models.SessionLauncherDataConnector(
             launcher_id=self.launcher_id,
             data_connector_to_project_link_id=self.data_connector_to_project_link_id,
@@ -465,6 +472,8 @@ class SessionLauncherSecretORM(BaseORM):
 
     @classmethod
     def load(cls, link: models.SessionLauncherSecret) -> Self:
+        """Create an ORM object from a SessionLauncherSecret object."""
+
         return cls(
             launcher_id=link.launcher_id,
             secret_slot_id=link.secret_slot_id,
@@ -472,6 +481,8 @@ class SessionLauncherSecretORM(BaseORM):
         )
 
     def dump(self) -> models.SessionLauncherSecret:
+        """Create a SessionLauncherSecret object from an ORM object."""
+
         return models.SessionLauncherSecret(
             launcher_id=self.launcher_id,
             secret_slot_id=self.secret_slot_id,

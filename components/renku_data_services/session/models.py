@@ -65,7 +65,7 @@ class BuilderVariant(StrEnum):
 
 
 class SessionLauncherPolicy(StrEnum):
-    """The access mode of a resource within a session launcher"""
+    """The access mode of a resource within a session launcher."""
 
     excluded = "excluded"
     read_only = "readOnly"
@@ -73,6 +73,7 @@ class SessionLauncherPolicy(StrEnum):
 
     @property
     def requires_write_access(self) -> bool:
+        """Policy requires write access."""
         return self is SessionLauncherPolicy.read_write
 
 
@@ -448,13 +449,15 @@ class ShipwrightBuildStatusUpdate:
 
 @dataclass(frozen=True, kw_only=True)
 class SessionLauncherRepositoryPolicy:
+    """Model to represent a session launcher repository policy."""
+
     policy: SessionLauncherPolicy
     writable_references: list[str] | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SessionLauncherRepository(SessionLauncherRepositoryPolicy):
-    """Model to represent a repository and its access policies for a launcher"""
+    """Model to represent a repository and its access policies for a launcher."""
 
     launcher_id: ULID
     repository_id: int
@@ -469,7 +472,7 @@ class SessionLauncherDataConnectorPolicy:
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SessionLauncherDataConnector(SessionLauncherDataConnectorPolicy):
-    """Model to represent a data connector and its access policies for a launcher"""
+    """Model to represent a data connector and its access policies for a launcher."""
 
     launcher_id: ULID
     data_connector_to_project_link_id: ULID
@@ -477,14 +480,14 @@ class SessionLauncherDataConnector(SessionLauncherDataConnectorPolicy):
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SessionLauncherSecretPolicy:
-    """Model to represent the visibility of a secret"""
+    """Model to represent the visibility of a secret."""
 
     policy: SessionLauncherPolicy
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SessionLauncherSecret(SessionLauncherSecretPolicy):
-    """Model to represent the visibility of a project secret in a launcher"""
+    """Model to represent the visibility of a project secret in a launcher."""
 
     launcher_id: ULID
     secret_slot_id: ULID
