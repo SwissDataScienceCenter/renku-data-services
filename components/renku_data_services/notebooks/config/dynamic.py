@@ -354,6 +354,8 @@ class _SessionSshConfig:
     container_port: int = 2022
     host_key_secret: str | None = None
     host_key_location: str = "/opt/ssh/ssh_host_keys"
+    proxy_host_key_secret: str | None = None
+    proxy_auth_key_secret: str | None = None
 
     @classmethod
     def from_env(cls) -> Self:
@@ -363,6 +365,8 @@ class _SessionSshConfig:
             container_port=_parse_value_as_int(os.environ.get("NB_SESSIONS__SSH__CONTAINER_PORT", 2022)),
             host_key_secret=os.environ.get("NB_SESSIONS__SSH__HOST_KEY_SECRET"),
             host_key_location=os.environ.get("NB_SESSIONS__SSH__HOST_KEY_LOCATION", "/opt/ssh/ssh_host_keys"),
+            proxy_host_key_secret=os.environ.get("NB_SESSIONS__SSH__PROXY_HOST_KEY_SECRET"),
+            proxy_auth_key_secret=os.environ.get("NB_SESSIONS__SSH__PROXY_AUTH_KEY_SECRET"),
         )
 
 
