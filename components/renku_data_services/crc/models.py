@@ -103,6 +103,39 @@ class FirecrestClassRemote:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedResourceFlavour(ResourcesCompareMixin):
+    """A named shape that resource classes can link to instead of setting their own values."""
+
+    name: str
+    cpu: float
+    memory: int
+    max_storage: int
+    gpu: int = 0
+    default_storage: int = 1
+    description: str | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourceFlavour(UnsavedResourceFlavour):
+    """Resource flavour model."""
+
+    id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourceFlavourPatch:
+    """Model for changes requested on a resource flavour."""
+
+    name: str | None = None
+    cpu: float | None = None
+    memory: int | None = None
+    max_storage: int | None = None
+    gpu: int | None = None
+    default_storage: int | None = None
+    description: str | None | ResetType = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedResourceClass(ResourcesCompareMixin):
     """Model for a resource class yet to be saved."""
 
@@ -117,6 +150,7 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     tolerations: list[str] = field(default_factory=list)
     quota_enforced: bool = False
     remote: FirecrestClassRemote | None = None
+    resource_flavour_id: ULID | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -139,6 +173,7 @@ class ResourceClass(ResourcesCompareMixin):
     usage_hours_total: float | None = None
     quota_enforced: bool = False
     remote: FirecrestClassRemote | None = None
+    resource_flavour_id: ULID | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -156,6 +191,7 @@ class ResourceClassPatch:
     tolerations: list[str] | None = None
     quota_enforced: bool | None = None
     remote: FirecrestClassRemote | None = None
+    resource_flavour_id: ULID | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
