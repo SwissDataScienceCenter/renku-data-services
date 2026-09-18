@@ -489,7 +489,7 @@ class SessionLauncherSecretORM(BaseORM):
     @property
     def _policy(self) -> models.SessionLauncherPolicy:
         try:
-            policy = models.SessionLauncherPolicy(self.policy.get("policy"))
+            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
         except (ValueError, TypeError):
             return models.SessionLauncherPolicy.excluded
         if policy is models.SessionLauncherPolicy.excluded:
