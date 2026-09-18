@@ -53,6 +53,7 @@ from renku_data_services.notebooks.api.amalthea_patches.init_containers import u
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
+from renku_data_services.notebooks.config.dynamic import _SessionSshConfig
 from renku_data_services.notebooks.cr_amalthea_session import PersistentVolumeClaim
 from renku_data_services.notebooks.crs import (
     AmaltheaMetadata,
@@ -932,6 +933,49 @@ async def get_mount_work_dir(
     return storage_mount, work_dir
 
 
+def ssh_proxy_session_extras(ssh_config: _SessionSshConfig, storage_mount: PurePosixPath) -> SessionExtraResources:
+    """Volumes and mounts delivering the proxy-to-session keys to a session.
+
+    The two secrets are created once by the Helm keygen job; data-services only mounts them here.
+    """
+    if not ssh_config.proxy_host_key_secret or not ssh_config.proxy_auth_key_secret:
+        return SessionExtraResources()
+
+    ssh_dir = (storage_mount / ".ssh").as_posix()
+    return SessionExtraResources(
+        volumes=[
+            ExtraVolume(
+                name="ssh-session-host-key",
+                secret=SecretAsVolume(
+                    secretName=ssh_config.proxy_host_key_secret,
+                    items=[SecretAsVolumeItem(key="hostKey", path="dropbear_ed25519_host_key")],
+                ),
+            ),
+            ExtraVolume(
+                name="ssh-proxy-session-auth-key",
+                secret=SecretAsVolume(
+                    secretName=ssh_config.proxy_auth_key_secret,
+                    items=[SecretAsVolumeItem(key="authKeyPub", path="proxy_auth_key.pub")],
+                ),
+            ),
+        ],
+        volume_mounts=[
+            ExtraVolumeMount(
+                name="ssh-session-host-key",
+                mountPath=f"{ssh_dir}/dropbear_ed25519_host_key",
+                subPath="dropbear_ed25519_host_key",
+                readOnly=True,
+            ),
+            ExtraVolumeMount(
+                name="ssh-proxy-session-auth-key",
+                mountPath=f"{ssh_dir}/proxy_auth_key.pub",
+                subPath="proxy_auth_key.pub",
+                readOnly=True,
+            ),
+        ],
+    )
+
+
 async def start_session(
     request: Request,
     launch_request: SessionLaunchRequest,
@@ -1046,6 +1090,9 @@ async def start_session(
             session_secrets=session_secrets,
         )
     )
+
+    # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
+    session_extras = session_extras.concat(ssh_proxy_session_extras(nb_config.sessions.ssh, storage_mount))
 
     # Data connectors
     session_extras = session_extras.concat(
@@ -1504,6 +1551,9 @@ async def patch_session(
             session_secrets=session_secrets,
         )
     )
+
+    # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
+    session_extras = session_extras.concat(ssh_proxy_session_extras(nb_config.sessions.ssh, storage_mount))
 
     # Data connectors: skip
     # TODO: How can we patch data connectors? Should we even patch them?
