@@ -876,7 +876,7 @@ components:
       type: string
       enum:
         - excluded
-        - enabled
+        - readOnly
     SecretAccessPolicy:
       description: Secret access policy config
       type: object
