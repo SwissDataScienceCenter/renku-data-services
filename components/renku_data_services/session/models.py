@@ -452,7 +452,7 @@ class SessionLauncherRepositoryPolicy:
 class SessionLauncherRepository(SessionLauncherRepositoryPolicy):
     """Model to represent a repository and its access policies for a launcher"""
     launcher_id: ULID
-    repository_id: ULID
+    repository_id: int
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SessionLauncherDataConnectorPolicy:

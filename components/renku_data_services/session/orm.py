@@ -366,7 +366,7 @@ class SessionLauncherRepositoryORM(BaseORM):
     @property
     def _policy(self) -> models.SessionLauncherPolicy:
         try:
-            policy = models.SessionLauncherPolicy(self.policy.get("policy"))
+            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
         except (ValueError, TypeError):
             return models.SessionLauncherPolicy.excluded
         # TODO: Return models.SessionLauncherPolicy.read_only if repository is read only
@@ -375,7 +375,7 @@ class SessionLauncherRepositoryORM(BaseORM):
     @property
     def _is_policy_valid(self) -> bool:
         try:
-            policy = models.SessionLauncherPolicy(self.policy.get("policy"))
+            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
         except (ValueError, TypeError):
             return False
         # TODO: Return False if session launcher escalates the repositoriy's permissions
@@ -424,7 +424,7 @@ class SessionLauncherDataConnectorORM(BaseORM):
     @property
     def _policy(self) -> models.SessionLauncherPolicy:
         try:
-            policy = models.SessionLauncherPolicy(self.policy.get("policy"))
+            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
         except (ValueError, TypeError):
             return models.SessionLauncherPolicy.excluded
         if (
@@ -437,7 +437,7 @@ class SessionLauncherDataConnectorORM(BaseORM):
     @property
     def _is_policy_valid(self) -> bool:
         try:
-            policy = models.SessionLauncherPolicy(self.policy.get("policy"))
+            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
         except (ValueError, TypeError):
             return False
 
