@@ -100,3 +100,9 @@ result
 # VScode local config
 .vscode/*
 !.vscode/settings.json
+
+# Local devcontainer and npm settings
+.devcontainer/devcontainer-lock.json
+node_modules/
+package.json
+package-lock.json
