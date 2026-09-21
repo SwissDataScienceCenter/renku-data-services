@@ -116,8 +116,10 @@ between the client and Keycloak.
 ## Safety rules (enforced in code)
 
 - **Admin accounts are blocked.** The server calls `GET /user` on each tool invocation
-  and refuses if `is_admin=true`. The result is cached per token so the check only
-  hits the API once per session. Set `RENKU_MCP_ALLOW_ADMIN=1` to override.
+  and refuses if `is_admin=true`. The check runs once per tool call — repeated within
+  a tool that polls (`session_wait`, `job_wait`, `build_wait`) it would double that
+  tool's request volume, and cached beyond the tool call it would both hold live
+  tokens in memory and go stale. Set `RENKU_MCP_ALLOW_ADMIN=1` to override.
 - **Credentials are never accepted as tool parameters.** Storage credentials (S3 keys,
   passwords) must be added through the Renku UI after creating a connector.
 

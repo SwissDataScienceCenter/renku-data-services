@@ -55,8 +55,12 @@ def _client(ctx: Context) -> RenkuApiClient:
     return ctx.request_context.lifespan_context["api"]
 
 
-# Cache admin status per token so we only call /user once per session/request.
-_admin_cache: dict[str, bool] = {}
+# Token whose admin status has already been checked in this context. Scoped to the
+# context rather than kept in a module-level dict: a dict keyed by token would hold
+# live credentials for the process lifetime, and go stale for exactly as long. The
+# token is stored alongside the flag so a context serving a different token always
+# re-checks.
+_admin_checked_token: contextvars.ContextVar[str] = contextvars.ContextVar("mcp_admin_checked", default="")
 
 
 async def _require_non_admin(ctx: Context) -> None:
@@ -65,6 +69,9 @@ async def _require_non_admin(ctx: Context) -> None:
     Admin accounts have platform-wide write access that bypasses normal
     permission checks — running agent operations as an admin is dangerous.
     Set RENKU_MCP_ALLOW_ADMIN=1 in the server environment to override.
+
+    Checked once per tool call, not once per API call: the wait tools poll up to
+    ~120 times, and re-checking on every poll would double their request volume.
     """
 
     if os.environ.get("RENKU_MCP_ALLOW_ADMIN") == "1":
@@ -72,16 +79,17 @@ async def _require_non_admin(ctx: Context) -> None:
     t = _token(ctx)
     if not t:
         return
-    if t not in _admin_cache:
-        # Direct client call, not _api(): going through _api() would recurse.
-        user = await _client(ctx).request("GET", "/user", t)
-        _admin_cache[t] = bool(user.get("is_admin", False))
-    if _admin_cache.get(t):
+    if _admin_checked_token.get() == t:
+        return
+    # Direct client call, not _api(): going through _api() would recurse.
+    user = await _client(ctx).request("GET", "/user", t)
+    if user.get("is_admin", False):
         raise RuntimeError(
             "Refusing to operate as a Renku admin. "
             "Log out and log back in as a non-admin account, "
             "or set RENKU_MCP_ALLOW_ADMIN=1 to override."
         )
+    _admin_checked_token.set(t)
 
 
 async def _api(ctx: Context, method: str, path: str, body: Any = None, **kwargs: Any) -> Any:

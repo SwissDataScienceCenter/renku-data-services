@@ -16,7 +16,7 @@ import pytest
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.mcp_api.client import RenkuApiClient
-from renku_data_services.mcp_api.server import _admin_cache
+from renku_data_services.mcp_api.server import _admin_checked_token
 from test.bases.renku_data_services.mcp_api.conftest import (
     mcp_session,
     tool_result_dict,
@@ -64,10 +64,10 @@ class SanicRenkuApiClient(RenkuApiClient):
 
 
 @pytest.fixture(autouse=True)
-def clear_admin_cache_integration():
-    _admin_cache.clear()
+def clear_admin_check_integration():
+    _admin_checked_token.set("")
     yield
-    _admin_cache.clear()
+    _admin_checked_token.set("")
 
 
 @pytest.fixture

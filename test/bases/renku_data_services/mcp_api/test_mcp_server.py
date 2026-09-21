@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -17,7 +19,7 @@ from renku_data_services.mcp_api.main import (
     _rnk_token_paths,
 )
 from renku_data_services.mcp_api.server import (
-    _admin_cache,
+    _admin_checked_token,
     _launcher_summary,
     _project_path,
 )
@@ -30,11 +32,11 @@ from test.bases.renku_data_services.mcp_api.conftest import (
 
 
 @pytest.fixture(autouse=True)
-def clear_admin_cache():
-    """Ensure the admin cache doesn't bleed between tests."""
-    _admin_cache.clear()
+def clear_admin_check():
+    """Ensure a completed admin check doesn't bleed between tests."""
+    _admin_checked_token.set("")
     yield
-    _admin_cache.clear()
+    _admin_checked_token.set("")
 
 
 # ------------------------------------------------------------------ #
@@ -287,8 +289,8 @@ async def test_non_admin_allowed(mock_api):
 
 
 @pytest.mark.asyncio
-async def test_admin_check_cached(mock_api):
-    """/user is only called once per token, even across multiple tool calls."""
+async def test_admin_rechecked_each_tool_call(mock_api):
+    """Admin status is re-checked on each tool call — it is not cached for the process."""
 
     async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
         if path == "/user":
@@ -302,6 +304,34 @@ async def test_admin_check_cached(mock_api):
         await session.call_tool("session_list", {})
 
     user_calls = [c for c in mock_api.request.call_args_list if c.args[1] == "/user"]
+    assert len(user_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_admin_checked_once_while_polling(mock_api, monkeypatch):
+    """A wait loop polls repeatedly but checks admin status only once.
+
+    This is what the per-context scoping buys: session_wait can poll ~90 times
+    on its defaults, and re-checking on every poll would double its load.
+    """
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    states = iter(["starting", "starting", "running"])
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        if path == "/user":
+            return {"is_admin": False, "id": "user1"}
+        if path == "/sessions/s1":
+            return make_session(next(states, "running"))
+        return []
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, _):
+        await session.call_tool("session_wait", {"session_id": "s1", "interval": 1})
+
+    user_calls = [c for c in mock_api.request.call_args_list if c.args[1] == "/user"]
+    session_calls = [c for c in mock_api.request.call_args_list if c.args[1] == "/sessions/s1"]
+    assert len(session_calls) == 3, "expected the loop to poll until the session was running"
     assert len(user_calls) == 1
 
 
