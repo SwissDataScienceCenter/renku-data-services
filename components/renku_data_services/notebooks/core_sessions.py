@@ -857,6 +857,29 @@ def get_remote_secret(
     return ExtraSecret(secret)
 
 
+def get_remote_secret_runners(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    config: NotebooksConfig,
+    server_name: str,
+    internal_token_mint: RenkuSelfTokenMint,
+) -> ExtraSecret | None:
+    """Returns the secret containing the configuration for the remote session controller when using runners."""
+    if not user.is_authenticated or user.access_token is None or user.refresh_token is None:
+        return None
+    internal_token_scope = f"session:{server_name}"
+    internal_access_token = internal_token_mint.create_access_token(user=user, scope=internal_token_scope)
+    internal_refresh_token = internal_token_mint.create_refresh_token(user=user, scope=internal_token_scope)
+    secret_data = {
+        "RSC_AUTH_KIND": "renku_v2",
+        "RSC_AUTH_TOKEN_URI": f"https://{config.sessions.ingress.host}/api/data/internal/authentication/token",
+        "RSC_AUTH_RENKU_ACCESS_TOKEN": internal_access_token,
+        "RSC_AUTH_RENKU_REFRESH_TOKEN": internal_refresh_token,
+    }
+    secret_name = f"{server_name}-remote-secret"
+    secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
+    return ExtraSecret(secret)
+
+
 def _firecrest_resource_env_items(
     resource_class: ResourceClass,
     pool_remote: RemoteConfigurationFirecrest,
@@ -890,6 +913,7 @@ def _firecrest_resource_env_items(
 def get_remote_env(
     resource_class: ResourceClass,
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | RemoteConfigurationRunners,
+    config: NotebooksConfig,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
     env = [
@@ -902,7 +926,8 @@ def get_remote_env(
         env.extend(_firecrest_resource_env_items(resource_class, remote))
     elif isinstance(remote, RemoteConfigurationRunners):
         # TODO
-        env.append(SessionEnvItem(name="RSC_FIRECREST_API_URL", value="https://dev.renku.ch"))
+        # "RSC_AUTH_TOKEN_URI": f"https://{config.sessions.ingress.host}/api/data/internal/authentication/token",
+        env.append(SessionEnvItem(name="RSC_RENKU_API_URL", value=f"https://{config.sessions.ingress.host}/api/data/"))
     return env
 
 
@@ -1180,9 +1205,13 @@ async def start_session(
                 internal_token_mint=internal_token_mint,
             )
         elif resource_pool.remote.kind == RemoteConfigurationKind.runners:
-            # TODO: setup RSC env (will allow the remote-session-controller container to check status)
-            logger.warning("[SESSION RUNNERS] TODO: setup RSC env")
-            pass
+            # assert isinstance(resource_pool.remote, RemoteConfigurationRunners)
+            remote_secret = get_remote_secret_runners(
+                user=user,
+                config=nb_config,
+                server_name=server_name,
+                internal_token_mint=internal_token_mint,
+            )
         if remote_secret is not None:
             session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
 
@@ -1219,7 +1248,7 @@ async def start_session(
         assert resource_pool.remote is not None
         if resource_pool.remote.kind == RemoteConfigurationKind.firecrest:
             resource_class = replace(resource_class, cpu=ceil(resource_class.cpu))
-        env.extend(get_remote_env(resource_class, resource_pool.remote))
+        env.extend(get_remote_env(resource_class, resource_pool.remote, config=nb_config))
     launcher_env_variables = get_launcher_env_variables(launcher, launch_request)
     env.extend(launcher_env_variables)
 
