@@ -93,7 +93,7 @@ class RCloneValidator:
                     with_oauth2_config.config if isinstance(with_oauth2_config, RCloneConfig) else with_oauth2_config
                 )
 
-        with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(mode="w+", delete=True, encoding="utf-8") as f:
             test_conf = (
                 transformed_config
                 if isinstance(transformed_config, RCloneConfig)
