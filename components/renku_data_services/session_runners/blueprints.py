@@ -16,6 +16,7 @@ from renku_data_services.base_api.misc import validate
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.session_runners import apispec
 from renku_data_services.session_runners.core import (
+    validate_patch_assigned_session_secrets,
     validate_session_runner_contact_payload,
     validate_unsaved_session_runner,
 )
@@ -113,6 +114,52 @@ class SessionRunnersBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/session_runners/<session_runner_id:ulid>", ["DELETE"], _delete_session_runner
+
+    def get_assigned_session_secrets(self) -> BlueprintFactoryResponse:
+        """Get the secrets necesaary to run a session assigned to a given runner."""
+
+        @authenticate(self.internal_authenticator)
+        @only_authenticated
+        async def _get_assigned_session_secrets(
+            _: Request, user: base_models.APIUser, session_runner_id: ULID, session_id: str
+        ) -> JSONResponse:
+            async with self.session_maker() as session, session.begin():
+                secrets = await self.session_runners_repo.get_assigned_session_secrets(
+                    session=session, user=user, session_runner_id=session_runner_id, renku_session_id=session_id
+                )
+            return validated_json(apispec.AssignedSessionSecrets, secrets)
+
+        return "/session_runners/<session_runner_id:ulid>/<session_id>/secrets", ["GET"], _get_assigned_session_secrets
+
+    def patch_assigned_session_secrets(self) -> BlueprintFactoryResponse:
+        """Update the secrets used in an assigned session."""
+
+        @authenticate(self.internal_authenticator)
+        @only_authenticated
+        @validate(json=apispec.AssignedSessionSecrets)
+        async def _patch_assigned_session_secrets(
+            _: Request,
+            user: base_models.APIUser,
+            session_runner_id: ULID,
+            session_id: str,
+            body: apispec.AssignedSessionSecrets,
+        ) -> JSONResponse:
+            update = validate_patch_assigned_session_secrets(patch=body)
+            async with self.session_maker() as session, session.begin():
+                secrets = await self.session_runners_repo.update_assigned_session_secrets(
+                    session=session,
+                    user=user,
+                    session_runner_id=session_runner_id,
+                    renku_session_id=session_id,
+                    update=update,
+                )
+            return validated_json(apispec.AssignedSessionSecrets, secrets)
+
+        return (
+            "/session_runners/<session_runner_id:ulid>/<session_id>/secrets",
+            ["PATCH"],
+            _patch_assigned_session_secrets,
+        )
 
     def post_session_runner_contact(self) -> BlueprintFactoryResponse:
         """Contact endpoint for session runners."""

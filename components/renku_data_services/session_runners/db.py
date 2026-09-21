@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import random
+from base64 import b64decode, b64encode
 from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import UTC, datetime
 
@@ -20,13 +21,15 @@ from renku_data_services.crc import models as crc_models
 from renku_data_services.crc import orm as crc_schemas
 from renku_data_services.session_runners import models
 from renku_data_services.session_runners import orm as schemas
+from renku_data_services.utils import cryptography as crypt
 
 
 class SessionRunnersRepository:
     """Repository for session runners."""
 
-    def __init__(self, authz: Authz) -> None:
+    def __init__(self, authz: Authz, encryption_key: bytes) -> None:
         self.authz: Authz = authz
+        self._encryption_key = encryption_key
 
     async def get_all_runners(
         self, session: AsyncSession, user: base_models.APIUser
@@ -196,11 +199,113 @@ class SessionRunnersRepository:
         await session.delete(runner_orm)
         return None
 
+    async def get_assigned_session_secrets(
+        self, session: AsyncSession, user: base_models.APIUser, session_runner_id: ULID, renku_session_id: str
+    ) -> Sequence[models.AssignedSessionSecret]:
+        """Get the secrets needed to run a session assigned to a given runner."""
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        stmt = (
+            select(schemas.AssignedSessionORM)
+            .where(schemas.AssignedSessionORM.id == renku_session_id)
+            .where(schemas.AssignedSessionORM.runner_id == session_runner_id)
+            .where(schemas.AssignedSessionORM.user_id == user.id)
+            .options(selectinload(schemas.AssignedSessionORM.user))
+        )
+        res = await session.scalars(stmt)
+        session_orm = res.one_or_none()
+        if session_orm is None:
+            raise errors.MissingResourceError(
+                message=f"The assigned session {renku_session_id} does not exist or you do not have access to it."
+            )
+        encrypted_secrets = session_orm.secrets
+        if encrypted_secrets is None:
+            return []
+        user_secret_key = self._get_user_secret_key(user_orm=session_orm.user)
+        if user_secret_key is None:
+            raise errors.PreconditionRequiredError(message="User secret key is not defined.")
+        return self._decrypt_assigned_session_secrets(
+            encrypted_secrets, user_secret_key=user_secret_key, user_id=user.id
+        )
+
+    async def update_assigned_session_secrets(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        session_runner_id: ULID,
+        renku_session_id: str,
+        update: Sequence[models.AssignedSessionSecret],
+    ) -> Sequence[models.AssignedSessionSecret]:
+        """Update the secrets used in an assigned session."""
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        stmt = (
+            select(schemas.AssignedSessionORM)
+            .where(schemas.AssignedSessionORM.id == renku_session_id)
+            .where(schemas.AssignedSessionORM.runner_id == session_runner_id)
+            .where(schemas.AssignedSessionORM.user_id == user.id)
+            .options(selectinload(schemas.AssignedSessionORM.user))
+        )
+        res = await session.scalars(stmt)
+        session_orm = res.one_or_none()
+        if session_orm is None:
+            raise errors.MissingResourceError(
+                message=f"The assigned session {renku_session_id} does not exist or you do not have access to it."
+            )
+        if not update:
+            return []
+        user_secret_key = self._get_user_secret_key(user_orm=session_orm.user)
+        if user_secret_key is None:
+            raise errors.PreconditionRequiredError(message="User secret key is not defined.")
+        session_orm.secrets = self._encrypt_assigned_session_secrets(
+            update, user_secret_key=user_secret_key, user_id=user.id, existing_secrets=session_orm.secrets
+        )
+
+        await session.flush()
+
+        return self._decrypt_assigned_session_secrets(
+            session_orm.secrets or dict(), user_secret_key=user_secret_key, user_id=user.id
+        )
+
+    def _get_user_secret_key(self, user_orm: schemas.UserORM) -> str | None:
+        """Get the user secret key from the ORM instance."""
+        if user_orm.secret_key is None:
+            return None
+        return crypt.decrypt_string(self._encryption_key, user_orm.keycloak_id, user_orm.secret_key)
+
     @staticmethod
     def _generate_registration_token(size: int = 18) -> str:
         """Returns a random code to use as a registration token."""
         rand = random.SystemRandom()
         return base64.urlsafe_b64encode(rand.randbytes(size)).decode()
+
+    @staticmethod
+    def _encrypt_assigned_session_secrets(
+        secrets: Sequence[models.AssignedSessionSecret],
+        user_secret_key: str,
+        user_id: str,
+        existing_secrets: dict[str, str] | None,
+    ) -> dict[str, str]:
+        """Encrypts the secrets for an assigned session."""
+        existing_secrets = existing_secrets or dict()
+        for secret in secrets:
+            existing_secrets[secret.name] = b64encode(
+                crypt.encrypt_string(user_secret_key.encode(), user_id, secret.value)
+            ).decode("ascii")
+        return existing_secrets
+
+    @staticmethod
+    def _decrypt_assigned_session_secrets(
+        encrypted_secrets: dict[str, str], user_secret_key: str, user_id: str
+    ) -> list[models.AssignedSessionSecret]:
+        """Decrypts the secrets for an assigned session."""
+        return [
+            models.AssignedSessionSecret(
+                name=key,
+                value=crypt.decrypt_string(user_secret_key.encode(), user_id, b64decode(encrypted_secrets[key])),
+            )
+            for key in sorted(encrypted_secrets.keys())
+        ]
 
     # async def get_assigned_sessions_from_runner(self, ):
 
@@ -263,6 +368,11 @@ class SessionRunnersSchedulingRepository:
     ) -> models.AssignedSession:
         if not user.is_authenticated or not user.id:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        # TODO: handle:
+        # Database error occurred: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError)
+        # <class 'asyncpg.exceptions.UniqueViolationError'>: duplicate key value violates unique constraint
+        #   "assigned_sessions_pkey" DETAIL: Key (id)=(flora-thieba-380907b6c92d) already exists.
+        # -> Delete existing row (didn't happen in data-tasks yet)
         await self._check_eventually_schedulable(session=session, user_id=user.id, renku_session=renku_session)
         session_orm = schemas.AssignedSessionORM(
             id=renku_session.session_id,

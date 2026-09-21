@@ -372,6 +372,7 @@ class DependencyManager:
 
         session_runners_repo = SessionRunnersRepository(
             authz=authz,
+            encryption_key=config.secrets.encryption_key,
         )
         session_runners_scheduling_repo = SessionRunnersSchedulingRepository(
             session_maker=config.db.async_session_maker

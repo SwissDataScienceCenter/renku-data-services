@@ -101,6 +101,101 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_runners
+  /session_runners/{session_runner_id}/sessions:
+    parameters:
+      - in: path
+        name: session_runner_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    get:
+      summary: List sessions assigned to a runner
+      description: TODO
+      responses:
+        "200":
+          description: The list of session IDs assigned to a given runner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssignedSessionIds"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_runners
+  /session_runners/{session_runner_id}/sessions/{session_id}:
+    parameters:
+      - in: path
+        name: session_runner_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/AssignedSessionId"
+    get:
+      summary: Get the details of a session assigned to a given runner
+      description: TODO
+      responses:
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_runners
+    patch:
+      summary: Update a session assigned to a given runner
+      description: TODO
+      responses:
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_runners
+  /session_runners/{session_runner_id}/sessions/{session_id}/secrets:
+    parameters:
+      - in: path
+        name: session_runner_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/AssignedSessionId"
+    get:
+      summary: Get the secrets necesaary to run a session assigned to a given runner
+      description: TODO
+      responses:
+        "200":
+          description: The secrets used in an assigned session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssignedSessionSecrets"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_runners
+    patch:
+      summary: Update the secrets used in an assigned session
+      description: TODO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignedSessionSecrets"
+      responses:
+        "200":
+          description: The updated secrets used in an assigned session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssignedSessionSecrets"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_runners
   /session_runners/{session_runner_id}/contact:
     parameters:
       - in: path
@@ -207,6 +302,34 @@ components:
       required:
         - runner
         - auth
+    AssignedSessionIds:
+      description: A list of session IDs assigned to a runner
+      type: array
+      items:
+        $ref: "#/components/schemas/AssignedSessionId"
+    AssignedSessionId:
+      description: A session ID
+      type: string
+      example: "my-session-name"
+    AssignedSessionSecrets:
+      description: The secrets used in an assigned session
+      type: array
+      items:
+        $ref: "#/components/schemas/AssignedSessionSecret"
+    AssignedSessionSecret:
+      description: A secret used in an assigned session
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          example: my_secret
+        value:
+          type: string
+          example: some_value
+      required:
+        - name
+        - value
     SessionRunnerContactPost:
       description: Data sent when a session runner contacts the API
       type: object

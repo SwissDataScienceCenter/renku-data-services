@@ -1,5 +1,6 @@
 """Business logic for session runners."""
 
+from collections.abc import Sequence
 from typing import Literal, cast
 
 from renku_data_services.session_runners import apispec, models
@@ -17,3 +18,10 @@ def validate_session_runner_contact_payload(
     status = models.RunnerStatus(payload.status.value)
     status = cast(Literal[models.RunnerStatus.ready] | Literal[models.RunnerStatus.not_ready], status)
     return models.SessionRunnerContactPayload(status=status)
+
+
+def validate_patch_assigned_session_secrets(
+    patch: apispec.AssignedSessionSecrets,
+) -> Sequence[models.AssignedSessionSecret]:
+    """Validate the update to secrets of a session assigned to a runner."""
+    return [models.AssignedSessionSecret(name=item.name, value=item.value) for item in patch.root]

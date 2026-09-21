@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, MetaData, func, text
+from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, func, null, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from ulid import ULID
 
@@ -14,6 +15,8 @@ from renku_data_services.crc.orm import ResourcePoolORM
 from renku_data_services.session_runners import models
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
+
+JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -118,13 +121,13 @@ class AssignedSessionORM(BaseORM):
     )
     """User ID of the owner of the session."""
 
+    user: Mapped[UserORM] = relationship(init=False, repr=False)
+    """The owner of the session."""
+
     resource_pool_id: Mapped[int] = mapped_column(
         ForeignKey(ResourcePoolORM.id, ondelete="RESTRICT"), index=True, nullable=False
     )
     """Resource pool ID of the session."""
-
-    user: Mapped[UserORM] = relationship(init=False, repr=False)
-    """The owner of the session."""
 
     runner_id: Mapped[ULID | None] = mapped_column(
         ForeignKey(SessionRunnerORM.id, ondelete="RESTRICT"), index=True, nullable=True
@@ -133,6 +136,11 @@ class AssignedSessionORM(BaseORM):
 
     runner: Mapped[SessionRunnerORM | None] = relationship(init=False, repr=False, back_populates="assigned_sessions")
     """The runner picked to run the session."""
+
+    secrets: Mapped[dict[str, str] | None] = mapped_column(
+        "secrets", JSONVariant, nullable=True, default=None, server_default=null()
+    )
+    """The session secrets needed by the runner."""
 
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
