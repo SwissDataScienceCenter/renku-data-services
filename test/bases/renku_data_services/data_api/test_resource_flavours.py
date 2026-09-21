@@ -94,6 +94,65 @@ async def test_class_created_from_a_link_only(
 
 
 @pytest.mark.asyncio
+async def test_pool_created_with_a_linked_class(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    """A class may link to a flavour on the request that creates its pool, not only afterwards."""
+    flavour = await _create_flavour(sanic_client, admin_headers)
+    payload = {
+        **valid_resource_pool_payload,
+        "classes": [
+            {
+                "name": "plain-class",
+                "default": True,
+                "cpu": 1.0,
+                "memory": 10,
+                "gpu": 0,
+                "max_storage": 100,
+                "default_storage": 1,
+            },
+            {"name": "linked-class", "default": False, "resource_flavour_id": flavour["id"]},
+        ],
+    }
+    pool = await _create_pool(sanic_client, payload)
+
+    linked, plain = sorted(pool["classes"], key=lambda c: c["name"])
+    assert plain["cpu"] == 1.0
+    assert "resource_flavour_id" not in plain
+    assert linked["name"] == "linked-class", "the class keeps its own name"
+    assert linked["cpu"] == 2.0
+    assert linked["memory"] == 8
+    assert linked["max_storage"] == 200
+    assert linked["default_storage"] == 20
+    assert linked["resource_flavour_id"] == flavour["id"]
+
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{pool['id']}/classes/{linked['id']}", headers=admin_headers
+    )
+    assert res.status_code == 200, res.text
+    assert res.json["cpu"] == 2.0
+
+
+@pytest.mark.asyncio
+async def test_pool_creation_rejects_an_unknown_flavour(
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    payload = {
+        **valid_resource_pool_payload,
+        "classes": [
+            {"name": "linked-class", "default": True, "resource_flavour_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"},
+        ],
+    }
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 404, res.text
+
+
+@pytest.mark.asyncio
 async def test_class_rejects_shape_beside_a_link(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
