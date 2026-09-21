@@ -13,24 +13,24 @@ import pytest
 from mcp.client.session import ClientSession
 from mcp.shared.memory import create_client_server_memory_streams
 
-from renku_data_services.mcp_api.dependencies import MCPDependencies
+from renku_data_services.mcp_api.client import RenkuApiClient
 from renku_data_services.mcp_api.server import create_server, set_current_token
 
 
 @pytest.fixture
-def mock_deps() -> MCPDependencies:
-    """MCPDependencies with a mocked api() method."""
-    deps = MCPDependencies(base_url="https://test.renkulab.io")
-    deps.api = AsyncMock(return_value={})
-    return deps
+def mock_api() -> RenkuApiClient:
+    """RenkuApiClient with a mocked request() method."""
+    api = RenkuApiClient(base_url="https://test.renkulab.io")
+    api.request = AsyncMock(return_value={})
+    return api
 
 
 @contextlib.asynccontextmanager
-async def mcp_session(deps: MCPDependencies, token: str = "test-token"):
+async def mcp_session(api: RenkuApiClient, token: str = "test-token"):
     """Async context manager that runs the MCP server in-process.
     Must be used within a single asyncio task to keep anyio cancel scopes happy."""
     set_current_token(token)
-    server = create_server(deps)
+    server = create_server(api)
 
     async with create_client_server_memory_streams() as (client_streams, server_streams):
         task = asyncio.create_task(
@@ -43,7 +43,7 @@ async def mcp_session(deps: MCPDependencies, token: str = "test-token"):
         try:
             async with ClientSession(*client_streams) as session:
                 await session.initialize()
-                yield session, deps
+                yield session, api
         finally:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):

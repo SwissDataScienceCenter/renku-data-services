@@ -27,7 +27,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from renku_data_services.mcp_api.dependencies import MCPDependencies
+from renku_data_services.mcp_api.client import RenkuApiClient
 from renku_data_services.mcp_api.server import create_server, set_current_token
 
 logger = logging.getLogger(__name__)
@@ -156,7 +156,7 @@ async def _authorization_server_doc(keycloak_realm_url: str) -> tuple[dict[str, 
     }, 200
 
 
-def _build_http_app(deps: MCPDependencies) -> Any:
+def _build_http_app(base_url: str) -> Any:
     """Build the HTTP ASGI app with OAuth metadata endpoints and Bearer-token middleware.
 
     Routes and middleware are added directly to the FastMCP app so its lifespan
@@ -166,7 +166,6 @@ def _build_http_app(deps: MCPDependencies) -> Any:
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
 
-    base_url = deps.base_url
     keycloak_realm_url = _keycloak_issuer_url()
 
     @mcp.custom_route("/.well-known/oauth-protected-resource", methods=["GET"])  # type: ignore[misc]
@@ -185,7 +184,7 @@ def _build_http_app(deps: MCPDependencies) -> Any:
                 return await call_next(request)
             # We extract the token here but do not validate it. Validation
             # happens implicitly downstream: if the token is invalid or expired,
-            # the Renku data API returns a 401 when the tool calls deps.api().
+            # the Renku data API returns a 401 when the tool calls the API client.
             auth_header = request.headers.get("Authorization", "")
             token = auth_header.removeprefix("Bearer ").removeprefix("bearer ").strip()
             if not token:
@@ -205,14 +204,14 @@ def _build_http_app(deps: MCPDependencies) -> Any:
 
 
 # Module-level objects so `mcp dev` can discover the server by name.
-_deps = MCPDependencies.from_env()
+_api_client = RenkuApiClient.from_env()
 
 # In stdio mode, pass _resolve_token as a lazy resolver so the server picks up
 # a fresh rnk login without needing a restart.
 # In HTTP mode, the per-request middleware is the sole source of tokens.
 _is_stdio = os.environ.get("MCP_TRANSPORT", "stdio") != "streamable-http"
 _token_resolver: Callable[[], str] | None = _resolve_token if _is_stdio else None
-mcp = create_server(_deps, token_resolver=_token_resolver)
+mcp = create_server(_api_client, token_resolver=_token_resolver)
 
 
 async def _run_stdio() -> None:
@@ -224,7 +223,7 @@ def _run_http() -> None:
 
     host = os.environ.get("MCP_HOST", "0.0.0.0")  # nosec B104 — intentional for server deployment
     port = int(os.environ.get("MCP_PORT", "9000"))
-    app = _build_http_app(_deps)
+    app = _build_http_app(_api_client.base_url)
     logger.info("Starting Renku MCP server (HTTP) on %s:%s", host, port)
     uvicorn.run(app, host=host, port=port)
 

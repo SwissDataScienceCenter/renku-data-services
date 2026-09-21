@@ -16,7 +16,7 @@ from mcp.server.fastmcp.server import Context
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field
 
-from renku_data_services.mcp_api.dependencies import MCPDependencies
+from renku_data_services.mcp_api.client import RenkuApiClient
 
 # Current request token — set by ASGI auth middleware (HTTP) or resolved lazily in stdio mode.
 _current_token: contextvars.ContextVar[str] = contextvars.ContextVar("mcp_token", default="")
@@ -51,8 +51,8 @@ def _token(ctx: Context) -> str:
     return ""
 
 
-def _deps(ctx: Context) -> MCPDependencies:
-    return ctx.request_context.lifespan_context["deps"]
+def _client(ctx: Context) -> RenkuApiClient:
+    return ctx.request_context.lifespan_context["api"]
 
 
 # Cache admin status per token so we only call /user once per session/request.
@@ -73,7 +73,8 @@ async def _require_non_admin(ctx: Context) -> None:
     if not t:
         return
     if t not in _admin_cache:
-        user = await _deps(ctx).api("GET", "/user", t)
+        # Direct client call, not _api(): going through _api() would recurse.
+        user = await _client(ctx).request("GET", "/user", t)
         _admin_cache[t] = bool(user.get("is_admin", False))
     if _admin_cache.get(t):
         raise RuntimeError(
@@ -86,7 +87,7 @@ async def _require_non_admin(ctx: Context) -> None:
 async def _api(ctx: Context, method: str, path: str, body: Any = None, **kwargs: Any) -> Any:
     """Make an authenticated API call, refusing if the current user is an admin."""
     await _require_non_admin(ctx)
-    return await _deps(ctx).api(method, path, _token(ctx), body, **kwargs)
+    return await _client(ctx).request(method, path, _token(ctx), body, **kwargs)
 
 
 def _launcher_summary(data: dict[str, Any]) -> dict[str, Any]:
@@ -115,11 +116,12 @@ def _project_path(ident: str) -> str:
 
 
 def create_server(
-    deps: MCPDependencies,
+    api: RenkuApiClient,
     token_resolver: Callable[[], str] | None = None,
 ) -> FastMCP:
     """Create and return the configured FastMCP server.
 
+    api: client used by every tool to reach the Renku data API.
     token_resolver: optional callable that returns a fresh token string (stdio mode).
     When provided, _token() calls it on each request so a fresh rnk login is picked
     up without restarting the server.
@@ -127,16 +129,16 @@ def create_server(
 
     @asynccontextmanager
     async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
-        yield {"deps": deps, "token_resolver": token_resolver}
+        yield {"api": api, "token_resolver": token_resolver}
 
     # Allow the deployment hostname so the MCP SDK's DNS-rebinding protection
     # doesn't reject requests that arrive with the public hostname as Host header.
-    _base_host = urlparse(deps.base_url).hostname or ""
+    _base_host = urlparse(api.base_url).hostname or ""
     _transport_security = (
         TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
             allowed_hosts=["127.0.0.1:*", "localhost:*", _base_host, f"{_base_host}:*"],
-            allowed_origins=[deps.base_url, f"{deps.base_url}/*"],
+            allowed_origins=[api.base_url, f"{api.base_url}/*"],
         )
         if _base_host
         else None
@@ -202,22 +204,25 @@ def create_server(
         Always call this first; refuse all operations if is_admin is true.
         """
         t = _token(ctx)
+        base_url = _client(ctx).base_url
         if not t:
             return {
                 "authenticated": False,
-                "base_url": _deps(ctx).base_url,
+                "base_url": base_url,
                 "hint": "Set RENKU_ACCESS_TOKEN in the MCP server environment, or run 'rnk login'.",
             }
         try:
-            user = await _deps(ctx).api("GET", "/user", t)
+            # Direct client call, not _api(): this tool must work for admins too,
+            # since reporting is_admin=true is the whole point of calling it.
+            user = await _client(ctx).request("GET", "/user", t)
             return {
                 "authenticated": True,
-                "base_url": _deps(ctx).base_url,
+                "base_url": base_url,
                 "user": user,
                 "is_admin": user.get("is_admin", False),
             }
         except RuntimeError as exc:
-            return {"authenticated": False, "base_url": _deps(ctx).base_url, "error": str(exc)}
+            return {"authenticated": False, "base_url": base_url, "error": str(exc)}
 
     @mcp.tool()
     async def resource_classes(

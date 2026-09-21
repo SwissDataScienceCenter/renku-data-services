@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.mcp_api.dependencies import MCPDependencies
+from renku_data_services.mcp_api.client import RenkuApiClient
 from renku_data_services.mcp_api.server import _admin_cache
 from test.bases.renku_data_services.mcp_api.conftest import (
     mcp_session,
@@ -24,14 +24,14 @@ from test.bases.renku_data_services.mcp_api.conftest import (
 )
 
 
-class SanicMCPDependencies(MCPDependencies):
-    """MCPDependencies that routes api() calls through the Sanic test client."""
+class SanicRenkuApiClient(RenkuApiClient):
+    """RenkuApiClient that routes requests through the Sanic test client instead of httpx."""
 
     def __init__(self, sanic_client: SanicASGITestClient) -> None:
         super().__init__(base_url="http://localhost")
         self._client = sanic_client
 
-    async def api(
+    async def request(
         self,
         method: str,
         path: str,
@@ -71,8 +71,8 @@ def clear_admin_cache_integration():
 
 
 @pytest.fixture
-def mcp_deps(sanic_client: SanicASGITestClient) -> SanicMCPDependencies:
-    return SanicMCPDependencies(sanic_client)
+def mcp_api(sanic_client: SanicASGITestClient) -> SanicRenkuApiClient:
+    return SanicRenkuApiClient(sanic_client)
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +81,8 @@ def mcp_deps(sanic_client: SanicASGITestClient) -> SanicMCPDependencies:
 
 
 @pytest.mark.asyncio
-async def test_auth_status(mcp_deps: SanicMCPDependencies, regular_user_access_token: str) -> None:
-    async with mcp_session(mcp_deps, token=regular_user_access_token) as (session, _):
+async def test_auth_status(mcp_api: SanicRenkuApiClient, regular_user_access_token: str) -> None:
+    async with mcp_session(mcp_api, token=regular_user_access_token) as (session, _):
         result = await session.call_tool("auth_status", {})
         data = tool_result_dict(result)
         assert data["authenticated"] is True
@@ -90,8 +90,8 @@ async def test_auth_status(mcp_deps: SanicMCPDependencies, regular_user_access_t
 
 
 @pytest.mark.asyncio
-async def test_resource_classes(mcp_deps: SanicMCPDependencies, regular_user_access_token: str) -> None:
-    async with mcp_session(mcp_deps, token=regular_user_access_token) as (session, _):
+async def test_resource_classes(mcp_api: SanicRenkuApiClient, regular_user_access_token: str) -> None:
+    async with mcp_session(mcp_api, token=regular_user_access_token) as (session, _):
         result = await session.call_tool("resource_classes", {})
         classes = tool_result_list(result)
         # Resource pools may not be seeded in all test environments
@@ -101,8 +101,8 @@ async def test_resource_classes(mcp_deps: SanicMCPDependencies, regular_user_acc
 
 
 @pytest.mark.asyncio
-async def test_namespaces(mcp_deps: SanicMCPDependencies, regular_user_access_token: str) -> None:
-    async with mcp_session(mcp_deps, token=regular_user_access_token) as (session, _):
+async def test_namespaces(mcp_api: SanicRenkuApiClient, regular_user_access_token: str) -> None:
+    async with mcp_session(mcp_api, token=regular_user_access_token) as (session, _):
         result = await session.call_tool("namespaces", {})
         ns_list = tool_result_list(result)
         assert len(ns_list) > 0
@@ -114,18 +114,18 @@ async def test_namespaces(mcp_deps: SanicMCPDependencies, regular_user_access_to
 
 
 @pytest.mark.asyncio
-async def test_project_list(mcp_deps: SanicMCPDependencies, regular_user_access_token: str) -> None:
-    async with mcp_session(mcp_deps, token=regular_user_access_token) as (session, _):
+async def test_project_list(mcp_api: SanicRenkuApiClient, regular_user_access_token: str) -> None:
+    async with mcp_session(mcp_api, token=regular_user_access_token) as (session, _):
         result = await session.call_tool("project_list", {})
         assert result.isError is not True
 
 
 @pytest.mark.asyncio
 async def test_project_create_and_delete(
-    mcp_deps: SanicMCPDependencies, regular_user_access_token: str, regular_user: Any
+    mcp_api: SanicRenkuApiClient, regular_user_access_token: str, regular_user: Any
 ) -> None:
     namespace = regular_user.namespace.path.serialize()
-    async with mcp_session(mcp_deps, token=regular_user_access_token) as (session, _):
+    async with mcp_session(mcp_api, token=regular_user_access_token) as (session, _):
         created = await session.call_tool(
             "project_create",
             {"name": "mcp-integration-test", "namespace": namespace, "visibility": "private"},
@@ -145,7 +145,7 @@ async def test_project_create_and_delete(
 
 @pytest.mark.asyncio
 async def test_launcher_create_without_launcher_type(
-    mcp_deps: SanicMCPDependencies,
+    mcp_api: SanicRenkuApiClient,
     regular_user_access_token: str,
     regular_user: Any,
     create_session_environment: Any,
@@ -163,7 +163,7 @@ async def test_launcher_create_without_launcher_type(
     resource_class_id = pool["classes"][0]["id"]
 
     namespace = regular_user.namespace.path.serialize()
-    async with mcp_session(mcp_deps, token=regular_user_access_token) as (session, _):
+    async with mcp_session(mcp_api, token=regular_user_access_token) as (session, _):
         project_result = await session.call_tool(
             "project_create",
             {"name": "mcp-launcher-test", "namespace": namespace, "visibility": "private"},
@@ -191,7 +191,7 @@ async def test_launcher_create_without_launcher_type(
 
 @pytest.mark.asyncio
 async def test_launcher_create_non_interactive(
-    mcp_deps: SanicMCPDependencies,
+    mcp_api: SanicRenkuApiClient,
     regular_user_access_token: str,
     regular_user: Any,
     create_session_environment: Any,
@@ -203,7 +203,7 @@ async def test_launcher_create_non_interactive(
     resource_class_id = pool["classes"][0]["id"]
 
     namespace = regular_user.namespace.path.serialize()
-    async with mcp_session(mcp_deps, token=regular_user_access_token) as (session, _):
+    async with mcp_session(mcp_api, token=regular_user_access_token) as (session, _):
         project_result = await session.call_tool(
             "project_create",
             {"name": "mcp-job-test", "namespace": namespace, "visibility": "private"},

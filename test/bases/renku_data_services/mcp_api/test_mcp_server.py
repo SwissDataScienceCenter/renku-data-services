@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from renku_data_services.mcp_api.dependencies import MCPDependencies
+from renku_data_services.mcp_api.client import RenkuApiClient
 from renku_data_services.mcp_api.main import (
     TokenNotFoundError,
     _authorization_server_doc,
@@ -203,15 +203,15 @@ def test_rnk_token_paths_uses_xdg(monkeypatch):
 
 
 # ------------------------------------------------------------------ #
-# MCPDependencies.api — test via pytest-httpx                         #
+# RenkuApiClient.request — test via pytest-httpx                       #
 # ------------------------------------------------------------------ #
 
 
 @pytest.mark.asyncio
 async def test_api_sets_auth_header(httpx_mock):
     httpx_mock.add_response(json={"ok": True})
-    deps = MCPDependencies(base_url="https://test.renkulab.io")
-    await deps.api("GET", "/projects", "my-token")
+    api = RenkuApiClient(base_url="https://test.renkulab.io")
+    await api.request("GET", "/projects", "my-token")
 
     request = httpx_mock.get_request()
     assert request.headers["Authorization"] == "Bearer my-token"
@@ -221,8 +221,8 @@ async def test_api_sets_auth_header(httpx_mock):
 @pytest.mark.asyncio
 async def test_api_constructs_correct_url(httpx_mock):
     httpx_mock.add_response(json=[])
-    deps = MCPDependencies(base_url="https://test.renkulab.io")
-    await deps.api("GET", "/projects", "tok", query={"namespace": "myuser"})
+    api = RenkuApiClient(base_url="https://test.renkulab.io")
+    await api.request("GET", "/projects", "tok", query={"namespace": "myuser"})
 
     request = httpx_mock.get_request()
     assert str(request.url).startswith("https://test.renkulab.io/api/data/projects")
@@ -232,17 +232,17 @@ async def test_api_constructs_correct_url(httpx_mock):
 @pytest.mark.asyncio
 async def test_api_raises_on_http_error(httpx_mock):
     httpx_mock.add_response(status_code=403, text="Forbidden")
-    deps = MCPDependencies(base_url="https://test.renkulab.io")
+    api = RenkuApiClient(base_url="https://test.renkulab.io")
 
     with pytest.raises(RuntimeError, match="HTTP 403"):
-        await deps.api("GET", "/projects", "tok")
+        await api.request("GET", "/projects", "tok")
 
 
 @pytest.mark.asyncio
 async def test_api_returns_headers_when_requested(httpx_mock):
     httpx_mock.add_response(json={"id": "1"}, headers={"ETag": '"abc123"'})
-    deps = MCPDependencies(base_url="https://test.renkulab.io")
-    result, headers = await deps.api("GET", "/projects/1", "tok", return_headers=True)
+    api = RenkuApiClient(base_url="https://test.renkulab.io")
+    result, headers = await api.request("GET", "/projects/1", "tok", return_headers=True)
 
     assert result == {"id": "1"}
     assert "etag" in {k.lower() for k in headers}
@@ -254,7 +254,7 @@ async def test_api_returns_headers_when_requested(httpx_mock):
 
 
 @pytest.mark.asyncio
-async def test_admin_blocks_tool_calls(mock_deps):
+async def test_admin_blocks_tool_calls(mock_api):
     """All tools except auth_status are blocked for admin users."""
 
     async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
@@ -262,16 +262,16 @@ async def test_admin_blocks_tool_calls(mock_deps):
             return {"is_admin": True, "id": "admin"}
         return []
 
-    mock_deps.api.side_effect = fake_api
+    mock_api.request.side_effect = fake_api
 
-    async with mcp_session(mock_deps) as (session, _):
+    async with mcp_session(mock_api) as (session, _):
         result = await session.call_tool("project_list", {})
         assert result.isError is True
         assert "admin" in result.content[0].text.lower()
 
 
 @pytest.mark.asyncio
-async def test_non_admin_allowed(mock_deps):
+async def test_non_admin_allowed(mock_api):
     """Non-admin users can call tools normally."""
 
     async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
@@ -279,15 +279,15 @@ async def test_non_admin_allowed(mock_deps):
             return {"is_admin": False, "id": "user1"}
         return []
 
-    mock_deps.api.side_effect = fake_api
+    mock_api.request.side_effect = fake_api
 
-    async with mcp_session(mock_deps) as (session, _):
+    async with mcp_session(mock_api) as (session, _):
         result = await session.call_tool("project_list", {})
         assert result.isError is not True
 
 
 @pytest.mark.asyncio
-async def test_admin_check_cached(mock_deps):
+async def test_admin_check_cached(mock_api):
     """/user is only called once per token, even across multiple tool calls."""
 
     async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
@@ -295,18 +295,18 @@ async def test_admin_check_cached(mock_deps):
             return {"is_admin": False, "id": "user1"}
         return []
 
-    mock_deps.api.side_effect = fake_api
+    mock_api.request.side_effect = fake_api
 
-    async with mcp_session(mock_deps) as (session, _):
+    async with mcp_session(mock_api) as (session, _):
         await session.call_tool("project_list", {})
         await session.call_tool("session_list", {})
 
-    user_calls = [c for c in mock_deps.api.call_args_list if c.args[1] == "/user"]
+    user_calls = [c for c in mock_api.request.call_args_list if c.args[1] == "/user"]
     assert len(user_calls) == 1
 
 
 @pytest.mark.asyncio
-async def test_admin_override_env(mock_deps, monkeypatch):
+async def test_admin_override_env(mock_api, monkeypatch):
     """RENKU_MCP_ALLOW_ADMIN=1 lets admin users through."""
     monkeypatch.setenv("RENKU_MCP_ALLOW_ADMIN", "1")
 
@@ -315,9 +315,9 @@ async def test_admin_override_env(mock_deps, monkeypatch):
             return {"is_admin": True, "id": "admin"}
         return []
 
-    mock_deps.api.side_effect = fake_api
+    mock_api.request.side_effect = fake_api
 
-    async with mcp_session(mock_deps) as (session, _):
+    async with mcp_session(mock_api) as (session, _):
         result = await session.call_tool("project_list", {})
         assert result.isError is not True
 
@@ -328,9 +328,9 @@ async def test_admin_override_env(mock_deps, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_list_tools_smoke(mock_deps):
+async def test_list_tools_smoke(mock_api):
     """Server exposes the expected core tools."""
-    async with mcp_session(mock_deps) as (session, _):
+    async with mcp_session(mock_api) as (session, _):
         result = await session.list_tools()
         names = {t.name for t in result.tools}
         for expected in (
@@ -353,7 +353,7 @@ async def test_list_tools_smoke(mock_deps):
 
 
 @pytest.mark.asyncio
-async def test_job_run_marks_new_session(mock_deps):
+async def test_job_run_marks_new_session(mock_api):
     """job_run sets _created=True when started_at is recent."""
     non_interactive_launcher = {"id": "launcher-1", "launcher_type": "non_interactive"}
 
@@ -364,16 +364,16 @@ async def test_job_run_marks_new_session(mock_deps):
             return non_interactive_launcher
         return make_session("running", started_at=iso_ago(5))
 
-    mock_deps.api.side_effect = fake_api
+    mock_api.request.side_effect = fake_api
 
-    async with mcp_session(mock_deps) as (session, _):
+    async with mcp_session(mock_api) as (session, _):
         result = await session.call_tool("job_run", {"launcher_id": "launcher-1"})
         data = tool_result_dict(result)
         assert data["_created"] is True
 
 
 @pytest.mark.asyncio
-async def test_job_run_marks_stale_session(mock_deps):
+async def test_job_run_marks_stale_session(mock_api):
     """job_run sets _created=False when the platform returned a pre-existing session."""
     non_interactive_launcher = {"id": "launcher-1", "launcher_type": "non_interactive"}
 
@@ -384,44 +384,44 @@ async def test_job_run_marks_stale_session(mock_deps):
             return non_interactive_launcher
         return make_session("running", started_at=iso_ago(300))
 
-    mock_deps.api.side_effect = fake_api
+    mock_api.request.side_effect = fake_api
 
-    async with mcp_session(mock_deps) as (session, _):
+    async with mcp_session(mock_api) as (session, _):
         result = await session.call_tool("job_run", {"launcher_id": "launcher-1"})
         data = tool_result_dict(result)
         assert data["_created"] is False
 
 
 @pytest.mark.asyncio
-async def test_session_delete_if_failed_deletes_terminal_states(mock_deps):
+async def test_session_delete_if_failed_deletes_terminal_states(mock_api):
     """session_delete_if_failed deletes sessions in any terminal state."""
-    async with mcp_session(mock_deps) as (session, deps):
+    async with mcp_session(mock_api) as (session, api):
         for state in ("failed", "error", "stopped", "succeeded", "completed", "finished"):
-            deps.api.reset_mock()
-            deps.api.return_value = make_session(state)
+            api.request.reset_mock()
+            api.request.return_value = make_session(state)
             result = await session.call_tool("session_delete_if_failed", {"session_id": "s1"})
             assert "Deleted" in result.content[0].text, f"Expected deletion for state '{state}'"
-            paths = [c.args[1] for c in deps.api.call_args_list]
+            paths = [c.args[1] for c in api.request.call_args_list]
             assert "/sessions/s1" in paths, f"Expected GET /sessions/s1 for state '{state}'"
-            methods = [c.args[0] for c in deps.api.call_args_list if c.args[1] == "/sessions/s1"]
+            methods = [c.args[0] for c in api.request.call_args_list if c.args[1] == "/sessions/s1"]
             assert "DELETE" in methods, f"Expected DELETE for state '{state}'"
 
 
 @pytest.mark.asyncio
-async def test_session_delete_if_failed_skips_running(mock_deps):
+async def test_session_delete_if_failed_skips_running(mock_api):
     """session_delete_if_failed does not delete running sessions."""
-    mock_deps.api.return_value = make_session("running")
+    mock_api.request.return_value = make_session("running")
 
-    async with mcp_session(mock_deps) as (session, deps):
+    async with mcp_session(mock_api) as (session, api):
         result = await session.call_tool("session_delete_if_failed", {"session_id": "s1"})
         assert "not deleted" in result.content[0].text
-        methods = [c.args[0] for c in deps.api.call_args_list if c.args[1] == "/sessions/s1"]
+        methods = [c.args[0] for c in api.request.call_args_list if c.args[1] == "/sessions/s1"]
         assert "GET" in methods
         assert "DELETE" not in methods
 
 
 @pytest.mark.asyncio
-async def test_job_wait_returns_timed_out_flag(mock_deps):
+async def test_job_wait_returns_timed_out_flag(mock_api):
     """job_wait returns timed_out=True instead of raising when it times out."""
 
     async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
@@ -431,9 +431,9 @@ async def test_job_wait_returns_timed_out_flag(mock_deps):
             return {}
         return make_session("starting")
 
-    mock_deps.api.side_effect = fake_api
+    mock_api.request.side_effect = fake_api
 
-    async with mcp_session(mock_deps) as (session, _):
+    async with mcp_session(mock_api) as (session, _):
         result = await session.call_tool("job_wait", {"session_id": "s1", "timeout": 1, "interval": 1})
         data = tool_result_dict(result)
         assert data["timed_out"] is True
@@ -441,16 +441,16 @@ async def test_job_wait_returns_timed_out_flag(mock_deps):
 
 
 @pytest.mark.asyncio
-async def test_project_create_sends_correct_body(mock_deps):
+async def test_project_create_sends_correct_body(mock_api):
     """project_create passes name, namespace, and visibility to the API."""
-    mock_deps.api.return_value = {"id": "new-proj", "name": "My Project"}
+    mock_api.request.return_value = {"id": "new-proj", "name": "My Project"}
 
-    async with mcp_session(mock_deps) as (session, deps):
+    async with mcp_session(mock_api) as (session, api):
         await session.call_tool(
             "project_create",
             {"name": "My Project", "namespace": "myuser", "visibility": "public"},
         )
-        post_calls = [c for c in deps.api.call_args_list if c.args[0] == "POST"]
+        post_calls = [c for c in api.request.call_args_list if c.args[0] == "POST"]
         assert len(post_calls) == 1
         _, path, _, body = post_calls[0].args
         assert path == "/projects"
@@ -460,7 +460,7 @@ async def test_project_create_sends_correct_body(mock_deps):
 
 
 @pytest.mark.asyncio
-async def test_project_repo_add_sends_etag(mock_deps):
+async def test_project_repo_add_sends_etag(mock_api):
     """project_repo_add fetches the ETag and passes it as If-Match on the PATCH."""
     project = {"id": "proj-1", "etag": '"v1"', "repositories": []}
 
@@ -471,18 +471,18 @@ async def test_project_repo_add_sends_etag(mock_deps):
             return project, {"ETag": '"v1"'}
         return {"id": "proj-1", "repositories": ["https://github.com/x/y"]}
 
-    mock_deps.api.side_effect = fake_api
+    mock_api.request.side_effect = fake_api
 
-    async with mcp_session(mock_deps) as (session, deps):
+    async with mcp_session(mock_api) as (session, api):
         await session.call_tool("project_repo_add", {"project": "proj-1", "repository_url": "https://github.com/x/y"})
 
-    patch_calls = [c for c in deps.api.call_args_list if c.args[0] == "PATCH"]
+    patch_calls = [c for c in api.request.call_args_list if c.args[0] == "PATCH"]
     assert len(patch_calls) == 1
     assert patch_calls[0].kwargs.get("extra_headers", {}).get("If-Match") == '"v1"'
 
 
 @pytest.mark.asyncio
-async def test_project_repo_add_raises_without_etag(mock_deps):
+async def test_project_repo_add_raises_without_etag(mock_api):
     """project_repo_add raises when the project has no ETag."""
 
     async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
@@ -490,9 +490,9 @@ async def test_project_repo_add_raises_without_etag(mock_deps):
             return {"is_admin": False}
         return {"id": "proj-1", "repositories": []}  # no etag field
 
-    mock_deps.api.side_effect = fake_api
+    mock_api.request.side_effect = fake_api
 
-    async with mcp_session(mock_deps) as (session, _):
+    async with mcp_session(mock_api) as (session, _):
         result = await session.call_tool(
             "project_repo_add", {"project": "proj-1", "repository_url": "https://github.com/x/y"}
         )
@@ -500,11 +500,11 @@ async def test_project_repo_add_raises_without_etag(mock_deps):
 
 
 @pytest.mark.asyncio
-async def test_launcher_create_injects_name_for_image(mock_deps):
+async def test_launcher_create_injects_name_for_image(mock_api):
     """launcher_create adds 'name' to the environment dict for image-source environments."""
-    mock_deps.api.return_value = {"id": "launcher-1", "environment": {}}
+    mock_api.request.return_value = {"id": "launcher-1", "environment": {}}
 
-    async with mcp_session(mock_deps) as (session, deps):
+    async with mcp_session(mock_api) as (session, api):
         await session.call_tool(
             "launcher_create",
             {
@@ -518,16 +518,16 @@ async def test_launcher_create_injects_name_for_image(mock_deps):
                 },
             },
         )
-        _, _, _, body = deps.api.call_args.args
+        _, _, _, body = api.request.call_args.args
         assert body["environment"]["name"] == "My Launcher"
 
 
 @pytest.mark.asyncio
-async def test_launcher_create_no_name_for_build(mock_deps):
+async def test_launcher_create_no_name_for_build(mock_api):
     """launcher_create does NOT inject 'name' for build-source environments."""
-    mock_deps.api.return_value = {"id": "launcher-1", "environment": {}}
+    mock_api.request.return_value = {"id": "launcher-1", "environment": {}}
 
-    async with mcp_session(mock_deps) as (session, deps):
+    async with mcp_session(mock_api) as (session, api):
         await session.call_tool(
             "launcher_create",
             {
@@ -542,5 +542,5 @@ async def test_launcher_create_no_name_for_build(mock_deps):
                 },
             },
         )
-        _, _, _, body = deps.api.call_args.args
+        _, _, _, body = api.request.call_args.args
         assert "name" not in body["environment"]

@@ -1,28 +1,35 @@
-"""Dependency container for the MCP server — just a base URL and an HTTP client."""
+"""HTTP client for the Renku data API."""
 
 from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
+DEFAULT_TIMEOUT = 30.0
 
-@dataclass
-class MCPDependencies:
-    """Dependency container for the MCP server — just a base URL and an HTTP client."""
 
-    base_url: str
+class RenkuApiClient:
+    """Calls the Renku data API on behalf of the user whose token is supplied per request.
+
+    No token validation happens here — the data API is the authoritative validator
+    (signature, issuer, expiry). An invalid token simply produces a 401 from the API,
+    which is surfaced to the caller as a RuntimeError carrying the response body so
+    the agent can act on the message.
+    """
+
+    def __init__(self, base_url: str, timeout: float = DEFAULT_TIMEOUT) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
 
     @classmethod
-    def from_env(cls) -> MCPDependencies:
-        """Build MCPDependencies from environment variables."""
-        base_url = os.environ.get("RENKU_BASE_URL", "https://renkulab.io").rstrip("/")
-        return cls(base_url=base_url)
+    def from_env(cls) -> RenkuApiClient:
+        """Build a client for the deployment named by RENKU_BASE_URL."""
+        return cls(base_url=os.environ.get("RENKU_BASE_URL", "https://renkulab.io"))
 
-    async def api(
+    async def request(
         self,
         method: str,
         path: str,
@@ -44,7 +51,7 @@ class MCPDependencies:
         if extra_headers:
             headers.update(extra_headers)
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.request(
                 method,
                 url,
