@@ -551,8 +551,7 @@ class RCloneConfig(BaseModel, MutableMapping):
     @model_validator(mode="after")
     def check_rclone_schema(self) -> RCloneConfig:
         """Validate that the reclone config is valid."""
-        # If keep_sensitive is set to False then the config that is written will have all
-        # sensitive/password fields replaced with a fixed value equal to "<sensitive>".
+        # If keep_sensitive is set to False then all sensitive/password field values are replaced with "<sensitive>".
         self.validator.validate(self.config, keep_sensitive=True)
         return self
 
