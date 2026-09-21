@@ -189,7 +189,7 @@ class SessionRunnersBP(CustomBlueprint):
         @authenticate(self.internal_authenticator)
         @only_authenticated
         async def _get_assigned_session_standalone(
-            _: Request, user: base_models.APIUser, session_runner_id: ULID, session_id: str
+            _: Request, user: base_models.APIUser, session_id: str
         ) -> JSONResponse:
             async with self.session_maker() as session, session.begin():
                 renku_session = await self.session_runners_repo.get_assigned_session_standalone(
