@@ -926,8 +926,9 @@ def get_remote_env(
         env.extend(_firecrest_resource_env_items(resource_class, remote))
     elif isinstance(remote, RemoteConfigurationRunners):
         # TODO
-        # "RSC_AUTH_TOKEN_URI": f"https://{config.sessions.ingress.host}/api/data/internal/authentication/token",
-        env.append(SessionEnvItem(name="RSC_RENKU_API_URL", value=f"https://{config.sessions.ingress.host}/api/data/"))
+        env.append(
+            SessionEnvItem(name="RSC_RUNNERS_API_URL", value=f"https://{config.sessions.ingress.host}/api/data/")
+        )
     return env
 
 
