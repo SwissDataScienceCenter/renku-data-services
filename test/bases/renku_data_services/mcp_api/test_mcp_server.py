@@ -378,6 +378,12 @@ async def test_list_tools_smoke(mock_api):
             "build_wait",
             "global_environments",
             "renku_group_members",
+            "app_launch",
+            "app_list",
+            "app_get",
+            "app_logs",
+            "app_delete",
+            "app_wait",
         ):
             assert expected in names, f"Missing tool: {expected}"
 
@@ -574,3 +580,165 @@ async def test_launcher_create_no_name_for_build(mock_api):
         )
         _, _, _, body = api.request.call_args.args
         assert "name" not in body["environment"]
+
+
+# ------------------------------------------------------------------ #
+# Apps                                                                 #
+# ------------------------------------------------------------------ #
+
+
+@pytest.mark.asyncio
+async def test_app_launch_sends_only_launcher_id(mock_api):
+    """POST /apps takes just the launcher_id — the platform names the app itself."""
+    mock_api.request.return_value = {"name": "my-app-0h8kq2zt", "status": "pending"}
+
+    async with mcp_session(mock_api) as (session, api):
+        result = await session.call_tool("app_launch", {"launcher_id": "launcher-1"})
+
+        method, path, _, body = api.request.call_args.args
+        assert (method, path) == ("POST", "/apps")
+        assert body == {"launcher_id": "launcher-1"}
+        assert tool_result_dict(result)["name"] == "my-app-0h8kq2zt"
+
+
+@pytest.mark.asyncio
+async def test_app_list_filters_by_project(mock_api):
+    """app_list passes project_id as a query parameter, not a path segment."""
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        return {"is_admin": False} if path == "/user" else []
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, api):
+        await session.call_tool("app_list", {"project_id": "proj-1"})
+
+        method, path, *_ = api.request.call_args.args
+        assert (method, path) == ("GET", "/apps")
+        assert api.request.call_args.kwargs["query"] == {"project_id": "proj-1"}
+
+
+@pytest.mark.asyncio
+async def test_app_logs_omits_max_lines_when_unset(mock_api):
+    """No max_lines means no query parameter, so the API applies its own default."""
+    mock_api.request.return_value = {}
+
+    async with mcp_session(mock_api) as (session, api):
+        await session.call_tool("app_logs", {"app_name": "my-app"})
+        assert api.request.call_args.kwargs["query"] is None
+
+        await session.call_tool("app_logs", {"app_name": "my-app", "max_lines": 50})
+        assert api.request.call_args.kwargs["query"] == {"max_lines": 50}
+
+
+@pytest.mark.asyncio
+async def test_app_wait_returns_when_ready(mock_api, monkeypatch):
+    """app_wait polls until the app is ready and reports timed_out=False."""
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    statuses = iter(["pending", "pending", "ready"])
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        if path == "/user":
+            return {"is_admin": False}
+        return {"name": "my-app", "status": next(statuses, "ready")}
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, _):
+        result = await session.call_tool("app_wait", {"app_name": "my-app", "interval": 1})
+
+    payload = tool_result_dict(result)
+    assert payload["status"] == "ready"
+    assert payload["timed_out"] is False
+
+
+@pytest.mark.asyncio
+async def test_app_wait_attaches_logs_on_failure(mock_api, monkeypatch):
+    """A failed app comes back with its logs, so the agent can explain the failure."""
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        if path == "/user":
+            return {"is_admin": False}
+        if path.endswith("/logs"):
+            return {"my-app-pod-1/app": "Traceback: boom"}
+        return {"name": "my-app", "status": "failed"}
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, _):
+        result = await session.call_tool("app_wait", {"app_name": "my-app"})
+
+    payload = tool_result_dict(result)
+    assert payload["status"] == "failed"
+    assert payload["logs"] == {"my-app-pod-1/app": "Traceback: boom"}
+
+
+@pytest.mark.asyncio
+async def test_app_wait_times_out(mock_api, monkeypatch):
+    """A never-ready app reports timed_out=True rather than hanging or claiming success."""
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    mock_api.request.return_value = {"name": "my-app", "status": "pending"}
+
+    async with mcp_session(mock_api) as (session, _):
+        result = await session.call_tool("app_wait", {"app_name": "my-app", "timeout": 1})
+
+    payload = tool_result_dict(result)
+    assert payload["timed_out"] is True
+    assert payload["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_app_delete_confirms_by_name(mock_api):
+    """app_delete issues a DELETE and reports which app went away."""
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        return {"is_admin": False} if path == "/user" else None
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, api):
+        result = await session.call_tool("app_delete", {"app_name": "my-app"})
+
+        method, path, *_ = api.request.call_args.args
+        assert (method, path) == ("DELETE", "/apps/my-app")
+        assert "my-app" in result.content[0].text
+
+
+@pytest.mark.asyncio
+async def test_launcher_create_hyphenates_launcher_type(mock_api):
+    """The API enum is hyphenated, so an underscored launcher_type must be normalised."""
+    mock_api.request.return_value = {"id": "launcher-1", "environment": {}}
+
+    async with mcp_session(mock_api) as (session, api):
+        await session.call_tool(
+            "launcher_create",
+            {
+                "project_id": "proj-1",
+                "name": "Job Launcher",
+                "resource_class_id": 1,
+                "environment": {"id": "env-1"},
+                "launcher_type": "non_interactive",
+            },
+        )
+        _, _, _, body = api.request.call_args.args
+        assert body["launcher_type"] == "non-interactive"
+
+
+@pytest.mark.asyncio
+async def test_launcher_create_omits_launcher_type_when_unset(mock_api):
+    """Interactive launchers send no launcher_type at all — older deployments reject it."""
+    mock_api.request.return_value = {"id": "launcher-1", "environment": {}}
+
+    async with mcp_session(mock_api) as (session, api):
+        await session.call_tool(
+            "launcher_create",
+            {
+                "project_id": "proj-1",
+                "name": "Session Launcher",
+                "resource_class_id": 1,
+                "environment": {"id": "env-1"},
+            },
+        )
+        _, _, _, body = api.request.call_args.args
+        assert "launcher_type" not in body

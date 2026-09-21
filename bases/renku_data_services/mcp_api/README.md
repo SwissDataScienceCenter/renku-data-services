@@ -14,6 +14,7 @@ typed tools that AI agents can call.
 | Session launchers | `launcher_list`, `launcher_project_list`, `launcher_get`, `launcher_create`, `launcher_patch`, `launcher_delete` |
 | Sessions | `session_launch`, `session_list`, `session_get`, `session_logs`, `session_delete`, `session_delete_if_failed`, `session_wait` |
 | Jobs | `job_run`, `job_list`, `job_wait` |
+| Apps | `app_launch`, `app_list`, `app_get`, `app_logs`, `app_delete`, `app_wait` |
 | Builds | `build_list`, `build_get`, `build_logs`, `build_wait` |
 | Groups | `renku_group_members` |
 
@@ -117,11 +118,15 @@ between the client and Keycloak.
 
 - **Admin accounts are blocked.** The server calls `GET /user` on each tool invocation
   and refuses if `is_admin=true`. The check runs once per tool call — repeated within
-  a tool that polls (`session_wait`, `job_wait`, `build_wait`) it would double that
+  a tool that polls (`session_wait`, `job_wait`, `build_wait`, `app_wait`) it would double that
   tool's request volume, and cached beyond the tool call it would both hold live
   tokens in memory and go stale. Set `RENKU_MCP_ALLOW_ADMIN=1` to override.
 - **Credentials are never accepted as tool parameters.** Storage credentials (S3 keys,
   passwords) must be added through the Renku UI after creating a connector.
+- **Apps stay the user's decision.** An app is public by definition: it needs a public
+  project, and the data API refuses an `app` launcher in a private one. The tools surface
+  that refusal rather than working around it — nothing changes a project's visibility on
+  the user's behalf. Only public, credential-free data connectors are mounted into an app.
 
 ## Environment variables
 
