@@ -22,9 +22,6 @@ uvicorn = "^0.34"
 starlette = ">=1.0.1"
 pydantic = "^2.10.6"
 
-[tool.poetry.scripts]
-renku-mcp = "renku_data_services.mcp_api.main:main"
-
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"

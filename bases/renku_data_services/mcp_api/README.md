@@ -62,10 +62,10 @@ cd projects/renku_mcp_server
 poetry install
 
 # Run against renkulab.io (default)
-poetry run renku-mcp
+poetry run python -m renku_data_services.mcp_api.main
 
 # Run against a different deployment
-RENKU_BASE_URL=https://dev.renku.ch poetry run renku-mcp
+RENKU_BASE_URL=https://dev.renku.ch poetry run python -m renku_data_services.mcp_api.main
 ```
 
 Then configure Claude Code to use it:
@@ -74,7 +74,7 @@ Then configure Claude Code to use it:
 {
   "renku": {
     "command": "poetry",
-    "args": ["run", "renku-mcp"],
+    "args": ["run", "python", "-m", "renku_data_services.mcp_api.main"],
     "cwd": "/path/to/projects/renku_mcp_server",
     "env": {
       "RENKU_BASE_URL": "https://<deployment>"
