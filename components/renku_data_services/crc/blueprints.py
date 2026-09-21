@@ -470,9 +470,7 @@ class ResourceFlavoursBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate_query(query=apispec.ResourceFlavourParams)
-        async def _get_all(
-            _: Request, user: base_models.APIUser, query: apispec.ResourceFlavourParams
-        ) -> HTTPResponse:
+        async def _get_all(_: Request, user: base_models.APIUser, query: apispec.ResourceFlavourParams) -> HTTPResponse:
             res = await self.repo.get_flavours(name=query.name)
             return validated_json(apispec.ResourceFlavoursWithId, res)
 
