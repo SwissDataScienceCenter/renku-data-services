@@ -129,7 +129,11 @@ class SessionRunnersBP(CustomBlueprint):
                 )
             return validated_json(apispec.AssignedSessionSecrets, secrets)
 
-        return "/session_runners/<session_runner_id:ulid>/<session_id>/secrets", ["GET"], _get_assigned_session_secrets
+        return (
+            "/session_runners/<session_runner_id:ulid>/sessions/<session_id>/secrets",
+            ["GET"],
+            _get_assigned_session_secrets,
+        )
 
     def patch_assigned_session_secrets(self) -> BlueprintFactoryResponse:
         """Update the secrets used in an assigned session."""
@@ -156,7 +160,7 @@ class SessionRunnersBP(CustomBlueprint):
             return validated_json(apispec.AssignedSessionSecrets, secrets)
 
         return (
-            "/session_runners/<session_runner_id:ulid>/<session_id>/secrets",
+            "/session_runners/<session_runner_id:ulid>/sessions/<session_id>/secrets",
             ["PATCH"],
             _patch_assigned_session_secrets,
         )
@@ -178,3 +182,19 @@ class SessionRunnersBP(CustomBlueprint):
             return validated_json(apispec.SessionRunnerContactResponse, {"sessions": assigned_session_ids})
 
         return "/session_runners/<session_runner_id:ulid>/contact", ["POST"], _post_session_runner_contact
+
+    def get_assigned_session_standalone(self) -> BlueprintFactoryResponse:
+        """Get the details of a session which needs a runner."""
+
+        @authenticate(self.internal_authenticator)
+        @only_authenticated
+        async def _get_assigned_session_standalone(
+            _: Request, user: base_models.APIUser, session_runner_id: ULID, session_id: str
+        ) -> JSONResponse:
+            async with self.session_maker() as session, session.begin():
+                renku_session = await self.session_runners_repo.get_assigned_session_standalone(
+                    session=session, user=user, renku_session_id=session_id
+                )
+            return validated_json(apispec.AssignedSession, renku_session)
+
+        return "/session_runners/sessions/<session_id>", ["GET"], _get_assigned_session_standalone

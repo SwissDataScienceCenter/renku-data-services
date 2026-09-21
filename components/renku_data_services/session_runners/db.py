@@ -267,6 +267,28 @@ class SessionRunnersRepository:
             session_orm.secrets or dict(), user_secret_key=user_secret_key, user_id=user.id
         )
 
+    async def get_assigned_session_standalone(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        renku_session_id: str,
+    ) -> models.AssignedSession:
+        """Get the details of an assigned session from the database."""
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        stmt = (
+            select(schemas.AssignedSessionORM)
+            .where(schemas.AssignedSessionORM.id == renku_session_id)
+            .where(schemas.AssignedSessionORM.user_id == user.id)
+        )
+        res = await session.scalars(stmt)
+        session_orm = res.one_or_none()
+        if session_orm is None:
+            raise errors.MissingResourceError(
+                message=f"The assigned session {renku_session_id} does not exist or you do not have access to it."
+            )
+        return session_orm.dump()
+
     def _get_user_secret_key(self, user_orm: schemas.UserORM) -> str | None:
         """Get the user secret key from the ORM instance."""
         if user_orm.secret_key is None:
