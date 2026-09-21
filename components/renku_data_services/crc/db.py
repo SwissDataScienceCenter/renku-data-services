@@ -134,6 +134,16 @@ async def _get_flavour_orm(session: AsyncSession, flavour_id: ULID) -> schemas.R
     return flavour
 
 
+async def _get_linked_classes(session: AsyncSession, flavour_id: ULID) -> list[schemas.ResourceClassORM]:
+    """Load every resource class linked to a resource flavour."""
+    res = await session.scalars(
+        select(schemas.ResourceClassORM)
+        .where(schemas.ResourceClassORM.resource_flavour_id == flavour_id)
+        .order_by(schemas.ResourceClassORM.id)
+    )
+    return list(res)
+
+
 async def _apply_flavour_snapshots(session: AsyncSession, classes: Sequence[schemas.ResourceClassORM]) -> None:
     """Copy the linked flavour's values onto every class that carries a link."""
     for cls in classes:
@@ -1990,6 +2000,20 @@ class ResourceFlavourRepository:
             flavour = await _get_flavour_orm(session, flavour_id)
             return flavour.dump()
 
+    async def get_flavour_resource_classes(self, flavour_id: ULID) -> list[models.LinkedResourceClass]:
+        """Get every resource class linked to a resource flavour, with the pool it belongs to."""
+        async with self.session_maker() as session:
+            await _get_flavour_orm(session, flavour_id)
+            return [
+                models.LinkedResourceClass(
+                    id=cls.id,
+                    name=cls.name,
+                    resource_pool_id=cls.resource_pool_id,
+                    resource_pool_name=cls.resource_pool.name if cls.resource_pool is not None else None,
+                )
+                for cls in await _get_linked_classes(session, flavour_id)
+            ]
+
     @_only_admins
     async def insert_flavour(
         self, api_user: base_models.APIUser, new_flavour: models.UnsavedResourceFlavour
@@ -2059,10 +2083,7 @@ class ResourceFlavourRepository:
             )
             if flavour is None:
                 return
-            linked = await session.scalars(
-                select(schemas.ResourceClassORM).where(schemas.ResourceClassORM.resource_flavour_id == flavour_id)
-            )
-            names = [cls.name for cls in linked]
+            names = [cls.name for cls in await _get_linked_classes(session, flavour_id)]
             if names:
                 raise errors.ConflictError(
                     message=(

@@ -136,6 +136,16 @@ class ResourceFlavourPatch:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class LinkedResourceClass:
+    """A resource class linked to a resource flavour, with the pool it belongs to."""
+
+    id: int
+    name: str
+    resource_pool_id: int | None = None
+    resource_pool_name: str | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedResourceClass(ResourcesCompareMixin):
     """Model for a resource class yet to be saved."""
 
