@@ -1075,7 +1075,12 @@ def create_server(
         ctx: Context,
         app_name: Annotated[str, Field(description="App name (from app_launch or app_list)")],
     ) -> dict[str, Any]:
-        """Get an app's status and public URL. Status is one of pending, ready, failed."""
+        """Get an app's status and public URL. Status is one of pending, ready, failed.
+
+        'ready' means servable, not warm: an idle app scales to zero and still reports ready,
+        so the first visitor after a quiet spell pays a cold start. Such an app also returns
+        no logs — ready with empty logs means idle, not broken.
+        """
         return await _api(ctx, "GET", f"/apps/{app_name}")
 
     @mcp.tool()
