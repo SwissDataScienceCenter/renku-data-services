@@ -40,7 +40,7 @@ def _token(ctx: Context) -> str:
             if t:
                 set_current_token(t)  # cache for this session once found
                 return t
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             from renku_data_services.mcp_api.main import TokenNotFoundError
 
             if isinstance(exc, TokenNotFoundError):
@@ -67,7 +67,7 @@ async def _require_non_admin(ctx: Context) -> None:
     Set RENKU_MCP_ALLOW_ADMIN=1 in the server environment to override.
     """
 
-    if os.environ.get("RENKU_MCP_ALLOW_ADMIN"):
+    if os.environ.get("RENKU_MCP_ALLOW_ADMIN") == "1":
         return
     t = _token(ctx)
     if not t:
@@ -87,7 +87,6 @@ async def _api(ctx: Context, method: str, path: str, body: Any = None, **kwargs:
     """Make an authenticated API call, refusing if the current user is an admin."""
     await _require_non_admin(ctx)
     return await _deps(ctx).api(method, path, _token(ctx), body, **kwargs)
-
 
 
 def _launcher_summary(data: dict[str, Any]) -> dict[str, Any]:
@@ -282,7 +281,7 @@ def create_server(
         project: Annotated[str, Field(description="Project ID or namespace/slug (e.g. 'myuser/my-project')")],
     ) -> dict[str, Any]:
         """Get a Renku project by ID or namespace/slug."""
-        return await _api(ctx, "GET", _project_path(project), _token(ctx))
+        return await _api(ctx, "GET", _project_path(project))
 
     @mcp.tool()
     async def project_create(
@@ -320,7 +319,7 @@ def create_server(
         - Hibernated or paused sessions: warn the user that unsaved work inside those
           sessions will be lost, and ask for explicit confirmation before stopping them.
         """
-        proj = await _api(ctx, "GET", _project_path(project), _token(ctx))
+        proj = await _api(ctx, "GET", _project_path(project))
         await _api(ctx, "DELETE", f"/projects/{proj['id']}")
         return f"Deleted project {proj['id']} ({proj.get('name', '')})"
 
@@ -468,9 +467,7 @@ def create_server(
         project_id: Annotated[str, Field(description="Project ID")],
     ) -> dict[str, Any]:
         """Link an existing data connector to a project."""
-        return await _deps(ctx).api(
-            "POST", f"/data_connectors/{connector_id}/project_links", _token(ctx), {"project_id": project_id}
-        )
+        return await _api(ctx, "POST", f"/data_connectors/{connector_id}/project_links", {"project_id": project_id})
 
     @mcp.tool()
     async def connector_patch(
@@ -838,12 +835,8 @@ def create_server(
         ] = None,
         resource_class_id: Annotated[int | None, Field(description="Override resource class")] = None,
         disk_storage: Annotated[int | None, Field(description="Override disk storage in GB")] = None,
-        job_command_override: Annotated[
-            list[str] | None, Field(description="Override the container command")
-        ] = None,
-        job_args_override: Annotated[
-            list[str] | None, Field(description="Override the container args")
-        ] = None,
+        job_command_override: Annotated[list[str] | None, Field(description="Override the container command")] = None,
+        job_args_override: Annotated[list[str] | None, Field(description="Override the container args")] = None,
     ) -> dict[str, Any]:
         """Launch a non-interactive job from a launcher.
 

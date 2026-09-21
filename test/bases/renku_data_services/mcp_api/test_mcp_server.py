@@ -9,6 +9,7 @@ import pytest
 
 from renku_data_services.mcp_api.dependencies import MCPDependencies
 from renku_data_services.mcp_api.main import (
+    TokenNotFoundError,
     _authorization_server_doc,
     _load_rnk_token,
     _protected_resource_doc,
@@ -39,7 +40,6 @@ def clear_admin_cache():
 # ------------------------------------------------------------------ #
 # Pure logic — no server needed                                        #
 # ------------------------------------------------------------------ #
-
 
 
 class TestLauncherSummary:
@@ -183,13 +183,13 @@ def test_resolve_token_falls_back_to_rnk(tmp_path, monkeypatch):
 
 
 def test_resolve_token_raises_when_nothing_found(monkeypatch):
-    """_resolve_token raises RuntimeError with a helpful message when no token is available."""
+    """_resolve_token raises TokenNotFoundError with a helpful message when no token is available."""
     monkeypatch.delenv("RENKU_ACCESS_TOKEN", raising=False)
     monkeypatch.delenv("RENKU_TOKEN", raising=False)
     monkeypatch.delenv("RENKU_CLI_ACCESS_TOKEN", raising=False)
     monkeypatch.setattr("renku_data_services.mcp_api.main._rnk_token_paths", lambda: [])
 
-    with pytest.raises(RuntimeError, match="rnk login"):
+    with pytest.raises(TokenNotFoundError, match="rnk login"):
         _resolve_token()
 
 
@@ -350,7 +350,6 @@ async def test_list_tools_smoke(mock_deps):
             "renku_group_members",
         ):
             assert expected in names, f"Missing tool: {expected}"
-
 
 
 @pytest.mark.asyncio
