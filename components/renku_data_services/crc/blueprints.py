@@ -494,6 +494,23 @@ class ResourceFlavoursBP(CustomBlueprint):
 
         return "/resource_flavours/<resource_flavour_id:ulid>", ["GET"], _get
 
+    def get_resource_classes(self) -> BlueprintFactoryResponse:
+        """Get the resource classes linked to a resource flavour."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _get_resource_classes(
+            _: Request, user: base_models.APIUser, resource_flavour_id: ULID
+        ) -> HTTPResponse:
+            res = await self.repo.get_flavour_resource_classes(resource_flavour_id)
+            return validated_json(apispec.LinkedResourceClassesList, res)
+
+        return (
+            "/resource_flavours/<resource_flavour_id:ulid>/resource_classes",
+            ["GET"],
+            _get_resource_classes,
+        )
+
     def patch(self) -> BlueprintFactoryResponse:
         """Partially update a resource flavour."""
 

@@ -296,6 +296,35 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - resource_flavours
+  /resource_flavours/{resource_flavour_id}/resource_classes:
+    get:
+      summary: Get the resource classes linked to a resource flavour
+      description: |
+        Shows what an edit to the flavour will affect. A class is listed for as long as it is
+        linked, whether or not its own values still match the flavour.
+      parameters:
+        - in: path
+          name: resource_flavour_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+      responses:
+        "200":
+          description: The resource classes linked to the resource flavour
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/LinkedResourceClassesList"
+        "404":
+          description: The resource flavour does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - resource_flavours
   /resource_pools:
     get:
       summary: Get all resource pool definitions
@@ -1537,6 +1566,31 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/ResourceFlavourWithId"
+      uniqueItems: true
+    LinkedResourceClass:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/IntegerId"
+        name:
+          $ref: "#/components/schemas/Name"
+        resource_pool_id:
+          $ref: "#/components/schemas/IntegerId"
+        resource_pool_name:
+          $ref: "#/components/schemas/Name"
+      required:
+        - id
+        - name
+      example:
+        id: 1
+        name: "small"
+        resource_pool_id: 1
+        resource_pool_name: "default"
+    LinkedResourceClassesList:
+      type: array
+      items:
+        $ref: "#/components/schemas/LinkedResourceClass"
       uniqueItems: true
     ResourceClassProperties:
       type: object
