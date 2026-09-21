@@ -94,7 +94,11 @@ class RCloneValidator:
                 )
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
-            test_conf = configuration if isinstance(configuration, RCloneConfig) else RCloneConfig(config=configuration)
+            test_conf = (
+                transformed_config
+                if isinstance(transformed_config, RCloneConfig)
+                else RCloneConfig(config=transformed_config)
+            )
             test_conf.write(f, name="temp")
             # Handle SFTP retries, see https://github.com/SwissDataScienceCenter/renku-data-services/issues/893
             rclone_args = [
