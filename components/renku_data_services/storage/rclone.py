@@ -551,7 +551,9 @@ class RCloneConfig(BaseModel, MutableMapping):
     @model_validator(mode="after")
     def check_rclone_schema(self) -> RCloneConfig:
         """Validate that the reclone config is valid."""
-        self.validator.validate(self.config)
+        # If keep_sensitive is set to False then the config that is written will have all
+        # sensitive/password fields replaced with a fixed value equal to "<sensitive>".
+        self.validator.validate(self.config, keep_sensitive=True)
         return self
 
     @model_serializer
@@ -567,11 +569,11 @@ class RCloneConfig(BaseModel, MutableMapping):
 
     def __setitem__(self, key: str, value: Any) -> None:
         self.config[key] = value
-        self.validator.validate(self.config)
+        self.validator.validate(self.config, keep_sensitive=True)
 
     def __delitem__(self, key: str) -> None:
         del self.config[key]
-        self.validator.validate(self.config)
+        self.validator.validate(self.config, keep_sensitive=True)
 
     def __iter__(self) -> Generator[str, None, None]:  # type: ignore[override]
         """Iterate method.
@@ -580,16 +582,26 @@ class RCloneConfig(BaseModel, MutableMapping):
         """
         yield from self.config.keys()
 
-    def config_string(self, name: str = "temp") -> str:
-        """Generate an rclone ini-style config string."""
+    def config_string(self, name: str = "temp", keep_sensitive: bool = True) -> str:
+        """Generate an rclone ini-style config string.
+
+        If keep_sensitive is set to False, then all sensitive fields are replaced with the value '<sensitive>'.
+        This replacement is useful if the sensitive fields are saved separately, decrypted and injected later.
+        """
         config = io.StringIO()
-        self.write(config, name=name)
+        self.write(config, name=name, keep_sensitive=keep_sensitive)
         result = config.getvalue()
         config.close()
         return result
 
-    def write(self, output: IO[str], name: str = "temp") -> None:
-        """Write the configuration as an rclone ini-style config file."""
+    def write(self, output: IO[str], name: str = "temp", keep_sensitive: bool = True) -> None:
+        """Write the configuration as an rclone ini-style config file.
+
+        If keep_sensitive is set to False, then all sensitive fields are replaced with the value '<sensitive>'.
+        """
+
+        if not keep_sensitive:
+            self.validator.validate(self.config, keep_sensitive=keep_sensitive)
 
         def _stringify_bool(value: Any) -> str:
             """Converts booleans to a rclone compliant values."""
