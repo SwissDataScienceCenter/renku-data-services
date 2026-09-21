@@ -186,10 +186,16 @@ paths:
       summary: Get all resource flavours
       parameters:
         - in: query
-          name: name
-          required: false
+          description: Filter for resource flavours based on the provided name as a prefix. Omitting this parameter returns all flavours.
+          name: resource_flavour_params
+          style: form
+          explode: true
           schema:
-            $ref: "#/components/schemas/Name"
+            type: object
+            additionalProperties: false
+            properties:
+              name:
+                $ref: "#/components/schemas/Name"
       responses:
         "200":
           description: The list of resource flavours
@@ -1534,14 +1540,33 @@ components:
         max_storage: 100
         default_storage: 10
     ResourceFlavourWithId:
-      allOf:
-        - $ref: "#/components/schemas/ResourceFlavour"
-        - type: object
-          properties:
-            id:
-              $ref: "#/components/schemas/Ulid"
-          required:
-            - id
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          $ref: "#/components/schemas/Name"
+        description:
+          $ref: "#/components/schemas/ResourceFlavourDescription"
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        max_storage:
+          $ref: "#/components/schemas/Storage"
+        default_storage:
+          $ref: "#/components/schemas/Storage"
+      required:
+        - id
+        - name
+        - cpu
+        - memory
+        - gpu
+        - max_storage
+        - default_storage
     ResourceFlavourPatch:
       type: object
       additionalProperties: false
