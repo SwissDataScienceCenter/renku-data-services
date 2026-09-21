@@ -1,5 +1,6 @@
 """crc modules converters and validators."""
 
+from collections.abc import Mapping
 from typing import Literal, overload
 from urllib.parse import urlparse
 
@@ -247,8 +248,27 @@ def validate_resource_class_update(
         raise errors.ValidationError(message="The default storage cannot be larger than the max allowable storage.")
 
 
-def validate_resource_pool_post(body: apispec.ResourcePool) -> models.UnsavedResourcePool:
-    """Validate a resource pool object."""
+def _flavour_for(
+    body: ResourceClassBody, flavours: Mapping[str, models.ResourceFlavour] | None
+) -> models.ResourceFlavour | None:
+    """Find the resource flavour that a resource class body links to."""
+    if not isinstance(body, apispec.ResourceClassFromFlavour):
+        return None
+    flavour = (flavours or {}).get(body.resource_flavour_id)
+    if flavour is None:
+        raise errors.MissingResourceError(
+            message=f"Resource flavour with id {body.resource_flavour_id} does not exist."
+        )
+    return flavour
+
+
+def validate_resource_pool_post(
+    body: apispec.ResourcePool, flavours: Mapping[str, models.ResourceFlavour] | None = None
+) -> models.UnsavedResourcePool:
+    """Validate a resource pool object.
+
+    Classes that link to a resource flavour need that flavour in ``flavours``, keyed on its id.
+    """
     if len(body.name) > 40:
         # TODO: Should this be added to the API spec instead?
         raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
@@ -280,7 +300,10 @@ def validate_resource_pool_post(body: apispec.ResourcePool) -> models.UnsavedRes
     quota = validate_quota(body=body.quota) if body.quota else None
     remote = validate_remote(body=body.remote) if body.remote else None
     pool_kind = remote.kind if remote is not None else None
-    classes = [validate_resource_class(body=new_cls, pool_kind=pool_kind) for new_cls in body.classes]
+    classes = [
+        validate_resource_class(body=new_cls, pool_kind=pool_kind, flavour=_flavour_for(new_cls, flavours))
+        for new_cls in body.classes
+    ]
 
     default_classes: list[models.UnsavedResourceClass] = []
     for cls in classes:
