@@ -86,6 +86,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         member_repo=dm.member_repo,
         cluster_repo=dm.cluster_repo,
+        flavour_repo=dm.resource_flavour_repo,
     )
     classes = ClassesBP(
         name="classes",

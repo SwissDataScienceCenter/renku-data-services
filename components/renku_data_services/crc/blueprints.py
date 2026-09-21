@@ -1,6 +1,7 @@
 """Compute resource control (CRC) app."""
 
 import asyncio
+from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
@@ -48,7 +49,13 @@ class ResourcePoolsBP(CustomBlueprint):
     rp_repo: ResourcePoolRepository
     member_repo: MemberRepository
     cluster_repo: ClusterRepository
+    flavour_repo: ResourceFlavourRepository
     authenticator: base_models.Authenticator
+
+    async def _resolve_flavours(self, classes: Sequence[ResourceClassBody]) -> dict[str, ResourceFlavour]:
+        """Load every resource flavour that the given resource class bodies link to."""
+        ids = {cls.resource_flavour_id for cls in classes if isinstance(cls, apispec.ResourceClassFromFlavour)}
+        return {i: await self.flavour_repo.get_flavour(ULID.from_str(i)) for i in ids}
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all resource pools."""
@@ -70,7 +77,8 @@ class ResourcePoolsBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourcePool)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourcePool) -> HTTPResponse:
-            new_resource_pool = validate_resource_pool_post(body=body)
+            flavours = await self._resolve_flavours(body.classes)
+            new_resource_pool = validate_resource_pool_post(body=body, flavours=flavours)
             res = await self.rp_repo.insert_resource_pool(api_user=user, new_resource_pool=new_resource_pool)
             return validated_json(apispec.ResourcePoolWithId, res, status=201)
 
