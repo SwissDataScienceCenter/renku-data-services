@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import datetime
 import os
 import time
+import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from typing import Annotated, Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from mcp import types as mcp_types
 from mcp.server.fastmcp import FastMCP
@@ -243,12 +245,10 @@ def _launcher_summary(data: dict[str, Any]) -> dict[str, Any]:
 
 def _project_path(ident: str) -> str:
     """Turn a project ID or namespace/slug into an API path segment."""
-    import urllib.parse
-
     if "/" in ident:
         ns, slug = ident.split("/", 1)
-        return f"/namespaces/{urllib.parse.quote(ns, safe='')}/projects/{urllib.parse.quote(slug, safe='')}"
-    return f"/projects/{urllib.parse.quote(ident, safe='')}"
+        return f"/namespaces/{quote(ns, safe='')}/projects/{quote(slug, safe='')}"
+    return f"/projects/{quote(ident, safe='')}"
 
 
 def create_server(
@@ -1013,8 +1013,6 @@ def create_server(
         On timeout returns {"state": <last_state>, "timed_out": true} — always check
         timed_out before assuming the session is running.
         """
-        import asyncio
-
         terminal = {"running", "succeeded", "failed", "error", "stopped"}
         success = {"running", "succeeded"}
         deadline = time.time() + timeout
@@ -1068,8 +1066,6 @@ def create_server(
         a new one — always verify _created=true in the response. If _created=false, delete
         the returned session and retry.
         """
-        import uuid
-
         launcher = await _api(ctx, "GET", f"/session_launchers/{launcher_id}")
         # Normalise hyphen/underscore variants returned by different API versions.
         # None means the API predates launcher_type — treat as interactive, so block job_run.
@@ -1131,8 +1127,6 @@ def create_server(
         On timeout returns {"state": <last_state>, "timed_out": true} — always check
         timed_out and follow up with job_list to confirm actual state before retrying.
         """
-        import asyncio
-
         terminal = {"succeeded", "completed", "finished", "failed", "error", "stopped"}
         deadline = time.time() + timeout
         session: dict[str, Any] = {}
@@ -1198,8 +1192,6 @@ def create_server(
         interval: Annotated[int, Field(description="Poll interval in seconds", ge=1)] = 15,
     ) -> dict[str, Any]:
         """Wait for an image build to complete. Returns final state; includes logs on failure."""
-        import asyncio
-
         terminal = {"succeeded", "failed", "error"}
         deadline = time.time() + timeout
         build: dict[str, Any] = {}
@@ -1310,8 +1302,6 @@ def create_server(
         {"status": <last_status>, "timed_out": true} — always check timed_out before
         telling the user the app is up.
         """
-        import asyncio
-
         terminal = {"ready", "failed"}
         deadline = time.time() + timeout
         app: dict[str, Any] = {}
