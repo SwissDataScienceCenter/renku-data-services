@@ -8,12 +8,14 @@ from sanic.response import HTTPResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
-from renku_data_services import base_models
+from renku_data_services import base_models, errors
 from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate
 from renku_data_services.base_models.validation import validated_json
+from renku_data_services.notebooks import models as nb_models
+from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.session_runners import apispec
 from renku_data_services.session_runners.core import (
     validate_patch_assigned_session_secrets,
@@ -28,6 +30,7 @@ class SessionRunnersBP(CustomBlueprint):
     """Handlers for session runners."""
 
     session_runners_repo: SessionRunnersRepository
+    k8s_v2_client: NotebookK8sClient
     authenticator: base_models.Authenticator
     internal_authenticator: RenkuSelfAuthenticator
     internal_token_mint: RenkuSelfTokenMint
@@ -114,6 +117,44 @@ class SessionRunnersBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/session_runners/<session_runner_id:ulid>", ["DELETE"], _delete_session_runner
+
+    def get_assigned_session_details(self) -> BlueprintFactoryResponse:
+        """Get the details of a session assigned to a given runner."""
+
+        @authenticate(self.internal_authenticator)
+        @only_authenticated
+        async def _get_assigned_session_details(
+            _: Request, user: base_models.APIUser, session_runner_id: ULID, session_id: str
+        ) -> JSONResponse:
+            async with self.session_maker() as session, session.begin():
+                assigned_session = await self.session_runners_repo.get_assigned_session(
+                    session=session, user=user, session_runner_id=session_runner_id, renku_session_id=session_id
+                )
+            user_id = user.id
+            assert user_id is not None
+            k8s_session = await self.k8s_v2_client.get_session(session_id, user_id)
+            if k8s_session is None:
+                raise errors.MissingResourceError(
+                    message=f"The assigned session {session_id} does not exist or you do not have access to it."
+                )
+            response = apispec.AssignedSessionDetails(
+                session_id=assigned_session.session_id,
+                runner_id=str(assigned_session.runner_id) if assigned_session.runner_id else None,  # TODO
+                spec=apispec.Spec(
+                    image=k8s_session.spec.session.image,
+                    url=k8s_session.base_url() or "None",
+                    session_type=nb_models.SessionType.interactive.value,  # TODO
+                    command=list(k8s_session.spec.session.command) if k8s_session.spec.session.command else [],
+                    args=list(k8s_session.spec.session.args) if k8s_session.spec.session.args else [],
+                ),
+            )
+            return validated_json(apispec.AssignedSessionDetails, response)
+
+        return (
+            "/session_runners/<session_runner_id:ulid>/sessions/<session_id>",
+            ["GET"],
+            _get_assigned_session_details,
+        )
 
     def get_assigned_session_secrets(self) -> BlueprintFactoryResponse:
         """Get the secrets necesaary to run a session assigned to a given runner."""

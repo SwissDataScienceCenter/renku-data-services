@@ -200,6 +200,26 @@ class SessionRunnersRepository:
         await session.delete(runner_orm)
         return None
 
+    async def get_assigned_session(
+        self, session: AsyncSession, user: base_models.APIUser, session_runner_id: ULID, renku_session_id: str
+    ) -> models.AssignedSession:
+        """Get the details of a session assigned to a given runner."""
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        stmt = (
+            select(schemas.AssignedSessionORM)
+            .where(schemas.AssignedSessionORM.id == renku_session_id)
+            .where(schemas.AssignedSessionORM.runner_id == session_runner_id)
+            .where(schemas.AssignedSessionORM.user_id == user.id)
+        )
+        res = await session.scalars(stmt)
+        session_orm = res.one_or_none()
+        if session_orm is None:
+            raise errors.MissingResourceError(
+                message=f"The assigned session {renku_session_id} does not exist or you do not have access to it."
+            )
+        return session_orm.dump()
+
     async def get_assigned_session_secrets(
         self, session: AsyncSession, user: base_models.APIUser, session_runner_id: ULID, renku_session_id: str
     ) -> Sequence[models.AssignedSessionSecret]:
