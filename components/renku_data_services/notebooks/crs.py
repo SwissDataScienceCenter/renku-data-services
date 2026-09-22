@@ -361,6 +361,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         ):
             command_args = list(self.spec.session.args) if self.spec.session.args else []
 
+        frontend_variant = self.metadata.labels.get("renku.io/frontend-variant")
         return apispec.SessionResponse(
             image=self.spec.session.image,
             name=self.metadata.name,
@@ -389,6 +390,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             session_type=session_type,
             submission_id=submission_id,
             command_args=command_args,
+            frontend_variant=frontend_variant,
         )
 
     def base_url(self) -> str | None:
