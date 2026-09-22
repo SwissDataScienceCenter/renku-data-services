@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import datetime
 import json
 from typing import Any
 from unittest.mock import AsyncMock
@@ -82,19 +81,6 @@ def tool_result_dict(result: Any) -> dict[str, Any]:
     return json.loads(result.content[0].text)
 
 
-def make_session(state: str, started_at: str | None = None, will_delete_at: str | None = None) -> dict[str, Any]:
+def make_session(state: str) -> dict[str, Any]:
     """Build a minimal session dict for test assertions."""
-    s: dict[str, Any] = {"id": "test-session", "status": {"state": state}}
-    if started_at:
-        s["started_at"] = started_at
-    if will_delete_at:
-        s["will_delete_at"] = will_delete_at
-    return s
-
-
-def iso_ago(seconds: int) -> str:
-    return (datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=seconds)).isoformat()
-
-
-def iso_future(seconds: int) -> str:
-    return (datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=seconds)).isoformat()
+    return {"id": "test-session", "status": {"state": state}}

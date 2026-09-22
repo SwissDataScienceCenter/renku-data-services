@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
 from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 
-from renku_data_services.mcp_api.client import RenkuApiClient
+from renku_data_services.mcp_api.client import ApiResponse, RenkuApiClient
 from renku_data_services.mcp_api.main import (
     TokenNotFoundError,
     _authorization_server_doc,
@@ -22,10 +21,8 @@ from renku_data_services.mcp_api.server import (
     _launcher_summary,
     _project_path,
     _secret_keys,
-    _started_recently,
 )
 from test.bases.renku_data_services.mcp_api.conftest import (
-    iso_ago,
     make_session,
     mcp_session,
     tool_result_dict,
@@ -201,13 +198,14 @@ async def test_api_raises_on_http_error(httpx_mock):
 
 
 @pytest.mark.asyncio
-async def test_api_returns_headers_when_requested(httpx_mock):
-    httpx_mock.add_response(json={"id": "1"}, headers={"ETag": '"abc123"'})
+async def test_api_returns_status_and_headers_when_requested(httpx_mock):
+    httpx_mock.add_response(status_code=201, json={"id": "1"}, headers={"ETag": '"abc123"'})
     api = RenkuApiClient(base_url="https://test.renkulab.io")
-    result, headers = await api.request("GET", "/projects/1", "tok", return_headers=True)
+    resp = await api.request("GET", "/projects/1", "tok", full_response=True)
 
-    assert result == {"id": "1"}
-    assert "etag" in {k.lower() for k in headers}
+    assert resp.body == {"id": "1"}
+    assert resp.status == 201
+    assert "etag" in {k.lower() for k in resp.headers}
 
 
 # ------------------------------------------------------------------ #
@@ -350,7 +348,7 @@ async def test_list_tools_smoke(mock_api):
 
 @pytest.mark.asyncio
 async def test_job_run_marks_new_session(mock_api):
-    """job_run sets _created=True when started_at is recent."""
+    """201 means the API started this session, so _created is True."""
     non_interactive_launcher = {"id": "launcher-1", "launcher_type": "non_interactive"}
 
     async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
@@ -358,7 +356,7 @@ async def test_job_run_marks_new_session(mock_api):
             return {"is_admin": False}
         if method == "GET" and "session_launchers" in path:
             return non_interactive_launcher
-        return make_session("running", started_at=iso_ago(5))
+        return ApiResponse(body=make_session("running"), status=201, headers={})
 
     mock_api.request.side_effect = fake_api
 
@@ -370,7 +368,11 @@ async def test_job_run_marks_new_session(mock_api):
 
 @pytest.mark.asyncio
 async def test_job_run_marks_stale_session(mock_api):
-    """job_run sets _created=False when the platform returned a pre-existing session."""
+    """200 means the API handed back a session that already existed, so _created is False.
+
+    The API is idempotent on (user, project, launcher, cluster, submission_id) and reports
+    which happened in the status code — see blueprints.py, `status = 201 if created else 200`.
+    """
     non_interactive_launcher = {"id": "launcher-1", "launcher_type": "non_interactive"}
 
     async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
@@ -378,7 +380,7 @@ async def test_job_run_marks_stale_session(mock_api):
             return {"is_admin": False}
         if method == "GET" and "session_launchers" in path:
             return non_interactive_launcher
-        return make_session("running", started_at=iso_ago(300))
+        return ApiResponse(body=make_session("running"), status=200, headers={})
 
     mock_api.request.side_effect = fake_api
 
@@ -463,8 +465,8 @@ async def test_project_repo_add_sends_etag(mock_api):
     async def fake_api(method: str, path: str, token: str, body: Any = None, **kwargs: Any) -> Any:
         if path == "/user":
             return {"is_admin": False}
-        if method == "GET" and kwargs.get("return_headers"):
-            return project, {"ETag": '"v1"'}
+        if method == "GET" and kwargs.get("full_response"):
+            return ApiResponse(body=project, status=200, headers={"ETag": '"v1"'})
         return {"id": "proj-1", "repositories": ["https://github.com/x/y"]}
 
     mock_api.request.side_effect = fake_api
@@ -932,30 +934,3 @@ async def test_unlinked_connector_created_after_user_agrees(mock_api):
 
     assert result.isError is not True
     assert [c.args[1] for c in api.request.call_args_list if c.args[0] == "POST"] == ["/data_connectors"]
-
-
-class TestStartedRecently:
-    """job_run infers whether a session is new from its start time — these are the edge cases."""
-
-    def test_just_started_is_new(self):
-        assert _started_recently({"started_at": iso_ago(2)}) is True
-
-    def test_long_running_is_pre_existing(self):
-        assert _started_recently({"started_at": iso_ago(3600)}) is False
-
-    def test_reads_nested_status(self):
-        assert _started_recently({"status": {"started_at": iso_ago(3600)}}) is False
-
-    def test_accepts_zulu_suffix(self):
-        """fromisoformat handles 'Z' natively on the Python this runs on."""
-        stamp = datetime.datetime.now(datetime.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-        assert _started_recently({"started_at": stamp}) is True
-
-    def test_assumes_utc_for_naive_timestamps(self):
-        naive = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)).replace(tzinfo=None).isoformat()
-        assert _started_recently({"started_at": naive}) is False
-
-    @pytest.mark.parametrize("value", [None, "", "not-a-timestamp", 12345, {}])
-    def test_unusable_timestamp_counts_as_new(self, value):
-        """Better to treat an unknown session as new than to have the agent delete it."""
-        assert _started_recently({"started_at": value}) is True

@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.mcp_api.client import RenkuApiClient
+from renku_data_services.mcp_api.client import ApiResponse, RenkuApiClient
 from renku_data_services.mcp_api.server import _admin_checked_token
 from test.bases.renku_data_services.mcp_api.conftest import (
     mcp_session,
@@ -40,7 +40,7 @@ class SanicRenkuApiClient(RenkuApiClient):
         *,
         query: dict[str, Any] | None = None,
         extra_headers: dict[str, str] | None = None,
-        return_headers: bool = False,
+        full_response: bool = False,
     ) -> Any:
         headers: dict[str, str] = {"Authorization": f"Bearer {token}"}
         if extra_headers:
@@ -58,8 +58,8 @@ class SanicRenkuApiClient(RenkuApiClient):
             raise RuntimeError(f"HTTP {response.status}: {response.text}")
 
         result = response.json if response.content_type and "json" in response.content_type else None
-        if return_headers:
-            return result, dict(response.headers)
+        if full_response:
+            return ApiResponse(body=result, status=response.status, headers=dict(response.headers))
         return result
 
 
@@ -134,7 +134,7 @@ async def test_project_create_and_delete(
         project = tool_result_dict(created)
         project_id = project["id"]
 
-        deleted = await session.call_tool("project_delete", {"project": project_id})
+        deleted = await session.call_tool("project_delete", {"project": project_id, "confirm": True})
         assert deleted.isError is not True
 
 
@@ -184,9 +184,9 @@ async def test_launcher_create_without_launcher_type(
                 launcher_result.isError is not True
             ), f"launcher_create failed without launcher_type: {launcher_result.content[0].text}"
             launcher_id = tool_result_dict(launcher_result)["id"]
-            await session.call_tool("launcher_delete", {"launcher_id": launcher_id})
+            await session.call_tool("launcher_delete", {"launcher_id": launcher_id, "confirm": True})
         finally:
-            await session.call_tool("project_delete", {"project": project_id})
+            await session.call_tool("project_delete", {"project": project_id, "confirm": True})
 
 
 @pytest.mark.asyncio
@@ -223,6 +223,6 @@ async def test_launcher_create_non_interactive(
             assert launcher_result.isError is not True
             launcher = tool_result_dict(launcher_result)
             assert launcher.get("launcher_type") == "non_interactive"
-            await session.call_tool("launcher_delete", {"launcher_id": launcher["id"]})
+            await session.call_tool("launcher_delete", {"launcher_id": launcher["id"], "confirm": True})
         finally:
-            await session.call_tool("project_delete", {"project": project_id})
+            await session.call_tool("project_delete", {"project": project_id, "confirm": True})

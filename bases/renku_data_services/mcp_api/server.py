@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
-import datetime
 import os
 import time
 import uuid
@@ -226,28 +225,6 @@ async def _require_confirmation(ctx: Context, action: str, *, confirmed: bool) -
     result = await ctx.elicit(message=f"{action}. Go ahead?", schema=_Confirmation)
     if result.action != "accept" or not result.data.confirm:
         raise RuntimeError(f"The user did not agree to this: {action}. Do not retry it.")
-
-
-_NEW_SESSION_MAX_AGE = datetime.timedelta(seconds=60)
-
-
-def _started_recently(session: dict[str, Any], within: datetime.timedelta = _NEW_SESSION_MAX_AGE) -> bool:
-    """Whether the session started within `within` of now.
-
-    Launching a session can return an existing one instead of creating it, and the response
-    does not say which happened — so a session that started a while ago is taken to be
-    pre-existing. A missing or unparseable timestamp counts as newly created: the alternative
-    is telling the agent to delete a session that might be the one it just started.
-    """
-    started_at = session.get("started_at") or (session.get("status") or {}).get("started_at")
-    if not isinstance(started_at, str):
-        return True
-    with suppress(ValueError):
-        started = datetime.datetime.fromisoformat(started_at)
-        if started.tzinfo is None:
-            started = started.replace(tzinfo=datetime.UTC)
-        return datetime.datetime.now(datetime.UTC) - started < within
-    return True
 
 
 def _launcher_summary(data: dict[str, Any]) -> dict[str, Any]:
@@ -529,8 +506,9 @@ def create_server(
         repository_url: Annotated[str, Field(description="Git URL to add")],
     ) -> dict[str, Any]:
         """Add a Git repository URL to a project's repositories list."""
-        proj, resp_headers = await _api(ctx, "GET", _project_path(project), return_headers=True)
-        etag = resp_headers.get("ETag") or resp_headers.get("etag") or proj.get("etag")
+        resp = await _api(ctx, "GET", _project_path(project), full_response=True)
+        proj = resp.body
+        etag = resp.headers.get("ETag") or resp.headers.get("etag") or proj.get("etag")
         if not etag:
             raise RuntimeError("Could not get project ETag — cannot PATCH safely")
         repos = list(proj.get("repositories") or [])
@@ -1082,11 +1060,12 @@ def create_server(
         After calling this, use job_wait(session_id) to wait for completion — do not sleep
         or poll manually.
 
-        Pre-flight: call job_list(project_id=...) and check for any existing session from
-        the same launcher_id. If one exists in a non-terminal state, call session_delete on
-        it first. The platform may silently return an existing session rather than creating
-        a new one — always verify _created=true in the response. If _created=false, delete
-        the returned session and retry.
+        Launching is idempotent: the platform returns an already-running session instead of
+        starting a second one when the user, project, launcher, cluster and submission_id all
+        match. The response says which happened in _created — true for a session this call
+        started, false for one that was already there. On _created=false, either use that
+        session or session_delete it and retry with a different submission_id; do not assume
+        your job started.
         """
         launcher = await _api(ctx, "GET", f"/session_launchers/{launcher_id}")
         # Normalise hyphen/underscore variants returned by different API versions.
@@ -1108,8 +1087,12 @@ def create_server(
             body["job_command_override"] = job_command_override
         if job_args_override is not None:
             body["job_args_override"] = job_args_override
-        data = await _api(ctx, "POST", "/sessions", body)
-        data["_created"] = _started_recently(data)
+        # The API is idempotent on (user, project, launcher, cluster, submission_id): if such a
+        # session already exists it is returned instead of a new one, and says so with 200
+        # rather than 201.
+        resp = await _api(ctx, "POST", "/sessions", body, full_response=True)
+        data: dict[str, Any] = resp.body
+        data["_created"] = resp.status == 201
         return data
 
     @mcp.tool()

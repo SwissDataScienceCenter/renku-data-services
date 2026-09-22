@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpx
 
 DEFAULT_TIMEOUT = 30.0
+
+
+class ApiResponse(NamedTuple):
+    """A data API response where more than the body matters."""
+
+    body: Any
+    status: int
+    headers: dict[str, str]
 
 
 class RenkuApiClient:
@@ -38,9 +46,14 @@ class RenkuApiClient:
         *,
         query: dict[str, Any] | None = None,
         extra_headers: dict[str, str] | None = None,
-        return_headers: bool = False,
+        full_response: bool = False,
     ) -> Any:
-        """Make an authenticated call to the Renku data API."""
+        """Make an authenticated call to the Renku data API.
+
+        Returns the parsed body, or an ApiResponse when full_response is set — needed where
+        the status code or a header carries meaning the body does not, such as 201 vs 200 on
+        POST /sessions, or an ETag required for a subsequent PATCH.
+        """
         url = f"{self.base_url}/api/data{path}"
         params = {k: str(v) for k, v in (query or {}).items() if v is not None}
         headers: dict[str, str] = {
@@ -65,6 +78,6 @@ class RenkuApiClient:
                 raise RuntimeError(f"HTTP {exc.response.status_code}: {exc.response.text}") from exc
 
             result = resp.json() if resp.content else None
-            if return_headers:
-                return result, dict(resp.headers)
+            if full_response:
+                return ApiResponse(body=result, status=resp.status_code, headers=dict(resp.headers))
             return result
