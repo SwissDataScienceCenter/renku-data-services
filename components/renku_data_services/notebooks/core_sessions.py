@@ -1259,6 +1259,9 @@ async def start_session(
         "renku.io/session-type": str(session_type),
     }
 
+    if launcher.environment.build_parameters:
+        labels["renku.io/frontend-variant"] = launcher.environment.build_parameters.frontend_variant
+
     if session_location == SessionLocation.remote:
         labels["renku.io/remote-tunnel"] = "allow"
 
