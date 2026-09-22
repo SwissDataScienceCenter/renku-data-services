@@ -99,6 +99,16 @@ async def _api(ctx: Context, method: str, path: str, body: Any = None, **kwargs:
     return await _client(ctx).request(method, path, _token(ctx), body, **kwargs)
 
 
+async def _poll_get(ctx: Context, path: str) -> dict[str, Any]:
+    """GET during a wait loop, always returning a dict so callers can read fields off it.
+
+    Failures propagate: a deleted session or an unreachable API ends the wait with an error
+    the agent can act on, rather than being absorbed until the timeout expires.
+    """
+    value = await _api(ctx, "GET", path)
+    return value if isinstance(value, dict) else {}
+
+
 # ---------------------------------------------------------------------------
 # Guardrails enforced in code rather than asked for in the instructions
 # ---------------------------------------------------------------------------
@@ -1020,7 +1030,7 @@ def create_server(
         state = "unknown"
         poll = 3.0
         while time.time() < deadline:
-            session = await _api(ctx, "GET", f"/sessions/{session_id}")
+            session = await _poll_get(ctx, f"/sessions/{session_id}")
             status = session.get("status") or {}
             state = status.get("state") or session.get("state") or "unknown"
             if state in terminal:
@@ -1115,9 +1125,8 @@ def create_server(
     ) -> dict[str, Any]:
         """Wait for a non-interactive job to reach a terminal state.
 
-        Polls both session status and logs on every interval so the caller always has
-        the latest output. Logs are included in the result regardless of success or failure,
-        with amalthea-session first.
+        Logs are fetched once the wait ends — on success, failure or timeout — and included
+        in the result with amalthea-session first.
         On timeout returns {"state": <last_state>, "timed_out": true} — always check
         timed_out and follow up with job_list to confirm actual state before retrying.
         """
@@ -1125,30 +1134,29 @@ def create_server(
         deadline = time.time() + timeout
         session: dict[str, Any] = {}
         state = "unknown"
-        logs: Any = None
+        timed_out = True
         poll = 3.0
         while time.time() < deadline:
-            session, logs = await asyncio.gather(
-                _api(ctx, "GET", f"/sessions/{session_id}"),
-                _api(ctx, "GET", f"/sessions/{session_id}/logs"),
-                return_exceptions=True,
-            )
-            if isinstance(session, BaseException):
-                session = {}
-            if isinstance(logs, BaseException):
-                logs = None
+            session = await _poll_get(ctx, f"/sessions/{session_id}")
             status = session.get("status") or {}
             state = status.get("state") or session.get("state") or "unknown"
             if state in terminal:
-                result: dict[str, Any] = {"state": state, "timed_out": False, "session": session}
-                if isinstance(logs, dict):
-                    result["logs"] = dict(sorted(logs.items(), key=lambda kv: (kv[0] != "amalthea-session", kv[0])))
-                elif logs is not None:
-                    result["logs"] = logs
-                return result
+                timed_out = False
+                break
             await asyncio.sleep(min(poll, interval))
             poll = min(poll * 1.5, interval)
-        return {"state": state, "timed_out": True, "session": session, "logs": logs}
+
+        # Fetched after the loop rather than on every poll: only the final set is ever
+        # returned, and a long wait would otherwise repeat this ~120 times for nothing.
+        result: dict[str, Any] = {"state": state, "timed_out": timed_out, "session": session}
+        logs: Any = None
+        with suppress(Exception):
+            logs = await _api(ctx, "GET", f"/sessions/{session_id}/logs")
+        if isinstance(logs, dict):
+            result["logs"] = dict(sorted(logs.items(), key=lambda kv: (kv[0] != "amalthea-session", kv[0])))
+        elif logs is not None:
+            result["logs"] = logs
+        return result
 
     # ------------------------------------------------------------------ #
     # Builds                                                               #
@@ -1192,7 +1200,7 @@ def create_server(
         state = "unknown"
         poll = 3.0
         while time.time() < deadline:
-            build = await _api(ctx, "GET", f"/builds/{build_id}")
+            build = await _poll_get(ctx, f"/builds/{build_id}")
             state = build.get("status", "unknown")
             if state in terminal:
                 result: dict[str, Any] = {"state": state, "timed_out": False, "build": build}
@@ -1302,7 +1310,7 @@ def create_server(
         status = "unknown"
         poll = 3.0
         while time.time() < deadline:
-            app = await _api(ctx, "GET", f"/apps/{app_name}")
+            app = await _poll_get(ctx, f"/apps/{app_name}")
             status = app.get("status") or "unknown"
             if status in terminal:
                 result: dict[str, Any] = {"status": status, "timed_out": False, "app": app}

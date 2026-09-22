@@ -19,6 +19,19 @@ class ApiResponse(NamedTuple):
     headers: dict[str, str]
 
 
+class ApiError(RuntimeError):
+    """A call to the data API failed.
+
+    Subclasses RuntimeError because the message is what the agent reads and acts on, and
+    tools already surface RuntimeError that way. The status is kept as an attribute for
+    callers that need to branch on it; 0 means the API never answered.
+    """
+
+    def __init__(self, status: int, detail: str) -> None:
+        super().__init__(f"HTTP {status}: {detail}" if status else detail)
+        self.status = status
+
+
 class RenkuApiClient:
     """Calls the Renku data API on behalf of the user whose token is supplied per request.
 
@@ -65,17 +78,22 @@ class RenkuApiClient:
             headers.update(extra_headers)
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.request(
-                method,
-                url,
-                params=params or None,
-                content=json.dumps(body).encode() if body is not None else None,
-                headers=headers,
-            )
+            try:
+                resp = await client.request(
+                    method,
+                    url,
+                    params=params or None,
+                    content=json.dumps(body).encode() if body is not None else None,
+                    headers=headers,
+                )
+            except httpx.RequestError as exc:
+                # No response at all — a timeout, DNS failure, refused connection. Reported
+                # with status 0 so callers can treat it as "not this time" rather than "wrong".
+                raise ApiError(0, f"Could not reach the Renku data API: {exc}") from exc
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:
-                raise RuntimeError(f"HTTP {exc.response.status_code}: {exc.response.text}") from exc
+                raise ApiError(exc.response.status_code, exc.response.text) from exc
 
             result = resp.json() if resp.content else None
             if full_response:

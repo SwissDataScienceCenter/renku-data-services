@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from renku_data_services.mcp_api.client import ApiResponse, RenkuApiClient
+from renku_data_services.mcp_api.client import ApiError, ApiResponse, RenkuApiClient
 from renku_data_services.mcp_api.main import (
     TokenNotFoundError,
     _authorization_server_doc,
@@ -934,3 +934,77 @@ async def test_unlinked_connector_created_after_user_agrees(mock_api):
 
     assert result.isError is not True
     assert [c.args[1] for c in api.request.call_args_list if c.args[0] == "POST"] == ["/data_connectors"]
+
+
+# ------------------------------------------------------------------ #
+# Wait loops                                                           #
+# ------------------------------------------------------------------ #
+
+
+def test_api_error_keeps_the_status():
+    err = ApiError(404, "Session not found")
+    assert err.status == 404
+    assert "HTTP 404" in str(err)
+    assert isinstance(err, RuntimeError), "tools surface RuntimeError messages to the agent"
+
+
+@pytest.mark.asyncio
+async def test_wait_tolerates_an_unexpected_body(mock_api, monkeypatch):
+    """A null or oddly shaped body must not crash the loop with AttributeError."""
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    bodies = iter([None, ["unexpected"], make_session("running")])
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        if path == "/user":
+            return {"is_admin": False}
+        return next(bodies, make_session("running"))
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, _):
+        result = await session.call_tool("session_wait", {"session_id": "s1", "interval": 1})
+
+    assert result.isError is not True
+    assert tool_result_dict(result)["state"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_admin_refusal_is_not_swallowed_by_a_wait(mock_api, monkeypatch):
+    """The loop must not absorb errors that are not about the resource being waited on."""
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        return {"is_admin": True} if path == "/user" else make_session("running")
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, _):
+        result = await session.call_tool("session_wait", {"session_id": "s1", "timeout": 600})
+
+    assert result.isError is True
+    assert "admin" in result.content[0].text.lower()
+
+
+@pytest.mark.asyncio
+async def test_job_wait_fetches_logs_once(mock_api, monkeypatch):
+    """Logs come once at the end, not on every poll — a long wait would repeat it ~120 times."""
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    states = iter(["starting", "starting", "succeeded"])
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        if path == "/user":
+            return {"is_admin": False}
+        if path.endswith("/logs"):
+            return {"amalthea-session": "done", "other": "x"}
+        return make_session(next(states, "succeeded"))
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, api):
+        result = await session.call_tool("job_wait", {"session_id": "s1", "interval": 1})
+
+    log_calls = [c for c in api.request.call_args_list if str(c.args[1]).endswith("/logs")]
+    assert len(log_calls) == 1
+    payload = tool_result_dict(result)
+    assert payload["state"] == "succeeded"
+    assert list(payload["logs"]) == ["amalthea-session", "other"], "amalthea-session sorts first"
