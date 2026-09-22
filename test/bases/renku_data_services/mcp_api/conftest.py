@@ -10,6 +10,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+from mcp import types
 from mcp.client.session import ClientSession
 from mcp.shared.memory import create_client_server_memory_streams
 
@@ -25,12 +26,33 @@ def mock_api() -> RenkuApiClient:
     return api
 
 
+def elicitation_callback(answer: bool | None):
+    """Build a client elicitation handler that answers confirmations for us.
+
+    Passing one makes the test client declare the elicitation capability, which is what the
+    server checks before it will ask. `answer=None` declines the request, as a user clicking
+    "no" would; True and False both accept and return that value for the `confirm` field.
+    """
+
+    async def _callback(context, params):
+        if answer is None:
+            return types.ElicitResult(action="decline")
+        return types.ElicitResult(action="accept", content={"confirm": answer})
+
+    return _callback
+
+
 @contextlib.asynccontextmanager
-async def mcp_session(api: RenkuApiClient, token: str = "test-token"):
+async def mcp_session(api: RenkuApiClient, token: str = "test-token", elicit: bool | None = ...):  # type: ignore[assignment]
     """Async context manager that runs the MCP server in-process.
-    Must be used within a single asyncio task to keep anyio cancel scopes happy."""
+    Must be used within a single asyncio task to keep anyio cancel scopes happy.
+
+    By default the client declares no elicitation capability, matching a client that cannot
+    prompt. Pass elicit=True/False/None to declare it and answer accordingly.
+    """
     set_current_token(token)
     server = create_server(api)
+    callback = None if elicit is ... else elicitation_callback(elicit)
 
     async with create_client_server_memory_streams() as (client_streams, server_streams):
         task = asyncio.create_task(
@@ -41,7 +63,7 @@ async def mcp_session(api: RenkuApiClient, token: str = "test-token"):
             )
         )
         try:
-            async with ClientSession(*client_streams) as session:
+            async with ClientSession(*client_streams, elicitation_callback=callback) as session:
                 await session.initialize()
                 yield session, api
         finally:

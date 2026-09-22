@@ -11,10 +11,11 @@ from contextlib import asynccontextmanager, suppress
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
+from mcp import types as mcp_types
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.server import Context
 from mcp.server.transport_security import TransportSecuritySettings
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from renku_data_services.mcp_api.client import RenkuApiClient
 
@@ -97,6 +98,134 @@ async def _api(ctx: Context, method: str, path: str, body: Any = None, **kwargs:
     return await _client(ctx).request(method, path, _token(ctx), body, **kwargs)
 
 
+# ---------------------------------------------------------------------------
+# Guardrails enforced in code rather than asked for in the instructions
+# ---------------------------------------------------------------------------
+
+# Every option rclone marks as sensitive, across all providers. The data API replaces such
+# values with a "<sensitive>" placeholder rather than storing them, so a credential sent here
+# never persists — but it has already passed through the agent's context and every log between
+# here and the API, which is what refusing it prevents.
+#
+# Copied from the schema rather than imported: reading it at runtime would pull the storage,
+# app_config and errors components plus a bundled schema file into a service that otherwise has
+# six dependencies. test_secret_field_list_matches_rclone_schema fails if the schema grows a
+# sensitive option missing from this list, so the copy cannot drift silently. Regenerate with:
+#
+#     poetry run python -c "from renku_data_services.storage.rclone import RCloneValidator; \
+#     print(sorted({o.name for p in RCloneValidator().providers.values() \
+#     for o in p.options if getattr(o, 'sensitive', False)}))"
+_RCLONE_SECRET_OPTIONS = frozenset(
+    {
+        "access_key_id",
+        "bearer_token",
+        "client_access_token",
+        "client_id",
+        "client_refresh_token",
+        "client_salted_key_pass",
+        "client_secret",
+        "client_uid",
+        "drive_id",
+        "impersonate",
+        "key",
+        "key_pem",
+        "link_password",
+        "msi_client_id",
+        "msi_mi_res_id",
+        "msi_object_id",
+        "pass",
+        "resource_key",
+        "root_folder_id",
+        "sas_url",
+        "secret_access_key",
+        "service_account_credentials",
+        "session_token",
+        "sse_customer_key",
+        "sse_customer_key_base64",
+        "sse_customer_key_md5",
+        "sse_kms_key_id",
+        "team_drive",
+        "tenant",
+        "token",
+        "user",
+        "username",
+    }
+)
+
+# Catches secret-looking keys that are not rclone options at all — a field invented by an
+# agent, or one added to some future backend. Endpoints and file paths are not secrets.
+_SECRET_KEY_PARTS = ("password", "passwd", "secret", "credential", "passphrase", "api_key", "private_key")
+_SECRET_KEY_ALLOWED_SUFFIXES = ("_file", "_path", "_url")
+
+
+def _is_secret_key(key: str) -> bool:
+    """Whether a configuration key is one that carries a credential."""
+    name = key.strip().lower()
+    if name in _RCLONE_SECRET_OPTIONS:
+        return True
+    if name.endswith(_SECRET_KEY_ALLOWED_SUFFIXES):
+        return False
+    return any(part in name for part in _SECRET_KEY_PARTS)
+
+
+def _secret_keys(value: Any, path: str = "") -> list[str]:
+    """Return the dotted paths of every key that looks like it carries a secret."""
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            here = f"{path}.{key}" if path else str(key)
+            # An empty value carries no secret — it is a field the user will fill in later.
+            if _is_secret_key(str(key)) and child not in (None, ""):
+                found.append(here)
+            found.extend(_secret_keys(child, here))
+    elif isinstance(value, list):
+        for i, child in enumerate(value):
+            found.extend(_secret_keys(child, f"{path}[{i}]"))
+    return found
+
+
+def _reject_secrets(value: Any, what: str) -> None:
+    """Refuse a payload that carries credentials, naming the offending fields."""
+    keys = _secret_keys(value)
+    if not keys:
+        return
+    raise RuntimeError(
+        f"Refusing to send credentials to the API: {what} contains {', '.join(sorted(keys))}. "
+        "Credentials must never be passed as tool arguments — they end up in the conversation "
+        "and in logs. Create the connector without them, then tell the user to add the secrets "
+        "through the Renku UI."
+    )
+
+
+class _Confirmation(BaseModel):
+    """Schema for a yes/no confirmation asked of the user via elicitation."""
+
+    confirm: bool = Field(description="Confirm that this operation should go ahead")
+
+
+async def _require_confirmation(ctx: Context, action: str, *, confirmed: bool) -> None:
+    """Get the user's agreement before doing something destructive.
+
+    Asks the user through the client when the client supports elicitation, which makes this
+    a step the agent cannot skip. Clients without that capability get a refusal telling the
+    agent to confirm and call again with confirm=true — weaker, since the agent can assert
+    it, but at least deliberate and visible in the call.
+    """
+    if confirmed:
+        return
+    supports_elicitation = ctx.session.check_client_capability(
+        mcp_types.ClientCapabilities(elicitation=mcp_types.ElicitationCapability())
+    )
+    if not supports_elicitation:
+        raise RuntimeError(
+            f"{action} needs the user's confirmation, and this client cannot be asked directly. "
+            "Ask the user, and only if they agree call this tool again with confirm=true."
+        )
+    result = await ctx.elicit(message=f"{action}. Go ahead?", schema=_Confirmation)
+    if result.action != "accept" or not result.data.confirm:
+        raise RuntimeError(f"The user did not agree to this: {action}. Do not retry it.")
+
+
 def _launcher_summary(data: dict[str, Any]) -> dict[str, Any]:
     """Attach a concise _handoff block to a launcher response for easy downstream use."""
     env = data.get("environment") or {}
@@ -175,10 +304,13 @@ def create_server(
             "or running a job, passing your requirements so matching=true is set correctly. "
             "Pick the smallest class where matching=true and pass its id.\n"
             "- Always pass project_id to connector_create so the connector is linked immediately. "
-            "A connector created without project_id is orphaned — not visible in any project.\n"
-            "- Never include credentials in connector storage configurations. "
-            "Direct the user to add secrets through the Renku UI after creation.\n"
-            "- Confirm with the user before deleting connectors, launchers, running sessions, or apps.\n"
+            "Without it the connector appears in no project, so the tool stops and asks the user.\n"
+            "- Never put credentials in connector storage configurations or patch bodies. The tools "
+            "refuse them outright — create the connector first, then have the user add secrets "
+            "through the Renku UI.\n"
+            "- Deleting a project, connector, launcher, session or app asks the user to confirm. "
+            "Do not set confirm=true to skip that; it exists only for clients that cannot show a "
+            "prompt, and then only after the user has actually agreed.\n"
             "- Never sleep or poll manually while waiting for sessions, jobs, builds, or apps. "
             "Always use session_wait(), job_wait(), build_wait(), or app_wait() instead.\n\n"
             "Apps:\n"
@@ -348,18 +480,23 @@ def create_server(
     async def project_delete(
         ctx: Context,
         project: Annotated[str, Field(description="Project ID or namespace/slug")],
+        confirm: Annotated[bool, Field(description="Set only after the user has agreed to the deletion")] = False,
     ) -> str:
-        """Delete a Renku project. Irreversible — confirm with the user before calling.
+        """Delete a Renku project. Irreversible — the user is asked to confirm before it proceeds.
 
         Before deleting, call session_list(project_id=<id>) for both session types and
         job_list(project_id=<id>). Then:
-        - Inform the user about the running sessions and pending jobs that will be stopped, and ask for
-          explicit confirmation before proceeding.
+        - Inform the user about the running sessions and pending jobs that will be stopped.
         - Running or pending sessions: stop them with session_delete.
         - Hibernated or paused sessions: warn the user that unsaved work inside those
-          sessions will be lost, and ask for explicit confirmation before stopping them.
+          sessions will be lost.
         """
         proj = await _api(ctx, "GET", _project_path(project))
+        await _require_confirmation(
+            ctx,
+            f"Permanently delete project {proj.get('name') or proj['id']!r} and everything in it",
+            confirmed=confirm,
+        )
         await _api(ctx, "DELETE", f"/projects/{proj['id']}")
         return f"Deleted project {proj['id']} ({proj.get('name', '')})"
 
@@ -473,12 +610,20 @@ def create_server(
           SFTP:    {"configuration": {"type": "sftp", "host": "..."}, "source_path": "/path", "target_path": "data", "readonly": true}
           Polybox: {"configuration": {"type": "polybox", "provider": "shared", "public_link": "https://..."}, "source_path": "/", "target_path": "data", "readonly": true}
 
-        Do NOT include credentials in the storage configuration. After creating the connector,
-        direct the user to add any required secrets (passwords, access keys) through the Renku UI.
+        Credentials in the storage configuration are refused, not ignored — create the connector
+        without them and direct the user to add secrets through the Renku UI.
 
-        Always pass project_id to link the connector immediately — a connector without a project
-        link is orphaned and not visible in any project.
+        Always pass project_id to link the connector immediately. Creating one without a project
+        link leaves it visible only in its namespace, so the tool asks the user to confirm first.
         """
+        _reject_secrets(storage, "the storage configuration")
+        if not project_id:
+            await _require_confirmation(
+                ctx,
+                f"Create data connector {name or 'from DOI'!r} without linking it to a project, "
+                "so it will not appear in any project",
+                confirmed=False,
+            )
         is_doi = (storage.get("configuration") or {}).get("type") == "doi"
         if is_doi:
             data = await _api(ctx, "POST", "/data_connectors/global", {"storage": storage})
@@ -524,7 +669,10 @@ def create_server(
           1. Call connector_patch(connector_id, {"namespace": "<your-username>"}) to move it to
              a user namespace — it is now independently owned.
           2. Call connector_unlink(connector_id, link_id) to remove the project association.
+
+        Credentials in the patch body are refused; secrets belong in the Renku UI.
         """
+        _reject_secrets(body, "the patch body")
         return await _api(ctx, "PATCH", f"/data_connectors/{connector_id}", body)
 
     @mcp.tool()
@@ -548,14 +696,16 @@ def create_server(
     async def connector_delete(
         ctx: Context,
         connector_id: Annotated[str, Field(description="Connector ID")],
+        confirm: Annotated[bool, Field(description="Set only after the user has agreed to the deletion")] = False,
     ) -> str:
         """Delete a data connector entirely.
 
         Works whether the connector lives in a project namespace or a user/group namespace.
-        Confirm with the user before calling.
+        The user is asked to confirm before it proceeds.
         To keep the connector but remove it from a project, use connector_unlink (user/group
         namespace) or connector_patch + connector_unlink (project namespace).
         """
+        await _require_confirmation(ctx, f"Delete data connector {connector_id}", confirmed=confirm)
         await _api(ctx, "DELETE", f"/data_connectors/{connector_id}")
         return f"Deleted connector {connector_id}"
 
@@ -708,8 +858,10 @@ def create_server(
     async def launcher_delete(
         ctx: Context,
         launcher_id: Annotated[str, Field(description="Launcher ID")],
+        confirm: Annotated[bool, Field(description="Set only after the user has agreed to the deletion")] = False,
     ) -> str:
-        """Delete a session launcher. Confirm with the user before calling."""
+        """Delete a session launcher. The user is asked to confirm before it proceeds."""
+        await _require_confirmation(ctx, f"Delete session launcher {launcher_id}", confirmed=confirm)
         await _api(ctx, "DELETE", f"/session_launchers/{launcher_id}")
         return f"Deleted launcher {launcher_id}"
 
@@ -814,8 +966,17 @@ def create_server(
     async def session_delete(
         ctx: Context,
         session_id: Annotated[str, Field(description="Session name or ID")],
+        confirm: Annotated[bool, Field(description="Set only after the user has agreed to stopping it")] = False,
     ) -> str:
-        """Stop and delete a session. Confirm with the user before calling."""
+        """Stop and delete a session. The user is asked to confirm before it proceeds.
+
+        Unsaved work inside a running or hibernated session is lost. Use
+        session_delete_if_failed instead to clear sessions that already stopped — that one
+        needs no confirmation, since a terminal session has nothing left to lose.
+        """
+        await _require_confirmation(
+            ctx, f"Stop and delete session {session_id}, losing any unsaved work in it", confirmed=confirm
+        )
         await _api(ctx, "DELETE", f"/sessions/{session_id}")
         return f"Deleted session {session_id}"
 
@@ -1127,8 +1288,12 @@ def create_server(
     async def app_delete(
         ctx: Context,
         app_name: Annotated[str, Field(description="App name")],
+        confirm: Annotated[bool, Field(description="Set only after the user has agreed to the deletion")] = False,
     ) -> str:
-        """Delete an app. Takes the app offline for its anonymous visitors — confirm with the user first."""
+        """Delete an app. The user is asked to confirm, since this takes it offline for its visitors."""
+        await _require_confirmation(
+            ctx, f"Delete app {app_name!r}, taking it offline for anyone currently using it", confirmed=confirm
+        )
         await _api(ctx, "DELETE", f"/apps/{app_name}")
         return f"Deleted app {app_name}"
 

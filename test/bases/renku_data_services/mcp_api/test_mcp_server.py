@@ -17,8 +17,10 @@ from renku_data_services.mcp_api.main import (
 )
 from renku_data_services.mcp_api.server import (
     _admin_checked_token,
+    _is_secret_key,
     _launcher_summary,
     _project_path,
+    _secret_keys,
 )
 from test.bases.renku_data_services.mcp_api.conftest import (
     iso_ago,
@@ -654,7 +656,7 @@ async def test_app_delete_confirms_by_name(mock_api):
     mock_api.request.side_effect = fake_api
 
     async with mcp_session(mock_api) as (session, api):
-        result = await session.call_tool("app_delete", {"app_name": "my-app"})
+        result = await session.call_tool("app_delete", {"app_name": "my-app", "confirm": True})
 
         method, path, *_ = api.request.call_args.args
         assert (method, path) == ("DELETE", "/apps/my-app")
@@ -698,3 +700,233 @@ async def test_launcher_create_omits_launcher_type_when_unset(mock_api):
         )
         _, _, _, body = api.request.call_args.args
         assert "launcher_type" not in body
+
+
+# ------------------------------------------------------------------ #
+# Guardrails enforced in code                                          #
+# ------------------------------------------------------------------ #
+
+
+class TestSecretDetection:
+    @pytest.mark.parametrize(
+        "key",
+        ["password", "pass", "secret_access_key", "access_key_id", "sas_url", "username", "key_pem", "KEY"],
+    )
+    def test_flags_credential_keys(self, key):
+        assert _secret_keys({"configuration": {key: "hunter2"}}) == [f"configuration.{key}"]
+
+    @pytest.mark.parametrize("key", ["key_file", "public_url", "source_path", "provider", "endpoint", "readonly"])
+    def test_allows_locations_and_flags(self, key):
+        assert _secret_keys({"configuration": {key: "value"}}) == []
+
+    def test_ignores_empty_values(self):
+        """An empty secret field is a placeholder the user will fill in, not a leaked credential."""
+        assert _secret_keys({"configuration": {"password": ""}}) == []
+
+    def test_finds_nested_and_listed(self):
+        found = _secret_keys({"a": [{"b": {"secret": "x"}}]})
+        assert found == ["a[0].b.secret"]
+
+
+@pytest.mark.asyncio
+async def test_connector_create_refuses_credentials(mock_api):
+    """A credential in the storage config is refused before any HTTP call is made."""
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        return {"is_admin": False} if path == "/user" else {"id": "dc-1"}
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, api):
+        result = await session.call_tool(
+            "connector_create",
+            {
+                "name": "my-s3",
+                "namespace": "myuser",
+                "project_id": "proj-1",
+                "storage": {"configuration": {"type": "s3", "secret_access_key": "AKIAsecret"}},
+            },
+        )
+
+    assert result.isError is True
+    text = result.content[0].text
+    assert "secret_access_key" in text
+    assert "AKIAsecret" not in text, "the refusal must not echo the credential back"
+    posts = [c for c in api.request.call_args_list if c.args[0] == "POST"]
+    assert posts == [], "nothing should reach the API when credentials are present"
+
+
+@pytest.mark.asyncio
+async def test_connector_patch_refuses_credentials(mock_api):
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        return {"is_admin": False} if path == "/user" else {}
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, api):
+        result = await session.call_tool(
+            "connector_patch",
+            {"connector_id": "dc-1", "body": {"storage": {"configuration": {"password": "hunter2"}}}},
+        )
+
+    assert result.isError is True
+    assert [c for c in api.request.call_args_list if c.args[0] == "PATCH"] == []
+
+
+@pytest.mark.asyncio
+async def test_destructive_tool_refuses_without_confirmation(mock_api):
+    """The in-process test client declares no elicitation capability, so deletion is refused."""
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        return {"is_admin": False} if path == "/user" else {}
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, api):
+        result = await session.call_tool("app_delete", {"app_name": "my-app"})
+
+    assert result.isError is True
+    assert "confirm" in result.content[0].text.lower()
+    assert [c for c in api.request.call_args_list if c.args[0] == "DELETE"] == []
+
+
+@pytest.mark.asyncio
+async def test_destructive_tool_proceeds_when_confirmed(mock_api):
+    """confirm=true is the fallback path for clients that cannot be asked."""
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        return {"is_admin": False} if path == "/user" else None
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, api):
+        result = await session.call_tool("app_delete", {"app_name": "my-app", "confirm": True})
+
+    assert result.isError is not True
+    deletes = [c for c in api.request.call_args_list if c.args[0] == "DELETE"]
+    assert [c.args[1] for c in deletes] == ["/apps/my-app"]
+
+
+@pytest.mark.asyncio
+async def test_session_delete_if_failed_needs_no_confirmation(mock_api):
+    """A terminal session has nothing left to lose, so cleanup is not gated."""
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        if path == "/user":
+            return {"is_admin": False}
+        return make_session("failed")
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, api):
+        result = await session.call_tool("session_delete_if_failed", {"session_id": "s1"})
+
+    assert result.isError is not True
+    assert [c for c in api.request.call_args_list if c.args[0] == "DELETE"] != []
+
+
+@pytest.mark.asyncio
+async def test_connector_create_unlinked_requires_confirmation(mock_api):
+    """Creating a connector with no project link asks first, rather than silently orphaning it."""
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        return {"is_admin": False} if path == "/user" else {"id": "dc-1"}
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, api):
+        result = await session.call_tool(
+            "connector_create",
+            {"name": "my-s3", "namespace": "myuser", "storage": {"configuration": {"type": "s3"}}},
+        )
+
+    assert result.isError is True
+    assert [c for c in api.request.call_args_list if c.args[0] == "POST"] == []
+
+
+def test_secret_field_list_matches_rclone_schema():
+    """The checked-in secret list must cover every option rclone marks sensitive.
+
+    _RCLONE_SECRET_OPTIONS is a copy, taken so the MCP server need not import the storage
+    component at runtime. This test is what keeps the copy honest: if rclone gains a
+    sensitive option, it fails and names it.
+    """
+    from renku_data_services.storage.rclone import RCloneValidator
+
+    validator = RCloneValidator()
+    sensitive = {
+        option.name
+        for provider in validator.providers.values()
+        for option in provider.options
+        if getattr(option, "sensitive", False)
+    }
+    missing = sorted(name for name in sensitive if not _is_secret_key(name))
+    assert not missing, f"rclone marks these sensitive but the MCP server would not refuse them: {missing}"
+
+
+@pytest.mark.asyncio
+async def test_destructive_tool_asks_the_user_and_proceeds(mock_api):
+    """With an elicitation-capable client the server asks, and a yes lets the delete through."""
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        return {"is_admin": False} if path == "/user" else None
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api, elicit=True) as (session, api):
+        result = await session.call_tool("app_delete", {"app_name": "my-app"})
+
+    assert result.isError is not True
+    assert [c.args[1] for c in api.request.call_args_list if c.args[0] == "DELETE"] == ["/apps/my-app"]
+
+
+@pytest.mark.asyncio
+async def test_destructive_tool_stops_when_user_says_no(mock_api):
+    """A 'no' answer stops the deletion — the agent cannot talk its way past this."""
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        return {"is_admin": False} if path == "/user" else None
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api, elicit=False) as (session, api):
+        result = await session.call_tool("app_delete", {"app_name": "my-app"})
+
+    assert result.isError is True
+    assert "did not agree" in result.content[0].text
+    assert [c for c in api.request.call_args_list if c.args[0] == "DELETE"] == []
+
+
+@pytest.mark.asyncio
+async def test_destructive_tool_stops_when_user_declines(mock_api):
+    """A declined prompt is refused too, not treated as consent."""
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        return {"is_admin": False} if path == "/user" else None
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api, elicit=None) as (session, api):
+        result = await session.call_tool("session_delete", {"session_id": "s1"})
+
+    assert result.isError is True
+    assert [c for c in api.request.call_args_list if c.args[0] == "DELETE"] == []
+
+
+@pytest.mark.asyncio
+async def test_unlinked_connector_created_after_user_agrees(mock_api):
+    """The orphan warning is a question, not a block — the user can say yes."""
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        return {"is_admin": False} if path == "/user" else {"id": "dc-1"}
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api, elicit=True) as (session, api):
+        result = await session.call_tool(
+            "connector_create",
+            {"name": "my-s3", "namespace": "myuser", "storage": {"configuration": {"type": "s3"}}},
+        )
+
+    assert result.isError is not True
+    assert [c.args[1] for c in api.request.call_args_list if c.args[0] == "POST"] == ["/data_connectors"]
