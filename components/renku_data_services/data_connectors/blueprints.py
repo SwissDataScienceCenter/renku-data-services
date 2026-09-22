@@ -1,7 +1,6 @@
 """Data connectors blueprint."""
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
 from sanic import Request
@@ -671,20 +670,7 @@ class DataConnectorsBP(CustomBlueprint):
 
                 case apispec.DepositProvider.scicat:
                     deposit_api_key = await self.__get_scicat_token(user)
-
-                    user_groups = await self.scicat_client.get_user_groups(deposit_api_key)
-                    # TODO: use scicat user instead
-                    deposit_data = {
-                        "contactEmail": user.email,
-                        "creationTime": datetime.now().isoformat(),
-                        "datasetName": body.name,
-                        "description": "",
-                        "owner": user.full_name,
-                        "ownerEmail": user.email,
-                        "ownerGroup": user_groups[0] if user_groups else "",  # TODO: user input from frontend instead?
-                        "sourceFolder": body.path,  # NOTE: body.path is only the relative path
-                        "type": "base",
-                    }
+                    deposit_data = await self.scicat_client.default_deposit_data(deposit_api_key, body)
                     scicat_dep = await self.scicat_client.create_deposit(deposit_api_key, deposit_data)
                     original_id = str(scicat_dep.pid)
 

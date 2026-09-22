@@ -901,9 +901,9 @@ async def create_deposit_upload(
                                 image=deposit_config.scicat.image,
                                 args=[
                                     "datasetIngestor",
-                                    "--noninteractive",
                                     "--scicat-url",
                                     deposit_config.scicat.api_url,
+                                    "--testenv",  # TODO: remove this flag when we move to production
                                     "--token",
                                     api_key,
                                     "--copy",
@@ -912,6 +912,7 @@ async def create_deposit_upload(
                                     "--ingest",
                                     "--pid",
                                     deposit_job.deposit.original_id,
+                                    "--noninteractive",
                                     "/metadata/metadata.json",
                                 ],
                                 working_dir=work_dir.as_posix(),

@@ -1,12 +1,14 @@
 """Client for the SciCat API."""
 
 import os
+from datetime import datetime
 from typing import cast
 from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel
 
+from renku_data_services.data_connectors.apispec import DepositPost
 from renku_data_services.errors import errors
 
 
@@ -108,3 +110,20 @@ class ScicatAPIClient:
                 detail=f"Message from SciCat: {res.text}",
             )
         return cast(str, res.json().get("access_token"))
+
+    async def default_deposit_data(self, api_key: str, body: DepositPost) -> dict:
+        """Get the default deposit data for a SciCat user."""
+        user_identity = await self.get_user_identity(api_key)
+        user = user_identity.get("profile", {})
+        user_groups = user.get("accessGroups", [])
+        return {
+            "contactEmail": user.get("email", ""),
+            "owner": user.get("displayName", ""),
+            "ownerEmail": user.get("email", ""),
+            "ownerGroup": user_groups[0] if user_groups else "",  # TODO: user input from frontend instead?
+            "creationTime": datetime.now().isoformat(),
+            "datasetName": body.name,
+            "description": "",
+            "sourceFolder": body.path,
+            "type": "base",
+        }
