@@ -108,11 +108,31 @@ poetry run pytest test/bases/renku_data_services/mcp_api/
 
 ## Token handling
 
-The MCP server does not validate tokens. It extracts the Bearer token from the
-`Authorization` header and forwards it with every call to the Renku data API. The
-data API is responsible for validating the token and enforcing permissions — if the
-token is missing or invalid, the data API rejects the request and the tool returns an
-error.
+In HTTP mode the server verifies the Bearer token before doing anything with it:
+signature against the Keycloak realm's JWKS, issuer, expiry, and that `renku-mcp` is
+among the token's audiences. The MCP specification requires a server to establish that
+a token was issued *for it* — without the audience check, a token minted for the Renku
+UI or CLI would be accepted here and grant the full tool surface.
+
+This requires an **audience mapper on the `renku-mcp` Keycloak client** that adds
+`renku-mcp` to the access token. The mapper must *add* to the audiences already there,
+not replace them: the same token is forwarded to the Renku data API, which requires one
+of `renku`, `renku-ui`, `renku-cli`, `swagger`. A correctly configured access token
+therefore carries both:
+
+```json
+"aud": ["renku", "renku-mcp"]
+```
+
+Deploy the mapper before deploying a server that checks for it, or every tool call will
+be rejected with a 401.
+
+Beyond that check the token is forwarded unchanged with every call to the data API,
+which validates it again and enforces all permissions. The MCP server grants nothing the
+user does not already have. Forwarding the caller's token rather than exchanging it is a
+deliberate choice — the specification would prefer a token exchange, which would also let
+the data API tell agent-initiated calls apart from the user's own; that is not
+implemented.
 
 In HTTP mode, unauthenticated requests to `/mcp` receive a `401` response with a
 `WWW-Authenticate` header pointing at the OAuth discovery endpoints. This is the
@@ -142,7 +162,9 @@ touched beyond the variable they set for this process.
 | Variable | Default | Description |
 |---|---|---|
 | `RENKU_BASE_URL` | `https://renkulab.io` | Target Renku deployment |
-| `KEYCLOAK_ISSUER_URL` | — | Keycloak realm URL (set by Helm chart in HTTP mode) |
+| `KEYCLOAK_ISSUER_URL` | — | Keycloak realm URL; required in HTTP mode, since tokens are verified against its JWKS |
+| `RENKU_MCP_AUDIENCE` | `renku-mcp` | Audience an access token must carry to be accepted |
+| `RENKU_MCP_ALLOW_UNVERIFIED_TOKENS` | — | Set to `1` to run HTTP mode without `KEYCLOAK_ISSUER_URL`, forwarding tokens unverified (local development only) |
 | `MCP_TRANSPORT` | `stdio` | `stdio` or `streamable-http` |
 | `MCP_HOST` | `0.0.0.0` | Bind host (HTTP mode) |
 | `MCP_PORT` | `9000` | Bind port (HTTP mode) |

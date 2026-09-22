@@ -18,6 +18,7 @@ packages = [
 python = "^3.13"
 mcp = { extras = ["cli"], version = "^1.0" }
 httpx = "^0.28"
+pyjwt = { extras = ["crypto"], version = "^2.10.1" }
 uvicorn = "^0.34"
 starlette = ">=1.0.1"
 pydantic = "^2.10.6"

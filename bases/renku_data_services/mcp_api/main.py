@@ -26,6 +26,7 @@ import os
 from collections.abc import Callable
 from typing import Any
 
+from renku_data_services.mcp_api.auth import TokenVerificationError, TokenVerifier
 from renku_data_services.mcp_api.client import RenkuApiClient
 from renku_data_services.mcp_api.server import create_server, set_current_token
 
@@ -141,22 +142,36 @@ def _build_http_app(base_url: str) -> Any:
         body, status = await _authorization_server_doc(keycloak_realm_url)
         return JSONResponse(body, status_code=status)
 
+    resource_metadata_url = f"{base_url}/.well-known/oauth-protected-resource"
+    verifier = TokenVerifier.from_env()
+
+    def _unauthorized(error: str | None = None) -> Response:
+        """401 pointing the client at the resource metadata, which is how it starts OAuth."""
+        challenge = f'Bearer resource_metadata="{resource_metadata_url}"'
+        if error:
+            challenge += f', error="invalid_token", error_description="{error}"'
+        return Response(status_code=401, headers={"WWW-Authenticate": challenge})
+
     class _AuthMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next: Any) -> Response:
             # Metadata endpoints are public — no auth required.
             if request.url.path.startswith("/.well-known/"):
                 return await call_next(request)
-            # We extract the token here but do not validate it. Validation
-            # happens implicitly downstream: if the token is invalid or expired,
-            # the Renku data API returns a 401 when the tool calls the API client.
             auth_header = request.headers.get("Authorization", "")
             token = auth_header.removeprefix("Bearer ").removeprefix("bearer ").strip()
             if not token:
-                resource_metadata_url = f"{base_url}/.well-known/oauth-protected-resource"
-                return Response(
-                    status_code=401,
-                    headers={"WWW-Authenticate": f'Bearer resource_metadata="{resource_metadata_url}"'},
-                )
+                return _unauthorized()
+            # Verify the token was issued for this server before doing anything with it.
+            # The token is still forwarded to the data API, which applies its own
+            # validation and enforces permissions; this check only establishes that the
+            # caller was given the token for the MCP server rather than for some other
+            # Renku client.
+            if verifier is not None:
+                try:
+                    verifier.verify(token)
+                except TokenVerificationError as err:
+                    logger.info("Rejected access token: %s", err)
+                    return _unauthorized(str(err))
             set_current_token(token)
             return await call_next(request)
 
@@ -182,9 +197,32 @@ async def _run_stdio() -> None:
     await mcp.run_stdio_async()
 
 
+def _check_http_auth_config() -> None:
+    """Refuse to serve unverified tokens by accident.
+
+    Without KEYCLOAK_ISSUER_URL there is nothing to verify signatures against, so every
+    presented token would be forwarded unchecked. That is a deliberate choice for local
+    development, never a default — so it has to be asked for.
+    """
+    if _keycloak_issuer_url():
+        return
+    if os.environ.get("RENKU_MCP_ALLOW_UNVERIFIED_TOKENS") == "1":
+        logger.warning(
+            "KEYCLOAK_ISSUER_URL is not set and RENKU_MCP_ALLOW_UNVERIFIED_TOKENS=1: "
+            "access tokens will be forwarded without verification. Never do this in a deployment."
+        )
+        return
+    raise RuntimeError(
+        "KEYCLOAK_ISSUER_URL must be set in HTTP mode so access tokens can be verified. "
+        "Set it to the Keycloak realm URL, or set RENKU_MCP_ALLOW_UNVERIFIED_TOKENS=1 to "
+        "run without verification (local development only)."
+    )
+
+
 def _run_http() -> None:
     import uvicorn
 
+    _check_http_auth_config()
     host = os.environ.get("MCP_HOST", "0.0.0.0")  # nosec B104 — intentional for server deployment
     port = int(os.environ.get("MCP_PORT", "9000"))
     app = _build_http_app(_api_client.base_url)
