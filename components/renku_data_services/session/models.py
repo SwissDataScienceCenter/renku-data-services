@@ -73,6 +73,7 @@ class FrontendVariant(StrEnum):
     rstudio = "rstudio"
     infer = "infer"
     none = "none"
+    ssh = "ssh"
 
 
 VALID_BUILDER_FRONTEND_COMBINATIONS: typing.Final[set[tuple[BuilderVariant, FrontendVariant]]] = {
@@ -489,6 +490,19 @@ BUILD_ENVIRONMENT_CONFIGS: Final[dict[str, UnsavedEnvironment]] = {
     ),
     FrontendVariant.infer.value: UnsavedEnvironment(
         name="inferred-frontend",
+        default_url="/",
+        port=BUILD_PORT,
+        container_image="image:unknown-at-the-moment",
+        working_directory=BUILD_WORKING_DIRECTORY,
+        mount_directory=BUILD_MOUNT_DIRECTORY,
+        uid=BUILD_UID,
+        gid=BUILD_GID,
+        environment_kind=EnvironmentKind.CUSTOM,
+        environment_image_source=EnvironmentImageSource.build,
+        strip_path_prefix=False,
+    ),
+    FrontendVariant.ssh.value: UnsavedEnvironment(
+        name="no-implicit-frontend",
         default_url="/",
         port=BUILD_PORT,
         container_image="image:unknown-at-the-moment",
