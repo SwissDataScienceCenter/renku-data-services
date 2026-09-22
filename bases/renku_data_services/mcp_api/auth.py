@@ -9,6 +9,14 @@ Keycloak ignores the RFC 8707 ``resource`` parameter, so the audience is instead
 an audience mapper on the ``renku-mcp`` client. The resulting access token carries both
 that audience and the one the Renku data API expects, which is why the token can still be
 forwarded downstream unchanged.
+
+The JWKS lookup and ``jwt.decode`` call here overlap with
+``renku_data_services.authn.keycloak.KeycloakAuthenticator``. That class is not reused
+because importing it pulls in sanic, sqlalchemy and the data API's app config — around 159
+modules — into what is otherwise a standalone service with six dependencies. It also
+hardcodes the data API's own audience list and returns an APIUser, neither of which fits
+here. The shared part is small enough to live twice for now; extracting it into a leaf
+module under ``authn`` that both call is the eventual fix.
 """
 
 from __future__ import annotations
