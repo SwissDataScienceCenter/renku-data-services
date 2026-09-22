@@ -4,27 +4,26 @@ Usage
 -----
 stdio (local dev / Claude Desktop):
     RENKU_ACCESS_TOKEN=<token> python -m renku_data_services.mcp_api
-    # or: rnk login  (token auto-discovered from rnk's token file)
 
 streamable-http (production):
     MCP_TRANSPORT=streamable-http MCP_HOST=0.0.0.0 MCP_PORT=9000 \\
         python -m renku_data_services.mcp_api
 
-Token resolution order
-----------------------
-1. RENKU_ACCESS_TOKEN, RENKU_TOKEN, or RENKU_CLI_ACCESS_TOKEN env var.
-2. rnk CLI token file (platform-specific path, token forwarded as-is to the data API).
+Token resolution
+----------------
+stdio mode reads RENKU_ACCESS_TOKEN, RENKU_TOKEN, or RENKU_CLI_ACCESS_TOKEN from the
+environment. This is what the MCP specification prescribes for stdio transports, which
+"SHOULD NOT" run the OAuth flow and should "retrieve credentials from the environment"
+instead. HTTP mode ignores all of this — there the token arrives per request as a Bearer
+header and the OAuth flow happens between the client and Keycloak.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
-import sys
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 from renku_data_services.mcp_api.client import RenkuApiClient
@@ -34,69 +33,34 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Multi-source credential resolution (mirrors the reference standalone server)
+# Credential resolution (stdio mode only)
 # ---------------------------------------------------------------------------
+
+_TOKEN_ENV_VARS = ("RENKU_ACCESS_TOKEN", "RENKU_TOKEN", "RENKU_CLI_ACCESS_TOKEN")
 
 
 def _base_url() -> str:
     return os.environ.get("RENKU_BASE_URL", "https://renkulab.io").rstrip("/")
 
 
-def _rnk_token_paths() -> list[Path]:
-    """Paths where the official rnk CLI stores its token file (platform-specific)."""
-    home = Path.home()
-    token_path = Path("io.renku.sdsc.renku-cli") / "token.json"
-    paths: list[Path] = []
-    if sys.platform == "darwin":
-        paths.append(home / "Library" / "Application Support" / token_path)
-    xdg = Path(os.environ.get("XDG_DATA_HOME", str(home / ".local" / "share")))
-    paths.append(xdg / token_path)
-    if appdata := os.environ.get("APPDATA"):
-        paths.append(Path(appdata) / token_path)
-    return paths
-
-
-def _load_rnk_token() -> str | None:
-    """Read an access token from the rnk CLI token file.
-
-    No JWT validation is performed here — the token is forwarded to the Renku
-    data API which is the authoritative validator (signature, issuer, expiry).
-    """
-    for path in _rnk_token_paths():
-        if not path.exists():
-            continue
-        try:
-            data = json.loads(path.read_text())
-        except (OSError, json.JSONDecodeError):
-            continue
-        response = data.get("response") or data
-        access = response.get("access_token")
-        if access:
-            return access
-    return None
-
-
 class TokenNotFoundError(Exception):
-    """Raised when no Renku token can be found from any source."""
+    """Raised when no Renku token is set in the environment."""
 
 
 def _resolve_token() -> str:
-    """Return the best available token, or raise TokenNotFoundError with a helpful message."""
-    # 1. Environment variables (explicit override)
-    for var in ("RENKU_ACCESS_TOKEN", "RENKU_TOKEN", "RENKU_CLI_ACCESS_TOKEN"):
+    """Return the token from the environment, or raise TokenNotFoundError.
+
+    The token is forwarded to the Renku data API as-is; nothing is validated here,
+    since the data API is the authoritative validator (signature, issuer, expiry).
+    """
+    for var in _TOKEN_ENV_VARS:
         if t := os.environ.get(var):
             return t
 
-    # 2. rnk CLI token file
-    if t := _load_rnk_token():
-        return t
-
-    rnk_paths = [str(p) for p in _rnk_token_paths()]
     raise TokenNotFoundError(
         f"Not authenticated for {_base_url()}.\n"
-        f"Run: rnk login\n"
-        f"rnk token paths searched: {', '.join(rnk_paths)}\n"
-        f"Or set RENKU_ACCESS_TOKEN in the MCP server environment config."
+        f"Set one of {', '.join(_TOKEN_ENV_VARS)} in the MCP server's environment "
+        f"configuration, then restart the server."
     )
 
 
@@ -206,8 +170,8 @@ def _build_http_app(base_url: str) -> Any:
 # Module-level objects so `mcp dev` can discover the server by name.
 _api_client = RenkuApiClient.from_env()
 
-# In stdio mode, pass _resolve_token as a lazy resolver so the server picks up
-# a fresh rnk login without needing a restart.
+# In stdio mode, pass _resolve_token as a lazy resolver so a missing token surfaces
+# on the first tool call rather than at import time.
 # In HTTP mode, the per-request middleware is the sole source of tokens.
 _is_stdio = os.environ.get("MCP_TRANSPORT", "stdio") != "streamable-http"
 _token_resolver: Callable[[], str] | None = _resolve_token if _is_stdio else None

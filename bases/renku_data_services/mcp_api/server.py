@@ -31,8 +31,7 @@ def _token(ctx: Context) -> str:
     t = _current_token.get()
     if t:
         return t
-    # In stdio mode, try the resolver so that a fresh rnk login is picked up
-    # without restarting the server.
+    # In stdio mode, ask the resolver for the token from the environment.
     resolver: Callable[[], str] | None = ctx.request_context.lifespan_context.get("token_resolver")
     if resolver:
         try:
@@ -130,9 +129,9 @@ def create_server(
     """Create and return the configured FastMCP server.
 
     api: client used by every tool to reach the Renku data API.
-    token_resolver: optional callable that returns a fresh token string (stdio mode).
-    When provided, _token() calls it on each request so a fresh rnk login is picked
-    up without restarting the server.
+    token_resolver: optional callable returning the token from the environment (stdio
+    mode). When provided, _token() calls it on the first request that needs a token,
+    so a missing token surfaces as a tool error rather than a startup crash.
     """
 
     @asynccontextmanager
@@ -164,9 +163,9 @@ def create_server(
             "- If any tool returns an error containing 'Bearer', '401', 'Unauthorized', or "
             "'authenticated: false', treat it as an auth failure — not an API or schema problem. "
             "Stop retrying other tools and ask the user to re-authenticate.\n"
-            "- In stdio mode: tell the user to run rnk login "
-            "(with --renku-url <base_url> for non-default deployments), "
-            "then retry the failed tool call — the server will pick up the new token automatically.\n"
+            "- In stdio mode: tell the user to set RENKU_ACCESS_TOKEN in the MCP server's "
+            "environment configuration and restart the server. The token is read from the "
+            "environment at startup, so a token added afterwards is not picked up until then.\n"
             "- In HTTP mode (remote server): tell the user to reconnect the MCP server in their "
             "client (Claude Code, pi, Codex) to trigger a new OAuth login.\n\n"
             "Safety rules:\n"
@@ -245,7 +244,7 @@ def create_server(
             return {
                 "authenticated": False,
                 "base_url": base_url,
-                "hint": "Set RENKU_ACCESS_TOKEN in the MCP server environment, or run 'rnk login'.",
+                "hint": "Set RENKU_ACCESS_TOKEN in the MCP server's environment and restart it.",
             }
         try:
             # Direct client call, not _api(): this tool must work for admins too,

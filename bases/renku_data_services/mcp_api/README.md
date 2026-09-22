@@ -52,21 +52,23 @@ Both clients will open a browser to complete the Keycloak login on first connect
 
 ## Running locally (stdio mode)
 
-Useful for development or pointing at a remote deployment without managing tokens manually.
+Useful for development, or for pointing at a deployment that has no MCP server of its own.
+
+In stdio mode the token comes from the environment — there is no OAuth flow and no token
+file. This follows the MCP specification, which says stdio implementations "SHOULD NOT"
+run the authorization flow and should "retrieve credentials from the environment" instead.
 
 ```bash
-# Authenticate once
-rnk login
-
 # Install dependencies
 cd projects/renku_mcp_server
 poetry install
 
 # Run against renkulab.io (default)
-poetry run python -m renku_data_services.mcp_api.main
+RENKU_ACCESS_TOKEN=<token> poetry run python -m renku_data_services.mcp_api.main
 
 # Run against a different deployment
-RENKU_BASE_URL=https://dev.renku.ch poetry run python -m renku_data_services.mcp_api.main
+RENKU_BASE_URL=https://dev.renku.ch RENKU_ACCESS_TOKEN=<token> \
+  poetry run python -m renku_data_services.mcp_api.main
 ```
 
 Then configure Claude Code to use it:
@@ -78,14 +80,17 @@ Then configure Claude Code to use it:
     "args": ["run", "python", "-m", "renku_data_services.mcp_api.main"],
     "cwd": "/path/to/projects/renku_mcp_server",
     "env": {
-      "RENKU_BASE_URL": "https://<deployment>"
+      "RENKU_BASE_URL": "https://<deployment>",
+      "RENKU_ACCESS_TOKEN": "<token>"
     }
   }
 }
 ```
 
-The server discovers your token automatically from the `rnk` CLI token file — no `RENKU_ACCESS_TOKEN`
-needed after `rnk login`.
+`RENKU_TOKEN` and `RENKU_CLI_ACCESS_TOKEN` are accepted as alternatives. The token is read
+from the process environment, so a token that expires or changes needs the server restarted.
+For everyday use prefer the deployed server over stdio mode: it handles login through OAuth
+and refreshes without any of this.
 
 ## Development / testing
 
@@ -114,6 +119,10 @@ In HTTP mode, unauthenticated requests to `/mcp` receive a `401` response with a
 signal MCP clients use to trigger the OAuth flow; the flow itself happens entirely
 between the client and Keycloak.
 
+In stdio mode there is no OAuth flow: the token is read from the environment at startup.
+The server reads no token files and no OS keyring, so nothing of the user's credentials is
+touched beyond the variable they set for this process.
+
 ## Safety rules (enforced in code)
 
 - **Admin accounts are blocked.** The server calls `GET /user` on each tool invocation
@@ -137,5 +146,5 @@ between the client and Keycloak.
 | `MCP_TRANSPORT` | `stdio` | `stdio` or `streamable-http` |
 | `MCP_HOST` | `0.0.0.0` | Bind host (HTTP mode) |
 | `MCP_PORT` | `9000` | Bind port (HTTP mode) |
-| `RENKU_ACCESS_TOKEN` | — | Bearer token (stdio mode; auto-discovered if unset) |
+| `RENKU_ACCESS_TOKEN` | — | Bearer token, required in stdio mode (`RENKU_TOKEN` and `RENKU_CLI_ACCESS_TOKEN` also accepted) |
 | `RENKU_MCP_ALLOW_ADMIN` | — | Set to `1` to allow admin accounts |
