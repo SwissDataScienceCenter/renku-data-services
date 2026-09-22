@@ -197,10 +197,12 @@ def create_server(
             "uid, gid and command/args. The container runs as non-root with all capabilities "
             "dropped, so an image that insists on root will not start.\n"
             "2. Build from code: environment_image_source='build' with repository, builder_variant "
-            "and frontend_variant. The buildpack takes the start command from a Procfile in the "
-            "repository — an app needs a 'web:' process there, since nothing else tells the "
-            "buildpack how to serve it. Call build_list(environment_id) then build_wait(build_id) "
-            "and let the image finish before app_launch.\n"
+            "and frontend_variant. For an app pass frontend_variant='none' — the session frontends "
+            "(jupyterlab, vscodium, ttyd) are for interactive sessions, and 'none' adds no frontend "
+            "so the app itself is what gets served. The buildpack then takes the start command from "
+            "a Procfile in the repository, which needs a 'web:' process, since with no frontend "
+            "nothing else tells it how to serve the app. Call build_list(environment_id) then "
+            "build_wait(build_id) and let the image finish before app_launch.\n"
             "Whichever way, the served process MUST bind $RENKU_SESSION_PORT on $RENKU_SESSION_IP "
             "(0.0.0.0). This is the most common way an app fails: bind the buildpack's default port "
             "instead and Knative never probes the right port, so the app stays 'pending' and then "
@@ -638,11 +640,12 @@ def create_server(
 
         For launcher_type='app', options 2 and 3 are both fine, but the served process must
         bind $RENKU_SESSION_PORT on 0.0.0.0 — an app that listens anywhere else never becomes
-        ready. With option 2 the buildpack reads the start command from a Procfile in the
-        repository, so the repo needs a 'web:' process that honours $RENKU_SESSION_PORT; with
-        option 3 the image must run as non-root, since apps drop all capabilities. Apps get no
-        RENKU_BASE_URL_PATH — they are served at the root of their own hostname, so skip the
-        base-path configuration described below.
+        ready. With option 2 pass frontend_variant='none' (jupyterlab/vscodium/ttyd are session
+        frontends) and give the repo a Procfile with a 'web:' process that honours
+        $RENKU_SESSION_PORT — with no frontend, that process is the app. With option 3 the image
+        must run as non-root, since apps drop all capabilities. Apps get no RENKU_BASE_URL_PATH —
+        they are served at the root of their own hostname, so skip the base-path configuration
+        described below.
 
         Session environment variables — available inside every running session/job container:
           RENKU_BASE_URL_PATH  URL path prefix for the session (e.g. /sessions/my-session-abc)
