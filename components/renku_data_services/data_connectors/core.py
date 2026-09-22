@@ -627,6 +627,12 @@ async def create_deposit_upload(
             data={k: base64.b64encode(v.encode()).decode() for k, v in data.items()},
         )
 
+    def _get_copy_source(mount_path: PurePosixPath, deposit_path: PurePosixPath | None) -> PurePosixPath:
+        copy_source = mount_path
+        if deposit_path is not None:
+            copy_source = mount_path / (deposit_path.relative_to("/") if deposit_path.is_absolute() else deposit_path)
+        return copy_source
+
     def _create_envidat_upload_job_manifest(
         deposit_config: DepositConfig,
         deposit_job: models.DepositJob,
@@ -636,13 +642,7 @@ async def create_deposit_upload(
         suspended: bool = False,
     ) -> V1Job:
         mount_path = PurePosixPath("/" + pvc_name)
-        copy_source = mount_path
-        if deposit_job.deposit.path is not None:
-            copy_source = mount_path / (
-                deposit_job.deposit.path.relative_to("/")
-                if deposit_job.deposit.path.is_absolute()
-                else deposit_job.deposit.path
-            )
+        copy_source = _get_copy_source(mount_path, deposit_job.deposit.path)
         destination = f"envidat:{deposit_config.envidat.s3_bucket}/{deposit_job.deposit.original_id}/"
         return V1Job(
             metadata=V1ObjectMeta(
@@ -716,13 +716,7 @@ async def create_deposit_upload(
         suspended: bool = False,
     ) -> V1Job:
         mount_path = PurePosixPath("/" + pvc_name)
-        copy_source = mount_path
-        if deposit_job.deposit.path is not None:
-            copy_source = mount_path / (
-                deposit_job.deposit.path.relative_to("/")
-                if deposit_job.deposit.path.is_absolute()
-                else deposit_job.deposit.path
-            )
+        copy_source = _get_copy_source(mount_path, deposit_job.deposit.path)
 
         return V1Job(
             metadata=V1ObjectMeta(
@@ -792,13 +786,7 @@ async def create_deposit_upload(
         labels: dict[str, str] | None = None,
     ) -> V1ConfigMap:
         mount_path = PurePosixPath("/" + pvc_name)
-        copy_source = mount_path
-        if deposit_job.deposit.path is not None:
-            copy_source = mount_path / (
-                deposit_job.deposit.path.relative_to("/")
-                if deposit_job.deposit.path.is_absolute()
-                else deposit_job.deposit.path
-            )
+        copy_source = _get_copy_source(mount_path, deposit_job.deposit.path)
 
         return V1ConfigMap(
             metadata=V1ObjectMeta(

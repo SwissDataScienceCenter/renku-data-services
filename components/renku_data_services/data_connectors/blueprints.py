@@ -663,10 +663,9 @@ class DataConnectorsBP(CustomBlueprint):
                     deposit_api_key: str | None = None
 
                 case apispec.DepositProvider.zenodo:
-                    token = await self.__get_provider_access_token(user, ProviderKind.zenodo)
-                    zenodo_dep = await self.zenodo_client.create_deposit(token, body.name)
+                    deposit_api_key = await self.__get_provider_access_token(user, ProviderKind.zenodo)
+                    zenodo_dep = await self.zenodo_client.create_deposit(deposit_api_key, body.name)
                     original_id = str(zenodo_dep.id)
-                    deposit_api_key = token
 
                 case apispec.DepositProvider.scicat:
                     deposit_api_key = await self.__get_scicat_token(user)
@@ -764,8 +763,10 @@ class DataConnectorsBP(CustomBlueprint):
                                 message="The deposit needs to be published on Envidat before being marked complete."
                             )
                     case models.DepositSource.zenodo:
-                        token = await self.__get_provider_access_token(user, ProviderKind.zenodo)
-                        zenodo_dep = await self.zenodo_client.get_deposit(token, saved_dep.deposit.original_id)
+                        deposit_api_key = await self.__get_provider_access_token(user, ProviderKind.zenodo)
+                        zenodo_dep = await self.zenodo_client.get_deposit(
+                            deposit_api_key, saved_dep.deposit.original_id
+                        )
                         if not zenodo_dep:
                             raise errors.MissingResourceError(
                                 message=f"The Zenodo deposit with id {saved_dep.deposit.original_id} cannot be found."
@@ -827,8 +828,7 @@ class DataConnectorsBP(CustomBlueprint):
 
             match saved_dep.deposit.source:
                 case models.DepositSource.zenodo:
-                    token = await self.__get_provider_access_token(user, ProviderKind.zenodo)
-                    deposit_api_key = token
+                    deposit_api_key = await self.__get_provider_access_token(user, ProviderKind.zenodo)
                 case models.DepositSource.scicat:
                     deposit_api_key = await self.__get_scicat_token(user)
                 case x:
