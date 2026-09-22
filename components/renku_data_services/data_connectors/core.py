@@ -20,7 +20,6 @@ from kubernetes.client import (
     V1ConfigMap,
     V1ConfigMapVolumeSource,
     V1Container,
-    V1EmptyDirVolumeSource,
     V1EnvFromSource,
     V1EnvVar,
     V1Job,
@@ -34,7 +33,6 @@ from kubernetes.client import (
     V1PersistentVolumeClaimVolumeSource,
     V1PodSpec,
     V1PodTemplateSpec,
-    V1ProjectedVolumeSource,
     V1Secret,
     V1SecretEnvSource,
     V1SecurityContext,
@@ -70,7 +68,6 @@ from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectMeta
-from renku_data_services.notebooks.config.dynamic import _CustomCaCertsConfig
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER, SCICAT_V1_PROVIDER
 from renku_data_services.storage.rclone import RCloneValidator, parse_storage_url
@@ -812,7 +809,7 @@ async def create_deposit_upload(
             data={
                 "metadata.json": json.dumps(
                     {
-                        "datasetName": metadata.datasetName,
+                        "datasetName": deposit_job.deposit.name,
                         "sourceFolder": copy_source.as_posix(),
                         "ownerGroup": metadata.ownerGroup,
                         "type": metadata.type,
@@ -820,43 +817,6 @@ async def create_deposit_upload(
                 )
             },
         )
-
-    def _create_ca_certs_init_container(ca_certs: _CustomCaCertsConfig) -> tuple[V1Container, list[V1Volume]]:
-        """Build an init container that merges the system CA bundle with any custom CA secrets.
-
-        Mirrors the equivalent session-pod pattern in
-        renku_data_services.notebooks.api.amalthea_patches.init_containers.certificates_container.
-        """
-        init_container = V1Container(
-            name="init-certificates",
-            image=ca_certs.image,
-            security_context=V1SecurityContext(
-                allow_privilege_escalation=False,
-                run_as_non_root=True,
-                capabilities=V1Capabilities(drop=["ALL"]),
-                run_as_user=1000,
-                run_as_group=1000,
-            ),
-            volume_mounts=[
-                V1VolumeMount(name="etc-ssl-certs", mount_path="/etc/ssl/certs/", read_only=False),
-                V1VolumeMount(name="custom-ca-certs", mount_path=ca_certs.path, read_only=True),
-            ],
-        )
-        volumes = [
-            V1Volume(name="etc-ssl-certs", empty_dir=V1EmptyDirVolumeSource(medium="Memory")),
-            V1Volume(
-                name="custom-ca-certs",
-                projected=V1ProjectedVolumeSource(
-                    default_mode=440,
-                    sources=[
-                        {"secret": {"name": secret.get("secret")}}
-                        for secret in ca_certs.secrets
-                        if isinstance(secret, dict) and secret.get("secret") is not None
-                    ],
-                ),
-            ),
-        ]
-        return init_container, volumes
 
     def _create_scicat_upload_job_manifest(
         deposit_config: DepositConfig,
@@ -868,8 +828,6 @@ async def create_deposit_upload(
         suspended: bool = False,
     ) -> V1Job:
         mount_path = PurePosixPath("/" + pvc_name)
-        cert_init_container, cert_volumes = _create_ca_certs_init_container(deposit_config.ca_certs)
-        ca_bundle_path = "/etc/ssl/certs/ca-certificates.crt"
 
         return V1Job(
             metadata=V1ObjectMeta(
@@ -887,7 +845,6 @@ async def create_deposit_upload(
                         restart_policy="Never",
                         tolerations=deposit_config.tolerations,
                         node_selector=deposit_config.node_selector,
-                        init_containers=[cert_init_container],
                         containers=[
                             V1Container(
                                 security_context=V1SecurityContext(
@@ -916,14 +873,9 @@ async def create_deposit_upload(
                                     "/metadata/metadata.json",
                                 ],
                                 working_dir=work_dir.as_posix(),
-                                env=[
-                                    V1EnvVar(name="SSL_CERT_FILE", value=ca_bundle_path),
-                                    V1EnvVar(name="REQUESTS_CA_BUNDLE", value=ca_bundle_path),
-                                ],
                                 volume_mounts=[
                                     V1VolumeMount(mount_path=mount_path.as_posix(), read_only=True, name=pvc_name),
                                     V1VolumeMount(mount_path="/metadata", read_only=True, name="metadata-volume"),
-                                    V1VolumeMount(name="etc-ssl-certs", mount_path="/etc/ssl/certs/", read_only=True),
                                 ],
                             )
                         ],
@@ -942,7 +894,6 @@ async def create_deposit_upload(
                                     items=[V1KeyToPath(key="metadata.json", path="metadata.json")],
                                 ),
                             ),
-                            *cert_volumes,
                         ],
                     ),
                 ),
@@ -1095,7 +1046,7 @@ async def create_deposit_upload(
     data_src = extras.data_sources[0]
 
     base_name = deposit_job.name
-    pvc_name = deposit_job.name + "-ds"
+    pvc_name = "deposit-" + str(deposit_job.deposit.id).lower() + "-ds"
     # NOTE: The user id label is important - that is how authorization is enforced
     # TODO: Cleanup user-id authorization - add it in the k8s client
     labels = {"renku.io/deposit_id": str(deposit_job.deposit.id), "renku.io/safe-username": user.id}
