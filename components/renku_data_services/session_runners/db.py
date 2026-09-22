@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import random
+import secrets
 from base64 import b64decode, b64encode
 from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import UTC, datetime
@@ -221,9 +222,7 @@ class SessionRunnersRepository:
         encrypted_secrets = session_orm.secrets
         if encrypted_secrets is None:
             return []
-        user_secret_key = self._get_user_secret_key(user_orm=session_orm.user)
-        if user_secret_key is None:
-            raise errors.PreconditionRequiredError(message="User secret key is not defined.")
+        user_secret_key = await self._get_user_secret_key(session=session, user_orm=session_orm.user)
         return self._decrypt_assigned_session_secrets(
             encrypted_secrets, user_secret_key=user_secret_key, user_id=user.id
         )
@@ -254,9 +253,7 @@ class SessionRunnersRepository:
             )
         if not update:
             return []
-        user_secret_key = self._get_user_secret_key(user_orm=session_orm.user)
-        if user_secret_key is None:
-            raise errors.PreconditionRequiredError(message="User secret key is not defined.")
+        user_secret_key = await self._get_user_secret_key(session=session, user_orm=session_orm.user)
         session_orm.secrets = self._encrypt_assigned_session_secrets(
             update, user_secret_key=user_secret_key, user_id=user.id, existing_secrets=session_orm.secrets
         )
@@ -289,11 +286,15 @@ class SessionRunnersRepository:
             )
         return session_orm.dump()
 
-    def _get_user_secret_key(self, user_orm: schemas.UserORM) -> str | None:
+    async def _get_user_secret_key(self, session: AsyncSession, user_orm: schemas.UserORM) -> str:
         """Get the user secret key from the ORM instance."""
-        if user_orm.secret_key is None:
-            return None
-        return crypt.decrypt_string(self._encryption_key, user_orm.keycloak_id, user_orm.secret_key)
+        if user_orm.secret_key is not None:
+            return crypt.decrypt_string(self._encryption_key, user_orm.keycloak_id, user_orm.secret_key)
+        # create a new secret key
+        secret_key = secrets.token_urlsafe(32)
+        user_orm.secret_key = crypt.encrypt_string(self._encryption_key, user_orm.keycloak_id, secret_key)
+        await session.flush()
+        return secret_key
 
     @staticmethod
     def _generate_registration_token(size: int = 18) -> str:
