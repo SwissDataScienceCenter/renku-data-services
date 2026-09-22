@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -21,6 +22,7 @@ from renku_data_services.mcp_api.server import (
     _launcher_summary,
     _project_path,
     _secret_keys,
+    _started_recently,
 )
 from test.bases.renku_data_services.mcp_api.conftest import (
     iso_ago,
@@ -930,3 +932,30 @@ async def test_unlinked_connector_created_after_user_agrees(mock_api):
 
     assert result.isError is not True
     assert [c.args[1] for c in api.request.call_args_list if c.args[0] == "POST"] == ["/data_connectors"]
+
+
+class TestStartedRecently:
+    """job_run infers whether a session is new from its start time — these are the edge cases."""
+
+    def test_just_started_is_new(self):
+        assert _started_recently({"started_at": iso_ago(2)}) is True
+
+    def test_long_running_is_pre_existing(self):
+        assert _started_recently({"started_at": iso_ago(3600)}) is False
+
+    def test_reads_nested_status(self):
+        assert _started_recently({"status": {"started_at": iso_ago(3600)}}) is False
+
+    def test_accepts_zulu_suffix(self):
+        """fromisoformat handles 'Z' natively on the Python this runs on."""
+        stamp = datetime.datetime.now(datetime.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        assert _started_recently({"started_at": stamp}) is True
+
+    def test_assumes_utc_for_naive_timestamps(self):
+        naive = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)).replace(tzinfo=None).isoformat()
+        assert _started_recently({"started_at": naive}) is False
+
+    @pytest.mark.parametrize("value", [None, "", "not-a-timestamp", 12345, {}])
+    def test_unusable_timestamp_counts_as_new(self, value):
+        """Better to treat an unknown session as new than to have the agent delete it."""
+        assert _started_recently({"started_at": value}) is True

@@ -228,6 +228,28 @@ async def _require_confirmation(ctx: Context, action: str, *, confirmed: bool) -
         raise RuntimeError(f"The user did not agree to this: {action}. Do not retry it.")
 
 
+_NEW_SESSION_MAX_AGE = datetime.timedelta(seconds=60)
+
+
+def _started_recently(session: dict[str, Any], within: datetime.timedelta = _NEW_SESSION_MAX_AGE) -> bool:
+    """Whether the session started within `within` of now.
+
+    Launching a session can return an existing one instead of creating it, and the response
+    does not say which happened — so a session that started a while ago is taken to be
+    pre-existing. A missing or unparseable timestamp counts as newly created: the alternative
+    is telling the agent to delete a session that might be the one it just started.
+    """
+    started_at = session.get("started_at") or (session.get("status") or {}).get("started_at")
+    if not isinstance(started_at, str):
+        return True
+    with suppress(ValueError):
+        started = datetime.datetime.fromisoformat(started_at)
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=datetime.UTC)
+        return datetime.datetime.now(datetime.UTC) - started < within
+    return True
+
+
 def _launcher_summary(data: dict[str, Any]) -> dict[str, Any]:
     """Attach a concise _handoff block to a launcher response for easy downstream use."""
     env = data.get("environment") or {}
@@ -1087,18 +1109,7 @@ def create_server(
         if job_args_override is not None:
             body["job_args_override"] = job_args_override
         data = await _api(ctx, "POST", "/sessions", body)
-        # Detect whether the platform returned a pre-existing session by checking if
-        # started_at is more than 60 seconds in the past.
-        created = True
-        try:
-            started_at = data.get("started_at") or (data.get("status") or {}).get("started_at")
-            if started_at:
-                age = time.time() - datetime.datetime.fromisoformat(started_at.replace("Z", "+00:00")).timestamp()
-                created = age < 60
-        except (ValueError, TypeError, AttributeError):
-            # Malformed or missing started_at — assume created to be safe.
-            pass
-        data["_created"] = created
+        data["_created"] = _started_recently(data)
         return data
 
     @mcp.tool()
