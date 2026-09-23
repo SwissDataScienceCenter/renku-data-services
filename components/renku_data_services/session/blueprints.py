@@ -192,6 +192,40 @@ class SessionLaunchersBP(CustomBlueprint):
 
         return "/projects/<project_id:ulid>/session_launchers", ["GET"], _get_launcher
 
+    def get_launcher_secrets(self) -> BlueprintFactoryResponse:
+        """Get all secret slots and their access policy parameters for the launcher."""
+
+        @authenticate(self.authenticator)
+        async def _get_secrets(_: Request, user: base_models.APIUser, launcher_id: ULID) -> JSONResponse:
+            current_launcher = await self.session_repo.get_launcher(user, launcher_id)
+            secrets = await self.session_repo.get_all_session_secret_slots_from_launcher(
+                user=user, launcher=current_launcher
+            )
+            return validated_json(apispec.SessionLauncherSecretList, secrets)
+
+        return "/session_launchers/<launcher_id:ulid>/secrets", ["GET"], _get_secrets
+
+    def update_launcher_secrets(self) -> BlueprintFactoryResponse:
+        """Update the secret access policies for the launcher."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.SessionLauncherSecretPatchList)
+        async def _patch_secrets(
+            request: Request,
+            user: base_models.APIUser,
+            launcher_id: ULID,
+        ) -> JSONResponse:
+            current_launcher = await self.session_repo.get_launcher(user, launcher_id)
+            secrets = await self.session_repo.update_launcher_secret_slots(
+                user=user,
+                launcher=current_launcher,
+                patches=request.json,
+            )
+            return validated_json(apispec.SessionLauncherSecretList, secrets)
+
+        return "/session_launchers/<launcher_id:ulid>/secrets", ["PATCH"], _patch_secrets
+
 
 @dataclass(kw_only=True)
 class BuildsBP(CustomBlueprint):

@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Concatenate, ParamSpec, Protocol, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnElement, Select, and_, delete, distinct, func, or_, select, update
+from sqlalchemy import ColumnElement, Select, delete, distinct, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 from sqlalchemy.sql.functions import coalesce
@@ -38,8 +38,6 @@ from renku_data_services.session.core import (
     validate_unsaved_session_launcher,
 )
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.models import SessionLauncher, SessionLauncherPolicy
-from renku_data_services.session.orm import SessionLauncherSecretORM
 from renku_data_services.users.db import UserRepo
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.core import with_db_transaction
@@ -778,54 +776,6 @@ class ProjectSessionSecretRepository:
                 )
 
             await session.delete(secret_slot)
-
-    async def get_all_session_secrets_from_launcher(
-        self,
-        user: base_models.APIUser,
-        launcher: SessionLauncher,
-    ) -> list[models.SessionSecret]:
-        """Get all session secrets from a project."""
-        if user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-
-        # Get project, get project id, check if the project id is authorized
-        # Check that the user is allowed to access the project
-        authorized = await self.authz.has_permission(user, ResourceType.project, launcher.project_id, Scope.READ)
-        if not authorized:
-            raise errors.MissingResourceError(
-                message=f"Project with id '{launcher.project_id}' does not exist or you do not have access to it."
-            )
-
-        async with self.session_maker() as session:
-            result = await session.scalars(
-                select(schemas.SessionSecretORM)
-                .join(schemas.SessionSecretORM.secret)
-                .join(schemas.SessionSecretORM.secret_slot)
-                .outerjoin(
-                    SessionLauncherSecretORM,
-                    and_(
-                        SessionLauncherSecretORM.secret_slot_id == schemas.SessionSecretORM.secret_slot_id,
-                        SessionLauncherSecretORM.launcher_id == launcher.id,
-                    ),
-                )
-                .where(
-                    or_(
-                        schemas.SecretORM.expiration_timestamp.is_(None),
-                        schemas.SecretORM.expiration_timestamp > datetime.now(UTC) + timedelta(seconds=120),
-                    ),
-                    schemas.SessionSecretORM.user_id == user.id,
-                    schemas.SessionSecretSlotORM.project_id == launcher.project_id,
-                    or_(
-                        SessionLauncherSecretORM.secret_slot_id.is_(None),
-                        SessionLauncherSecretORM.policy["policy"] != SessionLauncherPolicy.excluded,
-                    ),
-                )
-                .order_by(schemas.SessionSecretORM.id.desc())
-            )
-
-            secrets = result.all()
-
-            return [s.dump() for s in secrets]
 
     async def get_all_session_secrets_from_project(
         self,
