@@ -722,9 +722,7 @@ paths:
           name: class_id
           required: true
           schema:
-            type: integer
-            minimum: 1
-            maximum: 2147483647
+            type: string
       responses:
         "204":
           description: The resource class is not linked to a resource flavour
