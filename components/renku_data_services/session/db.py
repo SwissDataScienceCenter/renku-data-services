@@ -7,7 +7,7 @@ from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import and_, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
@@ -1342,16 +1342,17 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             shipwright_client=None,
             builds_config=None,  # type: ignore
             git_repositories_repo=None,  # type: ignore
-            project_session_secret_repo=None, #type: ignore
+            project_session_secret_repo=None,  # type: ignore
         )
         return instance
 
-    async def get_launcher_secrets(self, user: base_models.APIUser, launcher: models.SessionLauncher) -> list[models.SessionLauncherSecret]:
+    async def get_launcher_secrets(
+        self, user: base_models.APIUser, launcher: models.SessionLauncher
+    ) -> list[models.SessionLauncherSecret]:
         """Get the secret parameters of a launcher entry."""
 
         project_id = launcher.project_id
 
-        # NOTE: project_session_secret_repo verifies the same authorization.
         if not user.is_authenticated or user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
@@ -1361,26 +1362,44 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        project_secrets = await self.project_session_secret_repo.get_all_session_secret_slots_from_project(user, project_id)
+        async with self.session_maker() as session:
+            result = await session.execute(
+                select(
+                    schemas.SessionSecretSlotORM,
+                    func.coalesce(
+                        schemas.SessionLauncherSecretORM.policy,
+                        cast({"policy": models.SessionLauncherPolicy.read_only}, schemas.JSONVariant),
+                    ).label("policy"),
+                )
+                .outerjoin(
+                    schemas.SessionLauncherSecretORM,
+                    and_(
+                        schemas.SessionLauncherSecretORM.secret_slot_id == schemas.SessionSecretSlotORM.id,
+                        schemas.SessionLauncherSecretORM.launcher_id == launcher.id,
+                    ),
+                )
+                .where(
+                    schemas.SessionSecretSlotORM.project_id == launcher.project_id,
+                )
+                .order_by(schemas.SessionSecretSlotORM.id.desc())
+            )
 
-        async with self.session_maker() as session, session.begin():
-            stmt = select(schemas.SessionLauncherSecretORM).where(schemas.SessionLauncherSecretORM.launcher_id==launcher.id)
-            res = await session.scalars(stmt)
-            launcher_secrets = { s.secret_slot_id:s.dump() for s in res.all() }
-
-        return [
-            launcher_secrets.get(
-                secret.id,
+            return [
                 models.SessionLauncherSecret(
                     launcher_id=launcher.id,
-                    secret_slot_id=secret.id,
-                    policy=models.SessionLauncherPolicy.read_only,
-                ),
-            )
-            for secret in project_secrets
-        ]
+                    secret_slot_id=slot.id,
+                    policy=policy,
+                )
+                for slot, policy in result.all()
+            ]
 
-    async def update_launcher_secrets(self, user: base_models.APIUser, launcher: models.SessionLauncher, policies: list[models.SessionLauncherSecretPatch]) -> list[models.SessionLauncherSecret]:
+    async def update_launcher_secrets(
+        self,
+        user: base_models.APIUser,
+        launcher: models.SessionLauncher,
+        patches: list[models.SessionLauncherSecretPatch],
+    ) -> list[models.SessionLauncherSecret]:
+        """Patch the secret parameters of the session launcher."""
 
         project_id = launcher.project_id
 
@@ -1393,44 +1412,47 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        project_secrets = await self.project_session_secret_repo.get_all_session_secret_slots_from_project(user, project_id)
-
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(
                 select(schemas.SessionLauncherSecretORM).where(
                     schemas.SessionLauncherSecretORM.launcher_id == launcher.id
                 )
             )
-            launcher_secrets = {
-                secret.secret_slot_id: secret
-                for secret in result.all()
-            }
+
+            launcher_secrets = {secret.secret_slot_id: secret for secret in result.all()}
+
+            result = await session.scalars(
+                select(schemas.SessionSecretSlotORM).where(schemas.SessionSecretSlotORM.project_id == project_id)
+            )
+
+            project_secret_slot_ids = {slot.id for slot in result}
+
+            patch_secret_slot_ids = {patch.secret_slot_id for patch in patches}
+
+            invalid_secret_slot_ids = patch_secret_slot_ids - project_secret_slot_ids
+
+            if invalid_secret_slot_ids:
+                raise errors.MissingResourceError(
+                    message=f"Secret slots do not belong to the project: {invalid_secret_slot_ids}"
+                )
 
             updated = []
 
-            for patch in policies:
+            for patch in patches:
                 secret = launcher_secrets.get(patch.secret_slot_id)
 
                 if secret is None:
                     secret = schemas.SessionLauncherSecretORM(
                         launcher_id=launcher.id,
                         secret_slot_id=patch.secret_slot_id,
-                        policy=patch.policy.read_only,
+                        policy={"policy": models.SessionLauncherPolicy.read_only},
                     )
                     session.add(secret)
                 else:
-                    secret.policy = patch.policy
+                    secret.policy = {"policy": patch.policy}
 
                 updated.append(secret)
 
             await session.flush()
 
         return [secret.dump() for secret in updated]
-
-
-
-
-
-
-
-        

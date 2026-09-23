@@ -492,6 +492,7 @@ class SessionLauncherSecret(SessionLauncherSecretPolicy):
     launcher_id: ULID
     secret_slot_id: ULID
 
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SessionLauncherSecretPatch(SessionLauncherSecretPolicy):
     """Model to represent the visibility of a project secret in a launcher."""
