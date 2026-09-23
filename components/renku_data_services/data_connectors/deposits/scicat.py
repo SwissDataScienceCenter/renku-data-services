@@ -11,40 +11,37 @@ from pydantic import BaseModel
 from renku_data_services.data_connectors.apispec import DepositPost
 from renku_data_services.errors import errors
 
+# See: https://dacat.psi.ch/explorer (prod) or https://dacat-qa.psi.ch/explorer (qa) for SciCat API documentation.
+
 
 class DepositResponse(BaseModel):
-    """Response from listing or creating a deposit in SciCat."""
+    """Simplified response from listing or creating a deposit in SciCat."""
 
     ownerGroup: str
-    accessGroups: list
     owner: str
     ownerEmail: str
     contactEmail: str
     sourceFolder: str
-    size: int
-    packedSize: int
-    numberOfFiles: int
-    numberOfFilesArchived: int
     creationTime: str
-    keywords: list[str]
     description: str
     datasetName: str
-    classification: str
     isPublished: bool
-    techniques: list
-    sharedWith: list
-    relationships: list
-    datasetlifecycle: dict
-    scientificMetadata: dict
     pid: str
     type: str
-    version: str
-    inputDatasets: list[str]
-    usedSoftware: list[str]
-    createdBy: str
-    updatedBy: str
-    createdAt: str
-    updatedAt: str
+
+
+class UserProfile(BaseModel):
+    """Simplified User Profile from user identity endpoint in SciCat."""
+
+    displayName: str
+    email: str
+    accessGroups: list[str]
+
+
+class UserResponse(BaseModel):
+    """Simplified Response from user identity endpoint in SciCat."""
+
+    profile: UserProfile
 
 
 class ScicatAPIClient:
@@ -80,7 +77,7 @@ class ScicatAPIClient:
             )
         return DepositResponse.model_validate(res.json())
 
-    async def get_user_identity(self, api_key: str) -> dict:
+    async def get_user_identity(self, api_key: str) -> UserResponse:
         """Get the user's identity in SciCat."""
         header = {"Authorization": f"Bearer {api_key}"}
         res = await self.__client.get(f"{self.base_url}/users/my/identity", headers=header)
@@ -89,12 +86,7 @@ class ScicatAPIClient:
                 message=f"Received unexpected status code {res.status_code} when trying to get SciCat user identity.",
                 detail=f"Message from SciCat: {res.text}",
             )
-        return cast(dict, res.json())
-
-    async def get_user_groups(self, api_key: str) -> list[str]:
-        """Get the groups the user belongs to in SciCat."""
-        res_json = await self.get_user_identity(api_key)
-        return cast(list[str], res_json.get("profile", {}).get("accessGroups", []))
+        return UserResponse.model_validate(res.json())
 
     async def get_scicat_token(self, access_token: str) -> str:
         """Get the SciCat API token for a user."""
@@ -114,16 +106,16 @@ class ScicatAPIClient:
     async def default_deposit_data(self, api_key: str, body: DepositPost) -> dict:
         """Get the default deposit data for a SciCat user."""
         user_identity = await self.get_user_identity(api_key)
-        user = user_identity.get("profile", {})
-        user_groups = user.get("accessGroups", [])
+        user = user_identity.profile
+        user_groups = user.accessGroups
         return {
-            "contactEmail": user.get("email", ""),
-            "owner": user.get("displayName", ""),
-            "ownerEmail": user.get("email", ""),
-            "ownerGroup": user_groups[0] if user_groups else "",  # TODO: user input from frontend instead?
+            "contactEmail": user.email,
+            "owner": user.displayName,
+            "ownerEmail": user.email,
+            "ownerGroup": user_groups[0] if user_groups else "",
             "creationTime": datetime.now().isoformat(),
             "datasetName": body.name,
             "description": "",
-            "sourceFolder": body.path,
+            "sourceFolder": body.path or "",
             "type": "base",
         }
