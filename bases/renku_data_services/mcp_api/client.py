@@ -50,6 +50,19 @@ class RenkuApiClient:
         """Build a client for the deployment named by RENKU_BASE_URL."""
         return cls(base_url=os.environ.get("RENKU_BASE_URL", "https://renkulab.io"))
 
+    def _http_client(self) -> httpx.AsyncClient:
+        """An httpx client pointed at the data API, so callers pass only a path.
+
+        A new one per request, as everywhere else in this repository that calls out over
+        HTTP. It carries no credentials: the server handles one user per request, so the
+        Authorization header is supplied at the call rather than baked in here.
+        """
+        return httpx.AsyncClient(
+            base_url=f"{self.base_url}/api/data",
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            timeout=self.timeout,
+        )
+
     async def request(
         self,
         method: str,
@@ -67,21 +80,15 @@ class RenkuApiClient:
         the status code or a header carries meaning the body does not, such as 201 vs 200 on
         POST /sessions, or an ETag required for a subsequent PATCH.
         """
-        url = f"{self.base_url}/api/data{path}"
         params = {k: str(v) for k, v in (query or {}).items() if v is not None}
-        headers: dict[str, str] = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-        if extra_headers:
-            headers.update(extra_headers)
+        # Only the caller's identity varies per request; everything else belongs on the client.
+        headers = {"Authorization": f"Bearer {token}", **(extra_headers or {})}
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             try:
                 resp = await client.request(
                     method,
-                    url,
+                    path,
                     params=params or None,
                     content=json.dumps(body).encode() if body is not None else None,
                     headers=headers,
