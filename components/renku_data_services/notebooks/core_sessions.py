@@ -1370,6 +1370,9 @@ async def start_session(
             if dcs_have_secrets and isinstance(user, AuthenticatedAPIUser):
                 secret_key = await user_repo.get_or_create_user_secret_key(user)
                 user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode()
+                import logging
+
+                logging.error(f"user secret key {user_secret_key}")
             else:
                 user_secret_key = None
             await request_dc_secret_creation_new(user, nb_config, session, data_connectors_list, user_secret_key)
