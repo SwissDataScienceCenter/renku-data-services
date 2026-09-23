@@ -163,6 +163,31 @@ def _snapshot_flavour(cls: schemas.ResourceClassORM, flavour: schemas.ResourceFl
     cls.gpu = flavour.gpu
 
 
+async def _reject_classes_over_quota(
+    session: AsyncSession, quotas_repo: QuotaRepository, flavour: schemas.ResourceFlavourORM
+) -> None:
+    """Refuse a flavour change that makes a linked resource class larger than the quota of its pool."""
+    quotas: dict[tuple[str, ClusterId], models.Quota | None] = {}
+    blockers: list[str] = []
+    for cls in await _get_linked_classes(session, flavour.id):
+        pool = cls.resource_pool
+        if pool is None or pool.quota is None:
+            continue
+        key = (pool.quota, pool.get_cluster_id())
+        if key not in quotas:
+            quotas[key] = await quotas_repo.get_quota(key[0], key[1])
+        quota = quotas[key]
+        if quota is not None and not quota.is_resource_class_compatible(cls.dump()):
+            blockers.append(f"{cls.name} (in {pool.name})")
+    if blockers:
+        raise errors.ConflictError(
+            message=(
+                f"The resource flavour {flavour.name} cannot be changed because the new values are larger than the "
+                f"quota of the resource pools of these resource classes: {', '.join(blockers)}."
+            )
+        )
+
+
 class ResourcePoolQueryRepository:
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
@@ -1984,6 +2009,7 @@ class ResourceFlavourRepository:
     """Repository for resource flavours."""
 
     session_maker: Callable[..., AsyncSession]
+    quotas_repo: QuotaRepository
 
     async def get_flavours(self, name: str | None = None) -> list[models.ResourceFlavour]:
         """Get all resource flavours from the database."""
@@ -2070,6 +2096,8 @@ class ResourceFlavourRepository:
                 raise errors.ValidationError(
                     message="The default storage cannot be larger than the max allowable storage."
                 )
+            if any(value is not None for value in (update.cpu, update.memory, update.gpu)):
+                await _reject_classes_over_quota(session, self.quotas_repo, flavour)
             await session.flush()
             await session.refresh(flavour)
             return flavour.dump()
