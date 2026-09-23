@@ -234,6 +234,7 @@ class DataConnectorSecretORM(BaseORM):
     )
 
     name: Mapped[str] = mapped_column("name", String(), primary_key=True)
+    """The name of the parameter in the configuration that the secret refers to - i.e. pass or secret_access_key."""
 
     secret_id: Mapped[ULID] = mapped_column("secret_id", ForeignKey(SecretORM.id, ondelete="CASCADE"))
     secret: Mapped[SecretORM] = relationship(
