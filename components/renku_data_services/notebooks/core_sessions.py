@@ -129,6 +129,7 @@ from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import get_effective_quota
+from renku_data_services.utils.cryptography import get_encryption_key
 
 logger = logging.getLogger(__name__)
 
@@ -463,6 +464,7 @@ async def request_dc_secret_creation_new(
     nb_config: NotebooksConfig,
     manifest: AmaltheaSessionV1Alpha1,
     data_connectors: list[DataConnectorWithSecrets],
+    user_key: str | None,
 ) -> None:
     """Request the specified data connector secrets to be created by the secret service."""
     if isinstance(user, AnonymousAPIUser):
@@ -488,6 +490,7 @@ async def request_dc_secret_creation_new(
         "owner_references": [owner_reference],
         "cluster_id": str(cluster_id),
         "combined_remote_name": "__combined__",
+        "user_private_key": user_key,
     }
     request_data_connectors = []
     for dc in data_connectors:
@@ -1363,7 +1366,13 @@ async def start_session(
             data_connector_secrets = session_extras.data_connector_secrets or dict()
             await request_dc_secret_creation(user, nb_config, session, data_connector_secrets)
             # TODO: Remove the old method, handle dc overrides.
-            await request_dc_secret_creation_new(user, nb_config, session, data_connectors_list)
+            dcs_have_secrets = len(data_connectors_list) > 0 and any([len(i.secrets) > 0 for i in data_connectors_list])
+            if dcs_have_secrets and isinstance(user, AuthenticatedAPIUser):
+                secret_key = await user_repo.get_or_create_user_secret_key(user)
+                user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode()
+            else:
+                user_secret_key = None
+            await request_dc_secret_creation_new(user, nb_config, session, data_connectors_list, user_secret_key)
         except Exception:
             await nb_config.k8s_v2_client.delete_session(server_name, user.id)
             raise
