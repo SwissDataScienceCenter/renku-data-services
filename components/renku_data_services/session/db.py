@@ -19,6 +19,7 @@ from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.project.apispec import Visibility as ProjectVisibility
+from renku_data_services.project.db import ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata, RepositoryVisibility
 from renku_data_services.session import constants, models
@@ -74,6 +75,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         shipwright_client: ShipwrightClient | None,
         builds_config: BuildsConfig,
         git_repositories_repo: GitRepositoriesRepository,
+        project_session_secret_repo: ProjectSessionSecretRepository,
     ) -> None:
         self.session_maker = session_maker
         self.project_authz: Authz = project_authz
@@ -82,6 +84,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         self.builds_config = builds_config
         self.git_repositories_repo = git_repositories_repo
         self.apps_cleanup: AppLauncherCleanupProtocol | None = None
+        self.project_session_secret_repo = project_session_secret_repo
 
     async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
@@ -1339,5 +1342,95 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             shipwright_client=None,
             builds_config=None,  # type: ignore
             git_repositories_repo=None,  # type: ignore
+            project_session_secret_repo=None, #type: ignore
         )
         return instance
+
+    async def get_launcher_secrets(self, user: base_models.APIUser, launcher: models.SessionLauncher) -> list[models.SessionLauncherSecret]:
+        """Get the secret parameters of a launcher entry."""
+
+        project_id = launcher.project_id
+
+        # NOTE: project_session_secret_repo verifies the same authorization.
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        project_secrets = await self.project_session_secret_repo.get_all_session_secret_slots_from_project(user, project_id)
+
+        async with self.session_maker() as session, session.begin():
+            stmt = select(schemas.SessionLauncherSecretORM).where(schemas.SessionLauncherSecretORM.launcher_id==launcher.id)
+            res = await session.scalars(stmt)
+            launcher_secrets = { s.secret_slot_id:s.dump() for s in res.all() }
+
+        return [
+            launcher_secrets.get(
+                secret.id,
+                models.SessionLauncherSecret(
+                    launcher_id=launcher.id,
+                    secret_slot_id=secret.id,
+                    policy=models.SessionLauncherPolicy.read_only,
+                ),
+            )
+            for secret in project_secrets
+        ]
+
+    async def update_launcher_secrets(self, user: base_models.APIUser, launcher: models.SessionLauncher, policies: list[models.SessionLauncherSecretPatch]) -> list[models.SessionLauncherSecret]:
+
+        project_id = launcher.project_id
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        project_secrets = await self.project_session_secret_repo.get_all_session_secret_slots_from_project(user, project_id)
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.SessionLauncherSecretORM).where(
+                    schemas.SessionLauncherSecretORM.launcher_id == launcher.id
+                )
+            )
+            launcher_secrets = {
+                secret.secret_slot_id: secret
+                for secret in result.all()
+            }
+
+            updated = []
+
+            for patch in policies:
+                secret = launcher_secrets.get(patch.secret_slot_id)
+
+                if secret is None:
+                    secret = schemas.SessionLauncherSecretORM(
+                        launcher_id=launcher.id,
+                        secret_slot_id=patch.secret_slot_id,
+                        policy=patch.policy.read_only,
+                    )
+                    session.add(secret)
+                else:
+                    secret.policy = patch.policy
+
+                updated.append(secret)
+
+            await session.flush()
+
+        return [secret.dump() for secret in updated]
+
+
+
+
+
+
+
+        
