@@ -414,7 +414,6 @@ class DependencyManager:
             shipwright_client=shipwright_client,
             builds_config=config.builds,
             git_repositories_repo=git_repositories_repo,
-            project_session_secret_repo=project_session_secret_repo,
         )
         project_migration_repo = ProjectMigrationRepository(
             session_maker=config.db.async_session_maker,

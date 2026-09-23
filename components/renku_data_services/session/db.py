@@ -19,7 +19,6 @@ from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.project.apispec import Visibility as ProjectVisibility
-from renku_data_services.project.db import ProjectSessionSecretRepository
 from renku_data_services.project.models import SessionSecret
 from renku_data_services.project.orm import SessionSecretORM, SessionSecretSlotORM
 from renku_data_services.repositories.db import GitRepositoriesRepository
@@ -78,7 +77,6 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         shipwright_client: ShipwrightClient | None,
         builds_config: BuildsConfig,
         git_repositories_repo: GitRepositoriesRepository,
-        project_session_secret_repo: ProjectSessionSecretRepository,
     ) -> None:
         self.session_maker = session_maker
         self.project_authz: Authz = project_authz
@@ -87,7 +85,6 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         self.builds_config = builds_config
         self.git_repositories_repo = git_repositories_repo
         self.apps_cleanup: AppLauncherCleanupProtocol | None = None
-        self.project_session_secret_repo = project_session_secret_repo
 
     async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
@@ -1345,7 +1342,6 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             shipwright_client=None,
             builds_config=None,  # type: ignore
             git_repositories_repo=None,  # type: ignore
-            project_session_secret_repo=None,  # type: ignore
         )
         return instance
 
