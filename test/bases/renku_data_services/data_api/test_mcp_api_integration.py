@@ -197,7 +197,11 @@ async def test_launcher_create_non_interactive(
     create_session_environment: Any,
     create_resource_pool: Any,
 ) -> None:
-    """Launcher creation with launcher_type='non_interactive' must succeed on current API."""
+    """An underscored launcher_type must be normalised to the API's hyphenated enum value.
+
+    Agents reach for 'non_interactive'; LauncherType only accepts 'non-interactive', so
+    launcher_create rewrites it and the created launcher comes back hyphenated.
+    """
     env = await create_session_environment("mcp-job-env")
     pool = await create_resource_pool(admin=True)
     resource_class_id = pool["classes"][0]["id"]
@@ -222,7 +226,7 @@ async def test_launcher_create_non_interactive(
             )
             assert launcher_result.isError is not True
             launcher = tool_result_dict(launcher_result)
-            assert launcher.get("launcher_type") == "non_interactive"
+            assert launcher.get("launcher_type") == "non-interactive"
             await session.call_tool("launcher_delete", {"launcher_id": launcher["id"], "confirm": True})
         finally:
             await session.call_tool("project_delete", {"project": project_id, "confirm": True})
