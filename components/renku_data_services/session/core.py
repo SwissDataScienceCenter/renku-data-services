@@ -390,6 +390,19 @@ def validate_build_patch(patch: apispec.BuildPatch) -> models.BuildPatch:
     return models.BuildPatch(status=status)
 
 
+def validate_session_launcher_secrets_patch(
+    patches: apispec.SessionLauncherSecretPatchList,
+) -> list[models.SessionLauncherSecretPatch]:
+    """Validate the update to the secret slots of a session launcher."""
+    return [
+        models.SessionLauncherSecretPatch(
+            secret_slot_id=ULID.from_str(patch.secret_slot_id),
+            policy=models.SessionLauncherPolicy(patch.policy),
+        )
+        for patch in patches.root
+    ]
+
+
 def __validate_build_parameters_platforms(platforms: list[apispec.BuildPlatform] | None) -> list[models.Platform]:
     """Validate the platforms field for build parameters."""
     platforms_str_list: list[str] = [models.Platform.linux_amd64]

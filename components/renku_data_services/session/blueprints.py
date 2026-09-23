@@ -18,6 +18,7 @@ from renku_data_services.session.core import (
     validate_build_patch,
     validate_environment_patch,
     validate_session_launcher_patch,
+    validate_session_launcher_secrets_patch,
     validate_unsaved_build,
     validate_unsaved_environment,
     validate_unsaved_session_launcher,
@@ -215,12 +216,13 @@ class SessionLaunchersBP(CustomBlueprint):
             request: Request,
             user: base_models.APIUser,
             launcher_id: ULID,
+            body: apispec.SessionLauncherSecretPatchList,
         ) -> JSONResponse:
             current_launcher = await self.session_repo.get_launcher(user, launcher_id)
             secrets = await self.session_repo.update_launcher_secret_slots(
                 user=user,
                 launcher=current_launcher,
-                patches=request.json,
+                patches=validate_session_launcher_secrets_patch(body),
             )
             return validated_json(apispec.SessionLauncherSecretList, secrets)
 
