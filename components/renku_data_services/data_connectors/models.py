@@ -199,6 +199,7 @@ class DataConnectorSecret:
     """Data connector secret model."""
 
     name: str
+    """This is the name of the field the secret should replace in the data connector configuration."""
     user_id: str
     data_connector_id: ULID
     secret_id: ULID
