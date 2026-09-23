@@ -155,7 +155,8 @@ def __decrypt_secret(
 
         decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value)
         if user_key:
-            decrypted_value = decrypt_string(user_key.encode(), user.id, decrypted_value.encode())
+            pass
+            # decrypted_value = decrypt_string(user_key.encode(), user.id, decrypted_value.encode())
 
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
