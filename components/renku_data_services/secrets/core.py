@@ -202,7 +202,7 @@ def __create_secret_manifest(
     namespace: str,
     cluster_id: ClusterId | str | ULID | None,
     owner_references: list[dict[str, str]],
-    payload: dict[str, Any],
+    payload: dict[str, str],
     base64_encode: bool = True,
 ) -> K8sSecret:
     match cluster_id:
@@ -225,9 +225,10 @@ def __create_secret_manifest(
 
     import logging
 
+    logging.warning(payload)
     if base64_encode:
         for k in payload:
-            payload[k] = b64encode(payload.encode()).decode()
+            payload[k] = b64encode(payload[k].encode()).decode()
 
     logging.warning(payload)
     v1_secret = k8s_client.V1Secret(
