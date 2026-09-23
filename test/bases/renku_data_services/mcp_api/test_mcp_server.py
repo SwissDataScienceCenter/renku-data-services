@@ -1008,3 +1008,83 @@ async def test_job_wait_fetches_logs_once(mock_api, monkeypatch):
     payload = tool_result_dict(result)
     assert payload["state"] == "succeeded"
     assert list(payload["logs"]) == ["amalthea-session", "other"], "amalthea-session sorts first"
+
+
+@pytest.mark.asyncio
+async def test_job_wait_reports_state_changes_only(mock_api, monkeypatch):
+    """The client hears about each state change, not about every poll."""
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    states = iter(["starting", "starting", "running", "succeeded"])
+    messages: list[str] = []
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        if path == "/user":
+            return {"is_admin": False}
+        if path.endswith("/logs"):
+            return {}
+        return make_session(next(states, "succeeded"))
+
+    mock_api.request.side_effect = fake_api
+
+    async def logging_callback(params):
+        messages.append(str(params.data))
+
+    async with mcp_session(mock_api, logging_callback=logging_callback) as (session, _):
+        await session.call_tool("job_wait", {"session_id": "s1", "interval": 1})
+
+    assert [m for m in messages if "starting" in m], "should announce the first state"
+    assert len([m for m in messages if "starting" in m]) == 1, "should not repeat an unchanged state"
+    assert any("succeeded" in m for m in messages)
+
+
+@pytest.mark.asyncio
+async def test_job_wait_streams_log_tail_when_asked(mock_api, monkeypatch):
+    """stream_logs tails the logs each poll so a watching user sees output as it happens."""
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    states = iter(["starting", "succeeded"])
+    messages: list[str] = []
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        if path == "/user":
+            return {"is_admin": False}
+        if path.endswith("/logs"):
+            return {"amalthea-session": "step 1 of 3"}
+        return make_session(next(states, "succeeded"))
+
+    mock_api.request.side_effect = fake_api
+
+    async def logging_callback(params):
+        messages.append(str(params.data))
+
+    async with mcp_session(mock_api, logging_callback=logging_callback) as (session, api):
+        await session.call_tool("job_wait", {"session_id": "s1", "interval": 1, "stream_logs": 20})
+
+    assert any("step 1 of 3" in m for m in messages), "log output should reach the client mid-call"
+    tail_calls = [
+        c
+        for c in api.request.call_args_list
+        if str(c.args[1]).endswith("/logs") and (c.kwargs.get("query") or {}).get("max_lines") == 20
+    ]
+    assert tail_calls, "the tail should be bounded by max_lines rather than fetching everything"
+
+
+@pytest.mark.asyncio
+async def test_job_wait_does_not_stream_by_default(mock_api, monkeypatch):
+    """Without stream_logs the logs are fetched once at the end, as before."""
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    states = iter(["starting", "starting", "succeeded"])
+
+    async def fake_api(method: str, path: str, token: str, *args: Any, **kwargs: Any) -> Any:
+        if path == "/user":
+            return {"is_admin": False}
+        if path.endswith("/logs"):
+            return {"amalthea-session": "done"}
+        return make_session(next(states, "succeeded"))
+
+    mock_api.request.side_effect = fake_api
+
+    async with mcp_session(mock_api) as (session, api):
+        await session.call_tool("job_wait", {"session_id": "s1", "interval": 1})
+
+    log_calls = [c for c in api.request.call_args_list if str(c.args[1]).endswith("/logs")]
+    assert len(log_calls) == 1

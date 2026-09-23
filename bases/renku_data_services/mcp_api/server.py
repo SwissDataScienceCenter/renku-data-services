@@ -109,6 +109,21 @@ async def _poll_get(ctx: Context, path: str) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+async def _stream_log_tail(ctx: Context, path: str, max_lines: int) -> None:
+    """Send the tail of a log to the client mid-call, for a user watching a long wait.
+
+    Best effort on purpose: nothing here is worth failing a wait over, and the notification
+    is a courtesy to whoever is watching rather than data the caller receives.
+    """
+    with suppress(Exception):
+        logs = await _api(ctx, "GET", path, query={"max_lines": max_lines})
+        if not isinstance(logs, dict):
+            return
+        for name, text in sorted(logs.items(), key=lambda kv: (kv[0] != "amalthea-session", kv[0])):
+            if text:
+                await ctx.info(f"{name}:\n{text}")
+
+
 # ---------------------------------------------------------------------------
 # Guardrails enforced in code rather than asked for in the instructions
 # ---------------------------------------------------------------------------
@@ -321,7 +336,11 @@ def create_server(
             "Do not set confirm=true to skip that; it exists only for clients that cannot show a "
             "prompt, and then only after the user has actually agreed.\n"
             "- Never sleep or poll manually while waiting for sessions, jobs, builds, or apps. "
-            "Always use session_wait(), job_wait(), build_wait(), or app_wait() instead.\n\n"
+            "Always use session_wait(), job_wait(), build_wait(), or app_wait() instead.\n"
+            "- A wait blocks until it returns, so you cannot inspect a job while it runs. For a "
+            "long job worth supervising, wait in shorter stretches — job_wait(timeout=120) — read "
+            "the logs it returns, and decide whether to wait again or stop a job that is going "
+            "wrong, rather than waiting half an hour blind.\n\n"
             "Apps:\n"
             "An app is a long-running deployment served to anonymous visitors, created from a "
             "launcher with launcher_type='app' and started with app_launch().\n"
@@ -1122,6 +1141,14 @@ def create_server(
         session_id: Annotated[str, Field(description="Session name or ID")],
         timeout: Annotated[int, Field(description="Maximum wait time in seconds", ge=1)] = 1800,
         interval: Annotated[int, Field(description="Poll interval in seconds", ge=1)] = 15,
+        stream_logs: Annotated[
+            int | None,
+            Field(
+                description="Send this many trailing log lines to the client on each poll, "
+                "so a watching user can see output as the job runs and interrupt it",
+                ge=1,
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Wait for a non-interactive job to reach a terminal state.
 
@@ -1129,17 +1156,33 @@ def create_server(
         in the result with amalthea-session first.
         On timeout returns {"state": <last_state>, "timed_out": true} — always check
         timed_out and follow up with job_list to confirm actual state before retrying.
+
+        Supervising a long job: this call blocks until the job finishes, so you cannot inspect
+        its output while waiting. To keep judgement in the loop, wait in shorter stretches —
+        job_wait(session_id, timeout=120) — read the logs it returns, and decide whether to
+        wait again or session_delete a job that is clearly going wrong. Passing stream_logs
+        additionally sends log output to the client as it arrives, which lets the user see
+        trouble and interrupt, but does not give you anything to act on mid-call.
         """
         terminal = {"succeeded", "completed", "finished", "failed", "error", "stopped"}
         deadline = time.time() + timeout
         session: dict[str, Any] = {}
         state = "unknown"
+        last_reported = ""
         timed_out = True
         poll = 3.0
         while time.time() < deadline:
             session = await _poll_get(ctx, f"/sessions/{session_id}")
             status = session.get("status") or {}
             state = status.get("state") or session.get("state") or "unknown"
+            # A state change is worth telling the client about; repeating "still starting"
+            # every few seconds is not. Costs no extra request either way.
+            if state != last_reported:
+                last_reported = state
+                with suppress(Exception):
+                    await ctx.info(f"Job {session_id}: {state}")
+            if stream_logs:
+                await _stream_log_tail(ctx, f"/sessions/{session_id}/logs", stream_logs)
             if state in terminal:
                 timed_out = False
                 break

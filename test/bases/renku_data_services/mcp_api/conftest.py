@@ -42,7 +42,12 @@ def elicitation_callback(answer: bool | None):
 
 
 @contextlib.asynccontextmanager
-async def mcp_session(api: RenkuApiClient, token: str = "test-token", elicit: bool | None = ...):  # type: ignore[assignment]
+async def mcp_session(
+    api: RenkuApiClient,
+    token: str = "test-token",
+    elicit: bool | None = ...,  # type: ignore[assignment]
+    logging_callback: Any = None,
+):
     """Async context manager that runs the MCP server in-process.
     Must be used within a single asyncio task to keep anyio cancel scopes happy.
 
@@ -62,7 +67,9 @@ async def mcp_session(api: RenkuApiClient, token: str = "test-token", elicit: bo
             )
         )
         try:
-            async with ClientSession(*client_streams, elicitation_callback=callback) as session:
+            async with ClientSession(
+                *client_streams, elicitation_callback=callback, logging_callback=logging_callback
+            ) as session:
                 await session.initialize()
                 yield session, api
         finally:
