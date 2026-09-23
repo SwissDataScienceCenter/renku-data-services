@@ -78,11 +78,13 @@ class FrontendVariant(StrEnum):
 
 VALID_BUILDER_FRONTEND_COMBINATIONS: typing.Final[set[tuple[BuilderVariant, FrontendVariant]]] = {
     (BuilderVariant.r, FrontendVariant.rstudio),
+    (BuilderVariant.r, FrontendVariant.ssh),
     (BuilderVariant.r, FrontendVariant.none),
     (BuilderVariant.python, FrontendVariant.vscodium),
     (BuilderVariant.python, FrontendVariant.jupyterlab),
     (BuilderVariant.python, FrontendVariant.ttyd),
     (BuilderVariant.python, FrontendVariant.infer),
+    (BuilderVariant.python, FrontendVariant.ssh),
     (BuilderVariant.python, FrontendVariant.none),
 }
 
