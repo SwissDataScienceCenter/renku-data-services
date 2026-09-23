@@ -25,12 +25,12 @@ def validate_oauth2_client_patch(patch: apispec.ProviderPatch) -> models.OAuth2C
     if patch.image_registry_url:
         validate_image_registry_url(patch.image_registry_url)
     kind = models.ProviderKind(patch.kind.value) if patch.kind else None
-    if kind == models.ProviderKind.generic_oidc:
-        if not patch.oidc_issuer_url:
-            raise errors.ValidationError(
-                message=f"The field 'oidc_issuer_url' is required when kind is set to {models.ProviderKind.generic_oidc.value}.",  # noqa E501
-                quiet=True,
-            )
+    if kind in [models.ProviderKind.generic_oidc, models.ProviderKind.scicat] and not patch.oidc_issuer_url:
+        raise errors.ValidationError(
+            message=f"The field 'oidc_issuer_url' is required when kind is set to {kind}.",
+            quiet=True,
+        )
+    if patch.oidc_issuer_url:
         validate_oidc_issuer_url(patch.oidc_issuer_url)
     return models.OAuth2ClientPatch(
         kind=kind,
@@ -51,12 +51,12 @@ def validate_unsaved_oauth2_client(clnt: apispec.ProviderPost) -> models.Unsaved
     if clnt.image_registry_url is not None:
         validate_image_registry_url(clnt.image_registry_url)
     kind = models.ProviderKind(clnt.kind.value)
-    if kind == models.ProviderKind.generic_oidc:
-        if not clnt.oidc_issuer_url:
-            raise errors.ValidationError(
-                message=f"The field 'oidc_issuer_url' is required when kind is set to {models.ProviderKind.generic_oidc.value}.",  # noqa E501
-                quiet=True,
-            )
+    if kind in [models.ProviderKind.generic_oidc, models.ProviderKind.scicat] and not clnt.oidc_issuer_url:
+        raise errors.ValidationError(
+            message=f"The field 'oidc_issuer_url' is required when kind is set to {kind}.",
+            quiet=True,
+        )
+    if clnt.oidc_issuer_url:
         validate_oidc_issuer_url(clnt.oidc_issuer_url)
     return models.UnsavedOAuth2Client(
         id=clnt.id,

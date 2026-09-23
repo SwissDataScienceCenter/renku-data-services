@@ -778,14 +778,20 @@ async def create_deposit_upload(
             ),
         )
 
+    def _get_scicat_mount_path(deposit_job: models.DepositJob) -> PurePosixPath:
+        """Get the mount path for the scicat upload job."""
+        # NOTE: scicat cli prevents exporting data with the same sourceFolder,
+        # so we use the deposit id as the mount path to avoid conflicts.
+        # This still prevents exporting the same data twice to the same deposit.
+        return PurePosixPath("/" + str(deposit_job.deposit.id).lower())
+
     def _create_scicat_configmap_manifest(
         deposit_config: DepositConfig,
         deposit_job: models.DepositJob,
-        pvc_name: str,
         metadata: DepositResponse,
         labels: dict[str, str] | None = None,
     ) -> V1ConfigMap:
-        mount_path = PurePosixPath("/" + pvc_name)
+        mount_path = _get_scicat_mount_path(deposit_job)
         copy_source = _get_copy_source(mount_path, deposit_job.deposit.path)
 
         return V1ConfigMap(
@@ -809,13 +815,13 @@ async def create_deposit_upload(
     def _create_scicat_upload_job_manifest(
         deposit_config: DepositConfig,
         deposit_job: models.DepositJob,
-        api_key: str,
+        api_key_secret_name: str,
         work_dir: PurePosixPath,
         pvc_name: str,
         labels: dict[str, str] | None = None,
         suspended: bool = False,
     ) -> V1Job:
-        mount_path = PurePosixPath("/" + pvc_name)
+        mount_path = _get_scicat_mount_path(deposit_job)
 
         return V1Job(
             metadata=V1ObjectMeta(
@@ -839,18 +845,17 @@ async def create_deposit_upload(
                                     privileged=False,
                                     run_as_non_root=True,
                                     capabilities=V1Capabilities(drop=["ALL"]),
-                                    run_as_user=1000,
-                                    run_as_group=1000,
                                 ),
                                 name="upload-deposit",
                                 image=deposit_config.scicat.image,
+                                env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=api_key_secret_name))],
                                 args=[
                                     "datasetIngestor",
                                     "--scicat-url",
                                     deposit_config.scicat.api_url,
                                     "--testenv",  # TODO: remove this flag when we move to production
                                     "--token",
-                                    api_key,
+                                    "$(SCICAT_TOKEN)",
                                     "--copy",
                                     "--transfer-type",
                                     "s3",
@@ -1034,7 +1039,7 @@ async def create_deposit_upload(
     data_src = extras.data_sources[0]
 
     base_name = deposit_job.name
-    pvc_name = "deposit-" + str(deposit_job.deposit.id).lower() + "-ds"
+    pvc_name = deposit_job.name + "-ds"
     # NOTE: The user id label is important - that is how authorization is enforced
     # TODO: Cleanup user-id authorization - add it in the k8s client
     labels = {"renku.io/deposit_id": str(deposit_job.deposit.id), "renku.io/safe-username": user.id}
@@ -1062,13 +1067,10 @@ async def create_deposit_upload(
                 pvc_name=pvc_name,
             )
         case models.DepositSource.scicat:
-            if deposit_api_key is None:
-                raise errors.ProgrammingError(message="A SciCat deposit requires an API key.")
-
             job = _create_scicat_upload_job_manifest(
                 deposit_config=deposit_config,
                 deposit_job=deposit_job,
-                api_key=deposit_api_key,
+                api_key_secret_name=base_name,
                 work_dir=work_dir,
                 suspended=True,
                 labels=labels,
@@ -1094,7 +1096,6 @@ async def create_deposit_upload(
         scicat_configmap = _create_scicat_configmap_manifest(
             deposit_config=deposit_config,
             deposit_job=deposit_job,
-            pvc_name=pvc_name,
             metadata=metadata,
             labels=labels,
         )
@@ -1114,7 +1115,9 @@ async def create_deposit_upload(
                 raise errors.ProgrammingError(message="A Zenodo deposit requires an API key.")
             job_secret_data = {"ZENODO_API_KEY": deposit_api_key}
         case models.DepositSource.scicat:
-            job_secret_data = {}
+            if deposit_api_key is None:
+                raise errors.ProgrammingError(message="A SciCat deposit requires an API key.")
+            job_secret_data = {"SCICAT_TOKEN": deposit_api_key}
         case x:
             raise errors.ValidationError(message=f"Received unknown deposit source {x}")
     job_secret = _create_secret_manifest(
