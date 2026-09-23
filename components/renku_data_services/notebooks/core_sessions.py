@@ -1028,8 +1028,8 @@ async def start_session(
     image = environment.container_image
     storage_mount, work_dir = await get_mount_work_dir(user, environment, image_check_repo)
     secrets_mount_directory = storage_mount / project.secrets_mount_directory
-    session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
-        user=user, project_id=project.id
+    session_secrets = await project_session_secret_repo.get_all_session_secrets_from_launcher(
+        user=user, launcher=launcher
     )
     data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
     git_providers = await git_provider_helper.get_providers(user=user)
