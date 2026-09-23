@@ -72,7 +72,7 @@ async def validate_secret(
             )
             for key in keys:
                 decrypted_secrets[key] = __decrypt_secret(
-                    user, secret, secret_service_private_key, previous_secret_service_private_key, base_64_encode=True
+                    user, secret, secret_service_private_key, previous_secret_service_private_key
                 )
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
@@ -127,7 +127,9 @@ async def create_dc_config_secret(
         previous_secret_service_private_key,
     )
     ini_config = __create_ini_style_config(config)
-    return __create_secret_manifest(body.name, body.namespace, body.cluster_id, body.owner_references, ini_config)
+    return __create_secret_manifest(
+        body.name, body.namespace, body.cluster_id, body.owner_references, {"config": ini_config}
+    )
 
 
 def __decrypt_secret(
@@ -135,7 +137,6 @@ def __decrypt_secret(
     secret: Secret,
     secret_service_private_key: rsa.RSAPrivateKey,
     previous_secret_service_private_key: rsa.RSAPrivateKey | None = None,
-    base_64_encode: bool = True,
 ) -> str:
     if not user.id:
         raise errors.UnauthorizedError(message="Cannot manage saved secrets for an unauthenticated user.")
@@ -155,8 +156,6 @@ def __decrypt_secret(
         # don't wrap the error, we don't want secrets accidentally leaking.
         raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}") from None
 
-    if base_64_encode:
-        return b64encode(decrypted_value.encode()).decode()
     return decrypted_value
 
 
@@ -183,11 +182,7 @@ async def __combine_dc_configs(
                     raise errors.ProgrammingError(message=f"Expected to get one secret but did got {len(secrets)}")
                 secret_enc = secrets[0]
                 secret_dec = __decrypt_secret(
-                    user,
-                    secret_enc,
-                    secret_service_private_key,
-                    previous_secret_service_private_key,
-                    base_64_encode=False,
+                    user, secret_enc, secret_service_private_key, previous_secret_service_private_key
                 )
                 if isinstance(secret_fields, str):
                     secret_fields = [secret_fields]
@@ -208,6 +203,7 @@ def __create_secret_manifest(
     cluster_id: ClusterId | str | ULID | None,
     owner_references: list[dict[str, str]],
     payload: dict[str, Any],
+    base64_encode: bool = True,
 ) -> K8sSecret:
     match cluster_id:
         case ULID():
@@ -228,6 +224,10 @@ def __create_secret_manifest(
         owner_refs = [OwnerReference.from_dict(o).to_k8s() for o in owner_references]
 
     import logging
+
+    if base64_encode:
+        for k in payload:
+            payload[k] = b64encode(payload.encode()).decode()
 
     logging.warning(payload)
     v1_secret = k8s_client.V1Secret(
