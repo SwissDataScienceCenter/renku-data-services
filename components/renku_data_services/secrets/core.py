@@ -95,6 +95,9 @@ async def create_or_patch_secret(client: SecretClient, secret: K8sSecret) -> K8s
             logger.warning(msg)
             result = await client.patch_secret(secret, patch=secret.to_patch())
             return result
+        import logging
+
+        logging.error(e)
         raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}") from None
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
@@ -110,6 +113,9 @@ async def create_dc_config_secret(
     previous_secret_service_private_key: rsa.RSAPrivateKey | None = None,
 ) -> K8sSecret:
     """Create a k8s secret that contains the configuration for a set of data connectors."""
+    import logging
+
+    logging.warning(body)
     config = await __combine_dc_configs(
         user,
         body.data_connectors,
@@ -218,6 +224,9 @@ def __create_secret_manifest(
     if owner_references:
         owner_refs = [OwnerReference.from_dict(o).to_k8s() for o in owner_references]
 
+    import logging
+
+    logging.warning(payload)
     v1_secret = k8s_client.V1Secret(
         data=payload,
         metadata=k8s_client.V1ObjectMeta(
