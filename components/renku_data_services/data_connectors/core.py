@@ -56,7 +56,7 @@ from renku_data_services.data_connectors.constants import (
     _UNSAFE_SCICAT_COMBINE_PROVIDER,
     ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS,
 )
-from renku_data_services.data_connectors.deposits.scicat import DepositResponse, ScicatAPIClient
+from renku_data_services.data_connectors.deposits.scicat import DepositResponse as ScicatDepositResponse
 from renku_data_services.data_connectors.doi import schema_org
 from renku_data_services.data_connectors.doi.metadata import (
     DOIProviders,
@@ -576,8 +576,8 @@ async def create_deposit_upload(
     data_source_repo: DataSourceRepository,
     data_connector_repo: DataConnectorRepository,
     data_connector_secret_repo: DataConnectorSecretRepository,
-    scicat_client: ScicatAPIClient,
     deposit_api_key: str | None = None,
+    deposit_data: ScicatDepositResponse | None = None,
 ) -> None:
     """Create the resources required to upload data to a deposit."""
 
@@ -788,7 +788,7 @@ async def create_deposit_upload(
     def _create_scicat_configmap_manifest(
         deposit_config: DepositConfig,
         deposit_job: models.DepositJob,
-        metadata: DepositResponse,
+        deposit_data: ScicatDepositResponse,
         labels: dict[str, str] | None = None,
     ) -> V1ConfigMap:
         mount_path = _get_scicat_mount_path(deposit_job)
@@ -805,8 +805,8 @@ async def create_deposit_upload(
                     {
                         "datasetName": deposit_job.deposit.name,
                         "sourceFolder": copy_source.as_posix(),
-                        "ownerGroup": metadata.ownerGroup,
-                        "type": metadata.type,
+                        "ownerGroup": deposit_data.ownerGroup,
+                        "type": deposit_data.type,
                     }
                 )
             },
@@ -1090,13 +1090,14 @@ async def create_deposit_upload(
     if deposit_job.deposit.source == models.DepositSource.scicat:
         if deposit_api_key is None:
             raise errors.ProgrammingError(message="A SciCat deposit requires an API key.")
+        if deposit_data is None:
+            raise errors.ProgrammingError(message="A SciCat deposit requires a SciCat deposit response.")
 
-        metadata = await scicat_client.get_deposit(deposit_api_key, deposit_job.deposit.original_id)
         # Create the configmap manifest that contains the metadata.json for SciCat
         scicat_configmap = _create_scicat_configmap_manifest(
             deposit_config=deposit_config,
             deposit_job=deposit_job,
-            metadata=metadata,
+            deposit_data=deposit_data,
             labels=labels,
         )
         resources_to_create.append(

@@ -654,6 +654,7 @@ class DataConnectorsBP(CustomBlueprint):
                     detail="Please delete your existing deposit and make a new one afterward.",
                 )
 
+            deposit_data = None
             match body.provider:
                 case apispec.DepositProvider.envidat:
                     # TODO: Should we use the deposit ULID as the directory name!?
@@ -669,9 +670,8 @@ class DataConnectorsBP(CustomBlueprint):
 
                 case apispec.DepositProvider.scicat:
                     deposit_api_key = await self.__get_scicat_token(user)
-                    deposit_data = await self.scicat_client.default_deposit_data(deposit_api_key, body)
-                    scicat_dep = await self.scicat_client.create_deposit(deposit_api_key, deposit_data)
-                    original_id = str(scicat_dep.pid)
+                    deposit_data = await self.scicat_client.create_deposit(deposit_api_key, body)
+                    original_id = str(deposit_data.pid)
 
                 case x:
                     raise errors.ValidationError(
@@ -697,7 +697,7 @@ class DataConnectorsBP(CustomBlueprint):
                     data_connector_secret_repo=self.data_connector_secret_repo,
                     data_source_repo=self.data_source_repo,
                     deposit_api_key=deposit_api_key,
-                    scicat_client=self.scicat_client,
+                    deposit_data=deposit_data,
                 )
 
             unsaved_dep = validate_deposit(body, original_id)
@@ -826,11 +826,13 @@ class DataConnectorsBP(CustomBlueprint):
             if saved_dep.deposit.status == models.DepositStatus.in_progress:
                 raise errors.ValidationError(message="Cannot rerun a deposit job that is currently in progress.")
 
+            deposit_data = None
             match saved_dep.deposit.source:
                 case models.DepositSource.zenodo:
                     deposit_api_key = await self.__get_provider_access_token(user, ProviderKind.zenodo)
                 case models.DepositSource.scicat:
                     deposit_api_key = await self.__get_scicat_token(user)
+                    deposit_data = await self.scicat_client.get_deposit(deposit_api_key, saved_dep.deposit.original_id)
                 case x:
                     raise errors.ValidationError(
                         message=f"Received unknown deposit provider {x} when rerunning deposit job."
@@ -857,7 +859,7 @@ class DataConnectorsBP(CustomBlueprint):
                 data_connector_repo=self.data_connector_repo,
                 data_connector_secret_repo=self.data_connector_secret_repo,
                 deposit_config=self.deposit_config,
-                scicat_client=self.scicat_client,
+                deposit_data=deposit_data,
             )
             return HTTPResponse(status=201)
 

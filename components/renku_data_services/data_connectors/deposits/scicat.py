@@ -51,8 +51,9 @@ class ScicatAPIClient:
         self.base_url = os.environ.get("SCICAT_API_URL", "https://dacat-qa.psi.ch/api/v3").rstrip("/")
         self.__client = httpx.AsyncClient()
 
-    async def create_deposit(self, api_key: str, data: dict) -> DepositResponse:
+    async def create_deposit(self, api_key: str, body: DepositPost) -> DepositResponse:
         """Create a new deposit in SciCat."""
+        data = await self.default_deposit_data(api_key, body)
         header = {"Authorization": f"Bearer {api_key}"}
         res = await self.__client.post(f"{self.base_url}/datasets", headers=header, json=data)
         if res.status_code >= 300 or res.status_code < 200:
