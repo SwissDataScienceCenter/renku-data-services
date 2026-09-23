@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from base64 import b64encode
+from configparser import ConfigParser
 from copy import deepcopy
+from io import StringIO
 from typing import Any
 
 import kr8s
@@ -124,7 +126,8 @@ async def create_dc_config_secret(
         secret_service_private_key,
         previous_secret_service_private_key,
     )
-    return __create_secret_manifest(body.name, body.namespace, body.cluster_id, body.owner_references, config)
+    ini_config = __create_ini_style_config(config)
+    return __create_secret_manifest(body.name, body.namespace, body.cluster_id, body.owner_references, ini_config)
 
 
 def __decrypt_secret(
@@ -184,7 +187,7 @@ async def __combine_dc_configs(
                     secret_enc,
                     secret_service_private_key,
                     previous_secret_service_private_key,
-                    base_64_encode=True,
+                    base_64_encode=False,
                 )
                 if isinstance(secret_fields, str):
                     secret_fields = [secret_fields]
@@ -242,3 +245,25 @@ def __create_secret_manifest(
         cluster=cluster_id or DEFAULT_K8S_CLUSTER,
         manifest=Box(sanitizer(v1_secret)),
     )
+
+
+def __create_ini_style_config(config: dict[str, dict[str, Any]]) -> str:
+    def _stringify_bool(value: Any) -> str:
+        """Converts booleans to a rclone compliant values."""
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value)
+
+    parser = ConfigParser(interpolation=None)
+
+    for remote in config:
+        parser.add_section(remote)
+        for k, v in config[remote].items():
+            parser.set(remote, k, _stringify_bool(v))
+
+    output = StringIO()
+    parser.write(output)
+    # NOTE: If you do not flush the contents of the file may show up too late
+    # for commands that expect to have the config present.
+    output.flush()
+    return output.getvalue()
