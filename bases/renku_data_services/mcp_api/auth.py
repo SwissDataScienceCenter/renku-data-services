@@ -33,10 +33,6 @@ DEFAULT_AUDIENCE = "renku-mcp"
 _DISCOVERY_PATH = "/.well-known/openid-configuration"
 
 
-class TokenVerificationError(Exception):
-    """Raised when an access token is missing, malformed, or not issued for this server."""
-
-
 class TokenVerifier:
     """Verifies access tokens against the Keycloak realm that issued them.
 
@@ -71,30 +67,23 @@ class TokenVerifier:
         return self._jwks
 
     def verify(self, token: str) -> dict[str, object]:
-        """Return the token's claims, or raise TokenVerificationError.
+        """Return the token's claims.
 
         Checks the signature, the issuer, the expiry and — the point of the exercise —
         that this server is among the token's audiences.
+
+        Raises PyJWT's own exceptions, which already distinguish the cases a caller needs
+        to tell apart: jwt.InvalidTokenError (and its subclasses) means the token is bad,
+        while PyJWKClientError means the signing keys could not be fetched and nothing
+        could be decided. Those warrant different answers to the client, so they are not
+        flattened into one error type here.
         """
-        try:
-            signing_key = self.jwks.get_signing_key_from_jwt(token)
-            return jwt.decode(
-                token,
-                key=signing_key.key,
-                algorithms=self.algorithms,
-                audience=self.audience,
-                issuer=self.issuer_url,
-                options={"require": ["exp", "aud", "iss"]},
-            )
-        except jwt.InvalidAudienceError as err:
-            # Most likely a token for another Renku client, or the audience mapper on the
-            # renku-mcp Keycloak client is missing or not applied to the access token.
-            raise TokenVerificationError(
-                f"Token was not issued for this server (expected audience {self.audience!r})."
-            ) from err
-        except jwt.InvalidTokenError as err:
-            raise TokenVerificationError(f"Invalid access token: {err}") from err
-        except Exception as err:
-            # A JWKS fetch failure lands here; treat it as a verification failure rather
-            # than letting an unverified token through.
-            raise TokenVerificationError(f"Could not verify access token: {err}") from err
+        signing_key = self.jwks.get_signing_key_from_jwt(token)
+        return jwt.decode(
+            token,
+            key=signing_key.key,
+            algorithms=self.algorithms,
+            audience=self.audience,
+            issuer=self.issuer_url,
+            options={"require": ["exp", "aud", "iss"]},
+        )

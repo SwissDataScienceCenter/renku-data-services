@@ -26,7 +26,10 @@ import os
 from collections.abc import Callable
 from typing import Any
 
-from renku_data_services.mcp_api.auth import TokenVerificationError, TokenVerifier
+import jwt
+from jwt import PyJWKClientError
+
+from renku_data_services.mcp_api.auth import TokenVerifier
 from renku_data_services.mcp_api.client import RenkuApiClient
 from renku_data_services.mcp_api.server import create_server, set_current_token
 
@@ -169,9 +172,20 @@ def _build_http_app(base_url: str) -> Any:
             if verifier is not None:
                 try:
                     verifier.verify(token)
-                except TokenVerificationError as err:
+                except jwt.InvalidAudienceError:
+                    # Either a token for another Renku client, or the audience mapper on the
+                    # renku-mcp Keycloak client is missing from this deployment.
+                    logger.info("Rejected a token issued for another audience")
+                    return _unauthorized(f"Token audience does not include {verifier.audience!r}")
+                except jwt.InvalidTokenError as err:
                     logger.info("Rejected access token: %s", err)
                     return _unauthorized(str(err))
+                except PyJWKClientError as err:
+                    # The keys could not be fetched, so nothing was decided about this token.
+                    # Saying "unauthorized" would send the user off to log in again over a
+                    # fault on our side that another login cannot fix.
+                    logger.error("Cannot verify tokens, Keycloak keys unavailable: %s", err)
+                    return Response(status_code=503, headers={"Retry-After": "10"})
             set_current_token(token)
             return await call_next(request)
 

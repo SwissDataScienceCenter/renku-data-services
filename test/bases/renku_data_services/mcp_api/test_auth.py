@@ -7,8 +7,9 @@ import datetime
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
+from jwt import PyJWKClientError
 
-from renku_data_services.mcp_api.auth import TokenVerificationError, TokenVerifier
+from renku_data_services.mcp_api.auth import TokenVerifier
 
 ISSUER = "https://renkulab.io/auth/realms/Renku"
 
@@ -57,45 +58,50 @@ def test_accepts_token_with_both_audiences(verifier, private_key):
 
 def test_rejects_token_for_another_renku_client(verifier, private_key):
     """A UI or CLI token carries 'renku' but not 'renku-mcp' — this is the check's whole point."""
-    with pytest.raises(TokenVerificationError, match="not issued for this server"):
+    with pytest.raises(jwt.InvalidAudienceError):
         verifier.verify(make_token(private_key, aud=["renku", "renku-ui"]))
 
 
 def test_rejects_expired_token(verifier, private_key):
     now = datetime.datetime.now(datetime.UTC)
-    with pytest.raises(TokenVerificationError):
+    with pytest.raises(jwt.ExpiredSignatureError):
         verifier.verify(
             make_token(private_key, exp=now - datetime.timedelta(minutes=1), iat=now - datetime.timedelta(hours=1))
         )
 
 
 def test_rejects_token_from_another_issuer(verifier, private_key):
-    with pytest.raises(TokenVerificationError):
+    with pytest.raises(jwt.InvalidIssuerError):
         verifier.verify(make_token(private_key, iss="https://evil.example.com/realms/Renku"))
 
 
 def test_rejects_token_signed_by_another_key(verifier):
     other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    with pytest.raises(TokenVerificationError):
+    with pytest.raises(jwt.InvalidSignatureError):
         verifier.verify(make_token(other_key))
 
 
 def test_rejects_garbage(verifier):
-    with pytest.raises(TokenVerificationError):
+    with pytest.raises(jwt.DecodeError):
         verifier.verify("not-a-jwt")
 
 
-def test_jwks_failure_rejects_rather_than_admits(private_key):
-    """If the keys can't be fetched the token is refused, not waved through."""
+def test_key_fetch_failure_is_not_an_invalid_token(private_key):
+    """Unreachable keys must stay distinguishable from a bad token.
+
+    They warrant different answers: a bad token means log in again, unfetchable keys mean
+    the server could not decide and the client should retry.
+    """
     v = TokenVerifier(issuer_url=ISSUER)
 
     class _Broken:
         def get_signing_key_from_jwt(self, token):
-            raise ConnectionError("keycloak unreachable")
+            raise PyJWKClientError("keycloak unreachable")
 
     object.__setattr__(v, "_jwks", _Broken())
-    with pytest.raises(TokenVerificationError, match="Could not verify"):
+    with pytest.raises(PyJWKClientError):
         v.verify(make_token(private_key))
+    assert not issubclass(PyJWKClientError, jwt.InvalidTokenError)
 
 
 def test_from_env_requires_issuer(monkeypatch):
