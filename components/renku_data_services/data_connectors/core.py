@@ -932,15 +932,6 @@ async def create_deposit_upload(
             kind=job.kind,
         )
 
-    def _owner_reference_to_secret_dict(owner_reference: V1OwnerReference) -> dict[str, str | None]:
-        """Build the minimal string-only owner reference shape the secrets-storage-api expects."""
-        return {
-            "apiVersion": owner_reference.api_version,
-            "kind": owner_reference.kind,
-            "name": owner_reference.name,
-            "uid": owner_reference.uid,
-        }
-
     async def _request_saved_secret_creation(
         user: base_models.AuthenticatedAPIUser,
         secrets_storage_service_url: str,
@@ -966,7 +957,7 @@ async def create_deposit_upload(
                 "name": secret_name,
                 "namespace": deposit_config.namespace,
                 "secret_ids": [str(secret.secret_id) for secret in secrets],
-                "owner_references": [_owner_reference_to_secret_dict(owner_reference)],
+                "owner_references": [sanitizer(owner_reference)],
                 "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
                 "cluster_id": str(deposit_config.cluster_id),
             }

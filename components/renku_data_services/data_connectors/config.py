@@ -126,7 +126,7 @@ class ScicatConfig:
     def from_env(cls) -> ScicatConfig:
         """Generate the config from environment variables."""
         return cls(
-            url=os.environ.get("SCICAT_URL", "https://discovery-qa.psi.ch").rstrip("/"),
-            api_url=os.environ.get("SCICAT_API_URL", "https://dacat-qa.psi.ch/api/v3").rstrip("/"),
+            url=os.environ.get("SCICAT_URL", "https://discovery.psi.ch").rstrip("/"),
+            api_url=os.environ.get("SCICAT_API_URL", "https://dacat.psi.ch/api/v3").rstrip("/"),
             image=os.environ.get("SCICAT_JOB_IMAGE", "ghcr.io/swissdatasciencecenter/scicat-cli:latest"),
         )

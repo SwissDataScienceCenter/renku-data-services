@@ -48,7 +48,7 @@ class ScicatAPIClient:
     """SciCat API client."""
 
     def __init__(self) -> None:
-        self.base_url = os.environ.get("SCICAT_API_URL", "https://dacat-qa.psi.ch/api/v3").rstrip("/")
+        self.base_url = os.environ.get("SCICAT_API_URL", "https://dacat.psi.ch/api/v3").rstrip("/")
         self.__client = httpx.AsyncClient()
 
     async def create_deposit(self, api_key: str, body: DepositPost) -> DepositResponse:
