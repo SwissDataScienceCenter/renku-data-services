@@ -1368,8 +1368,7 @@ async def start_session(
             # TODO: Remove the old method, handle dc overrides.
             dcs_have_secrets = len(data_connectors_list) > 0 and any([len(i.secrets) > 0 for i in data_connectors_list])
             if dcs_have_secrets and isinstance(user, AuthenticatedAPIUser):
-                secret_key = await user_repo.get_or_create_user_secret_key(user)
-                user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode()
+                user_secret_key = await user_repo.get_or_create_user_secret_key(user)
                 import logging
 
                 logging.error(f"user secret key {user_secret_key}")

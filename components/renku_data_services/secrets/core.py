@@ -159,7 +159,7 @@ def __decrypt_secret(
         if user_key:
             pass
             logging.warning(user_key, user.id, decrypted_value)
-            # decrypted_value = decrypt_string(user_key.encode(), user.id, decrypted_value.encode())
+            decrypted_value = decrypt_string(user_key.encode(), user.id, decrypted_value.encode())
 
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
