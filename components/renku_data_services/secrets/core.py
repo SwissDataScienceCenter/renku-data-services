@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from base64 import b64encode
+from copy import deepcopy
+from typing import Any
 
 import kr8s
 from box import Box
@@ -17,7 +19,7 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sSecret, sanitizer
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
-from renku_data_services.secrets.models import OwnerReference
+from renku_data_services.secrets.models import OwnerReference, Secret
 from renku_data_services.utils.cryptography import (
     decrypt_rsa,
     decrypt_string,
@@ -34,11 +36,6 @@ async def validate_secret(
     previous_secret_service_private_key: rsa.RSAPrivateKey | None,
 ) -> K8sSecret:
     """Creates a single k8s secret from a list of user secrets stored in the DB."""
-    cluster_id = ClusterId(ULID.from_str(body.cluster_id)) if body.cluster_id is not None else DEFAULT_K8S_CLUSTER
-
-    owner_references = []
-    if body.owner_references:
-        owner_references = [OwnerReference.from_dict(o) for o in body.owner_references]
     secret_ids = [ULID.from_str(id.root) for id in body.secret_ids]
 
     secrets = await secrets_repo.get_secrets_by_ids(requested_by=user, secret_ids=secret_ids)
@@ -66,46 +63,21 @@ async def validate_secret(
     decrypted_secrets = {}
     try:
         for secret in secrets:
-            try:
-                decryption_key = decrypt_rsa(secret_service_private_key, secret.encrypted_key)
-            except ValueError:
-                if previous_secret_service_private_key is not None:
-                    # If we're rotating keys right now, try the old key
-                    decryption_key = decrypt_rsa(previous_secret_service_private_key, secret.encrypted_key)
-                else:
-                    raise
-
-            decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
-
             keys = (
                 key_mapping_with_lists_only[str(secret.id)]
                 if key_mapping_with_lists_only
                 else [secret.default_filename]
             )
             for key in keys:
-                decrypted_secrets[key] = b64encode(decrypted_value).decode()
+                decrypted_secrets[key] = __decrypt_secret(
+                    user, secret, secret_service_private_key, previous_secret_service_private_key, base_64_encode=True
+                )
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
         raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}") from None
 
-    owner_refs = []
-    if owner_references:
-        owner_refs = [o.to_k8s() for o in owner_references]
-
-    v1_secret = k8s_client.V1Secret(
-        data=decrypted_secrets,
-        metadata=k8s_client.V1ObjectMeta(
-            name=body.name,
-            namespace=body.namespace,
-            owner_references=owner_refs,
-        ),
-    )
-
-    return K8sSecret(
-        name=v1_secret.metadata.name,
-        namespace=v1_secret.metadata.namespace,
-        cluster=cluster_id,
-        manifest=Box(sanitizer(v1_secret)),
+    return __create_secret_manifest(
+        body.name, body.namespace, body.cluster_id, body.owner_references, decrypted_secrets
     )
 
 
@@ -128,3 +100,136 @@ async def create_or_patch_secret(client: SecretClient, secret: K8sSecret) -> K8s
         # don't wrap the error, we don't want secrets accidentally leaking.
         raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}") from None
     return result
+
+
+async def create_dc_config_secret(
+    user: base_models.APIUser,
+    body: apispec.DataConnectorsK8sSecret,
+    secrets_repo: LowLevelUserSecretsRepo,
+    secret_service_private_key: rsa.RSAPrivateKey,
+    previous_secret_service_private_key: rsa.RSAPrivateKey | None = None,
+) -> K8sSecret:
+    """Create a k8s secret that contains the configuration for a set of data connectors."""
+    config = await __combine_dc_configs(
+        user,
+        body.data_connectors,
+        secrets_repo,
+        body.combined_remote_name,
+        secret_service_private_key,
+        previous_secret_service_private_key,
+    )
+    return __create_secret_manifest(body.name, body.namespace, body.cluster_id, body.owner_references, config)
+
+
+def __decrypt_secret(
+    user: base_models.APIUser,
+    secret: Secret,
+    secret_service_private_key: rsa.RSAPrivateKey,
+    previous_secret_service_private_key: rsa.RSAPrivateKey | None = None,
+    base_64_encode: bool = True,
+) -> str:
+    if not user.id:
+        raise errors.UnauthorizedError(message="Cannot manage saved secrets for an unauthenticated user.")
+    try:
+        try:
+            decryption_key = decrypt_rsa(secret_service_private_key, secret.encrypted_key)
+        except ValueError:
+            if previous_secret_service_private_key is not None:
+                # If we're rotating keys right now, try the old key
+                decryption_key = decrypt_rsa(previous_secret_service_private_key, secret.encrypted_key)
+            else:
+                raise
+
+        decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value)
+
+    except Exception as e:
+        # don't wrap the error, we don't want secrets accidentally leaking.
+        raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}") from None
+
+    if base_64_encode:
+        return b64encode(decrypted_value.encode()).decode()
+    return decrypted_value
+
+
+async def __combine_dc_configs(
+    user: base_models.APIUser,
+    dcs: list[apispec.DataConnectorWithSecrets],
+    secrets_repo: LowLevelUserSecretsRepo,
+    combined_remote_name: str,
+    secret_service_private_key: rsa.RSAPrivateKey,
+    previous_secret_service_private_key: rsa.RSAPrivateKey | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Combine the data connector secret and configurations."""
+    output: dict[str, dict[str, Any]] = {}
+    combined_conf: dict[str, Any] = {"type": "combine"}
+    upstreams: list[str] = []
+    for dc in dcs:
+        dc_config = deepcopy(dc.config)
+
+        if dc.secrets:
+            for secret_id in dc.secrets:
+                secret_fields = dc.secrets[secret_id]
+                secrets = await secrets_repo.get_secrets_by_ids(user, [ULID.from_str(secret_id)])
+                if len(secrets) != 1:
+                    raise errors.ProgrammingError(message=f"Expected to get one secret but did got {len(secrets)}")
+                secret_enc = secrets[0]
+                secret_dec = __decrypt_secret(
+                    user,
+                    secret_enc,
+                    secret_service_private_key,
+                    previous_secret_service_private_key,
+                    base_64_encode=True,
+                )
+                if isinstance(secret_fields, str):
+                    secret_fields = [secret_fields]
+                for k in secret_fields:
+                    dc_config[k] = secret_dec
+
+        output[dc.remote_name] = dc_config
+        upstreams.append(f"{dc.remote_name}={dc.remote_name}:{dc.remote_path or ''}")
+
+    combined_conf["upstreams"] = " ".join(upstreams)
+    output[combined_remote_name] = combined_conf
+    return output
+
+
+def __create_secret_manifest(
+    name: str,
+    namespace: str,
+    cluster_id: ClusterId | str | ULID | None,
+    owner_references: list[dict[str, str]],
+    payload: dict[str, Any],
+) -> K8sSecret:
+    match cluster_id:
+        case ULID():
+            cluster_id = ClusterId(cluster_id)
+        case str():
+            cluster_id = ClusterId(ULID.from_str(cluster_id))
+        case ClusterId():
+            pass
+        case None:
+            cluster_id = None
+        case _:
+            raise errors.ValidationError(
+                message=f"Cannot create secret manifest when the cluster id is of unexpected type: {type(cluster_id)}"
+            )
+
+    owner_refs = []
+    if owner_references:
+        owner_refs = [OwnerReference.from_dict(o).to_k8s() for o in owner_references]
+
+    v1_secret = k8s_client.V1Secret(
+        data=payload,
+        metadata=k8s_client.V1ObjectMeta(
+            name=name,
+            namespace=namespace,
+            owner_references=owner_refs,
+        ),
+    )
+
+    return K8sSecret(
+        name=v1_secret.metadata.name,
+        namespace=v1_secret.metadata.namespace,
+        cluster=cluster_id or DEFAULT_K8S_CLUSTER,
+        manifest=Box(sanitizer(v1_secret)),
+    )
