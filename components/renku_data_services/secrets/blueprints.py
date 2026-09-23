@@ -50,7 +50,7 @@ class K8sSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(json=apispec.K8sSecret)
+        @validate(json=apispec.DataConnectorsK8sSecret)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.DataConnectorsK8sSecret) -> JSONResponse:
             secret = await create_dc_config_secret(
                 user,
