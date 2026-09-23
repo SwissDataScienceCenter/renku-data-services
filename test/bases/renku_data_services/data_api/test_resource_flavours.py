@@ -302,6 +302,46 @@ async def test_unlink_keeps_the_current_values(
 
 
 @pytest.mark.asyncio
+async def test_a_flavour_edit_cannot_break_the_quota_of_a_linked_pool(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    flavour = await _create_flavour(sanic_client, admin_headers)
+    pool = await _create_pool(
+        sanic_client, {**valid_resource_pool_payload, "quota": {"cpu": 8, "memory": 32, "gpu": 0}}
+    )
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{pool['id']}/classes",
+        headers=admin_headers,
+        json={"name": "linked-class", "default": False, "resource_flavour_id": flavour["id"]},
+    )
+    assert res.status_code == 201, res.text
+    class_id = res.json["id"]
+
+    _, res = await sanic_client.patch(
+        f"/api/data/resource_flavours/{flavour['id']}", headers=admin_headers, json={"cpu": 16.0}
+    )
+    assert res.status_code == 409, res.text
+    assert "linked-class" in res.text
+
+    _, res = await sanic_client.get(f"/api/data/resource_flavours/{flavour['id']}", headers=admin_headers)
+    assert res.status_code == 200, res.text
+    assert res.json["cpu"] == 2.0, "the rejected patch is rolled back"
+
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{pool['id']}/classes/{class_id}", headers=admin_headers)
+    assert res.status_code == 200, res.text
+    assert res.json["cpu"] == 2.0
+
+    _, res = await sanic_client.patch(
+        f"/api/data/resource_flavours/{flavour['id']}", headers=admin_headers, json={"cpu": 8.0, "max_storage": 400}
+    )
+    assert res.status_code == 200, res.text
+    assert res.json["cpu"] == 8.0
+
+
+@pytest.mark.asyncio
 async def test_a_linked_flavour_cannot_be_deleted(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],

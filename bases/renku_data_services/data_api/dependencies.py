@@ -392,7 +392,9 @@ class DependencyManager:
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
-        resource_flavour_repo = ResourceFlavourRepository(session_maker=config.db.async_session_maker)
+        resource_flavour_repo = ResourceFlavourRepository(
+            session_maker=config.db.async_session_maker, quotas_repo=quota_repo
+        )
         project_storage_k8s = ProjectStorageK8s(config.nb_config.k8s_v2_client)
         project_storage_repo = ProjectStorageRepository(
             session_maker=config.db.async_session_maker,

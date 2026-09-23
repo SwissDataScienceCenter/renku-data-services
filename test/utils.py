@@ -290,7 +290,9 @@ class TestDependencyManager(DependencyManager):
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
-        resource_flavour_repo = ResourceFlavourRepository(session_maker=config.db.async_session_maker)
+        resource_flavour_repo = ResourceFlavourRepository(
+            session_maker=config.db.async_session_maker, quotas_repo=quota_repo
+        )
         reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
 
         git_repositories_repo = gitrepositoriesrepository_class(
