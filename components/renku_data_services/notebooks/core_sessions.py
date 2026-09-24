@@ -125,7 +125,7 @@ from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.models import Environment, SessionLauncher
+from renku_data_services.session.models import BuildParameters, Environment, FrontendVariant, SessionLauncher
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
@@ -933,11 +933,16 @@ async def get_mount_work_dir(
     return storage_mount, work_dir
 
 
-def ssh_proxy_session_extras(ssh_config: _SessionSshConfig, storage_mount: PurePosixPath) -> SessionExtraResources:
+def ssh_proxy_session_extras(
+    ssh_config: _SessionSshConfig, storage_mount: PurePosixPath, build_parameters: BuildParameters | None
+) -> SessionExtraResources:
     """Volumes and mounts delivering the proxy-to-session keys to a session.
 
+    Only ssh frontends are reached by the proxy; every other session must not get the keys.
     The two secrets are created once by the Helm keygen job; data-services only mounts them here.
     """
+    if build_parameters is None or build_parameters.frontend_variant != FrontendVariant.ssh:
+        return SessionExtraResources()
     if not ssh_config.proxy_host_key_secret or not ssh_config.proxy_auth_key_secret:
         return SessionExtraResources()
 
@@ -1092,7 +1097,9 @@ async def start_session(
     )
 
     # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
-    session_extras = session_extras.concat(ssh_proxy_session_extras(nb_config.sessions.ssh, storage_mount))
+    session_extras = session_extras.concat(
+        ssh_proxy_session_extras(nb_config.sessions.ssh, storage_mount, launcher.environment.build_parameters)
+    )
 
     # Data connectors
     session_extras = session_extras.concat(
@@ -1556,7 +1563,9 @@ async def patch_session(
     )
 
     # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
-    session_extras = session_extras.concat(ssh_proxy_session_extras(nb_config.sessions.ssh, storage_mount))
+    session_extras = session_extras.concat(
+        ssh_proxy_session_extras(nb_config.sessions.ssh, storage_mount, launcher.environment.build_parameters)
+    )
 
     # Data connectors: skip
     # TODO: How can we patch data connectors? Should we even patch them?
