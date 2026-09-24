@@ -68,6 +68,7 @@ class UnsavedCapacityReservation:
     recurrence: RecurrenceConfig
     provisioning: ProvisioningConfig
     project_template_id: ULID | None = None
+    resource_pool_id: int | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -83,6 +84,7 @@ class CapacityReservationPatch:
 
     name: str | None = None
     resource_class_id: int | None = None
+    resource_pool_id: int | None = None
     project_template_id: ULID | None = None
     recurrence: RecurrenceConfig | None = None
     provisioning: ProvisioningConfig | None = None

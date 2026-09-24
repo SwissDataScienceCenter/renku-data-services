@@ -43,6 +43,13 @@ class CapacityReservationRepository:
             raise errors.MissingResourceError(
                 message=f"Resource class with ID {capacity_reservation.resource_class_id} does not exist."
             )
+        if capacity_reservation.resource_pool_id is not None and not await self.cluster_repo.is_class_in_pool(
+            capacity_reservation.resource_class_id, capacity_reservation.resource_pool_id
+        ):
+            raise errors.ValidationError(
+                message=f"Resource class with ID {capacity_reservation.resource_class_id} is not offered by the "
+                f"resource pool with ID {capacity_reservation.resource_pool_id}."
+            )
 
         async with self.session_maker() as session, session.begin():
             capacity_reservation_orm = schemas.CapacityReservationORM.from_unsaved_model(capacity_reservation)

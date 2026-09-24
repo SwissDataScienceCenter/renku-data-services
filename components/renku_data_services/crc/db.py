@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Concatenate, Optional, ParamSpec, TypeVar
 from uuid import uuid4
 
 from sqlalchemy import NullPool, delete, false, select, true
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select, or_
@@ -68,26 +69,50 @@ class _Base:
         self.authz: Authz = authz
 
 
-_ORM = TypeVar("_ORM", schemas.ResourcePoolORM, schemas.ResourceClassORM)
+def _raise_for_duplicate_class_name(err: IntegrityError) -> None:
+    """Translate the unique constraint on resource class names into a validation error."""
+    if len(err.args) > 0 and "UniqueViolationError" in err.args[0] and "resource_classes_name" in err.args[0]:
+        raise errors.ValidationError(
+            message="A resource class with this name already exists.",
+            detail="Resource class names are unique across all resource pools, please pick another one.",
+        ) from err
+    raise err
 
 
-async def _filter_by_authz(
-    api_user: base_models.APIUser,
-    stmt: Select[tuple[_ORM]],
-    authz: Authz | None,
-) -> Select[tuple[_ORM]]:
-    """Modifies a select query to list resource pools based on whether the user is logged in or not."""
-    output = stmt
-    if api_user.is_admin:
-        return output
+async def _allowed_resource_pool_ids(api_user: base_models.APIUser, authz: Authz | None) -> list[int]:
+    """List the IDs of the resource pools the user is allowed to read."""
     if authz is None:
         raise errors.ProgrammingError(message="Authz must be set for non admin request")
     allowed_resource_pools = await authz.resources_with_permission(
         api_user, api_user.id, ResourceType.resource_pool, Scope.READ
     )
-    allowed_ids = [int(id) for id in allowed_resource_pools]
-    output = output.where(schemas.ResourcePoolORM.id.in_(allowed_ids))
-    return output
+    return [int(id) for id in allowed_resource_pools]
+
+
+async def _filter_visible_pools(
+    api_user: base_models.APIUser,
+    stmt: Select[tuple[schemas.ResourcePoolORM]],
+    authz: Authz | None,
+) -> Select[tuple[schemas.ResourcePoolORM]]:
+    """Modifies a select query to list resource pools based on whether the user is logged in or not."""
+    if api_user.is_admin:
+        return stmt
+    allowed_ids = await _allowed_resource_pool_ids(api_user, authz)
+    return stmt.where(schemas.ResourcePoolORM.id.in_(allowed_ids))
+
+
+async def _filter_visible_classes(
+    api_user: base_models.APIUser,
+    stmt: Select[tuple[schemas.ResourceClassORM]],
+    authz: Authz | None,
+) -> Select[tuple[schemas.ResourceClassORM]]:
+    """Modifies a select query to list the classes linked to at least one resource pool the user can read."""
+    if api_user.is_admin:
+        return stmt
+    allowed_ids = await _allowed_resource_pool_ids(api_user, authz)
+    return stmt.where(
+        schemas.ResourceClassORM.pool_links.any(schemas.ResourcePoolClassORM.resource_pool_id.in_(allowed_ids))
+    )
 
 
 _P = ParamSpec("_P")
@@ -148,7 +173,11 @@ class ResourcePoolQueryRepository:
         async with self.session_maker() as session:
             stmt = (
                 select(schemas.ResourcePoolORM)
-                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(
+                    selectinload(schemas.ResourcePoolORM.class_links).selectinload(
+                        schemas.ResourcePoolClassORM.resource_class
+                    )
+                )
                 .options(selectinload(schemas.ResourcePoolORM.cluster))
             )
             if name is not None:
@@ -156,7 +185,7 @@ class ResourcePoolQueryRepository:
             if id is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.id == id)
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = await _filter_by_authz(api_user, stmt, self.authz)
+            stmt = await _filter_visible_pools(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             orms = res.scalars().all()
             output: list[models.ResourcePool] = []
@@ -172,12 +201,20 @@ class ResourcePoolQueryRepository:
         async with self.session_maker() as session:
             stmt = (
                 select(schemas.ResourcePoolORM)
-                .where(schemas.ResourcePoolORM.classes.any(schemas.ResourceClassORM.id == resource_class_id))
-                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .where(
+                    schemas.ResourcePoolORM.class_links.any(
+                        schemas.ResourcePoolClassORM.resource_class_id == resource_class_id
+                    )
+                )
+                .options(
+                    selectinload(schemas.ResourcePoolORM.class_links).selectinload(
+                        schemas.ResourcePoolClassORM.resource_class
+                    )
+                )
                 .options(selectinload(schemas.ResourcePoolORM.cluster))
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = await _filter_by_authz(api_user, stmt, self.authz)
+            stmt = await _filter_visible_pools(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             orm = res.scalar()
             if orm is None:
@@ -195,10 +232,14 @@ class ResourcePoolQueryRepository:
             stmt = (
                 select(schemas.ResourcePoolORM)
                 .where(schemas.ResourcePoolORM.id == resource_pool_id)
-                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(
+                    selectinload(schemas.ResourcePoolORM.class_links).selectinload(
+                        schemas.ResourcePoolClassORM.resource_class
+                    )
+                )
                 .options(selectinload(schemas.ResourcePoolORM.cluster))
             )
-            stmt = await _filter_by_authz(api_user, stmt, self.authz)
+            stmt = await _filter_visible_pools(api_user, stmt, self.authz)
             if name is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.name == name)
             res = await session.execute(stmt)
@@ -216,7 +257,11 @@ class ResourcePoolQueryRepository:
             stmt = (
                 select(schemas.ResourcePoolORM)
                 .where(schemas.ResourcePoolORM.default == true())
-                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(
+                    selectinload(schemas.ResourcePoolORM.class_links).selectinload(
+                        schemas.ResourcePoolClassORM.resource_class
+                    )
+                )
             )
             res = await session.scalar(stmt)
             if res is None:
@@ -226,20 +271,21 @@ class ResourcePoolQueryRepository:
             quota = await self.quotas_repo.get_quota(res.quota, res.get_cluster_id()) if res.quota else None
             return res.dump(quota)
 
-    async def get_default_resource_class(self) -> models.ResourceClass:
+    async def get_default_resource_class(self) -> models.ResolvedResourceClass:
         """Get the default resource class in the default resource pool."""
         async with self.session_maker() as session:
             stmt = (
-                select(schemas.ResourceClassORM)
-                .where(schemas.ResourceClassORM.default == true())
-                .where(schemas.ResourceClassORM.resource_pool.has(schemas.ResourcePoolORM.default == true()))
+                select(schemas.ResourcePoolClassORM)
+                .join(schemas.ResourcePoolORM, schemas.ResourcePoolClassORM.resource_pool)
+                .where(schemas.ResourcePoolClassORM.is_default == true())
+                .where(schemas.ResourcePoolORM.default == true())
             )
-            res = await session.scalar(stmt)
-            if res is None:
+            link = await session.scalar(stmt)
+            if link is None:
                 raise errors.ProgrammingError(
                     message="Could not find the default class from the default resource pool, but this has to exist."
                 )
-            return res.dump()
+            return link.dump(link.resource_pool)
 
     async def filter_resource_pools(
         self,
@@ -264,21 +310,25 @@ class ResourcePoolQueryRepository:
             stmt = (
                 select(schemas.ResourcePoolORM)
                 .distinct()
-                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(
+                    selectinload(schemas.ResourcePoolORM.class_links).selectinload(
+                        schemas.ResourcePoolClassORM.resource_class
+                    )
+                )
                 .order_by(
                     schemas.ResourcePoolORM.id,
                     schemas.ResourcePoolORM.name,
                 )
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = await _filter_by_authz(api_user, stmt, self.authz)
+            stmt = await _filter_visible_pools(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             output: list[models.ResourcePool] = []
             rp: schemas.ResourcePoolORM
             for rp in res.scalars().all():
                 quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id())
                 credits_used = None
-                enforcement_enabled = any([c.quota_enforced for c in rp.classes])
+                enforcement_enabled = any(link.resource_class.quota_enforced for link in rp.class_links)
                 # TODO: Enable resource usage reporting broadly when the resource usage
                 # tracking / queries are more performant.
                 if self.resource_usage_service and api_user.is_authenticated and enforcement_enabled:
@@ -314,23 +364,10 @@ class ResourcePoolQueryRepository:
         api_user: Optional[base_models.APIUser] = None,
         id: Optional[int] = None,
         name: Optional[str] = None,
-        resource_pool_id: Optional[int] = None,
     ) -> list[models.ResourceClass]:
-        """Get classes from the database."""
+        """Get resource classes."""
         async with self.session_maker() as session:
-            if resource_pool_id is not None:
-                rp = await session.scalar(
-                    select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
-                )
-                if rp is None:
-                    raise errors.MissingResourceError(
-                        message=f"The resource pool with id {resource_pool_id} cannot be found."
-                    )
-            stmt = select(schemas.ResourceClassORM).join(
-                schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool, isouter=True
-            )
-            if resource_pool_id is not None:
-                stmt = stmt.where(schemas.ResourcePoolORM.id == resource_pool_id)
+            stmt = select(schemas.ResourceClassORM)
             if id is not None:
                 stmt = stmt.where(schemas.ResourceClassORM.id == id)
             if name is not None:
@@ -339,17 +376,57 @@ class ResourcePoolQueryRepository:
             # Apply user access control if api_user is provided
             if api_user is not None:
                 # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-                stmt = await _filter_by_authz(api_user, stmt, self.authz)
+                stmt = await _filter_visible_classes(api_user, stmt, self.authz)
 
             res = await session.execute(stmt)
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
 
+    async def get_pool_classes(
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        id: Optional[int] = None,
+        name: Optional[str] = None,
+    ) -> list[models.ResolvedResourceClass]:
+        """Get the classes a resource pool offers."""
+        async with self.session_maker() as session:
+            rp = await session.scalar(
+                select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
+            )
+            if rp is None:
+                raise errors.MissingResourceError(
+                    message=f"The resource pool with id {resource_pool_id} cannot be found."
+                )
+            # NOTE: The block below ensures that the right users can access the right resources, do not remove.
+            if not api_user.is_admin:
+                allowed_ids = await _allowed_resource_pool_ids(api_user, self.authz)
+                if rp.id not in allowed_ids:
+                    return []
+            links = sorted(rp.class_links, key=lambda link: link.sort_key)
+            if id is not None:
+                links = [link for link in links if link.resource_class_id == id]
+            if name is not None:
+                links = [link for link in links if link.resource_class.name == name]
+            return [link.dump(rp) for link in links]
+
     async def get_resource_class(self, api_user: base_models.APIUser, id: int) -> models.ResourceClass:
-        """Get a specific resource class by its ID."""
+        """Get a resource class by its ID."""
         classes = await self.get_classes(api_user, id)
         if len(classes) == 0:
             raise errors.MissingResourceError(message=f"The resource class with ID {id} cannot be found")
+        return classes[0]
+
+    async def resolve_class_in_pool(
+        self, api_user: base_models.APIUser, resource_class_id: int, resource_pool_id: int
+    ) -> models.ResolvedResourceClass:
+        """Get a resource class as configured in a pool."""
+        classes = await self.get_pool_classes(api_user, resource_pool_id, id=resource_class_id)
+        if len(classes) == 0:
+            raise errors.MissingResourceError(
+                message=f"The resource class with ID {resource_class_id} is not offered by the resource pool "
+                f"with ID {resource_pool_id}, or you cannot access it there."
+            )
         return classes[0]
 
 
@@ -428,7 +505,7 @@ class ResourcePoolRepository(_Base):
         """Get the default resource pool."""
         return await self.__query_repository.get_default_resource_pool()
 
-    async def get_default_resource_class(self) -> models.ResourceClass:
+    async def get_default_resource_class(self) -> models.ResolvedResourceClass:
         """Get the default resource class in the default resource pool."""
         return await self.__query_repository.get_default_resource_class()
 
@@ -518,7 +595,10 @@ class ResourcePoolRepository(_Base):
                 )
 
         session.add(resource_pool)
-        await session.flush()
+        try:
+            await session.flush()
+        except IntegrityError as err:
+            _raise_for_duplicate_class_name(err)
         await session.refresh(resource_pool)
         result = resource_pool.dump(quota=quota)
         return result
@@ -528,14 +608,29 @@ class ResourcePoolRepository(_Base):
         api_user: Optional[base_models.APIUser] = None,
         id: Optional[int] = None,
         name: Optional[str] = None,
-        resource_pool_id: Optional[int] = None,
     ) -> list[models.ResourceClass]:
-        """Get classes from the database."""
-        return await self.__query_repository.get_classes(api_user, id, name, resource_pool_id)
+        """Get resource classes."""
+        return await self.__query_repository.get_classes(api_user, id, name)
+
+    async def get_pool_classes(
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        id: Optional[int] = None,
+        name: Optional[str] = None,
+    ) -> list[models.ResolvedResourceClass]:
+        """Get the classes a resource pool offers."""
+        return await self.__query_repository.get_pool_classes(api_user, resource_pool_id, id, name)
 
     async def get_resource_class(self, api_user: base_models.APIUser, id: int) -> models.ResourceClass:
-        """Get a specific resource class by its ID."""
+        """Get a resource class by its ID."""
         return await self.__query_repository.get_resource_class(api_user, id)
+
+    async def resolve_class_in_pool(
+        self, api_user: base_models.APIUser, resource_class_id: int, resource_pool_id: int
+    ) -> models.ResolvedResourceClass:
+        """Get a resource class as configured in a pool."""
+        return await self.__query_repository.resolve_class_in_pool(api_user, resource_class_id, resource_pool_id)
 
     @_only_admins
     async def insert_resource_class(
@@ -545,35 +640,41 @@ class ResourcePoolRepository(_Base):
         *,
         resource_pool_id: int | None = None,
     ) -> models.ResourceClass:
-        """Insert a resource class in the database."""
+        """Insert a resource class in the database, linking it to a resource pool when one is given."""
         async with self.session_maker() as session, session.begin():
-            resource_class = schemas.ResourceClassORM.from_unsaved_model(
-                new_resource_class=new_resource_class, resource_pool_id=resource_pool_id
-            )
+            resource_class = schemas.ResourceClassORM.from_unsaved_model(new_resource_class=new_resource_class)
 
-            if resource_pool_id is not None:
-                stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
-                res = await session.execute(stmt)
-                rp = res.scalars().first()
-                if rp is None:
-                    raise errors.MissingResourceError(
-                        message=f"Resource pool with id {resource_pool_id} does not exist."
-                    )
-                resource_class.resource_pool = rp
-                if resource_class.default and len(rp.classes) > 0 and any([icls.default for icls in rp.classes]):
-                    raise errors.ValidationError(
-                        message="There can only be one default resource class per resource pool."
-                    )
-                quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
-                if quota and not quota.is_resource_class_compatible(new_resource_class):
-                    raise errors.ValidationError(
-                        message="The resource class {resource_class} is not compatible with the quota {quota}."
-                    )
+            if resource_pool_id is None:
+                session.add(resource_class)
+                try:
+                    await session.flush()
+                except IntegrityError as err:
+                    _raise_for_duplicate_class_name(err)
+                await session.refresh(resource_class)
+                return resource_class.dump()
 
+            stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
+            res = await session.execute(stmt)
+            rp = res.scalars().first()
+            if rp is None:
+                raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} does not exist.")
+            if new_resource_class.default and any(link.is_default for link in rp.class_links):
+                raise errors.ValidationError(message="There can only be one default resource class per resource pool.")
+            quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
+            if quota and not quota.is_resource_class_compatible(new_resource_class):
+                raise errors.ValidationError(
+                    message="The resource class {resource_class} is not compatible with the quota {quota}."
+                )
+
+            link = schemas.ResourcePoolClassORM(resource_class=resource_class, is_default=new_resource_class.default)
+            rp.class_links.append(link)
             session.add(resource_class)
-            await session.flush()
+            try:
+                await session.flush()
+            except IntegrityError as err:
+                _raise_for_duplicate_class_name(err)
             await session.refresh(resource_class)
-            return resource_class.dump()
+            return link.dump(rp)
 
     @_only_admins
     async def update_resource_pool(
@@ -584,7 +685,11 @@ class ResourcePoolRepository(_Base):
             stmt = (
                 select(schemas.ResourcePoolORM)
                 .where(schemas.ResourcePoolORM.id == resource_pool_id)
-                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(
+                    selectinload(schemas.ResourcePoolORM.class_links).selectinload(
+                        schemas.ResourcePoolClassORM.resource_class
+                    )
+                )
             )
             res = await session.scalars(stmt)
             rp = res.one_or_none()
@@ -718,11 +823,15 @@ class ResourcePoolRepository(_Base):
             # Clear stale class remote_json when the pool is not FirecREST
             if effective_pool_kind != models.RemoteConfigurationKind.firecrest:
                 updated_class_ids = {rc.id for rc in (update.classes or [])}
-                for cls_orm in rp.classes:
+                for link in rp.class_links:
+                    cls_orm = link.resource_class
                     if cls_orm.id not in updated_class_ids and cls_orm.remote_json is not None:
                         cls_orm.remote_json = None
 
-            await session.flush()
+            try:
+                await session.flush()
+            except IntegrityError as err:
+                _raise_for_duplicate_class_name(err)
             await session.refresh(rp)
             transaction_result = rp.dump(quota=quota)
             new_provider_id = transaction_result.remote.provider_id if transaction_result.remote else None
@@ -816,19 +925,20 @@ class ResourcePoolRepository(_Base):
     async def delete_resource_class(
         self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int
     ) -> None:
-        """Delete a specific resource class."""
+        """Remove a resource class from a resource pool."""
         async with self.session_maker() as session, session.begin():
             stmt = (
-                select(schemas.ResourceClassORM)
-                .where(schemas.ResourceClassORM.id == resource_class_id)
-                .where(schemas.ResourceClassORM.resource_pool_id == resource_pool_id)
+                select(schemas.ResourcePoolClassORM)
+                .where(schemas.ResourcePoolClassORM.resource_class_id == resource_class_id)
+                .where(schemas.ResourcePoolClassORM.resource_pool_id == resource_pool_id)
             )
             res = await session.execute(stmt)
-            cls = res.scalars().first()
-            if cls is not None:
-                if cls.default:
-                    raise errors.ValidationError(message="The default resource class cannot be deleted.")
-                await session.delete(cls)
+            link = res.scalars().first()
+            if link is None:
+                return
+            if link.is_default:
+                raise errors.ValidationError(message="The default resource class cannot be deleted.")
+            await session.delete(link)
 
     @_only_admins
     async def update_resource_class(
@@ -839,19 +949,17 @@ class ResourcePoolRepository(_Base):
         update: models.ResourceClassPatch,
         *,
         pool_kind: models.RemoteConfigurationKind | None = None,
-    ) -> models.ResourceClass:
-        """Update a specific resource class."""
+    ) -> models.ResolvedResourceClass:
+        """Update a specific resource class offered by a resource pool."""
         async with self.session_maker() as session, session.begin():
             stmt = (
-                select(schemas.ResourceClassORM)
-                .where(schemas.ResourceClassORM.id == resource_class_id)
-                .where(schemas.ResourceClassORM.resource_pool_id == resource_pool_id)
-                .join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool)
-                .options(selectinload(schemas.ResourceClassORM.resource_pool))
+                select(schemas.ResourcePoolClassORM)
+                .where(schemas.ResourcePoolClassORM.resource_class_id == resource_class_id)
+                .where(schemas.ResourcePoolClassORM.resource_pool_id == resource_pool_id)
             )
             res = await session.scalars(stmt)
-            cls = res.one_or_none()
-            if cls is None:
+            link = res.one_or_none()
+            if link is None:
                 raise errors.MissingResourceError(
                     message=(
                         f"The resource class with id {resource_class_id} does not exist, the resource pool with "
@@ -859,13 +967,15 @@ class ResourcePoolRepository(_Base):
                         "associated with the resource pool"
                     )
                 )
+            cls = link.resource_class
+            rp = link.resource_pool
 
-            if pool_kind is None and cls.resource_pool is not None and cls.resource_pool.remote_json is not None:
-                remote_kind = cls.resource_pool.remote_json.get("kind")
+            if pool_kind is None and rp.remote_json is not None:
+                remote_kind = rp.remote_json.get("kind")
                 if remote_kind is not None:
                     pool_kind = models.RemoteConfigurationKind(remote_kind)
 
-            validate_resource_class_update(existing=cls.dump(), update=update)
+            validate_resource_class_update(existing=link.dump(rp), update=update)
 
             # NOTE: updating the 'default' field is not supported, so it is skipped below
             if update.name is not None:
@@ -924,22 +1034,14 @@ class ResourcePoolRepository(_Base):
                     if existing_tol_key not in new_tolerations:
                         cls.tolerations.remove(existing_tol)
 
-            # NOTE: do we need to perform this check?
-            if cls.resource_pool is None:
-                raise errors.BaseError(
-                    message="Unexpected internal error.",
-                    detail=f"The resource class {resource_class_id} is not associated with any resource pool.",
-                )
-
-            await session.flush()
+            try:
+                await session.flush()
+            except IntegrityError as err:
+                _raise_for_duplicate_class_name(err)
             await session.refresh(cls)
 
-            cls_model = cls.dump()
-            quota = (
-                await self.quotas_repo.get_quota(cls_model.quota, cls.resource_pool.get_cluster_id())
-                if cls_model.quota
-                else None
-            )
+            cls_model = link.dump(rp)
+            quota = await self.quotas_repo.get_quota(cls_model.quota, rp.get_cluster_id()) if cls_model.quota else None
             if quota and not quota.is_resource_class_compatible(cls_model):
                 raise errors.ValidationError(
                     message=f"The resource class {cls_model} is not compatible with the quota {quota}"
@@ -951,7 +1053,7 @@ class ResourcePoolRepository(_Base):
     async def get_tolerations(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int) -> list[str]:
         """Get all tolerations of a resource class."""
         async with self.session_maker() as session:
-            res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
+            res_classes = await self.get_pool_classes(api_user=api_user, resource_pool_id=resource_pool_id, id=class_id)
             if len(res_classes) == 0:
                 raise errors.MissingResourceError(
                     message=f"The resource pool with ID {resource_pool_id} or the resource "
@@ -965,7 +1067,7 @@ class ResourcePoolRepository(_Base):
     async def delete_tolerations(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int) -> None:
         """Delete all tolerations for a specific resource class."""
         async with self.session_maker() as session, session.begin():
-            res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
+            res_classes = await self.get_pool_classes(api_user=api_user, resource_pool_id=resource_pool_id, id=class_id)
             if len(res_classes) == 0:
                 raise errors.MissingResourceError(
                     message=f"The resource pool with ID {resource_pool_id} or the resource "
@@ -980,7 +1082,7 @@ class ResourcePoolRepository(_Base):
     ) -> list[models.NodeAffinity]:
         """Get all affinities for a resource class."""
         async with self.session_maker() as session:
-            res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
+            res_classes = await self.get_pool_classes(api_user=api_user, resource_pool_id=resource_pool_id, id=class_id)
             if len(res_classes) == 0:
                 raise errors.MissingResourceError(
                     message=f"The resource pool with ID {resource_pool_id} or the resource "
@@ -994,7 +1096,7 @@ class ResourcePoolRepository(_Base):
     async def delete_affinities(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int) -> None:
         """Delete all affinities from a resource class."""
         async with self.session_maker() as session, session.begin():
-            res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
+            res_classes = await self.get_pool_classes(api_user=api_user, resource_pool_id=resource_pool_id, id=class_id)
             if len(res_classes) == 0:
                 raise errors.MissingResourceError(
                     message=f"The resource pool with ID {resource_pool_id} or the resource "
@@ -1181,7 +1283,11 @@ class MemberRepository(_Base):
                     message="Users cannot query for resource pools that belong to other users."
                 )
 
-            stmt = select(schemas.ResourcePoolORM).options(selectinload(schemas.ResourcePoolORM.classes))
+            stmt = select(schemas.ResourcePoolORM).options(
+                selectinload(schemas.ResourcePoolORM.class_links).selectinload(
+                    schemas.ResourcePoolClassORM.resource_class
+                )
+            )
             stmt = stmt.where(
                 or_(
                     schemas.ResourcePoolORM.public == true(),
@@ -1193,7 +1299,7 @@ class MemberRepository(_Base):
             if resource_pool_id is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.id == resource_pool_id)
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = await _filter_by_authz(api_user, stmt, self.authz)
+            stmt = await _filter_visible_pools(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             rps: Sequence[schemas.ResourcePoolORM] = res.scalars().all()
             output: list[models.ResourcePool] = []
@@ -1254,7 +1360,11 @@ class MemberRepository(_Base):
         stmt_rp = (
             select(schemas.ResourcePoolORM)
             .where(schemas.ResourcePoolORM.id.in_(resource_pool_ids))
-            .options(selectinload(schemas.ResourcePoolORM.classes))
+            .options(
+                selectinload(schemas.ResourcePoolORM.class_links).selectinload(
+                    schemas.ResourcePoolClassORM.resource_class
+                )
+            )
         )
         if user.no_default_access:
             stmt_rp = stmt_rp.where(schemas.ResourcePoolORM.default == false())
@@ -1349,7 +1459,9 @@ class MemberRepository(_Base):
                 .where(schemas.ResourcePoolORM.id == resource_pool_id)
                 .options(
                     selectinload(schemas.ResourcePoolORM.users),
-                    selectinload(schemas.ResourcePoolORM.classes),
+                    selectinload(schemas.ResourcePoolORM.class_links).selectinload(
+                        schemas.ResourcePoolClassORM.resource_class
+                    ),
                 )
             )
             res = await session.execute(stmt)
@@ -1716,7 +1828,11 @@ class MemberRepository(_Base):
             allowed_ids = [int(rp) async for rp in self.authz.get_group_resource_pools(str(group.id))]
             stmt = (
                 select(schemas.ResourcePoolORM)
-                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(
+                    selectinload(schemas.ResourcePoolORM.class_links).selectinload(
+                        schemas.ResourcePoolClassORM.resource_class
+                    )
+                )
                 .where(schemas.ResourcePoolORM.id.in_(allowed_ids))
             )
             res = await session.execute(stmt)
@@ -1842,17 +1958,20 @@ class ClusterRepository:
 
             return saved_cluster.dump()
 
-    async def get_cluster_id_for_resource_class(self, class_id: int) -> ClusterId | None:
-        """Return the cluster ID for the resource pool containing the given resource class.
-
-        Returns None if the resource pool uses the default cluster.
-        """
+    async def is_class_in_pool(self, resource_class_id: int, resource_pool_id: int) -> bool:
+        """Return whether a resource pool offers a resource class."""
         async with self.session_maker() as session:
             stmt = (
-                select(schemas.ResourcePoolORM.cluster_id)
-                .join(schemas.ResourceClassORM, schemas.ResourceClassORM.resource_pool_id == schemas.ResourcePoolORM.id)
-                .where(schemas.ResourceClassORM.id == class_id)
+                select(schemas.ResourcePoolClassORM)
+                .where(schemas.ResourcePoolClassORM.resource_class_id == resource_class_id)
+                .where(schemas.ResourcePoolClassORM.resource_pool_id == resource_pool_id)
             )
+            return await session.scalar(stmt) is not None
+
+    async def get_cluster_id_for_resource_pool(self, resource_pool_id: int) -> ClusterId | None:
+        """Return the cluster ID for a resource pool, or None if it uses the default cluster."""
+        async with self.session_maker() as session:
+            stmt = select(schemas.ResourcePoolORM.cluster_id).where(schemas.ResourcePoolORM.id == resource_pool_id)
             result = await session.scalar(stmt)
             if result is None:
                 return None
@@ -1862,7 +1981,7 @@ class ClusterRepository:
     async def get_resource_class_by_id(
         self, api_user: base_models.APIUser, class_id: int
     ) -> models.ResourceClass | None:
-        """Return the resource class with the given ID, including quota from the parent resource pool."""
+        """Return a resource class by its ID."""
         async with self.session_maker() as session:
             stmt = select(schemas.ResourceClassORM).where(schemas.ResourceClassORM.id == class_id)
             result = await session.scalar(stmt)

@@ -80,7 +80,6 @@ class DummyCRCValidator:
             gpu=0,
             id=1,
             default_storage=1,
-            default=True,
         )
 
 
