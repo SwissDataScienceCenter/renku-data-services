@@ -33,7 +33,13 @@ from renku_data_services.capacity_reservation.db import CapacityReservationRepos
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory
 from renku_data_services.crc import models as rp_models
-from renku_data_services.crc.db import ClusterRepository, MemberRepository, QuotaRepository, ResourcePoolRepository
+from renku_data_services.crc.db import (
+    ClusterRepository,
+    MemberRepository,
+    QuotaRepository,
+    ResourceFlavourRepository,
+    ResourcePoolRepository,
+)
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
@@ -284,6 +290,9 @@ class TestDependencyManager(DependencyManager):
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
+        resource_flavour_repo = ResourceFlavourRepository(
+            session_maker=config.db.async_session_maker, quotas_repo=quota_repo
+        )
         reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
 
         git_repositories_repo = gitrepositoriesrepository_class(
@@ -436,6 +445,7 @@ class TestDependencyManager(DependencyManager):
             kc_api=kc_api,
             member_repo=member_repo,
             rp_repo=rp_repo,
+            resource_flavour_repo=resource_flavour_repo,
             reprovisioning_repo=reprovisioning_repo,
             search_updates_repo=search_updates_repo,
             search_reprovisioning=search_reprovisioning,

@@ -1,6 +1,7 @@
 """Compute resource control (CRC) app."""
 
 import asyncio
+from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
@@ -18,21 +19,25 @@ from renku_data_services.base_models.core import Slug
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc import apispec
 from renku_data_services.crc.core import (
+    ResourceClassBody,
     validate_cluster,
     validate_cluster_patch,
     validate_quota_put_patch,
     validate_resource_class,
     validate_resource_class_patch_or_put,
+    validate_resource_flavour,
+    validate_resource_flavour_patch,
     validate_resource_pool_post,
     validate_resource_pool_put_or_patch,
 )
 from renku_data_services.crc.db import (
     ClusterRepository,
     MemberRepository,
+    ResourceFlavourRepository,
     ResourcePoolMemberResult,
     ResourcePoolRepository,
 )
-from renku_data_services.crc.models import MemberType, ResourcePoolMemberIdentifier
+from renku_data_services.crc.models import MemberType, ResourceFlavour, ResourcePoolMemberIdentifier
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
 
@@ -44,7 +49,13 @@ class ResourcePoolsBP(CustomBlueprint):
     rp_repo: ResourcePoolRepository
     member_repo: MemberRepository
     cluster_repo: ClusterRepository
+    flavour_repo: ResourceFlavourRepository
     authenticator: base_models.Authenticator
+
+    async def _resolve_flavours(self, classes: Sequence[ResourceClassBody]) -> dict[str, ResourceFlavour]:
+        """Load every resource flavour that the given resource class bodies link to."""
+        ids = {cls.resource_flavour_id for cls in classes if isinstance(cls, apispec.ResourceClassFromFlavour)}
+        return {i: await self.flavour_repo.get_flavour(ULID.from_str(i)) for i in ids}
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all resource pools."""
@@ -66,7 +77,8 @@ class ResourcePoolsBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourcePool)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourcePool) -> HTTPResponse:
-            new_resource_pool = validate_resource_pool_post(body=body)
+            flavours = await self._resolve_flavours(body.classes)
+            new_resource_pool = validate_resource_pool_post(body=body, flavours=flavours)
             res = await self.rp_repo.insert_resource_pool(api_user=user, new_resource_pool=new_resource_pool)
             return validated_json(apispec.ResourcePoolWithId, res, status=201)
 
@@ -446,11 +458,105 @@ class ResourcePoolMembersBP(CustomBlueprint):
 
 
 @dataclass(kw_only=True)
+class ResourceFlavoursBP(CustomBlueprint):
+    """Handlers for dealing with resource flavours."""
+
+    repo: ResourceFlavourRepository
+    authenticator: base_models.Authenticator
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get all resource flavours."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_query(query=apispec.ResourceFlavourParams)
+        async def _get_all(_: Request, user: base_models.APIUser, query: apispec.ResourceFlavourParams) -> HTTPResponse:
+            res = await self.repo.get_flavours(name=query.name)
+            return validated_json(apispec.ResourceFlavoursWithId, res)
+
+        return "/resource_flavours", ["GET"], _get_all
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Create a new resource flavour."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.ResourceFlavour)
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourceFlavour) -> HTTPResponse:
+            flavour = validate_resource_flavour(body)
+            res = await self.repo.insert_flavour(api_user=user, new_flavour=flavour)
+            return validated_json(apispec.ResourceFlavourWithId, res, 201)
+
+        return "/resource_flavours", ["POST"], _post
+
+    def get(self) -> BlueprintFactoryResponse:
+        """Get a specific resource flavour."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _get(_: Request, user: base_models.APIUser, resource_flavour_id: ULID) -> HTTPResponse:
+            res = await self.repo.get_flavour(resource_flavour_id)
+            return validated_json(apispec.ResourceFlavourWithId, res)
+
+        return "/resource_flavours/<resource_flavour_id:ulid>", ["GET"], _get
+
+    def get_resource_classes(self) -> BlueprintFactoryResponse:
+        """Get the resource classes linked to a resource flavour."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _get_resource_classes(
+            _: Request, user: base_models.APIUser, resource_flavour_id: ULID
+        ) -> HTTPResponse:
+            res = await self.repo.get_flavour_resource_classes(resource_flavour_id)
+            return validated_json(apispec.LinkedResourceClassesList, res)
+
+        return (
+            "/resource_flavours/<resource_flavour_id:ulid>/resource_classes",
+            ["GET"],
+            _get_resource_classes,
+        )
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Partially update a resource flavour."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.ResourceFlavourPatch)
+        async def _patch(
+            _: Request, user: base_models.APIUser, body: apispec.ResourceFlavourPatch, resource_flavour_id: ULID
+        ) -> HTTPResponse:
+            patch = validate_resource_flavour_patch(body)
+            res = await self.repo.update_flavour(api_user=user, flavour_id=resource_flavour_id, update=patch)
+            return validated_json(apispec.ResourceFlavourWithId, res)
+
+        return "/resource_flavours/<resource_flavour_id:ulid>", ["PATCH"], _patch
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Remove a resource flavour."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _delete(_: Request, user: base_models.APIUser, resource_flavour_id: ULID) -> HTTPResponse:
+            await self.repo.delete_flavour(api_user=user, flavour_id=resource_flavour_id)
+            return HTTPResponse(status=204)
+
+        return "/resource_flavours/<resource_flavour_id:ulid>", ["DELETE"], _delete
+
+
+@dataclass(kw_only=True)
 class ClassesBP(CustomBlueprint):
     """Handlers for dealing with resource classes of an individual resource pool."""
 
     repo: ResourcePoolRepository
+    flavour_repo: ResourceFlavourRepository
     authenticator: base_models.Authenticator
+
+    async def _resolve_flavour(self, body: ResourceClassBody) -> ResourceFlavour | None:
+        """Load the flavour a resource class body links to, if it links to one."""
+        if not isinstance(body, apispec.ResourceClassFromFlavour):
+            return None
+        return await self.flavour_repo.get_flavour(ULID.from_str(body.resource_flavour_id))
 
     def get_all(self) -> BlueprintFactoryResponse:
         """Get the classes of a specific resource pool."""
@@ -472,13 +578,14 @@ class ClassesBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate_db_ids
-        @validate(json=apispec.ResourceClass)
+        @validate(json=apispec.ResourceClassCreate)
         async def _post(
-            _: Request, user: base_models.APIUser, body: apispec.ResourceClass, resource_pool_id: int
+            _: Request, user: base_models.APIUser, body: apispec.ResourceClassCreate, resource_pool_id: int
         ) -> HTTPResponse:
             pool = await self.repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
             pool_kind = pool.remote.kind if pool.remote else None
-            cls = validate_resource_class(body=body, pool_kind=pool_kind)
+            flavour = await self._resolve_flavour(body.root)
+            cls = validate_resource_class(body=body.root, pool_kind=pool_kind, flavour=flavour)
             res = await self.repo.insert_resource_class(
                 api_user=user, new_resource_class=cls, resource_pool_id=resource_pool_id
             )
@@ -533,13 +640,17 @@ class ClassesBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate_db_ids
-        @validate(json=apispec.ResourceClass)
+        @validate(json=apispec.ResourceClassCreate)
         async def _put(
-            _: Request, user: base_models.APIUser, body: apispec.ResourceClass, resource_pool_id: int, class_id: int
+            _: Request,
+            user: base_models.APIUser,
+            body: apispec.ResourceClassCreate,
+            resource_pool_id: int,
+            class_id: int,
         ) -> HTTPResponse:
             pool = await self.repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
             pool_kind = pool.remote.kind if pool.remote else None
-            put = validate_resource_class_patch_or_put(body=body, method="PUT", existing_kind=pool_kind)
+            put = validate_resource_class_patch_or_put(body=body.root, method="PUT", existing_kind=pool_kind)
             rc = await self.repo.update_resource_class(
                 api_user=user,
                 resource_pool_id=resource_pool_id,
@@ -578,6 +689,26 @@ class ClassesBP(CustomBlueprint):
             return validated_json(apispec.ResourceClassWithId, rc)
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>", ["PATCH"], _patch
+
+    def delete_flavour_link(self) -> BlueprintFactoryResponse:
+        """Unlink a resource class from its resource flavour."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        async def _delete_flavour_link(
+            _: Request, user: base_models.APIUser, resource_pool_id: int, class_id: int
+        ) -> HTTPResponse:
+            await self.repo.unlink_resource_flavour(
+                api_user=user, resource_pool_id=resource_pool_id, resource_class_id=class_id
+            )
+            return empty()
+
+        return (
+            "/resource_pools/<resource_pool_id>/classes/<class_id>/resource_flavour",
+            ["DELETE"],
+            _delete_flavour_link,
+        )
 
     def get_tolerations(self) -> BlueprintFactoryResponse:
         """Get all tolerations of a resource class."""
