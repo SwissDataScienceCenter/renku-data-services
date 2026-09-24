@@ -562,7 +562,7 @@ async def create_deposit_upload(
     deposit_config: DepositConfig,
     storage_class: str,
     k8s_client: K8sClient,
-    data_service_base_url: str,
+    secrets_storage_service_url: str,
     deposit_job: models.DepositJob,
     job_client: DepositUploadJobClient,
     data_source_repo: DataSourceRepository,
@@ -814,14 +814,14 @@ async def create_deposit_upload(
 
     async def _request_saved_secret_creation(
         user: base_models.AuthenticatedAPIUser,
-        data_service_base_url: str,
+        secrets_storage_service_url: str,
         dc_secrets_dict: dict[str, list[models.DataConnectorSecret]],
         deposit_config: DepositConfig,
         pvc_name: str,
         owner_reference: V1OwnerReference,
     ) -> K8sObjectMeta | None:
         """Calls the secret service to request the creation of saved storage secrets."""
-        secrets_url = data_service_base_url + "/api/secrets/kubernetes"
+        secrets_url = secrets_storage_service_url + "/api/secrets/kubernetes"
         headers = {"Authorization": f"bearer {user.access_token}"}
         dc_secrets = list(dc_secrets_dict.items())
         if len(dc_secrets) > 0:
@@ -999,7 +999,7 @@ async def create_deposit_upload(
     try:
         created_saved_secret = await _request_saved_secret_creation(
             user=user,
-            data_service_base_url=data_service_base_url,
+            secrets_storage_service_url=secrets_storage_service_url,
             dc_secrets_dict=extras.data_connector_secrets,
             deposit_config=deposit_config,
             pvc_name=pvc_name,
