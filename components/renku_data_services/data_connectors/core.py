@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import contextlib
-from collections.abc import AsyncIterator
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime
@@ -883,15 +882,12 @@ async def create_deposit_upload(
     )
     dc_config_secrets = await data_connector_secret_repo.get_data_connector_secrets(user, dc.id)
 
-    async def dc_iter() -> AsyncIterator[models.DataConnectorWithSecrets]:
-        yield dc.with_secrets(dc_config_secrets)
-
     extras = await data_source_repo.get_data_sources(
         request=request,
         user=user,
         resource_type="deposit_job",
         base_name=deposit_job.name,
-        data_connectors_stream=dc_iter(),
+        data_connectors=[dc.with_secrets(dc_config_secrets)],
         work_dir=PurePosixPath(),
         data_connectors_overrides=[],
         namespace=deposit_config.namespace,

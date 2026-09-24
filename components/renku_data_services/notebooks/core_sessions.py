@@ -129,6 +129,7 @@ from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import get_effective_quota
+from renku_data_services.utils.cryptography import get_encryption_key
 
 logger = logging.getLogger(__name__)
 
@@ -456,6 +457,62 @@ async def request_dc_secret_creation(
                     "Please contact a Renku administrator.",
                     detail=res.text,
                 )
+
+
+async def request_dc_secret_creation_new(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    nb_config: NotebooksConfig,
+    manifest: AmaltheaSessionV1Alpha1,
+    data_connectors: list[DataConnectorWithSecrets],
+    user_key: str | None,
+) -> None:
+    """Request the specified data connector secrets to be created by the secret service."""
+    if isinstance(user, AnonymousAPIUser):
+        return
+    owner_reference = {
+        "apiVersion": manifest.apiVersion,
+        "kind": manifest.kind,
+        "name": manifest.metadata.name,
+        "uid": manifest.metadata.uid,
+    }
+    secrets_url = nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/data_connectors/kubernetes"
+    headers = {"Authorization": f"bearer {user.access_token}"}
+
+    cluster_id = None
+    namespace = await nb_config.k8s_v2_client.namespace()
+    if (cluster := await nb_config.k8s_v2_client.cluster_by_class_id(manifest.resource_class_id(), user)) is not None:
+        cluster_id = cluster.id
+        namespace = cluster.namespace
+
+    request_data = {
+        "name": f"{manifest.metadata.name}-dc-secrets",
+        "namespace": namespace,
+        "owner_references": [owner_reference],
+        "cluster_id": str(cluster_id),
+        "combined_remote_name": "__combined__",
+        "user_private_key": user_key,
+    }
+    request_data_connectors = []
+    for dc in data_connectors:
+        secrets_config = {str(sec.secret_id): [sec.name] for sec in dc.secrets}
+        request_data_connectors.append(
+            {
+                "remote_name": str(dc.data_connector.id) + "_" + dc.data_connector.slug,
+                "remote_path": dc.data_connector.storage.source_path,
+                "config": dc.data_connector.storage.configuration,
+                "secrets": secrets_config,
+            }
+        )
+    request_data["data_connectors"] = request_data_connectors
+    async with httpx.AsyncClient(timeout=10) as client:
+        res = await client.post(secrets_url, headers=headers, json=request_data)
+        if res.status_code >= 300 or res.status_code < 200:
+            raise errors.ProgrammingError(
+                message=f"The secret for data connector with {dc.data_connector.id} could not be "
+                f"successfully created, the status code was {res.status_code}."
+                "Please contact a Renku administrator.",
+                detail=res.text,
+            )
 
 
 def get_launcher_env_variables(launcher: SessionLauncher, launch_request: SessionLaunchRequest) -> list[SessionEnvItem]:
@@ -1031,7 +1088,9 @@ async def start_session(
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id
     )
-    data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
+    data_connectors_list = [
+        i async for i in data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
+    ]
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
@@ -1054,7 +1113,7 @@ async def start_session(
             user=user,
             resource_type="session",
             base_name=server_name,
-            data_connectors_stream=data_connectors_stream,
+            data_connectors=data_connectors_list,
             work_dir=work_dir,
             data_connectors_overrides=launch_request.data_connectors_overrides or [],
             namespace=await nb_config.k8s_v2_client.namespace(),
@@ -1306,6 +1365,16 @@ async def start_session(
             await request_session_secret_creation(user, nb_config, session, session_secrets)
             data_connector_secrets = session_extras.data_connector_secrets or dict()
             await request_dc_secret_creation(user, nb_config, session, data_connector_secrets)
+            # TODO: Remove the old method, handle dc overrides.
+            dcs_have_secrets = len(data_connectors_list) > 0 and any([len(i.secrets) > 0 for i in data_connectors_list])
+            if dcs_have_secrets and isinstance(user, AuthenticatedAPIUser):
+                user_secret_key = await user_repo.get_or_create_user_secret_key(user)
+                import logging
+
+                logging.error(f"user secret key {user_secret_key}")
+            else:
+                user_secret_key = None
+            await request_dc_secret_creation_new(user, nb_config, session, data_connectors_list, user_secret_key)
         except Exception:
             await nb_config.k8s_v2_client.delete_session(server_name, user.id)
             raise
