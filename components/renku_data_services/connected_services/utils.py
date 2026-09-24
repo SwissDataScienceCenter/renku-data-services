@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def generate_code_verifier(size: int = 48) -> str:
     """Returns a randomly generated code for use in PKCE."""
     rand = random.SystemRandom()
-    return base64.b64encode(rand.randbytes(size)).decode()
+    return base64.urlsafe_b64encode(rand.randbytes(size)).decode()
 
 
 class GitHubProviderType(StrEnum):

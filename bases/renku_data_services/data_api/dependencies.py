@@ -40,6 +40,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
+from renku_data_services.data_connectors.deposits.scicat import ScicatAPIClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.client_interfaces import K8sClient
@@ -185,6 +186,7 @@ class DependencyManager:
     build_logs_repo: ImageBuildPersistedLogsReadRepository
     zenodo_client: ZenodoAPIClient
     envidat_client: EnvidatClient
+    scicat_client: ScicatAPIClient
     job_client: DepositUploadJobClient
     secret_client: K8sSecretClient
     internal_token_mint: RenkuSelfTokenMint
@@ -570,6 +572,7 @@ class DependencyManager:
             build_logs_repo=build_logs_repo,
             zenodo_client=ZenodoAPIClient(),
             envidat_client=EnvidatClient(),
+            scicat_client=ScicatAPIClient(),
             job_client=job_client,
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,

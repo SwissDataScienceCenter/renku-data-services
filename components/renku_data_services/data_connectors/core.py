@@ -4,24 +4,28 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import json
 from collections.abc import AsyncIterator
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import httpx
 import kubernetes
 from kubernetes.client import (
     V1Capabilities,
+    V1ConfigMap,
+    V1ConfigMapVolumeSource,
     V1Container,
     V1EnvFromSource,
     V1EnvVar,
     V1Job,
     V1JobSpec,
     V1JobStatus,
+    V1KeyToPath,
     V1ObjectMeta,
     V1OwnerReference,
     V1PersistentVolumeClaim,
@@ -52,6 +56,7 @@ from renku_data_services.data_connectors.constants import (
     _UNSAFE_SCICAT_COMBINE_PROVIDER,
     ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS,
 )
+from renku_data_services.data_connectors.deposits.scicat import DepositResponse as ScicatDepositResponse
 from renku_data_services.data_connectors.doi import schema_org
 from renku_data_services.data_connectors.doi.metadata import (
     DOIProviders,
@@ -540,6 +545,9 @@ def serialize_deposit(deposit: models.DepositJob, deposit_config: DepositConfig)
                 }
             )
             external_url = f"{base}/#/workflow?{query_str}"
+        case models.DepositSource.scicat:
+            base = deposit_config.scicat.url.rstrip("/")
+            external_url = f"{base}/datasets/{quote(deposit.deposit.original_id, safe='')}"
         case _:
             external_url = ""
     return dict(
@@ -562,18 +570,19 @@ async def create_deposit_upload(
     deposit_config: DepositConfig,
     storage_class: str,
     k8s_client: K8sClient,
-    data_service_base_url: str,
+    secrets_storage_service_url: str,
     deposit_job: models.DepositJob,
     job_client: DepositUploadJobClient,
     data_source_repo: DataSourceRepository,
     data_connector_repo: DataConnectorRepository,
     data_connector_secret_repo: DataConnectorSecretRepository,
     deposit_api_key: str | None = None,
+    deposit_data: ScicatDepositResponse | None = None,
 ) -> None:
     """Create the resources required to upload data to a deposit."""
 
     def _convert_to_k8s_object(
-        input: V1Job | V1Secret | V1PersistentVolumeClaim, cluster_id: ClusterId, user_id: str
+        input: V1Job | V1Secret | V1PersistentVolumeClaim | V1ConfigMap, cluster_id: ClusterId, user_id: str
     ) -> K8sObject:
         if not isinstance(input.metadata, V1ObjectMeta):
             raise errors.ProgrammingError(message="Cannot convert a k8s object that is missing metadata.")
@@ -584,6 +593,8 @@ async def create_deposit_upload(
                 gvk = GVK(kind="Secret", version="v1")
             case V1PersistentVolumeClaim():
                 gvk = GVK(kind="PersistentVolumeClaim", version="v1")
+            case V1ConfigMap():
+                gvk = GVK(kind="ConfigMap", version="v1")
             case x:
                 raise errors.ProgrammingError(
                     message=f"Unexpected resource type {x.api_version}-{x.kind} when creating converting k8s object"
@@ -616,6 +627,12 @@ async def create_deposit_upload(
             data={k: base64.b64encode(v.encode()).decode() for k, v in data.items()},
         )
 
+    def _get_copy_source(mount_path: PurePosixPath, deposit_path: PurePosixPath | None) -> PurePosixPath:
+        copy_source = mount_path
+        if deposit_path is not None:
+            copy_source = mount_path / (deposit_path.relative_to("/") if deposit_path.is_absolute() else deposit_path)
+        return copy_source
+
     def _create_envidat_upload_job_manifest(
         deposit_config: DepositConfig,
         deposit_job: models.DepositJob,
@@ -625,13 +642,7 @@ async def create_deposit_upload(
         suspended: bool = False,
     ) -> V1Job:
         mount_path = PurePosixPath("/" + pvc_name)
-        copy_source = mount_path
-        if deposit_job.deposit.path is not None:
-            copy_source = mount_path / (
-                deposit_job.deposit.path.relative_to("/")
-                if deposit_job.deposit.path.is_absolute()
-                else deposit_job.deposit.path
-            )
+        copy_source = _get_copy_source(mount_path, deposit_job.deposit.path)
         destination = f"envidat:{deposit_config.envidat.s3_bucket}/{deposit_job.deposit.original_id}/"
         return V1Job(
             metadata=V1ObjectMeta(
@@ -705,13 +716,7 @@ async def create_deposit_upload(
         suspended: bool = False,
     ) -> V1Job:
         mount_path = PurePosixPath("/" + pvc_name)
-        copy_source = mount_path
-        if deposit_job.deposit.path is not None:
-            copy_source = mount_path / (
-                deposit_job.deposit.path.relative_to("/")
-                if deposit_job.deposit.path.is_absolute()
-                else deposit_job.deposit.path
-            )
+        copy_source = _get_copy_source(mount_path, deposit_job.deposit.path)
 
         return V1Job(
             metadata=V1ObjectMeta(
@@ -773,6 +778,121 @@ async def create_deposit_upload(
             ),
         )
 
+    def _get_scicat_mount_path(deposit_job: models.DepositJob) -> PurePosixPath:
+        """Get the mount path for the scicat upload job."""
+        # NOTE: scicat cli prevents exporting data with the same sourceFolder,
+        # so we use the deposit id as the mount path to avoid conflicts.
+        # This still prevents exporting the same data twice to the same deposit.
+        return PurePosixPath("/" + str(deposit_job.deposit.id).lower())
+
+    def _create_scicat_configmap_manifest(
+        deposit_config: DepositConfig,
+        deposit_job: models.DepositJob,
+        deposit_data: ScicatDepositResponse,
+        labels: dict[str, str] | None = None,
+    ) -> V1ConfigMap:
+        mount_path = _get_scicat_mount_path(deposit_job)
+        copy_source = _get_copy_source(mount_path, deposit_job.deposit.path)
+
+        return V1ConfigMap(
+            metadata=V1ObjectMeta(
+                name=f"{deposit_job.name}-metadata",
+                namespace=deposit_config.namespace,
+                labels=labels,
+            ),
+            data={
+                "metadata.json": json.dumps(
+                    {
+                        "datasetName": deposit_job.deposit.name,
+                        "sourceFolder": copy_source.as_posix(),
+                        "ownerGroup": deposit_data.ownerGroup,
+                        "type": deposit_data.type,
+                    }
+                )
+            },
+        )
+
+    def _create_scicat_upload_job_manifest(
+        deposit_config: DepositConfig,
+        deposit_job: models.DepositJob,
+        api_key_secret_name: str,
+        work_dir: PurePosixPath,
+        pvc_name: str,
+        labels: dict[str, str] | None = None,
+        suspended: bool = False,
+    ) -> V1Job:
+        mount_path = _get_scicat_mount_path(deposit_job)
+
+        return V1Job(
+            metadata=V1ObjectMeta(
+                name=deposit_job.name,
+                namespace=deposit_config.namespace,
+                labels=labels,
+            ),
+            spec=V1JobSpec(
+                backoff_limit=0,
+                ttl_seconds_after_finished=3600 * 6,
+                suspend=suspended,
+                template=V1PodTemplateSpec(
+                    metadata=V1ObjectMeta(labels=labels),
+                    spec=V1PodSpec(
+                        restart_policy="Never",
+                        tolerations=deposit_config.tolerations,
+                        node_selector=deposit_config.node_selector,
+                        containers=[
+                            V1Container(
+                                security_context=V1SecurityContext(
+                                    privileged=False,
+                                    run_as_non_root=True,
+                                    capabilities=V1Capabilities(drop=["ALL"]),
+                                ),
+                                name="upload-deposit",
+                                image=deposit_config.scicat.image,
+                                env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=api_key_secret_name))],
+                                args=[
+                                    "datasetIngestor",
+                                    "--scicat-url",
+                                    deposit_config.scicat.api_url,
+                                    "--testenv",  # TODO: remove this flag when we move to production
+                                    "--token",
+                                    "$(SCICAT_TOKEN)",
+                                    "--copy",
+                                    "--transfer-type",
+                                    "s3",
+                                    "--ingest",
+                                    "--pid",
+                                    deposit_job.deposit.original_id,
+                                    "--noninteractive",
+                                    "/metadata/metadata.json",
+                                ],
+                                working_dir=work_dir.as_posix(),
+                                volume_mounts=[
+                                    V1VolumeMount(mount_path=mount_path.as_posix(), read_only=True, name=pvc_name),
+                                    V1VolumeMount(mount_path="/metadata", read_only=True, name="metadata-volume"),
+                                ],
+                            )
+                        ],
+                        volumes=[
+                            V1Volume(
+                                name=pvc_name,
+                                persistent_volume_claim=V1PersistentVolumeClaimVolumeSource(
+                                    claim_name=pvc_name,
+                                    read_only=True,
+                                ),
+                            ),
+                            V1Volume(
+                                name="metadata-volume",
+                                config_map=V1ConfigMapVolumeSource(
+                                    name=f"{deposit_job.name}-metadata",
+                                    items=[V1KeyToPath(key="metadata.json", path="metadata.json")],
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+            ),
+        )
+
     def _create_pvc_manifest(
         name: str,
         namespace: str,
@@ -812,16 +932,22 @@ async def create_deposit_upload(
             kind=job.kind,
         )
 
+    def _owner_reference_to_secret_dict(owner_reference: V1OwnerReference) -> dict[str, str | None]:
+        """Build the minimal string-only owner reference shape the secrets-storage-api expects."""
+
+        sanitized = sanitizer(owner_reference)
+        return {k: sanitized.get(k) for k in ("apiVersion", "kind", "name", "uid")}
+
     async def _request_saved_secret_creation(
         user: base_models.AuthenticatedAPIUser,
-        data_service_base_url: str,
+        secrets_storage_service_url: str,
         dc_secrets_dict: dict[str, list[models.DataConnectorSecret]],
         deposit_config: DepositConfig,
         pvc_name: str,
         owner_reference: V1OwnerReference,
     ) -> K8sObjectMeta | None:
         """Calls the secret service to request the creation of saved storage secrets."""
-        secrets_url = data_service_base_url + "/api/secrets/kubernetes"
+        secrets_url = secrets_storage_service_url + "/api/secrets/kubernetes"
         headers = {"Authorization": f"bearer {user.access_token}"}
         dc_secrets = list(dc_secrets_dict.items())
         if len(dc_secrets) > 0:
@@ -837,19 +963,19 @@ async def create_deposit_upload(
                 "name": secret_name,
                 "namespace": deposit_config.namespace,
                 "secret_ids": [str(secret.secret_id) for secret in secrets],
-                "owner_references": [sanitizer(owner_reference)],
+                "owner_references": [_owner_reference_to_secret_dict(owner_reference)],
                 "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
                 "cluster_id": str(deposit_config.cluster_id),
             }
             async with httpx.AsyncClient(timeout=10) as client:
                 res = await client.post(secrets_url, headers=headers, json=request_data)
-            if res.status_code >= 300 or res.status_code < 200:
-                raise errors.ProgrammingError(
-                    message=f"The secret for data connector with {s_id} could not be "
-                    f"successfully created, the status code was {res.status_code}."
-                    "Please contact a Renku administrator.",
-                    detail=res.text,
-                )
+                if res.status_code >= 300 or res.status_code < 200:
+                    raise errors.ProgrammingError(
+                        message=f"The secret for data connector with {s_id} could not be "
+                        f"successfully created, the status code was {res.status_code}. "
+                        "Please contact a Renku administrator.",
+                        detail=res.text,
+                    )
             return K8sObjectMeta(
                 name=secret_name,
                 cluster=deposit_config.cluster_id,
@@ -937,6 +1063,16 @@ async def create_deposit_upload(
                 labels=labels,
                 pvc_name=pvc_name,
             )
+        case models.DepositSource.scicat:
+            job = _create_scicat_upload_job_manifest(
+                deposit_config=deposit_config,
+                deposit_job=deposit_job,
+                api_key_secret_name=base_name,
+                work_dir=work_dir,
+                suspended=True,
+                labels=labels,
+                pvc_name=pvc_name,
+            )
         case x:
             raise errors.ValidationError(message=f"Received unknown deposit source {x}")
     created_job = await job_client.create(
@@ -948,6 +1084,22 @@ async def create_deposit_upload(
     created_objects: list[K8sObjectMeta] = [
         _convert_to_k8s_object(created_job, cluster_id=deposit_config.cluster_id, user_id=user.id)
     ]
+    if deposit_job.deposit.source == models.DepositSource.scicat:
+        if deposit_api_key is None:
+            raise errors.ProgrammingError(message="A SciCat deposit requires an API key.")
+        if deposit_data is None:
+            raise errors.ProgrammingError(message="A SciCat deposit requires a SciCat deposit response.")
+
+        # Create the configmap manifest that contains the metadata.json for SciCat
+        scicat_configmap = _create_scicat_configmap_manifest(
+            deposit_config=deposit_config,
+            deposit_job=deposit_job,
+            deposit_data=deposit_data,
+            labels=labels,
+        )
+        resources_to_create.append(
+            _convert_to_k8s_object(scicat_configmap, cluster_id=deposit_config.cluster_id, user_id=user.id)
+        )
 
     match deposit_job.deposit.source:
         case models.DepositSource.envidat:
@@ -960,6 +1112,10 @@ async def create_deposit_upload(
             if deposit_api_key is None:
                 raise errors.ProgrammingError(message="A Zenodo deposit requires an API key.")
             job_secret_data = {"ZENODO_API_KEY": deposit_api_key}
+        case models.DepositSource.scicat:
+            if deposit_api_key is None:
+                raise errors.ProgrammingError(message="A SciCat deposit requires an API key.")
+            job_secret_data = {"SCICAT_TOKEN": deposit_api_key}
         case x:
             raise errors.ValidationError(message=f"Received unknown deposit source {x}")
     job_secret = _create_secret_manifest(
@@ -999,7 +1155,7 @@ async def create_deposit_upload(
     try:
         created_saved_secret = await _request_saved_secret_creation(
             user=user,
-            data_service_base_url=data_service_base_url,
+            secrets_storage_service_url=secrets_storage_service_url,
             dc_secrets_dict=extras.data_connector_secrets,
             deposit_config=deposit_config,
             pvc_name=pvc_name,
