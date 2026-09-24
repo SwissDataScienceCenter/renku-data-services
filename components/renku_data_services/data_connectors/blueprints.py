@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
+from kr8s import ServerError
 from sanic import Request
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
@@ -957,10 +959,21 @@ class DataConnectorsBP(CustomBlueprint):
             output: dict[str, str] = {}
             containers = sorted(all_logs.keys())
             for container in containers:
-                logs_iter = all_logs[container]
-                logs: list[str] = []
-                async for log in logs_iter:
-                    logs.append(log)
+                # NOTE: mirror error handling in NotebookK8sClient.get_session_logs
+                try:
+                    logs: list[str] = [log async for log in all_logs[container]]
+                except (httpx.ResponseNotRead, httpx.HTTPStatusError):
+                    # NOTE: This occurs when the container is still starting, but we try to read its logs
+                    continue
+                except ServerError as err:
+                    if err.response is not None and err.response.status_code == 400:
+                        # NOTE: This occurs when the target container is not yet running, but we try to read its logs
+                        continue
+                    if err.response is not None and err.response.status_code == 404:
+                        raise errors.MissingResourceError(
+                            message=f"Could not find logs for deposit job {deposit_id}."
+                        ) from err
+                    raise
                 output[container] = "\n".join(logs)
             return validated_json(apispec.DepositLogs, output)
 
