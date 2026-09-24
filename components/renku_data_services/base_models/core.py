@@ -169,6 +169,14 @@ class Slug:
         object.__setattr__(self, "value", value)
 
     @classmethod
+    def from_str(cls, value: str) -> Self | None:
+        """Creates a slug from a string. Returns None if the string doesn't match the requirements."""
+        if not re.match(cls._regex, value):
+            return None
+        else:
+            return cls(value)
+
+    @classmethod
     def from_name(cls, name: str) -> Self:
         """Takes a name with any amount of invalid characters and transforms it in a valid slug."""
         lower_case = name.lower()
