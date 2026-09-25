@@ -2196,6 +2196,7 @@ components:
       oneOf:
         - $ref: "#/components/schemas/RemoteConfigurationFirecrest"
         - $ref: "#/components/schemas/RemoteConfigurationRunai"
+        - $ref: "#/components/schemas/RemoteConfigurationRunners"
     RemoteConfigurationFirecrest:
       type: object
       description: |
@@ -2275,6 +2276,18 @@ components:
       type: string
       description: The base URL of the Runai server
       example: "https://sdsc.run.ai"
+    RemoteConfigurationRunners:
+      type: object
+      description: The configuration for sending sessions to runners
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: ["runners"]
+          description: Kind of remote resource pool
+          example: "runners"
+      required:
+        - kind
     RemoteConfigurationPatch:
       type: object
       description: |
@@ -2283,6 +2296,7 @@ components:
         - $ref: "#/components/schemas/RemoteConfigurationPatchReset"
         - $ref: "#/components/schemas/RemoteConfigurationFirecrestPatch"
         - $ref: "#/components/schemas/RemoteConfigurationRunaiPatch"
+        - $ref: "#/components/schemas/RemoteConfigurationRunnersPatch"
     RemoteConfigurationPatchReset:
       type: object
       description: Value used to unset the remote field (empty object).
@@ -2322,6 +2336,16 @@ components:
           $ref: "#/components/schemas/RemoteConfigurationRunaiApiUrl"
         provider_id:
           $ref: "#/components/schemas/RemoteConfigurationFirecrestProviderId"
+    RemoteConfigurationRunnersPatch:
+      type: object
+      description: The configuration for starting sessions remotely with runners
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: ["runners"]
+          description: Kind of remote resource pool
+          example: "runners"
     IdleThreshold:
       type: integer
       description: A threshold in seconds after which a session gets hibernated (0 means no threshold)
