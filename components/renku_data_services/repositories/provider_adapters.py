@@ -115,7 +115,7 @@ class GitHubAdapter(GitProviderAdapter):
     def get_repository_permission_api_url(self, repository_url: str, username: str) -> str:
         """Compute the metadata API URL for getting a user's permissions on a repository."""
         repo_api_url = self.get_repository_api_url(repository_url)
-        return urljoin(repo_api_url, f"collaborators/{username}/permission")
+        return urljoin(f"{repo_api_url}/", f"collaborators/{username}/permission")
 
 
 _adapter_map: dict[ProviderKind, type[GitProviderAdapter]] = {
