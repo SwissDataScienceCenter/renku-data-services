@@ -24,6 +24,18 @@ paths:
       responses:
         "204":
           description: Authorized
+        "401":
+          description: Missing or invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: The caller does not have the required role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: The key is unknown or malformed, or the session does not exist or is not owned by the key's user
           content:

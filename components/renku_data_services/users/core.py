@@ -53,7 +53,7 @@ def fingerprint_ssh_public_key(public_key: str) -> str | None:
     """Return the OpenSSH-compatible fingerprint of an SSH public key, or None if it cannot be parsed.
 
     Matches `ssh-keygen -l`: SHA256 over the decoded key blob, base64 without padding, `SHA256:` prefixed.
-    It is the identity of a key and is what the internal identity endpoint looks up.
+    It is the identity of a key and is what the internal authorize endpoint looks up.
     """
     raw = public_key.strip()
     parts = raw.split()
