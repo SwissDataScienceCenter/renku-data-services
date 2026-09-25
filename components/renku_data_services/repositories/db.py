@@ -216,6 +216,7 @@ class GitRepositoriesRepository:
                 permission_url = adapter.get_repository_permission_api_url(
                     repository_url.render(), username=account.username
                 )
+                logger.info(f"[GITHUB] Checking: {permission_url}")
                 headers = adapter.api_common_headers or dict()
                 permission_response = await oauth_client.get(permission_url, headers=headers)
                 logger.info(f"[GITHUB] Got permission response: {permission_response.status_code}")
