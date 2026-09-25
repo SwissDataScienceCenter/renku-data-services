@@ -479,6 +479,13 @@ class SessionLauncherDataConnector(SessionLauncherDataConnectorPolicy):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherDataConnectorPatch(SessionLauncherDataConnectorPolicy):
+    """Model to patch a data connector and its access policies for a launcher."""
+
+    data_connector_to_project_link_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class SessionLauncherSecretPolicy:
     """Model to represent the visibility of a secret."""
 

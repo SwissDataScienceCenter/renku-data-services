@@ -8,9 +8,9 @@ from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnExpressionArgument, Select, delete, func, or_, select
+from sqlalchemy import ColumnExpressionArgument, Select, and_, case, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from ulid import ULID
 
 from renku_data_services import base_models, errors
@@ -43,6 +43,12 @@ from renku_data_services.search.db import GlobalDataConnector, SearchUpdatesRepo
 from renku_data_services.search.decorators import update_search_document
 from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.models import SecretKind
+from renku_data_services.session.models import (
+    SessionLauncherDataConnector,
+    SessionLauncherDataConnectorPatch,
+    SessionLauncherPolicy,
+)
+from renku_data_services.session.orm import SessionLauncherDataConnectorORM, SessionLauncherORM
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
@@ -1030,6 +1036,190 @@ class DataConnectorRepository:
 
             return links, count
 
+    @with_db_transaction
+    async def get_dc_link_policies_for_launcher(
+        self, user: base_models.APIUser, launcher_id: ULID, session: AsyncSession | None = None
+    ) -> list[SessionLauncherDataConnector]:
+        """Get the data connector links and the access policies for a session launcher."""
+
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        launcher = await session.scalar(select(SessionLauncherORM).where(SessionLauncherORM.id == launcher_id))
+        if launcher is None:
+            raise errors.MissingResourceError(
+                message=f"Launcher with id '{launcher_id}' does not exist or you do not have access to it."
+            )
+
+        project_id = launcher.project_id
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        allowed_dcs = await self.authz.resources_with_permission(user, user.id, ResourceType.data_connector, Scope.READ)
+
+        launcher_policy = SessionLauncherDataConnectorORM.policy["policy"]
+        connector_readonly = schemas.DataConnectorToProjectLinkORM.data_connector.readonly.is_(True)
+
+        # A launcher policy cannot be more permissive than the data connector's
+        # project-level policy.
+        effective_policy = case(
+            (
+                connector_readonly,
+                case(
+                    (
+                        launcher_policy == SessionLauncherPolicy.excluded,
+                        SessionLauncherPolicy.excluded,
+                    ),
+                    else_=SessionLauncherPolicy.read_only,
+                ),
+            ),
+            else_=func.coalesce(
+                launcher_policy,
+                SessionLauncherPolicy.read_write,
+            ),
+        ).label("policy")
+
+        result = await session.stream(
+            select(
+                schemas.DataConnectorToProjectLinkORM,
+                effective_policy,
+            )
+            .outerjoin(
+                SessionLauncherDataConnectorORM,
+                and_(
+                    SessionLauncherDataConnectorORM.data_connector_to_project_link_id
+                    == schemas.DataConnectorToProjectLinkORM.id,
+                    SessionLauncherDataConnectorORM.launcher_id == launcher.id,
+                ),
+            )
+            .where(
+                and_(
+                    schemas.DataConnectorToProjectLinkORM.project_id == project_id,
+                    schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(allowed_dcs),
+                )
+            )
+            .order_by(schemas.DataConnectorToProjectLinkORM.id.desc())
+        )
+
+        return [
+            SessionLauncherDataConnector(
+                launcher_id=launcher.id,
+                data_connector_to_project_link_id=link.id,
+                policy=SessionLauncherPolicy(policy),
+            )
+            async for link, policy in result
+        ]
+
+    @with_db_transaction
+    async def update_dc_link_policies_for_launcher(
+        self,
+        user: base_models.APIUser,
+        launcher_id: ULID,
+        patches: list[SessionLauncherDataConnectorPatch],
+        session: AsyncSession | None = None,
+    ) -> list[SessionLauncherDataConnector]:
+        """Get the data connector links and the access policies for a session launcher."""
+
+        if session is None:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        launcher = await session.scalar(select(SessionLauncherORM).where(SessionLauncherORM.id == launcher_id))
+        if launcher is None:
+            raise errors.MissingResourceError(
+                message=f"Launcher with id '{launcher_id}' does not exist or you do not have access to it."
+            )
+
+        project_id = launcher.project_id
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        patch_dc_link_ids_list = [patch.data_connector_to_project_link_id for patch in patches]
+
+        patch_dc_link_ids = {patch.data_connector_to_project_link_id for patch in patches}
+
+        if len(patch_dc_link_ids_list) != len(patch_dc_link_ids):
+            raise errors.ValidationError(message="A data connector link id may only appear once in the list.")
+
+        allowed_dcs = await self.authz.resources_with_permission(user, user.id, ResourceType.data_connector, Scope.READ)
+
+        result = await session.stream_scalars(
+            select(schemas.DataConnectorToProjectLinkORM)
+            .where(
+                and_(
+                    schemas.DataConnectorToProjectLinkORM.project_id == project_id,
+                    schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(allowed_dcs),
+                )
+            )
+            .options(selectinload(schemas.DataConnectorToProjectLinkORM.data_connector))
+        )
+
+        project_dc_links = {link.id: link async for link in result}
+
+        invalid_dc_link_ids = patch_dc_link_ids - project_dc_links.keys()
+
+        if invalid_dc_link_ids:
+            raise errors.ValidationError(
+                message=f"Data connector links do not belong to project {project_id}: {invalid_dc_link_ids}"
+            )
+
+        result = await session.stream_scalars(
+            select(SessionLauncherDataConnectorORM)
+            .where(
+                and_(
+                    SessionLauncherDataConnectorORM.launcher_id == launcher_id,
+                    SessionLauncherDataConnectorORM.data_connector_to_project_link_id.in_(patch_dc_link_ids),
+                )
+            )
+            .options(
+                selectinload(SessionLauncherDataConnectorORM.data_connector_to_project_link).selectinload(
+                    schemas.DataConnectorToProjectLinkORM.data_connector
+                )
+            )
+        )
+
+        launcher_dc_links = {link.data_connector_to_project_link_id: link async for link in result}
+
+        updated = []
+
+        for patch in patches:
+            dc_link = launcher_dc_links.get(patch.data_connector_to_project_link_id)
+            data_connector = project_dc_links[patch.data_connector_to_project_link_id].data_connector
+
+            if patch.policy.requires_write_access and data_connector.readonly:
+                raise errors.ValidationError(
+                    message=f"Read only data connector cannot be made writable: {data_connector.id}"
+                )
+
+            if dc_link is None:
+                dc_link = SessionLauncherDataConnectorORM(
+                    launcher_id=launcher_id,
+                    data_connector_to_project_link_id=patch.data_connector_to_project_link_id,
+                    policy={"policy": patch.policy},
+                )
+                session.add(dc_link)
+            else:
+                dc_link.policy = {"policy": patch.policy}
+
+            updated.append(dc_link)
+
+        await session.flush()
+
+        return [link.dump() for link in updated]
+
 
 class DataConnectorSecretRepository:
     """Repository for data connector secrets."""
@@ -1052,6 +1242,7 @@ class DataConnectorSecretRepository:
         self,
         user: base_models.APIUser,
         project_id: ULID,
+        launcher_id: ULID | None = None,
     ) -> AsyncIterator[models.DataConnectorWithSecrets]:
         """Get all data connectors and their secrets for a project."""
         if user.id is None:
@@ -1068,25 +1259,60 @@ class DataConnectorSecretRepository:
         )
 
         async with self.session_maker() as session:
-            stmt = (
-                select(schemas.DataConnectorORM)
-                .where(
-                    schemas.DataConnectorORM.project_links.any(
-                        schemas.DataConnectorToProjectLinkORM.project_id == project_id
-                    ),
-                    schemas.DataConnectorORM.id.in_(data_connector_ids),
+            if launcher_id is None:
+                stmt = (
+                    select(schemas.DataConnectorORM, schemas.DataConnectorORM.readonly.label("computed_readonly"))
+                    .join(schemas.DataConnectorToProjectLinkORM, schemas.DataConnectorORM.project_links)
+                    .where(
+                        schemas.DataConnectorToProjectLinkORM.project_id == project_id,
+                        schemas.DataConnectorORM.id.in_(data_connector_ids),
+                    )
+                    .options(
+                        joinedload(schemas.DataConnectorORM.slug)
+                        .joinedload(ns_schemas.EntitySlugORM.project)
+                        .joinedload(ProjectORM.slug)
+                    )
                 )
-                .options(
-                    joinedload(schemas.DataConnectorORM.slug)
-                    .joinedload(ns_schemas.EntitySlugORM.project)
-                    .joinedload(ProjectORM.slug)
+            else:
+                stmt = (
+                    select(
+                        schemas.DataConnectorORM,
+                        # If readOnly -> True, otherwise inherit DataConnectorORM.readonly
+                        or_(
+                            schemas.DataConnectorORM.readonly.is_(True),
+                            SessionLauncherDataConnectorORM.policy["policy"] == SessionLauncherPolicy.read_only,
+                        ).label("computed_readonly"),
+                    )
+                    .join(schemas.DataConnectorToProjectLinkORM, schemas.DataConnectorORM.project_links)
+                    .outerjoin(
+                        SessionLauncherDataConnectorORM,
+                        and_(
+                            SessionLauncherDataConnectorORM.data_connector_to_project_link_id
+                            == schemas.DataConnectorToProjectLinkORM.id,
+                            SessionLauncherDataConnectorORM.launcher_id == launcher_id,
+                        ),
+                    )
+                    .where(
+                        schemas.DataConnectorToProjectLinkORM.project_id == project_id,
+                        schemas.DataConnectorORM.id.in_(data_connector_ids),
+                        # Exclude 'excluded' policies, but keep NULL rows from the outer join
+                        or_(
+                            SessionLauncherDataConnectorORM.launcher_id.is_(None),
+                            SessionLauncherDataConnectorORM.policy["policy"] != SessionLauncherPolicy.excluded,
+                        ),
+                    )
+                    .options(
+                        joinedload(schemas.DataConnectorORM.slug)
+                        .joinedload(ns_schemas.EntitySlugORM.project)
+                        .joinedload(ProjectORM.slug)
+                    )
                 )
-            )
 
-            results = await session.stream_scalars(stmt)
-            async for dc in results:
+            results = await session.stream(stmt)
+            async for row in results:
+                dc, computed_readonly = row
                 secrets = await self.get_data_connector_secrets(user, dc.id)
-                yield models.DataConnectorWithSecrets(dc.dump(), secrets)
+                yield models.DataConnectorWithSecrets(dc.dump(readonly=computed_readonly), secrets)
 
     async def get_data_connector_secrets(
         self,

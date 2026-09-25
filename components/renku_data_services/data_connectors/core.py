@@ -64,6 +64,8 @@ from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectMeta
 from renku_data_services.notebooks.data_sources import DataSourceRepository
+from renku_data_services.session import apispec as session_apispec
+from renku_data_services.session import models as session_models
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER, SCICAT_V1_PROVIDER
 from renku_data_services.storage.rclone import RCloneValidator, parse_storage_url
 from renku_data_services.utils.core import get_openbis_pat
@@ -1106,3 +1108,16 @@ def validate_deposit_status_change(current: models.DepositStatus, new: models.De
             raise errors.ValidationError(
                 message="The only allowed status change is from 'upload_complete' to 'complete'."
             )
+
+
+def validate_session_launcher_dc_links_patch(
+    patches: session_apispec.SessionLauncherDataConnectorPatchList,
+) -> list[session_models.SessionLauncherDataConnectorPatch]:
+    """Validate the update to the data connector policy of a session launcher."""
+    return [
+        session_models.SessionLauncherDataConnectorPatch(
+            data_connector_to_project_link_id=ULID.from_str(patch.data_connector_link_id),
+            policy=session_models.SessionLauncherPolicy(patch.policy),
+        )
+        for patch in patches.root
+    ]
