@@ -793,9 +793,9 @@ components:
         - excluded
         - readOnly
         - readWrite
-    ProjectRepositorySurrogateKey:
+    ProjectRepositoryId:
       description: |
-        Surrogate key identifying a repository within a project
+        The ID of the git repository
       type: object
       properties:
         repository_id:
