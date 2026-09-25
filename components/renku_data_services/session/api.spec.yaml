@@ -753,7 +753,7 @@ components:
         - readOnly
         - readWrite
     DataConnectorKey:
-      description: Surrogate key identifying a data connector to a project relationship
+      description: Key identifying a data connector to a project relationship
       type: object
       properties:
         data_connector_link_id:
@@ -813,15 +813,15 @@ components:
         - url
     RepositoryCompositeKey:
       description: |
-        Repository surrogate and natural key pair
+        Repository Id and URL pair
       allOf:
-        - $ref: "#/components/schemas/ProjectRepositorySurrogateKey"
-        - $ref: "#/components/schemas/RepositoryNaturalKey"
+        - $ref: "#/components/schemas/ProjectRepositoryId"
+        - $ref: "#/components/schemas/RepositoryUrl"
     GitReference:
-      description: A git references
+      description: A git branch
       type: string
-      pattern: "^refs/(heads|tags)/.*$"
-      example: "refs/heads/main"
+      minLength: 1
+      example: "main"
     GitReferenceList:
       description: List of git references
       type: array
@@ -830,7 +830,9 @@ components:
         $ref: "#/components/schemas/GitReference"
       uniqueItems: true
     RepositoryAccessPolicy:
-      description: Repository access policy config
+      description: |
+        Repository access policy config.
+        We do not return the references when the repository is writable.
       type: object
       properties:
         policy:
@@ -839,7 +841,6 @@ components:
           $ref: "#/components/schemas/GitReferenceList"
       required:
         - policy
-        - writable_references
     SessionLauncherRepositoryList:
       description: |
         A list of repository access policy paremeters of a Renku 2.0 session
@@ -861,10 +862,10 @@ components:
       description: |
         Patch git repository properties of a Renku 2.0 session
       allOf:
-        - $ref: "#/components/schemas/ProjectRepositorySurrogateKey"
+        - $ref: "#/components/schemas/ProjectRepositoryId"
         - $ref: "#/components/schemas/RepositoryAccessPolicy"
     SecretSlotKey:
-      description: Surrogate key identifying a secret slot within the project
+      description: Key identifying a secret slot within the project
       type: object
       properties:
         secret_slot_id:
