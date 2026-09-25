@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from pathlib import PurePosixPath
+from typing import Any, Self
 
 from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Enum, Identity, Integer, MetaData, String, false, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -11,7 +12,8 @@ from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.crc.orm import ResourceClassORM
-from renku_data_services.project.orm import ProjectORM
+from renku_data_services.data_connectors.orm import DataConnectorToProjectLinkORM
+from renku_data_services.project.orm import ProjectORM, ProjectRepositoryORM, SessionSecretSlotORM
 from renku_data_services.session import models
 from renku_data_services.utils.sqlalchemy import PurePosixPathType, ULIDType
 
@@ -319,3 +321,181 @@ class BuildORM(BaseORM):
             repository_url=self.result_repository_url,
             repository_git_commit_sha=self.result_repository_git_commit_sha,
         )
+
+
+class SessionLauncherRepositoryORM(BaseORM):
+    """The repository parameters of a launcher."""
+
+    __tablename__ = "launcher_repositories"
+
+    launcher_id: Mapped[ULID] = mapped_column(
+        ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    repository_id: Mapped[int] = mapped_column(
+        ForeignKey(ProjectRepositoryORM.id, ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    repository: Mapped[ProjectRepositoryORM] = relationship(
+        init=False,
+        repr=False,
+        viewonly=True,
+        lazy="selectin",
+    )
+
+    policy: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
+
+    @classmethod
+    def load(cls, link: models.SessionLauncherRepository) -> Self:
+        """Create an ORM object from a SessionLauncherRepository object."""
+
+        return cls(
+            launcher_id=link.launcher_id,
+            repository_id=link.repository_id,
+            policy={"policy": link.policy.value, "writable_references": link.writable_references},
+        )
+
+    def dump(self) -> models.SessionLauncherRepository:
+        """Create a SessionLauncherRepository object from an ORM object."""
+
+        return models.SessionLauncherRepository(
+            launcher_id=self.launcher_id,
+            repository_id=self.repository_id,
+            policy=self._policy,
+            writable_references=self.policy.get("writable_references"),
+        )
+
+    @property
+    def _policy(self) -> models.SessionLauncherPolicy:
+        try:
+            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
+        except (ValueError, TypeError):
+            return models.SessionLauncherPolicy.excluded
+        # TODO: Return models.SessionLauncherPolicy.read_only if repository is read only
+        return policy
+
+    @property
+    def _is_policy_valid(self) -> bool:
+        try:
+            _ = models.SessionLauncherPolicy(str(self.policy.get("policy")))
+        except (ValueError, TypeError):
+            return False
+        # TODO: Return False if session launcher escalates the repositoriy's permissions
+        return True
+
+
+class SessionLauncherDataConnectorORM(BaseORM):
+    """The data connector parameters of a launcher."""
+
+    __tablename__ = "launcher_data_connectors"
+
+    launcher_id: Mapped[ULID] = mapped_column(ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"), primary_key=True)
+
+    data_connector_to_project_link_id: Mapped[ULID] = mapped_column(
+        ForeignKey(DataConnectorToProjectLinkORM.id, ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    data_connector_to_project_link: Mapped[DataConnectorToProjectLinkORM] = relationship(
+        init=False,
+        repr=False,
+        viewonly=True,
+        lazy="selectin",
+    )
+
+    policy: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
+
+    @classmethod
+    def load(cls, link: models.SessionLauncherDataConnector) -> Self:
+        """Create an ORM object from a SessionLauncherDataConnector object."""
+
+        return cls(
+            launcher_id=link.launcher_id,
+            data_connector_to_project_link_id=link.data_connector_to_project_link_id,
+            policy={"policy": link.policy.value},
+        )
+
+    def dump(self) -> models.SessionLauncherDataConnector:
+        """Create a SessionLauncherDataConnector object from an ORM object."""
+
+        return models.SessionLauncherDataConnector(
+            launcher_id=self.launcher_id,
+            data_connector_to_project_link_id=self.data_connector_to_project_link_id,
+            policy=self._policy,
+        )
+
+    @property
+    def _policy(self) -> models.SessionLauncherPolicy:
+        try:
+            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
+        except (ValueError, TypeError):
+            return models.SessionLauncherPolicy.excluded
+        if policy.requires_write_access and self.data_connector_to_project_link.data_connector.readonly:
+            return models.SessionLauncherPolicy.read_only
+        return policy
+
+    @property
+    def _is_policy_valid(self) -> bool:
+        try:
+            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
+        except (ValueError, TypeError):
+            return False
+
+        return not policy.requires_write_access or not self.data_connector_to_project_link.data_connector.readonly
+
+
+class SessionLauncherSecretORM(BaseORM):
+    """The secret parameters of a launcher."""
+
+    __tablename__ = "launcher_secrets"
+
+    launcher_id: Mapped[ULID] = mapped_column(
+        ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    secret_slot_id: Mapped[ULID] = mapped_column(
+        ForeignKey(SessionSecretSlotORM.id, ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    secret_slot: Mapped[SessionSecretSlotORM] = relationship(
+        init=False,
+        repr=False,
+        viewonly=True,
+        lazy="selectin",
+    )
+
+    policy: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
+
+    @classmethod
+    def load(cls, link: models.SessionLauncherSecret) -> Self:
+        """Create an ORM object from a SessionLauncherSecret object."""
+
+        return cls(
+            launcher_id=link.launcher_id,
+            secret_slot_id=link.secret_slot_id,
+            policy={"policy": link.policy.value},
+        )
+
+    def dump(self) -> models.SessionLauncherSecret:
+        """Create a SessionLauncherSecret object from an ORM object."""
+
+        return models.SessionLauncherSecret(
+            launcher_id=self.launcher_id,
+            secret_slot_id=self.secret_slot_id,
+            policy=self._policy,
+        )
+
+    @property
+    def _policy(self) -> models.SessionLauncherPolicy:
+        try:
+            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
+        except (ValueError, TypeError):
+            return models.SessionLauncherPolicy.excluded
+        if policy is models.SessionLauncherPolicy.excluded:
+            return policy
+        else:
+            return models.SessionLauncherPolicy.read_only
