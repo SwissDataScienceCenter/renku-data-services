@@ -803,8 +803,8 @@ components:
           minimum: 0
       required:
         - repository_id
-    RepositoryNaturalKey:
-      description: Natural key identifying a repository from its url
+    RepositoryUrl:
+      description: The http git clone url for the repository
       type: object
       properties:
         url:
