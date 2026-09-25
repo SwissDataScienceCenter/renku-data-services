@@ -369,6 +369,17 @@ class SessionRunnersSchedulingRepository:
         async for session_orm in res:
             yield session_orm.dump()
 
+    async def get_all_runners(
+        self, session: AsyncSession, filter_status: models.RunnerStatus | None = None
+    ) -> AsyncIterator[models.SessionRunner]:
+        """Get all session runners from the database."""
+        stmt = select(schemas.SessionRunnerORM)
+        if filter_status is not None:
+            stmt = stmt.where(schemas.SessionRunnerORM.status == filter_status)
+        res = await session.stream_scalars(stmt)
+        async for runner_orm in res:
+            yield runner_orm.dump()
+
     async def get_viable_runners(
         self, session: AsyncSession, renku_session_id: str
     ) -> AsyncIterator[models.SessionRunner]:
@@ -472,3 +483,18 @@ class SessionRunnersSchedulingRepository:
             return None
         await session.delete(session_orm)
         return None
+
+    async def update_runner_status(
+        self, session: AsyncSession, runner_id: ULID, status: models.RunnerStatus
+    ) -> models.SessionRunner:
+        """Update the status of a session runner."""
+        stmt = select(schemas.SessionRunnerORM).where(schemas.SessionRunnerORM.id == runner_id)
+        res = await session.scalars(stmt)
+        runner_orm = res.one_or_none()
+        if runner_orm is None:
+            raise errors.MissingResourceError(
+                message=f"Session runner with id '{runner_id}' does not exist or you do not have access to it."
+            )
+        runner_orm.status = status
+        await session.flush()
+        return runner_orm.dump()

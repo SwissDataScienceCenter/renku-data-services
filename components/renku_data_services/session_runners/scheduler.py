@@ -1,6 +1,8 @@
 """Scheduler for session runners."""
 
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Final
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +18,9 @@ from renku_data_services.session_runners import models
 from renku_data_services.session_runners.db import SessionRunnersSchedulingRepository
 
 logger = logging.getLogger(__name__)
+
+
+RUNNER_LAST_CONTACT_TIMEOUT: Final[timedelta] = timedelta(minutes=5)
 
 
 class SessionRunnerScheduler:
@@ -34,6 +39,18 @@ class SessionRunnerScheduler:
     async def reconcile(self) -> None:
         """Reconcile session runners and Kubernetes state."""
         async with self.session_maker() as session, session.begin():
+            # Update runner statuses: mark runners who lost contact as not ready
+            runners_ready = self.session_runners_scheduling_repo.get_all_runners(
+                session=session, filter_status=models.RunnerStatus.ready
+            )
+            now = datetime.now(tz=UTC)
+            async for runner in runners_ready:
+                if runner.last_contact is None or (runner.last_contact - now) > RUNNER_LAST_CONTACT_TIMEOUT:
+                    logger.info(f"[SESSION RUNNERS] Marking runner {runner.id} as not ready.")
+                    await self.session_runners_scheduling_repo.update_runner_status(
+                        session=session, runner_id=runner.id, status=models.RunnerStatus.not_ready
+                    )
+
             assigned_sessions = self.session_runners_scheduling_repo.get_all_assigned_sessions(session=session)
             async for assigned_session in assigned_sessions:
                 k8s_session = await self._get_k8s_session(session_id=assigned_session.session_id)

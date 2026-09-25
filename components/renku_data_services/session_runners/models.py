@@ -1,6 +1,7 @@
 """Models for session runners."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
@@ -39,6 +40,7 @@ class SessionRunner(UnsavedSessionRunner):
     status: RunnerStatus
     # TODO
     registration_token: str | None = None
+    last_contact: datetime | None
 
 
 @dataclass(eq=True, frozen=True, kw_only=True)

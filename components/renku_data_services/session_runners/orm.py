@@ -98,6 +98,7 @@ class SessionRunnerORM(BaseORM):
             resource_pool_id=self.resource_pool_id,
             status=self.status,
             registration_token=self.registration_token if include_registration_token else None,
+            last_contact=self.last_contact,
         )
 
 
