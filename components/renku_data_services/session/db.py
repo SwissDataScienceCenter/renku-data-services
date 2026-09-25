@@ -1416,6 +1416,12 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         if len(secret_slot_ids) != len(set(secret_slot_ids)):
             raise errors.ValidationError(message="A secret slot may only appear once in the list.")
 
+        if not all(
+            patch.policy in [models.SessionLauncherPolicy.read_only, models.SessionLauncherPolicy.excluded]
+            for patch in patches
+        ):
+            raise errors.ValidationError(message="A secret slot may only be excluded or readOnly.")
+
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(
                 select(schemas.SessionLauncherSecretORM).where(
@@ -1436,7 +1442,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             invalid_secret_slot_ids = patch_secret_slot_ids - project_secret_slot_ids
 
             if invalid_secret_slot_ids:
-                raise errors.MissingResourceError(
+                raise errors.ProgrammingError(
                     message=f"Secret slots do not belong to the project: {invalid_secret_slot_ids}"
                 )
 
