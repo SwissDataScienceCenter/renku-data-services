@@ -76,7 +76,7 @@ class DataConnectorsBP(CustomBlueprint):
     connected_services_repo: ConnectedServicesRepository
     data_source_repo: DataSourceRepository
     dc_storage_class: str
-    data_service_base_url: str
+    secrets_storage_service_url: str
     k8s_client: K8sClient
     deposit_config: DepositConfig
 
@@ -679,7 +679,7 @@ class DataConnectorsBP(CustomBlueprint):
                     deposit_job=saved_dep,
                     data_connector_repo=self.data_connector_repo,
                     storage_class=self.dc_storage_class,
-                    data_service_base_url=self.data_service_base_url,
+                    secrets_storage_service_url=self.secrets_storage_service_url,
                     k8s_client=self.k8s_client,
                     deposit_config=self.deposit_config,
                     job_client=self.job_client,
@@ -812,7 +812,7 @@ class DataConnectorsBP(CustomBlueprint):
                 user=user,
                 storage_class=self.dc_storage_class,
                 k8s_client=self.k8s_client,
-                data_service_base_url=self.data_service_base_url,
+                secrets_storage_service_url=self.secrets_storage_service_url,
                 deposit_job=saved_dep,
                 job_client=self.job_client,
                 deposit_api_key=token,
