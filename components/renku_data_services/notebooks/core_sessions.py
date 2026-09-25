@@ -1259,6 +1259,9 @@ async def start_session(
         "renku.io/session-type": str(session_type),
     }
 
+    if launcher.environment.build_parameters:
+        labels["renku.io/frontend-variant"] = launcher.environment.build_parameters.frontend_variant
+
     if session_location == SessionLocation.remote:
         labels["renku.io/remote-tunnel"] = "allow"
 
@@ -1483,6 +1486,13 @@ async def patch_session(
         labels["renku.io/anonymous-session"] = "true"
     if not labels.get("renku.io/session-type"):
         labels["renku.io/session-type"] = SessionType.interactive.value
+
+    launcher = await session_repo.get_launcher(user, session.launcher_id)
+    if launcher.environment.build_parameters:
+        labels["renku.io/frontend-variant"] = launcher.environment.build_parameters.frontend_variant
+    else:
+        labels.pop("renku.io/frontend-variant", None)
+
     if not patch.metadata:
         patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
     patch.metadata.labels = labels
@@ -1528,7 +1538,6 @@ async def patch_session(
         return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch.to_rfc7386())
 
     server_name = session.metadata.name
-    launcher = await session_repo.get_launcher(user, session.launcher_id)
     project = await project_repo.get_project(user=user, project_id=session.project_id)
     environment = launcher.environment
     storage_mount, work_dir = await get_mount_work_dir(user, environment, image_check_repo)

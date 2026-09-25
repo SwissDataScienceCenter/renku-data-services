@@ -284,6 +284,8 @@ components:
           type: integer
         session_type:
           $ref: "#/components/schemas/SessionType"
+        frontend_variant:
+          $ref: "#/components/schemas/FrontendVariant"
         submission_id:
           $ref: "#/components/schemas/SubmissionId"
           nullable: true
@@ -528,6 +530,11 @@ components:
       required:
         - architecture
         - os
+    FrontendVariant:
+      description: User's Frontend Choice.
+      type: string
+      minLength: 1
+      maxLength: 99
   responses:
     ImageCheckResponse:
       description: Information about whether a docker image is available or not and if there is a connected service then which connected service can be used to access the image.
