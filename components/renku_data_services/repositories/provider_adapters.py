@@ -108,9 +108,14 @@ class GitHubAdapter(GitProviderAdapter):
         new_etag = response.headers.get("ETag")
         return model.to_repository(
             etag=new_etag,
-            # NOTE: we assume the "pull" permission if a GitLab repository is publicly visible
+            # NOTE: we assume the "pull" permission if a GitHub repository is publicly visible
             default_permissions=models.RepositoryPermissions(pull=True, push=False) if is_anonymous else None,
         )
+
+    def get_repository_permission_api_url(self, repository_url: str, username: str) -> str:
+        """Compute the metadata API URL for getting a user's permissions on a repository."""
+        repo_api_url = self.get_repository_api_url(repository_url)
+        return urljoin(repo_api_url, f"collaborators/{username}/permission")
 
 
 _adapter_map: dict[ProviderKind, type[GitProviderAdapter]] = {
