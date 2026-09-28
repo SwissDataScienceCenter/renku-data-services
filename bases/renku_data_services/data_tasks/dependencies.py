@@ -7,9 +7,15 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 from renku_data_services.capacity_reservation.k8s_client import CapacityReservationK8sClient
 from renku_data_services.capacity_reservation.tasks import CapacityReservationTasks
-from renku_data_services.crc.db import ClusterRepository
+from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolQueryRepository
 from renku_data_services.data_tasks.config import Config
-from renku_data_services.k8s.clients import K8sClusterClientsPool
+from renku_data_services.k8s.clients import (
+    DummyPriorityClassClient,
+    DummyResourceQuotaClient,
+    K8sClusterClientsPool,
+    K8sPriorityClassClient,
+    K8sResourceQuotaClient,
+)
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.metrics.core import StagingMetricsService
@@ -58,6 +64,8 @@ class DependencyManager:
     resource_usage_service: ResourceUsageService
     resource_requests_repo: ResourceRequestsRepo
     persisted_logs_collector: PersistedLogsCollector
+    quota_repo: QuotaRepository
+    resource_pool_query_repo: ResourcePoolQueryRepository
 
     @classmethod
     def from_env(cls, cfg: Config | None = None) -> "DependencyManager":
@@ -120,6 +128,15 @@ class DependencyManager:
             k8s_client=cr_k8s_client,
         )
 
+        quota_repo = (
+            QuotaRepository(DummyResourceQuotaClient(), DummyPriorityClassClient())
+            if cfg.dummy_stores
+            else QuotaRepository(K8sResourceQuotaClient(k8s_client), K8sPriorityClassClient(k8s_client))
+        )
+        resource_pool_query_repo = ResourcePoolQueryRepository(
+            session_maker=cfg.db.async_session_maker, quotas_repo=quota_repo, authz=None
+        )
+
         resource_requests_repo = ResourceRequestsRepo(cfg.db.async_session_maker)
         resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
 
@@ -175,4 +192,6 @@ class DependencyManager:
             resource_usage_service=resource_usage_service,
             resource_requests_repo=resource_requests_repo,
             persisted_logs_collector=persisted_logs_collector,
+            quota_repo=quota_repo,
+            resource_pool_query_repo=resource_pool_query_repo,
         )

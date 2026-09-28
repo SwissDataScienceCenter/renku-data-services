@@ -172,6 +172,20 @@ class GpuKind(StrEnum):
     AMD = "amd.com"
 
 
+def job_priority_class_name(quota_id: str) -> str:
+    """Return the name of the priority class for the jobs of a quota."""
+    return f"{quota_id}-job"
+
+
+def quota_scope_selector(quota_id: str) -> dict[str, Any]:
+    """Return the resource quota scope selector that matches the session and job priority classes."""
+    return {
+        "matchExpressions": [
+            {"operator": "In", "scopeName": "PriorityClass", "values": [quota_id, job_priority_class_name(quota_id)]}
+        ]
+    }
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedQuota(ResourcesCompareMixin):
     """Model for a quota yet to be saved."""
@@ -240,9 +254,7 @@ class Quota(UnsavedQuota):
                     "requests.memory": str(self.memory * 1_000_000_000),
                     f"requests.{self.gpu_kind}/gpu": self.gpu,
                 },
-                "scopeSelector": {
-                    "matchExpressions": [{"operator": "In", "scopeName": "PriorityClass", "values": [self.id]}]
-                },
+                "scopeSelector": quota_scope_selector(self.id),
             },
         }
 
