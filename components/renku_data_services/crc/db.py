@@ -141,6 +141,14 @@ class ResourcePoolQueryRepository:
         self.resource_usage_service = resource_usage_service
         self.resource_requests_repo = resource_requests_repo
 
+    async def get_quota_ids(self) -> list[tuple[str, ClusterId]]:
+        """Get the quota and cluster of every resource pool that has a quota."""
+        async with self.session_maker() as session:
+            res = await session.scalars(
+                select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.quota.is_not(None))
+            )
+            return [(rp.quota, rp.get_cluster_id()) for rp in res if rp.quota]
+
     async def get_resource_pools(
         self, api_user: base_models.APIUser, id: int | None = None, name: Optional[str] = None
     ) -> list[models.ResourcePool]:
@@ -1881,6 +1889,10 @@ class ClusterRepository:
                 await session.delete(cluster)
 
 
+SESSION_PRIORITY_VALUE = 100
+JOB_PRIORITY_VALUE = -10
+
+
 @dataclass
 class QuotaRepository:
     """Adapter for CRUD operations on resource quotas and priority classes in k8s."""
@@ -1910,31 +1922,63 @@ class QuotaRepository:
             id=new_quota.id if isinstance(new_quota, models.Quota) else str(uuid4()),
         )
         labels = {self._label_name: self._label_value}
-
-        # Check if we have a priority class with the given name, if not, create one it.
-        pc = await self.pc_client.read_priority_class(K8sPriorityClass.meta(quota.id, cluster_id))
-        if pc is None:
-            await self.pc_client.create_priority_class(
-                K8sPriorityClass.new(
-                    name=quota.id,
-                    cluster=cluster_id,
-                    global_default=False,
-                    value=100,
-                    preemption_policy="Never",
-                    description="Renku resource quota priority class",
-                    labels=labels,
-                ),
-            )
-
+        await self._ensure_priority_classes(quota.id, cluster_id)
         res = await self.rq_client.create_resource_quota(quota.to_patch(labels), cluster_id)
         return models.Quota.from_k8s_resource_quota(res)
 
     async def delete_quota(self, name: str, cluster_id: ClusterId) -> None:
-        """Delete a resource quota and priority class."""
-        await self.pc_client.delete_priority_class(
-            meta=K8sPriorityClass.meta(name, cluster_id), propagation_policy=DeletePropagationPolicy.foreground
-        )
+        """Delete a resource quota and its priority classes."""
+        for pc_name in [name, models.job_priority_class_name(name)]:
+            await self.pc_client.delete_priority_class(
+                meta=K8sPriorityClass.meta(pc_name, cluster_id), propagation_policy=DeletePropagationPolicy.foreground
+            )
         await self.rq_client.delete_resource_quota(name=name, cluster_id=cluster_id)
+
+    async def ensure_job_scheduling(self, quota_id: str, cluster_id: ClusterId) -> None:
+        """Bring the priority classes and scope of an existing quota up to date for jobs."""
+        await self._ensure_priority_classes(quota_id, cluster_id)
+        res_quota = await self.rq_client.read_resource_quota(name=quota_id, cluster_id=cluster_id)
+        scope_selector = models.quota_scope_selector(quota_id)
+        if res_quota.manifest.to_dict().get("spec", {}).get("scopeSelector") != scope_selector:
+            await self.rq_client.patch_resource_quota(quota_id, {"spec": {"scopeSelector": scope_selector}}, cluster_id)
+
+    async def ensure_job_priority_class(self, quota_id: str, cluster_id: ClusterId) -> None:
+        """Create the job priority class of a quota if it is missing."""
+        await self._ensure_priority_class(self._job_priority_class(quota_id, cluster_id))
+
+    async def _ensure_priority_classes(self, quota_id: str, cluster_id: ClusterId) -> None:
+        await self._ensure_priority_class(
+            K8sPriorityClass.new(
+                name=quota_id,
+                cluster=cluster_id,
+                global_default=False,
+                value=SESSION_PRIORITY_VALUE,
+                preemption_policy="PreemptLowerPriority",
+                description="Renku resource quota priority class",
+                labels={self._label_name: self._label_value},
+            )
+        )
+        await self._ensure_priority_class(self._job_priority_class(quota_id, cluster_id))
+
+    def _job_priority_class(self, quota_id: str, cluster_id: ClusterId) -> K8sPriorityClass:
+        return K8sPriorityClass.new(
+            name=models.job_priority_class_name(quota_id),
+            cluster=cluster_id,
+            global_default=False,
+            value=JOB_PRIORITY_VALUE,
+            preemption_policy="Never",
+            description="Renku resource quota priority class for jobs",
+            labels={self._label_name: self._label_value},
+        )
+
+    async def _ensure_priority_class(self, desired: K8sPriorityClass) -> None:
+        meta = K8sPriorityClass.meta(desired.name, desired.cluster)
+        current = await self.pc_client.read_priority_class(meta)
+        if current is None:
+            await self.pc_client.create_priority_class(desired)
+        elif current.manifest.get("preemptionPolicy") != desired.manifest.preemptionPolicy:
+            await self.pc_client.delete_priority_class(meta=meta, propagation_policy=DeletePropagationPolicy.foreground)
+            await self.pc_client.create_priority_class(desired)
 
     async def update_quota(self, quota: models.Quota, cluster_id: ClusterId) -> models.Quota:
         """Update a specific resource quota."""
