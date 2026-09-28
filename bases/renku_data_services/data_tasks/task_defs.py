@@ -443,6 +443,23 @@ async def cleanup_orphaned_capacity_reservations(dm: DependencyManager) -> None:
             await asyncio.sleep(dm.config.x_short_task_period_s)
 
 
+async def migrate_quota_job_priority_classes(dm: DependencyManager) -> None:
+    """Add the job priority classes and scopes to existing resource quotas."""
+    if dm.config.dummy_stores:
+        return
+    while True:
+        try:
+            for quota_id, cluster_id in await dm.resource_pool_query_repo.get_quota_ids():
+                try:
+                    await dm.quota_repo.ensure_job_scheduling(quota_id, cluster_id)
+                except Exception as e:
+                    logger.warning(f"Could not update quota {quota_id} in cluster {cluster_id} for jobs: {e}")
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
+            return
+        await asyncio.sleep(dm.config.long_task_period_s)
+
+
 async def record_resource_requests(dm: DependencyManager) -> None:
     """Periodically record all resource requests."""
     interval_seconds = 600
@@ -624,6 +641,7 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
             "monitor_capacity_reservations": lambda: monitor_capacity_reservations(dm),
             "cleanup_orphaned_capacity_reservations": lambda: cleanup_orphaned_capacity_reservations(dm),
             "record_resource_requests": lambda: record_resource_requests(dm),
+            "migrate_quota_job_priority_classes": lambda: migrate_quota_job_priority_classes(dm),
             "monitor_session_quota_and_send_alerts": lambda: monitor_session_quota_and_send_alerts(dm),
             "collect_persisted_logs": lambda: collect_persisted_logs(dm),
             "purge_expired_persisted_logs": lambda: purge_expired_persisted_logs(dm),
