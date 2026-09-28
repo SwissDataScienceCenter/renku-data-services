@@ -599,6 +599,17 @@ async def purge_expired_persisted_logs(dm: DependencyManager) -> None:
             await asyncio.sleep(dm.config.long_task_period_s)
 
 
+async def handle_session_runners(dm: DependencyManager) -> None:
+    """Handle session runners: assign sessions to runners."""
+    while True:
+        try:
+            await dm.session_runner_scheduler.reconcile()
+        except Exception as e:
+            logger.warning(f"Failed to handle session runners: {e}")
+        else:
+            await asyncio.sleep(dm.config.x_short_task_period_s)
+
+
 def all_tasks(dm: DependencyManager) -> TaskDefininions:
     """A dict of task factories to be managed in main."""
     # Impl. note: We pass the entire config to the coroutines, because
@@ -627,5 +638,6 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
             "monitor_session_quota_and_send_alerts": lambda: monitor_session_quota_and_send_alerts(dm),
             "collect_persisted_logs": lambda: collect_persisted_logs(dm),
             "purge_expired_persisted_logs": lambda: purge_expired_persisted_logs(dm),
+            "handle_session_runners": lambda: handle_session_runners(dm),
         }
     )

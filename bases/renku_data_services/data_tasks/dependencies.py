@@ -30,6 +30,8 @@ from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.tasks import SessionTasks
+from renku_data_services.session_runners.db import SessionRunnersSchedulingRepository
+from renku_data_services.session_runners.scheduler import SessionRunnerScheduler
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
@@ -58,6 +60,7 @@ class DependencyManager:
     resource_usage_service: ResourceUsageService
     resource_requests_repo: ResourceRequestsRepo
     persisted_logs_collector: PersistedLogsCollector
+    session_runner_scheduler: SessionRunnerScheduler
 
     @classmethod
     def from_env(cls, cfg: Config | None = None) -> "DependencyManager":
@@ -158,6 +161,13 @@ class DependencyManager:
             session_maker=cfg.db.async_session_maker,
         )
 
+        session_runners_scheduling_repo = SessionRunnersSchedulingRepository(session_maker=cfg.db.async_session_maker)
+        session_runner_scheduler = SessionRunnerScheduler(
+            session_maker=cfg.db.async_session_maker,
+            session_runners_scheduling_repo=session_runners_scheduling_repo,
+            k8s_db_cache=k8s_db_cache,
+        )
+
         return cls(
             config=cfg,
             search_updates_repo=search_updates_repo,
@@ -175,4 +185,5 @@ class DependencyManager:
             resource_usage_service=resource_usage_service,
             resource_requests_repo=resource_requests_repo,
             persisted_logs_collector=persisted_logs_collector,
+            session_runner_scheduler=session_runner_scheduler,
         )

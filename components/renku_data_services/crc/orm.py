@@ -392,12 +392,20 @@ class ResourcePoolORM(BaseORM):
             cpu_limit_factor=self.cpu_limit_factor,
         )
 
-    def _dump_remote(self) -> models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | None:
+    def _dump_remote(
+        self,
+    ) -> (
+        models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | models.RemoteConfigurationRunners | None
+    ):
         """Create a remote_configuration model from the corresponding column of the ORM object."""
         if self.remote_json is None:
             return None
         if self.remote_json.get("kind") == models.RemoteConfigurationKind.runai.value:
             return models.RemoteConfigurationRunai.from_dict(
+                {**self.remote_json, "provider_id": self.remote_provider_id}
+            )
+        if self.remote_json.get("kind") == models.RemoteConfigurationKind.runners.value:
+            return models.RemoteConfigurationRunners.from_dict(
                 {**self.remote_json, "provider_id": self.remote_provider_id}
             )
         return models.RemoteConfigurationFirecrest.from_dict(

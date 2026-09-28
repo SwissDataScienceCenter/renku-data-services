@@ -1,8 +1,12 @@
 """Core logic for internal authentication."""
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.app_config import logging
@@ -16,6 +20,7 @@ if TYPE_CHECKING:
     from renku_data_services.data_connectors.config import DepositConfig
     from renku_data_services.k8s.clients import DepositUploadJobClient
     from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
+    from renku_data_services.session_runners.db import SessionRunnersRepository
 
 
 logger = logging.getLogger(__name__)
@@ -28,6 +33,8 @@ class ScopeVerifier:
     deposit_config: "DepositConfig"
     notebook_k8s_client: "NotebookK8sClient"
     job_client: "DepositUploadJobClient"
+    session_runners_repo: "SessionRunnersRepository"
+    session_maker: Callable[..., AsyncSession]
 
     async def verify_scope(self, user: base_models.APIUser, scope: str) -> None:
         """Verify that the scope claim is valid.
@@ -47,6 +54,8 @@ class ScopeVerifier:
                 return await self._verify_session_scope(user=user, server_name=splits[1])
             case _ if len(splits) == 2 and splits[0].lower() == "deposit_job":
                 return await self._verify_deposit_job_scope(user=user, job_name=splits[1])
+            case _ if len(splits) == 2 and splits[0].lower() == "runner":
+                return await self._verify_runner_scope(user=user, runner_id=splits[1])
             case _:
                 logger.warning(f"Got unknown scope item: {scope_item}")
                 return None
@@ -88,4 +97,23 @@ class ScopeVerifier:
                 f"job status: {'not found' if job_status is None else job_status}."
             )
             raise errors.ForbiddenError(detail=f"Failed to verify deposit job scope '{job_name}'.")
+        return None
+
+    async def _verify_runner_scope(self, user: base_models.APIUser, runner_id: str) -> None:
+        """Verify a scope item corresponding to a session runner."""
+        logger.info(f"Verifying session runner: {runner_id}")
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError()
+
+        try:
+            runner_id_ulid = ULID.from_str(runner_id)
+        except ValueError as err:
+            logger.error(f"Failed to verify session runner scope '{runner_id}': not a valid ULID.")
+            raise errors.ForbiddenError(detail=f"Failed to verify session runner scope '{runner_id}'.") from err
+
+        async with self.session_maker() as session, session.begin():
+            runner = await self.session_runners_repo.get_runner_or_none(session=session, user=user, id=runner_id_ulid)
+        if runner is None:
+            logger.error(f"Failed to verify session runner scope '{runner_id}', runner status: not found.")
+            raise errors.ForbiddenError(detail=f"Failed to verify session runner scope '{runner_id}'.")
         return None

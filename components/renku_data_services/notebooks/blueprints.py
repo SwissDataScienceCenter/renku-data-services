@@ -40,6 +40,7 @@ from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.session_runners.db import SessionRunnersSchedulingRepository
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.users.db import UserRepo
 
@@ -69,6 +70,7 @@ class NotebooksNewBP(CustomBlueprint):
     user_repo: UserRepo
     metrics: MetricsService
     git_repositories_repo: GitRepositoriesRepository
+    session_runners_scheduling_repo: SessionRunnersSchedulingRepository
     builds_config: BuildsConfig
     resource_usage_service: ResourceUsageService
     resource_requests_repo: ResourceRequestsRepo
@@ -106,6 +108,7 @@ class NotebooksNewBP(CustomBlueprint):
                 image_check_repo=self.image_check_repo,
                 data_source_repo=self.data_source_repo,
                 git_repositories_repo=self.git_repositories_repo,
+                session_runners_scheduling_repo=self.session_runners_scheduling_repo,
                 builds_config=self.builds_config,
                 internal_token_mint=self.internal_token_mint,
                 resource_usage_service=self.resource_usage_service,
