@@ -572,7 +572,7 @@ class DependencyManager:
             build_logs_repo=build_logs_repo,
             zenodo_client=ZenodoAPIClient(),
             envidat_client=EnvidatClient(),
-            scicat_client=ScicatAPIClient(),
+            scicat_client=ScicatAPIClient(config.deposit_config.scicat.api_url),
             job_client=job_client,
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,

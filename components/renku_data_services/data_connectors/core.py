@@ -824,8 +824,6 @@ async def create_deposit_upload(
         mount_path = _get_scicat_mount_path(deposit_job)
         job_args = [
             "datasetIngestor",
-            "--scicat-url",
-            deposit_config.scicat.api_url,
             "--token",
             "$(SCICAT_TOKEN)",
             "--copy",

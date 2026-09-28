@@ -1,6 +1,5 @@
 """Client for the SciCat API."""
 
-import os
 from datetime import datetime
 from typing import cast
 from urllib.parse import quote
@@ -47,8 +46,8 @@ class UserResponse(BaseModel):
 class ScicatAPIClient:
     """SciCat API client."""
 
-    def __init__(self) -> None:
-        self.base_url = os.environ.get("SCICAT_API_URL", "https://dacat.psi.ch/api/v3").rstrip("/")
+    def __init__(self, api_url: str) -> None:
+        self.base_url = api_url.rstrip("/")
         self.__client = httpx.AsyncClient()
 
     async def create_deposit(self, api_key: str, body: DepositPost) -> DepositResponse:

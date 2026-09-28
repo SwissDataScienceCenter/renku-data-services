@@ -9,6 +9,8 @@ from renku_data_services.errors import errors
 
 DATA_CONNECTOR_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
+client = ScicatAPIClient("https://dacat-qa.psi.ch/api/v3")
+
 
 def make_deposit_post(path: str | None = "/some/path") -> DepositPost:
     return DepositPost(
@@ -42,7 +44,6 @@ def make_deposit_json(pid: str = "some-pid") -> dict:
     return_value=httpx.Response(200, json=make_user_identity_json(["group1", "group2"])),
 )
 async def test_get_user_identity(mock_get) -> None:
-    client = ScicatAPIClient()
     result = await client.get_user_identity("some-token")
     assert result == UserResponse(
         profile=UserProfile(displayName="Jane Doe", email="jane.doe@example.com", accessGroups=["group1", "group2"])
@@ -55,7 +56,6 @@ async def test_get_user_identity(mock_get) -> None:
     return_value=httpx.Response(500, text="internal error"),
 )
 async def test_get_user_identity_error(mock_get) -> None:
-    client = ScicatAPIClient()
     with pytest.raises(errors.ThirdPartyAPIError):
         await client.get_user_identity("some-token")
 
@@ -66,7 +66,6 @@ async def test_get_user_identity_error(mock_get) -> None:
     return_value=httpx.Response(200, json=make_user_identity_json(["group1", "group2"])),
 )
 async def test_default_deposit_data_uses_first_access_group(mock_get) -> None:
-    client = ScicatAPIClient()
     data = await client.default_deposit_data("some-token", make_deposit_post())
     assert data["ownerGroup"] == "group1"
     assert data["datasetName"] == "my deposit"
@@ -79,7 +78,6 @@ async def test_default_deposit_data_uses_first_access_group(mock_get) -> None:
     return_value=httpx.Response(200, json=make_user_identity_json([])),
 )
 async def test_default_deposit_data_no_access_groups(mock_get) -> None:
-    client = ScicatAPIClient()
     data = await client.default_deposit_data("some-token", make_deposit_post(path=None))
     assert data["ownerGroup"] == ""
     assert data["sourceFolder"] == ""
@@ -95,7 +93,6 @@ async def test_default_deposit_data_no_access_groups(mock_get) -> None:
     return_value=httpx.Response(200, json=make_user_identity_json(["group1"])),
 )
 async def test_create_deposit(mock_get, mock_post) -> None:
-    client = ScicatAPIClient()
     result = await client.create_deposit("some-token", make_deposit_post())
     assert result.pid == "new-pid"
 
@@ -110,7 +107,6 @@ async def test_create_deposit(mock_get, mock_post) -> None:
     return_value=httpx.Response(200, json=make_user_identity_json(["group1"])),
 )
 async def test_create_deposit_error(mock_get, mock_post) -> None:
-    client = ScicatAPIClient()
     with pytest.raises(errors.ThirdPartyAPIError):
         await client.create_deposit("some-token", make_deposit_post())
 
@@ -121,7 +117,6 @@ async def test_create_deposit_error(mock_get, mock_post) -> None:
     return_value=httpx.Response(200, json=make_deposit_json(pid="existing-pid")),
 )
 async def test_get_deposit(mock_get) -> None:
-    client = ScicatAPIClient()
     result = await client.get_deposit("some-token", "existing-pid")
     assert result.pid == "existing-pid"
 
@@ -132,7 +127,6 @@ async def test_get_deposit(mock_get) -> None:
     return_value=httpx.Response(404, text="not found"),
 )
 async def test_get_deposit_not_found(mock_get) -> None:
-    client = ScicatAPIClient()
     with pytest.raises(errors.MissingResourceError):
         await client.get_deposit("some-token", "missing-pid")
 
@@ -143,7 +137,6 @@ async def test_get_deposit_not_found(mock_get) -> None:
     return_value=httpx.Response(500, text="internal error"),
 )
 async def test_get_deposit_error(mock_get) -> None:
-    client = ScicatAPIClient()
     with pytest.raises(errors.ThirdPartyAPIError):
         await client.get_deposit("some-token", "some-pid")
 
@@ -154,7 +147,6 @@ async def test_get_deposit_error(mock_get) -> None:
     return_value=httpx.Response(200, json={"access_token": "the-scicat-token"}),
 )
 async def test_get_scicat_token(mock_post) -> None:
-    client = ScicatAPIClient()
     token = await client.get_scicat_token("some-access-token")
     assert token == "the-scicat-token"
 
@@ -165,7 +157,6 @@ async def test_get_scicat_token(mock_post) -> None:
     return_value=httpx.Response(401, text="unauthorized"),
 )
 async def test_get_scicat_token_error(mock_post) -> None:
-    client = ScicatAPIClient()
     with pytest.raises(errors.ThirdPartyAPIError):
         await client.get_scicat_token("some-access-token")
 
@@ -176,6 +167,5 @@ async def test_get_scicat_token_error(mock_post) -> None:
     return_value=httpx.Response(200, json={"token_type": "bearer"}),
 )
 async def test_get_scicat_token_missing_access_token(mock_post) -> None:
-    client = ScicatAPIClient()
     with pytest.raises(errors.ThirdPartyAPIError):
         await client.get_scicat_token("some-access-token")
