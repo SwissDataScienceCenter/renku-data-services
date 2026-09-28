@@ -361,8 +361,8 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
-    patch:
-      summary: Patch a session launchers' secret parameters
+    put:
+      summary: Update a list of session launchers' secret parameters
       requestBody:
         required: true
         content:
