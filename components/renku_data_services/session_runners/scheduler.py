@@ -45,7 +45,7 @@ class SessionRunnerScheduler:
             )
             now = datetime.now(tz=UTC)
             async for runner in runners_ready:
-                if runner.last_contact is None or (runner.last_contact - now) > RUNNER_LAST_CONTACT_TIMEOUT:
+                if runner.last_contact is None or (now - runner.last_contact) > RUNNER_LAST_CONTACT_TIMEOUT:
                     logger.info(f"[SESSION RUNNERS] Marking runner {runner.id} as not ready.")
                     await self.session_runners_scheduling_repo.update_runner_status(
                         session=session, runner_id=runner.id, status=models.RunnerStatus.not_ready
