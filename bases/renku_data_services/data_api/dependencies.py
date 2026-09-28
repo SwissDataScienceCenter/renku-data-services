@@ -20,7 +20,6 @@ import renku_data_services.platform
 import renku_data_services.renku_apps
 import renku_data_services.repositories
 import renku_data_services.search
-import renku_data_services.ssh_proxy
 import renku_data_services.storage
 import renku_data_services.users
 from renku_data_services.authn.api.core import ScopeVerifier
@@ -228,7 +227,6 @@ class DependencyManager:
             renku_data_services.resource_usage.__file__,
             renku_data_services.persisted_logs.__file__,
             renku_data_services.authn.api.__file__,
-            renku_data_services.ssh_proxy.__file__,
         ]
 
         api_specs = []

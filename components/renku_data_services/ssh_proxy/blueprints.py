@@ -7,7 +7,9 @@ from sanic_ext import validate
 
 from renku_data_services import errors
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.k8s.db import K8sDbCache
+from renku_data_services.k8s.models import K8sObjectFilter
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.ssh_proxy import apispec
 from renku_data_services.users.core import fingerprint_ssh_public_key
 from renku_data_services.users.db import SSHKeyRepository
@@ -18,7 +20,7 @@ class SSHProxyBP(CustomBlueprint):
     """Internal endpoints consumed by the Renku SSH proxy."""
 
     ssh_key_repo: SSHKeyRepository
-    nb_config: NotebooksConfig
+    k8s_db_cache: K8sDbCache
 
     def authorize(self) -> BlueprintFactoryResponse:
         """Authorize a connection from an SSH public key and a session id."""
@@ -30,8 +32,13 @@ class SSHProxyBP(CustomBlueprint):
             if user_id is None:
                 # NOTE: malformed and unknown keys are both a plain "no", so the proxy has one failure branch.
                 raise errors.MissingResourceError(message="No registered SSH key matches the provided key.")
-            session = await self.nb_config.k8s_v2_client.get_session(session_id, user_id)
-            if session is None:
+            sessions = [
+                obj
+                async for obj in self.k8s_db_cache.list(
+                    K8sObjectFilter(gvk=AMALTHEA_SESSION_GVK, name=session_id, user_id=user_id)
+                )
+            ]
+            if not sessions:
                 raise errors.MissingResourceError(message="The session does not exist or is not accessible.")
             return HTTPResponse(status=204)
 

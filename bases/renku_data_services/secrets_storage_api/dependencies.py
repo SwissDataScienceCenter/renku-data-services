@@ -15,8 +15,10 @@ from renku_data_services.k8s.clients import (
     K8sSecretClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
+from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets_storage_api.config import Config
+from renku_data_services.users.db import SSHKeyRepository
 
 
 @dataclass
@@ -26,6 +28,8 @@ class DependencyManager:
     authenticator: base_models.Authenticator
     config: Config
     secret_client: SecretClient
+    ssh_key_repo: SSHKeyRepository
+    k8s_db_cache: K8sDbCache
     _user_secrets_repo: LowLevelUserSecretsRepo | None = field(default=None, repr=False, init=False)
 
     @property
@@ -60,8 +64,13 @@ class DependencyManager:
             assert config.keycloak is not None
             authenticator = KeycloakAuthenticator.new(config.keycloak)
 
+        ssh_key_repo = SSHKeyRepository(session_maker=config.db.async_session_maker)
+        k8s_db_cache = K8sDbCache(session_maker=config.db.async_session_maker)
+
         return cls(
             config=config,
             authenticator=authenticator,
             secret_client=secret_client,
+            ssh_key_repo=ssh_key_repo,
+            k8s_db_cache=k8s_db_cache,
         )
