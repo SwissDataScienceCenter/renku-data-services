@@ -121,6 +121,7 @@ class ScicatConfig:
     url: str
     api_url: str
     image: str
+    test_env: bool
 
     @classmethod
     def from_env(cls) -> ScicatConfig:
@@ -129,4 +130,5 @@ class ScicatConfig:
             url=os.environ.get("SCICAT_URL", "https://discovery.psi.ch").rstrip("/"),
             api_url=os.environ.get("SCICAT_API_URL", "https://dacat.psi.ch/api/v3").rstrip("/"),
             image=os.environ.get("SCICAT_JOB_IMAGE", "ghcr.io/swissdatasciencecenter/scicat-cli:latest"),
+            test_env=os.environ.get("SCICAT_TEST_ENV", "false").lower() == "true",
         )

@@ -822,6 +822,23 @@ async def create_deposit_upload(
         suspended: bool = False,
     ) -> V1Job:
         mount_path = _get_scicat_mount_path(deposit_job)
+        job_args = [
+            "datasetIngestor",
+            "--scicat-url",
+            deposit_config.scicat.api_url,
+            "--token",
+            "$(SCICAT_TOKEN)",
+            "--copy",
+            "--transfer-type",
+            "s3",
+            "--ingest",
+            "--pid",
+            deposit_job.deposit.original_id,
+            "--noninteractive",
+            "/metadata/metadata.json",
+        ]
+        if deposit_config.scicat.test_env:
+            job_args.insert(1, "--testenv")
 
         return V1Job(
             metadata=V1ObjectMeta(
@@ -849,22 +866,7 @@ async def create_deposit_upload(
                                 name="upload-deposit",
                                 image=deposit_config.scicat.image,
                                 env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=api_key_secret_name))],
-                                args=[
-                                    "datasetIngestor",
-                                    "--scicat-url",
-                                    deposit_config.scicat.api_url,
-                                    "--testenv",  # TODO: remove this flag when we move to production
-                                    "--token",
-                                    "$(SCICAT_TOKEN)",
-                                    "--copy",
-                                    "--transfer-type",
-                                    "s3",
-                                    "--ingest",
-                                    "--pid",
-                                    deposit_job.deposit.original_id,
-                                    "--noninteractive",
-                                    "/metadata/metadata.json",
-                                ],
+                                args=job_args,
                                 working_dir=work_dir.as_posix(),
                                 volume_mounts=[
                                     V1VolumeMount(mount_path=mount_path.as_posix(), read_only=True, name=pvc_name),
