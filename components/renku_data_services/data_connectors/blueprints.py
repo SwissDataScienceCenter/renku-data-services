@@ -958,4 +958,4 @@ class DataConnectorsBP(CustomBlueprint):
             )
             return validated_json(session_apispec.SessionLauncherDataConnectorList, dc_links)
 
-        return "/session_launchers/<launcher_id:ulid>/data_connectors", ["PATCH"], _patch_dc_links
+        return "/session_launchers/<launcher_id:ulid>/data_connectors", ["PUT"], _patch_dc_links
