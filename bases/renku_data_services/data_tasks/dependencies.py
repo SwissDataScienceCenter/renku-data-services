@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 
-from renku_data_services.k8s.clients import DummyPriorityClassClient, DummyResourceQuotaClient
 from components.renku_data_services.crc.db import QuotaRepository, ResourcePoolQueryRepository
 from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz
@@ -11,7 +10,7 @@ from renku_data_services.capacity_reservation.k8s_client import CapacityReservat
 from renku_data_services.capacity_reservation.tasks import CapacityReservationTasks
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.data_tasks.config import Config
-from renku_data_services.k8s.clients import K8sClusterClientsPool
+from renku_data_services.k8s.clients import DummyPriorityClassClient, DummyResourceQuotaClient, K8sClusterClientsPool
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.metrics.core import StagingMetricsService
@@ -30,9 +29,7 @@ from renku_data_services.resource_usage.core import (
 )
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.resource_usage.metering import (
-    LagoClient,
-    MeteringClient,
-    MultiMeteringClient,
+    OpenMeterClient,
     ResourceUsageMetering,
 )
 from renku_data_services.search.db import SearchUpdatesRepo
@@ -138,20 +135,12 @@ class DependencyManager:
 
         resource_requests_recorder: ResourcesRequestRecorder
         if cfg.enable_resource_request_tracking:
-            metering_clients: list[ResourceUsageMetering] = []
-            if cfg.meteroid.enabled:
-                metering_clients.append(
-                    MeteringClient(endpoint_url=cfg.meteroid.endpoint_url, token=cfg.meteroid.token)
+            metering_client: ResourceUsageMetering | None = None
+            if cfg.openmeter.endpoint_url and cfg.openmeter.token:
+                metering_client = OpenMeterClient(
+                    endpoint_url=cfg.openmeter.endpoint_url,
+                    token=cfg.openmeter.token,
                 )
-            if cfg.lago.enabled:
-                metering_clients.append(LagoClient(endpoint_url=cfg.lago.endpoint_url, token=cfg.lago.token))
-
-            metering_client = None
-            if metering_clients:
-                if len(metering_clients) > 1:
-                    metering_client = MultiMeteringClient(metering_clients)
-                else:
-                    metering_client = metering_clients[0]
 
             resource_requests_recorder = DefaultResourcesRequestRecorder(
                 requests_repo=resource_requests_repo,

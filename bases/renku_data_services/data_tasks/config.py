@@ -35,38 +35,18 @@ class PosthogConfig:
 
 
 @dataclass
-class MeteroidConfig:
-    """Configuration for the Kong metering endpoint."""
+class OpenMeterConfig:
+    """Configuration for the OpenMeter metering endpoint."""
 
-    enabled: bool
     endpoint_url: str
     token: str
 
     @classmethod
-    def from_env(cls) -> MeteroidConfig:
-        """Create metering config from environment variables."""
+    def from_env(cls) -> OpenMeterConfig:
+        """Create OpenMeter config from environment variables."""
         return cls(
-            enabled=os.environ.get("METERING_ENABLED", "false").lower() == "true",
-            endpoint_url=os.environ.get("METERING_ENDPOINT_URL", ""),
-            token=os.environ.get("METERING_API_TOKEN", ""),
-        )
-
-
-@dataclass
-class LagoConfig:
-    """Configuration for the Lago metering endpoint."""
-
-    enabled: bool
-    endpoint_url: str
-    token: str
-
-    @classmethod
-    def from_env(cls) -> LagoConfig:
-        """Create Lago config from environment variables."""
-        return cls(
-            enabled=os.environ.get("LAGO_ENABLED", "false").lower() == "true",
-            endpoint_url=os.environ.get("LAGO_ENDPOINT_URL", ""),
-            token=os.environ.get("LAGO_API_TOKEN", ""),
+            endpoint_url=os.environ.get("OPENMETER_ENDPOINT_URL", ""),
+            token=os.environ.get("OPENMETER_API_TOKEN", ""),
         )
 
 
@@ -77,8 +57,7 @@ class Config:
     db: DBConfig
     solr: SolrClientConfig
     posthog: PosthogConfig
-    meteroid: MeteroidConfig
-    lago: LagoConfig
+    openmeter: OpenMeterConfig
     authz: AuthzConfig
     keycloak: KeycloakConfig | None
     persisted_logs: PersistedLogsConfig
@@ -107,8 +86,7 @@ class Config:
         main_tick = int(os.environ.get("MAIN_LOG_INTERVAL_SECONDS", "300"))
         solr_config = SolrClientConfig.from_env()
         posthog_config = PosthogConfig.from_env()
-        meteroid_config = MeteroidConfig.from_env()
-        lago_config = LagoConfig.from_env()
+        openmeter_config = OpenMeterConfig.from_env()
         tcp_host = os.environ.get("TCP_HOST", "127.0.0.1")
         tcp_port = int(os.environ.get("TCP_PORT", "8001"))
 
@@ -132,8 +110,7 @@ class Config:
             main_log_interval_seconds=main_tick,
             solr=solr_config,
             posthog=posthog_config,
-            meteroid=meteroid_config,
-            lago=lago_config,
+            openmeter=openmeter_config,
             authz=authz,
             keycloak=keycloak,
             persisted_logs=PersistedLogsConfig.from_env(namespace=k8s_namespace),
