@@ -239,6 +239,7 @@ async def prevalidate_unsaved_global_data_connector(
         # we eliminate the use of CSI rclone.
         doi_validator = deepcopy(validator)
         doi_validator.providers["combine"] = _UNSAFE_SCICAT_COMBINE_PROVIDER
+        doi_validator._additional_allowed_storages = {"combine"}
         doi_validator.validate(storage.configuration)
     else:
         validator.validate(storage.configuration)
