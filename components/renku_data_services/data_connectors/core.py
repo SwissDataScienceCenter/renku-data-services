@@ -283,6 +283,12 @@ async def validate_unsaved_global_data_connector(
     if not doi:
         raise errors.ValidationError(message="Global data connectors require a DOI.")
 
+    if prevalidated_dc.data_connector.publisher_name == "PSI Open Data Provider":
+        # For PSI we have to use the combine remote type and we allow it only for this use case
+        validator = deepcopy(validator)
+        validator.providers["combine"] = _UNSAFE_SCICAT_COMBINE_PROVIDER
+        validator._additional_allowed_storages = {"combine"}
+
     # Check that we can list the files in the DOI
     connection_result = await validator.test_connection(
         configuration=data_connector.storage.configuration, source_path=data_connector.storage.source_path or "/"
