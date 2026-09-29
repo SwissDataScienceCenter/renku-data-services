@@ -129,7 +129,6 @@ from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import get_effective_quota
-from renku_data_services.utils.cryptography import get_encryption_key
 
 logger = logging.getLogger(__name__)
 

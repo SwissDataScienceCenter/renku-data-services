@@ -134,7 +134,6 @@ def __decrypt_secret(
     previous_secret_service_private_key: rsa.RSAPrivateKey | None = None,
     user_key: str | None = None,
 ) -> str:
-
     if not user.id:
         raise errors.UnauthorizedError(message="Cannot manage saved secrets for an unauthenticated user.")
     try:
