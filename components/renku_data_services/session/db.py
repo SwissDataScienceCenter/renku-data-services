@@ -1367,7 +1367,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     schemas.SessionSecretSlotORM,
                     func.coalesce(
                         schemas.SessionLauncherSecretORM.policy,
-                        cast({"policy": models.SessionLauncherPolicy.read_only}, schemas.JSONVariant),
+                        cast({"policy": models.SessionLauncherPolicy.read_only.value}, schemas.JSONVariant),
                     ).label("policy"),
                 )
                 .outerjoin(
@@ -1387,7 +1387,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 models.SessionLauncherSecret(
                     launcher_id=launcher.id,
                     secret_slot_id=slot.id,
-                    policy=policy,
+                    policy=policy.get("policy"),
                 )
                 for slot, policy in result.all()
             ]
@@ -1455,7 +1455,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     secret = schemas.SessionLauncherSecretORM(
                         launcher_id=launcher.id,
                         secret_slot_id=patch.secret_slot_id,
-                        policy={"policy": models.SessionLauncherPolicy.read_only},
+                        policy={"policy": models.SessionLauncherPolicy.read_only.value},
                     )
                     session.add(secret)
                 else:
