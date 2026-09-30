@@ -512,6 +512,8 @@ class ResourcePoolRepository(_Base):
         cluster_id = DEFAULT_K8S_CLUSTER if cluster is None else cluster.id
         if new_resource_pool.quota is not None:
             quota = await self.quotas_repo.create_quota(new_quota=new_resource_pool.quota, cluster_id=cluster_id)
+            if any(rc.preemptible for rc in new_resource_pool.classes):
+                await self.quotas_repo.ensure_preemptible_priority_class(quota.id, cluster_id)
 
         resource_pool = schemas.ResourcePoolORM.from_unsaved_model(
             new_resource_pool=new_resource_pool, quota=quota, cluster=cluster
@@ -577,6 +579,8 @@ class ResourcePoolRepository(_Base):
                     raise errors.ValidationError(
                         message="The resource class {resource_class} is not compatible with the quota {quota}."
                     )
+                if rp.quota and new_resource_class.preemptible:
+                    await self.quotas_repo.ensure_preemptible_priority_class(rp.quota, rp.get_cluster_id())
 
             session.add(resource_class)
             await session.flush()
@@ -722,6 +726,15 @@ class ResourcePoolRepository(_Base):
                 rp.remote_json = remote_json
 
             await gather(*new_classes_coroutines)
+
+            preemptible_class_ids = {rc.id for rc in rp.classes if rc.preemptible}
+            for rc in update.classes or []:
+                if rc.preemptible is True:
+                    preemptible_class_ids.add(rc.id)
+                elif rc.preemptible is False:
+                    preemptible_class_ids.discard(rc.id)
+            if rp.quota and preemptible_class_ids:
+                await self.quotas_repo.ensure_preemptible_priority_class(rp.quota, cluster_id)
 
             # Clear stale class remote_json when the pool is not FirecREST
             if effective_pool_kind != models.RemoteConfigurationKind.firecrest:
@@ -890,6 +903,8 @@ class ResourcePoolRepository(_Base):
                 cls.default_storage = update.default_storage
             if update.quota_enforced is not None:
                 cls.quota_enforced = update.quota_enforced
+            if update.preemptible is not None:
+                cls.preemptible = update.preemptible
             if pool_kind is None or pool_kind != models.RemoteConfigurationKind.firecrest:
                 cls.remote_json = None
             if update.remote is not None:
@@ -951,6 +966,10 @@ class ResourcePoolRepository(_Base):
             if quota and not quota.is_resource_class_compatible(cls_model):
                 raise errors.ValidationError(
                     message=f"The resource class {cls_model} is not compatible with the quota {quota}"
+                )
+            if cls_model.quota and cls_model.preemptible:
+                await self.quotas_repo.ensure_preemptible_priority_class(
+                    cls_model.quota, cls.resource_pool.get_cluster_id()
                 )
 
             return cls_model
@@ -1890,7 +1909,7 @@ class ClusterRepository:
 
 
 SESSION_PRIORITY_VALUE = 100
-JOB_PRIORITY_VALUE = -10
+PREEMPTIBLE_PRIORITY_VALUE = -10
 
 
 @dataclass
@@ -1922,52 +1941,48 @@ class QuotaRepository:
             id=new_quota.id if isinstance(new_quota, models.Quota) else str(uuid4()),
         )
         labels = {self._label_name: self._label_value}
-        await self._ensure_priority_classes(quota.id, cluster_id)
+        await self._ensure_priority_class(self._quota_priority_class(quota.id, cluster_id))
         res = await self.rq_client.create_resource_quota(quota.to_patch(labels), cluster_id)
         return models.Quota.from_k8s_resource_quota(res)
 
     async def delete_quota(self, name: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota and its priority classes."""
-        for pc_name in [name, models.job_priority_class_name(name)]:
+        for pc_name in [name, models.preemptible_priority_class_name(name)]:
             await self.pc_client.delete_priority_class(
                 meta=K8sPriorityClass.meta(pc_name, cluster_id), propagation_policy=DeletePropagationPolicy.foreground
             )
         await self.rq_client.delete_resource_quota(name=name, cluster_id=cluster_id)
 
-    async def ensure_job_scheduling(self, quota_id: str, cluster_id: ClusterId) -> None:
-        """Bring the priority classes and scope of an existing quota up to date for jobs."""
-        await self._ensure_priority_classes(quota_id, cluster_id)
+    async def migrate_quota(self, quota_id: str, cluster_id: ClusterId) -> None:
+        """Bring the priority class and scope of an existing quota up to date."""
+        await self._ensure_priority_class(self._quota_priority_class(quota_id, cluster_id))
         res_quota = await self.rq_client.read_resource_quota(name=quota_id, cluster_id=cluster_id)
         scope_selector = models.quota_scope_selector(quota_id)
         if res_quota.manifest.to_dict().get("spec", {}).get("scopeSelector") != scope_selector:
             await self.rq_client.patch_resource_quota(quota_id, {"spec": {"scopeSelector": scope_selector}}, cluster_id)
 
-    async def ensure_job_priority_class(self, quota_id: str, cluster_id: ClusterId) -> None:
-        """Create the job priority class of a quota if it is missing."""
-        await self._ensure_priority_class(self._job_priority_class(quota_id, cluster_id))
-
-    async def _ensure_priority_classes(self, quota_id: str, cluster_id: ClusterId) -> None:
+    async def ensure_preemptible_priority_class(self, quota_id: str, cluster_id: ClusterId) -> None:
+        """Create the preemptible priority class of a quota if it is missing."""
         await self._ensure_priority_class(
             K8sPriorityClass.new(
-                name=quota_id,
+                name=models.preemptible_priority_class_name(quota_id),
                 cluster=cluster_id,
                 global_default=False,
-                value=SESSION_PRIORITY_VALUE,
-                preemption_policy="PreemptLowerPriority",
-                description="Renku resource quota priority class",
+                value=PREEMPTIBLE_PRIORITY_VALUE,
+                preemption_policy="Never",
+                description="Renku resource quota priority class for preemptible resource classes",
                 labels={self._label_name: self._label_value},
             )
         )
-        await self._ensure_priority_class(self._job_priority_class(quota_id, cluster_id))
 
-    def _job_priority_class(self, quota_id: str, cluster_id: ClusterId) -> K8sPriorityClass:
+    def _quota_priority_class(self, quota_id: str, cluster_id: ClusterId) -> K8sPriorityClass:
         return K8sPriorityClass.new(
-            name=models.job_priority_class_name(quota_id),
+            name=quota_id,
             cluster=cluster_id,
             global_default=False,
-            value=JOB_PRIORITY_VALUE,
-            preemption_policy="Never",
-            description="Renku resource quota priority class for jobs",
+            value=SESSION_PRIORITY_VALUE,
+            preemption_policy="PreemptLowerPriority",
+            description="Renku resource quota priority class",
             labels={self._label_name: self._label_value},
         )
 

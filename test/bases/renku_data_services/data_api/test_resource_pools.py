@@ -619,8 +619,9 @@ async def test_resource_class_filtering(
     matching_class = matching_classes[0]
     matching_class.pop("id")
     matching_class.pop("matching")
-    # NOTE: `quota_enforced` is `False` by default
+    # NOTE: `quota_enforced` and `preemptible` are `False` by default
     new_classes[2]["quota_enforced"] = False
+    new_classes[2]["preemptible"] = False
     assert matching_class == new_classes[2]
     # Test without any filtering
     _, res = await sanic_client.get(
@@ -1614,6 +1615,8 @@ async def _resource_pools_request(
                 c["id"] = rp["classes"][i]["id"]
             if "quota_enforced" not in c:
                 c["quota_enforced"] = False
+            if "preemptible" not in c:
+                c["preemptible"] = False
 
         if "platform" not in input_payload:
             input_payload["platform"] = "linux/amd64"
