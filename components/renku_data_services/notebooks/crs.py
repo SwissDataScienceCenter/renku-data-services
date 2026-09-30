@@ -400,6 +400,9 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         if self.spec.ingress is None:
             return None
 
+        if self.spec.session.urlPath.startswith("ssh://"):
+            return self.spec.session.urlPath
+
         scheme = self.spec.ingress.scheme()
         host = self.spec.ingress.host
         path = self.spec.session.urlPath if self.spec.session.urlPath else "/"

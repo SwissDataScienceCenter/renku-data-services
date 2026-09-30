@@ -226,6 +226,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         resource_usage_service=dm.resource_usage_service,
         resource_requests_repo=dm.resource_requests_repo,
         authz=dm.authz,
+        ssh_proxy_config=dm.config.ssh_proxy_config,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",
