@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import random
 from collections.abc import AsyncIterator
 
 from sqlalchemy import select
@@ -10,6 +12,10 @@ from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz
+from renku_data_services.authz.models import Scope
+from renku_data_services.base_models.core import ResourceType
+from renku_data_services.crc import models as crc_models
+from renku_data_services.crc import orm as crc_schemas
 from renku_data_services.session_runners import models
 from renku_data_services.session_runners import orm as schemas
 
@@ -77,51 +83,51 @@ class UserSessionRunnersRepository:
         res = await session.scalars(stmt)
         return res.one_or_none()
 
-    # async def insert_runner(
-    #     self, session: AsyncSession, user: base_models.APIUser, runner: models.UnsavedSessionRunner
-    # ) -> models.SessionRunner:
-    #     """Insert a new session runner into the database."""
-    #     if not user.is_authenticated or not user.id:
-    #         raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
-    #     authorized = (
-    #         await self.authz.has_permission(
-    #             user=user,
-    #             resource_type=ResourceType.resource_pool,
-    #             resource_id=runner.resource_pool_id,
-    #             scope=Scope.READ,
-    #         )
-    #         if runner.resource_pool_id > 0
-    #         else False
-    #     )
-    #     if not authorized:
-    #         raise errors.MissingResourceError(
-    #             message=f"Resource pool with id '{runner.resource_pool_id}' "
-    #             "does not exist or you do not have access to it."
-    #         )
-    #     compatible = False
-    #     rp_stmt = select(crc_schemas.ResourcePoolORM).where(crc_schemas.ResourcePoolORM.id == runner.resource_pool_id)
-    #     rp_res = await session.scalars(rp_stmt)
-    #     rp_orm = rp_res.one_or_none()
-    #     if (
-    #         rp_orm
-    #         and rp_orm.remote_json
-    #         and rp_orm.remote_json.get("kind") == crc_models.RemoteConfigurationKind.runners.value
-    #     ):
-    #         compatible = True
-    #     if not compatible:
-    #         raise errors.ValidationError(
-    #             message=f"Resource pool with id '{runner.resource_pool_id}' " "does not accept session runners."
-    #         )
-    #     registration_token = self._generate_registration_token()
-    #     runner_orm = schemas.SessionRunnerORM(
-    #         user_id=user.id,
-    #         resource_pool_id=runner.resource_pool_id,
-    #         registration_token=registration_token,
-    #         status=models.RunnerStatus.never_contacted,
-    #     )
-    #     session.add(runner_orm)
-    #     await session.flush()
-    #     return runner_orm.dump(include_registration_token=True)
+    async def insert_runner(
+        self, session: AsyncSession, user: base_models.APIUser, runner: models.UnsavedUserSessionRunner
+    ) -> models.UserSessionRunner:
+        """Insert a new session runner into the database."""
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        authorized = (
+            await self.authz.has_permission(
+                user=user,
+                resource_type=ResourceType.resource_pool,
+                resource_id=runner.resource_pool_id,
+                scope=Scope.READ,
+            )
+            if runner.resource_pool_id > 0
+            else False
+        )
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Resource pool with id '{runner.resource_pool_id}' "
+                "does not exist or you do not have access to it."
+            )
+        compatible = False
+        rp_stmt = select(crc_schemas.ResourcePoolORM).where(crc_schemas.ResourcePoolORM.id == runner.resource_pool_id)
+        rp_res = await session.scalars(rp_stmt)
+        rp_orm = rp_res.one_or_none()
+        if (
+            rp_orm
+            and rp_orm.remote_json
+            and rp_orm.remote_json.get("kind") == crc_models.RemoteConfigurationKind.runners.value
+        ):
+            compatible = True
+        if not compatible:
+            raise errors.ValidationError(
+                message=f"Resource pool with id '{runner.resource_pool_id}' " "does not accept session runners."
+            )
+        registration_token = self._generate_registration_token()
+        runner_orm = schemas.UserSessionRunnerORM(
+            user_id=user.id,
+            resource_pool_id=runner.resource_pool_id,
+            registration_token=registration_token,
+            status=models.RunnerStatus.never_contacted,
+        )
+        session.add(runner_orm)
+        await session.flush()
+        return runner_orm.dump(include_registration_token=True)
 
     # async def register_runner(
     #     self, session: AsyncSession, registration_token: str
@@ -321,11 +327,11 @@ class UserSessionRunnersRepository:
     #     await session.flush()
     #     return secret_key
 
-    # @staticmethod
-    # def _generate_registration_token(size: int = 18) -> str:
-    #     """Returns a random code to use as a registration token."""
-    #     rand = random.SystemRandom()
-    #     return base64.urlsafe_b64encode(rand.randbytes(size)).decode()
+    @staticmethod
+    def _generate_registration_token(size: int = 18) -> str:
+        """Returns a random code to use as a registration token."""
+        rand = random.SystemRandom()
+        return base64.urlsafe_b64encode(rand.randbytes(size)).decode()
 
     # @staticmethod
     # def _encrypt_assigned_session_secrets(

@@ -7,14 +7,16 @@ from sanic import Request
 from sanic.response import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
+
 from renku_data_services import base_models
 from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.misc import validate_query
+from renku_data_services.base_api.misc import validate, validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.session_runners import apispec
+from renku_data_services.session_runners.core import validate_unsaved_session_runner
 from renku_data_services.session_runners.db import UserSessionRunnersRepository
 
 
@@ -46,21 +48,21 @@ class UserSessionRunnersBP(CustomBlueprint):
 
         return "/session_runners/user", ["GET"], _get_all_user_session_runners
 
-    # def post_session_runner(self) -> BlueprintFactoryResponse:
-    #     """Create a new session runner."""
+    def post_user_session_runner(self) -> BlueprintFactoryResponse:
+        """Create a new user-scoped session runner."""
 
-    #     @authenticate(self.authenticator)
-    #     @only_authenticated
-    #     @validate(json=apispec.SessionRunnerPost)
-    #     async def _post_session_runner(
-    #         _: Request, user: base_models.APIUser, body: apispec.SessionRunnerPost
-    #     ) -> JSONResponse:
-    #         new_runner = validate_unsaved_session_runner(runner=body)
-    #         async with self.session_maker() as session, session.begin():
-    #             runner = await self.session_runners_repo.insert_runner(session=session, user=user, runner=new_runner)
-    #         return validated_json(apispec.SessionRunner, runner, status=201)
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.UserSessionRunnerPost)
+        async def _post_user_session_runner(
+            _: Request, user: base_models.APIUser, body: apispec.UserSessionRunnerPost
+        ) -> JSONResponse:
+            new_runner = validate_unsaved_session_runner(runner=body)
+            async with self.session_maker() as session, session.begin():
+                runner = await self.runners_repo.insert_runner(session=session, user=user, runner=new_runner)
+            return validated_json(apispec.UserSessionRunner, runner, status=201)
 
-    #     return "/session_runners", ["POST"], _post_session_runner
+        return "/session_runners/user", ["POST"], _post_user_session_runner
 
     # def post_register_session_runner(self) -> BlueprintFactoryResponse:
     #     """Register a session runner."""
@@ -94,13 +96,14 @@ class UserSessionRunnersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_user_session_runner(_: Request, user: base_models.APIUser, session_runner_id: ULID) -> JSONResponse:
+        async def _get_user_session_runner(
+            _: Request, user: base_models.APIUser, session_runner_id: ULID
+        ) -> JSONResponse:
             async with self.session_maker() as session, session.begin():
                 runner = await self.runners_repo.get_runner(session=session, user=user, runner_id=session_runner_id)
             return validated_json(apispec.UserSessionRunner, runner)
 
         return "/session_runners/user/<session_runner_id:ulid>", ["GET"], _get_user_session_runner
-
 
     # def delete_session_runner(self) -> BlueprintFactoryResponse:
     #     """Remove a session runner."""
