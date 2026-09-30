@@ -116,6 +116,7 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
     quota_enforced: bool = False
+    preemptible: bool = False
     remote: FirecrestClassRemote | None = None
 
 
@@ -138,6 +139,7 @@ class ResourceClass(ResourcesCompareMixin):
     usage_hours_remaining: float | None = None
     usage_hours_total: float | None = None
     quota_enforced: bool = False
+    preemptible: bool = False
     remote: FirecrestClassRemote | None = None
 
 
@@ -155,6 +157,7 @@ class ResourceClassPatch:
     node_affinities: list[NodeAffinity] | None = None
     tolerations: list[str] | None = None
     quota_enforced: bool | None = None
+    preemptible: bool | None = None
     remote: FirecrestClassRemote | None = None
 
 
@@ -172,16 +175,20 @@ class GpuKind(StrEnum):
     AMD = "amd.com"
 
 
-def job_priority_class_name(quota_id: str) -> str:
-    """Return the name of the priority class for the jobs of a quota."""
-    return f"{quota_id}-job"
+def preemptible_priority_class_name(quota_id: str) -> str:
+    """Return the name of the priority class for the preemptible resource classes of a quota."""
+    return f"{quota_id}-preemptible"
 
 
 def quota_scope_selector(quota_id: str) -> dict[str, Any]:
-    """Return the resource quota scope selector that matches the session and job priority classes."""
+    """Return the resource quota scope selector that matches the normal and preemptible priority classes."""
     return {
         "matchExpressions": [
-            {"operator": "In", "scopeName": "PriorityClass", "values": [quota_id, job_priority_class_name(quota_id)]}
+            {
+                "operator": "In",
+                "scopeName": "PriorityClass",
+                "values": [quota_id, preemptible_priority_class_name(quota_id)],
+            }
         ]
     }
 
