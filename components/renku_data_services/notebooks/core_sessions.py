@@ -39,7 +39,7 @@ from renku_data_services.crc.models import (
     ResourceClass,
     ResourcePool,
     SessionProtocol,
-    job_priority_class_name,
+    preemptible_priority_class_name,
 )
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -533,12 +533,12 @@ async def request_session_secret_creation(
             )
 
 
-def priority_class_from_resource_class(resource_class: ResourceClass, session_type: SessionType) -> str | None:
+def priority_class_from_resource_class(resource_class: ResourceClass) -> str | None:
     """Return the priority class for a session or a job in the resource class."""
     if not resource_class.quota:
         return None
-    if session_type.is_non_interactive:
-        return job_priority_class_name(resource_class.quota)
+    if resource_class.preemptible:
+        return preemptible_priority_class_name(resource_class.quota)
     return resource_class.quota
 
 
@@ -1020,8 +1020,10 @@ async def start_session(
         if not resource_class or not resource_class.id:
             raise errors.MissingResourceError(message=f"The resource class with ID {resource_class_id} does not exist.")
     await nb_config.crc_validator.validate_class_storage(user, resource_class.id, launch_request.disk_storage)
-    if session_type.is_non_interactive and resource_class.quota:
-        await rp_repo.quotas_repo.ensure_job_priority_class(resource_class.quota, resource_pool.get_cluster_id())
+    if resource_class.preemptible and resource_class.quota:
+        await rp_repo.quotas_repo.ensure_preemptible_priority_class(
+            resource_class.quota, resource_pool.get_cluster_id()
+        )
     disk_storage = launch_request.disk_storage or resource_class.default_storage
 
     # NOTE: Refuse to start if the user is over quota and the resource class enforces it
@@ -1255,7 +1257,7 @@ async def start_session(
             codeRepositories=[],
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
-            priorityClassName=priority_class_from_resource_class(resource_class, session_type),
+            priorityClassName=priority_class_from_resource_class(resource_class),
             sessionType=session_type.to_amalthea(),
             session=Session(
                 image=image,
@@ -1433,7 +1435,7 @@ async def patch_session(
         # Affinities
         patch.spec.affinity = node_affinity_patch_from_resource_class(rc, nb_config.sessions.affinity_model)
         # Priority class (if a quota is being used)
-        patch.spec.priorityClassName = priority_class_from_resource_class(rc, session_type) or RESET
+        patch.spec.priorityClassName = priority_class_from_resource_class(rc) or RESET
         # Service account name
         if rp.cluster is not None:
             patch.spec.service_account_name = (

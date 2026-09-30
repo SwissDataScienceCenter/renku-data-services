@@ -84,6 +84,7 @@ def validate_resource_class(
         node_affinities=node_affinities,
         tolerations=tolerations,
         quota_enforced=body.quota_enforced,
+        preemptible=body.preemptible,
         remote=remote,
     )
 
@@ -160,6 +161,7 @@ def validate_resource_class_patch_or_put(
             node_affinities=node_affinities,
             tolerations=tolerations,
             quota_enforced=body.quota_enforced,
+            preemptible=body.preemptible,
             remote=remote,
         )
     return models.ResourceClassPatch(
@@ -173,6 +175,7 @@ def validate_resource_class_patch_or_put(
         node_affinities=node_affinities,
         tolerations=tolerations,
         quota_enforced=body.quota_enforced,
+        preemptible=body.preemptible,
         remote=remote,
     )
 
