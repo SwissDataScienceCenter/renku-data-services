@@ -6,8 +6,8 @@ from typing import Protocol
 
 import httpx
 
-from components.renku_data_services.crc.models import ResourceClass
 from renku_data_services.app_config import logging
+from renku_data_services.crc.models import ResourceClass
 from renku_data_services.resource_usage.model import Credit, ResourcesRequest
 
 logger = logging.getLogger(__file__)

@@ -1,13 +1,14 @@
 """Core functions for resource usage."""
 
+from __future__ import annotations
+
 from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime, timedelta
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-from components.renku_data_services.crc.db import ResourcePoolQueryRepository
-from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services import errors
 from renku_data_services.app_config import logging
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter, K8sObjectMeta
@@ -24,6 +25,9 @@ from renku_data_services.resource_usage.model import (
     ResourceUsageQuery,
     ResourceUsageSummary,
 )
+
+if TYPE_CHECKING:
+    from renku_data_services.crc.db import ResourcePoolQueryRepository
 
 logger = logging.getLogger(__file__)
 
