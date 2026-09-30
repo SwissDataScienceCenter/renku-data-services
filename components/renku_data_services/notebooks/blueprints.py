@@ -202,6 +202,7 @@ class NotebooksNewBP(CustomBlueprint):
                 project_storage_repo=self.project_storage_repo,
                 authz=self.authz,
                 cluster_repo=self.cluster_repo,
+                ssh_proxy_config=self.ssh_proxy_config,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
