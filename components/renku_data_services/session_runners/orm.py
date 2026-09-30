@@ -60,9 +60,6 @@ class UserSessionRunnerORM(BaseORM):
     )
     """Resource pool ID the runner is associated with."""
 
-    resource_pool: Mapped[ResourcePoolORM] = relationship(init=False, repr=False)
-    """The resource pool ID the runner is associated with."""
-
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), server_default=func.now(), nullable=False, init=False
     )

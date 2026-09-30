@@ -85,6 +85,7 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
+from renku_data_services.session_runners.db import UserSessionRunnersRepository
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
@@ -236,12 +237,20 @@ class TestDependencyManager(DependencyManager):
         kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
 
         authz = NonCachingAuthz(config.authz_config)
+
+        user_session_runners_repo = UserSessionRunnersRepository(
+            authz=authz,
+            encryption_key=config.secrets.encryption_key,
+        )
+
         internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
         internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
         internal_scope_verifier = ScopeVerifier(
             deposit_config=config.deposit_config,
             notebook_k8s_client=config.nb_config.k8s_v2_client,
             job_client=job_client,
+            user_session_runners_repo=user_session_runners_repo,
+            session_maker=config.db.async_session_maker,
         )
         search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
         oauth_client_factory = DefaultOAuthHttpClientFactory(
@@ -472,6 +481,7 @@ class TestDependencyManager(DependencyManager):
             resource_usage_service=resource_usage_service,
             session_logs_repo=session_logs_repo,
             build_logs_repo=build_logs_repo,
+            user_session_runners_repo=user_session_runners_repo,
             zenodo_client=ZenodoAPIClient(),
             envidat_client=EnvidatClient(),
             scicat_client=ScicatAPIClient(config.deposit_config.scicat.api_url),
