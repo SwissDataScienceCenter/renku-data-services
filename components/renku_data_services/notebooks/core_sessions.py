@@ -941,7 +941,7 @@ def ssh_proxy_session_extras(
     Only ssh frontends are reached by the proxy; every other session must not get the keys.
     The two secrets are created once by the Helm keygen job; data-services only mounts them here.
     """
-    if build_parameters is None or build_parameters.frontend_variant != FrontendVariant.ssh:
+    if session_has_http_frontend(build_parameters):
         return SessionExtraResources()
     if not ssh_config.enabled:
         return SessionExtraResources()
@@ -993,6 +993,15 @@ def ssh_proxy_session_extras(
             ),
         ],
     )
+
+
+def session_has_http_frontend(build_parameters: BuildParameters | None) -> bool:
+    """Whether the session serves an HTTP frontend.
+
+    ssh sessions run a bare ssh daemon on the session port and have no HTTP
+    frontend, so they get neither the authentication proxy nor an ingress.
+    """
+    return build_parameters is None or build_parameters.frontend_variant != FrontendVariant.ssh
 
 
 async def start_session(
@@ -1182,26 +1191,35 @@ async def start_session(
     if launch_request.submission_id:
         annotations.update({"renku.io/submission_id": str(launch_request.submission_id)})
 
-    # Authentication
-    if isinstance(user, AuthenticatedAPIUser):
-        auth_secret = await get_auth_secret_authenticated(
-            nb_config, user, server_name, ingress_config.url, ingress_config.url_path
-        )
-    else:
-        auth_secret = get_auth_secret_anonymous(nb_config, server_name, request)
-    session_extras = session_extras.concat(
-        SessionExtraResources(
-            secrets=[auth_secret],
-            volumes=[auth_secret.volume] if auth_secret.volume else [],
-        )
-    )
-    authn_extra_volume_mounts: list[ExtraVolumeMount] = []
-    if auth_secret.volume_mount:
-        authn_extra_volume_mounts.append(auth_secret.volume_mount)
+    has_http_frontend = session_has_http_frontend(launcher.environment.build_parameters)
 
-    cert_vol_mounts = init_containers.certificates_volume_mounts(nb_config)
-    if cert_vol_mounts:
-        authn_extra_volume_mounts.extend(cert_vol_mounts)
+    # Authentication (only HTTP frontends get the auth proxy and its secret)
+    authentication: Authentication | None = None
+    if has_http_frontend:
+        if isinstance(user, AuthenticatedAPIUser):
+            auth_secret = await get_auth_secret_authenticated(
+                nb_config, user, server_name, ingress_config.url, ingress_config.url_path
+            )
+        else:
+            auth_secret = get_auth_secret_anonymous(nb_config, server_name, request)
+        session_extras = session_extras.concat(
+            SessionExtraResources(
+                secrets=[auth_secret],
+                volumes=[auth_secret.volume] if auth_secret.volume else [],
+            )
+        )
+        authn_extra_volume_mounts: list[ExtraVolumeMount] = []
+        if auth_secret.volume_mount:
+            authn_extra_volume_mounts.append(auth_secret.volume_mount)
+        cert_vol_mounts = init_containers.certificates_volume_mounts(nb_config)
+        if cert_vol_mounts:
+            authn_extra_volume_mounts.extend(cert_vol_mounts)
+        authentication = Authentication(
+            enabled=True,
+            type=AuthenticationType.oauth2proxy if isinstance(user, AuthenticatedAPIUser) else AuthenticationType.token,
+            secretRef=auth_secret.key_ref("auth"),
+            extraVolumeMounts=authn_extra_volume_mounts,
+        )
 
     image_secret = await get_image_pull_secret(
         launcher=launcher,
@@ -1339,19 +1357,12 @@ async def start_session(
                 remoteSecretRef=remote_secret.ref() if remote_secret else None,
                 readinessProbe=_get_readiness_probe(session_type, session_location),
             ),
-            ingress=ingress_config.get_k8s_ingress() if session_type.is_interactive else None,
+            ingress=ingress_config.get_k8s_ingress() if session_type.is_interactive and has_http_frontend else None,
             extraContainers=session_extras.containers,
             initContainers=session_extras.init_containers,
             extraVolumes=session_extras.volumes,
             culling=get_culling(user, resource_pool, nb_config, session_type),
-            authentication=Authentication(
-                enabled=True,
-                type=AuthenticationType.oauth2proxy
-                if isinstance(user, AuthenticatedAPIUser)
-                else AuthenticationType.token,
-                secretRef=auth_secret.key_ref("auth"),
-                extraVolumeMounts=authn_extra_volume_mounts,
-            ),
+            authentication=authentication,
             dataSources=session_extras.data_sources,
             tolerations=tolerations_from_resource_class(resource_class, nb_config.sessions.tolerations_model),
             affinity=node_affinity_from_resource_class(resource_class, nb_config.sessions.affinity_model),

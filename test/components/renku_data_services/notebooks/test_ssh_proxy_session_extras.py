@@ -1,11 +1,11 @@
-"""Tests for ssh_proxy_session_extras in core_sessions."""
+"""Tests for ssh_proxy_session_extras and session_has_http_frontend in core_sessions."""
 
 from pathlib import PurePosixPath
 
 from ulid import ULID
 
 from renku_data_services.notebooks.config.dynamic import _SessionSshConfig
-from renku_data_services.notebooks.core_sessions import ssh_proxy_session_extras
+from renku_data_services.notebooks.core_sessions import session_has_http_frontend, ssh_proxy_session_extras
 from renku_data_services.session.models import BuildParameters, FrontendVariant
 
 
@@ -73,3 +73,16 @@ class TestSshProxySessionExtras:
         extras = ssh_proxy_session_extras(ssh, PurePosixPath("/workspace"), None)
         assert extras.volumes == []
         assert extras.volume_mounts == []
+
+
+class TestSessionHasHttpFrontend:
+    """Unit tests for the session HTTP-frontend predicate."""
+
+    def test_ssh_frontend_has_no_http(self) -> None:
+        assert session_has_http_frontend(_build_parameters(FrontendVariant.ssh)) is False
+
+    def test_jupyterlab_frontend_has_http(self) -> None:
+        assert session_has_http_frontend(_build_parameters(FrontendVariant.jupyterlab)) is True
+
+    def test_no_build_parameters_has_http(self) -> None:
+        assert session_has_http_frontend(None) is True

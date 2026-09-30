@@ -2344,6 +2344,7 @@ async def test_starting_session_with_ssh_build_environment(
     admin_headers,
     launch_session,
     builds_enabled,
+    amalthea_installation,
 ) -> None:
     project: dict[str, Any] = await create_project(
         sanic_client,
@@ -2382,3 +2383,8 @@ async def test_starting_session_with_ssh_build_environment(
     assert res.status_code == 200, res.text
     assert len(res.json) > 0
     assert session_res.json["name"] in [i["name"] for i in res.json]
+
+    session = await app_manager.config.nb_config.k8s_v2_client.get_session(session_res.json["name"], "user")
+    assert session is not None
+    assert session.spec.authentication is None
+    assert session.spec.ingress is None
