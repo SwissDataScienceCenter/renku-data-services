@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
 
 from ulid import ULID
 
@@ -25,49 +24,50 @@ class RunnerStatus(StrEnum):
 
 
 @dataclass(eq=True, frozen=True, kw_only=True)
-class UnsavedSessionRunner:
+class UnsavedUserSessionRunner:
     """Represents an unsaved session runner."""
 
     resource_pool_id: int
 
 
 @dataclass(eq=True, frozen=True, kw_only=True)
-class SessionRunner(UnsavedSessionRunner):
+class UserSessionRunner(UnsavedUserSessionRunner):
     """Represents a session runner."""
 
     id: ULID
+    user_id: str
     resource_pool_id: int
     status: RunnerStatus
-    # TODO
     registration_token: str | None = None
+    creation_date: datetime
     last_contact: datetime | None
 
 
-@dataclass(eq=True, frozen=True, kw_only=True)
-class SessionRunnerContactPayload:
-    """Payload sent by a session runner."""
+# @dataclass(eq=True, frozen=True, kw_only=True)
+# class SessionRunnerContactPayload:
+#     """Payload sent by a session runner."""
 
-    status: Literal[RunnerStatus.ready] | Literal[RunnerStatus.not_ready]
-
-
-@dataclass(eq=True, frozen=True, kw_only=True)
-class UnsavedAssignedSession:
-    """Represents an unsaved assigned session."""
-
-    session_id: str
-    resource_pool_id: int
+#     status: Literal[RunnerStatus.ready] | Literal[RunnerStatus.not_ready]
 
 
-@dataclass(eq=True, frozen=True, kw_only=True)
-class AssignedSession(UnsavedAssignedSession):
-    """Represents a session which needs to be assigned to a runner."""
+# @dataclass(eq=True, frozen=True, kw_only=True)
+# class UnsavedAssignedSession:
+#     """Represents an unsaved assigned session."""
 
-    runner_id: ULID | None
+#     session_id: str
+#     resource_pool_id: int
 
 
-@dataclass(eq=True, frozen=True, kw_only=True)
-class AssignedSessionSecret:
-    """Represents a secret for an assigned session."""
+# @dataclass(eq=True, frozen=True, kw_only=True)
+# class AssignedSession(UnsavedAssignedSession):
+#     """Represents a session which needs to be assigned to a runner."""
 
-    name: str
-    value: str
+#     runner_id: ULID | None
+
+
+# @dataclass(eq=True, frozen=True, kw_only=True)
+# class AssignedSessionSecret:
+#     """Represents a secret for an assigned session."""
+
+#     name: str
+#     value: str

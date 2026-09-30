@@ -4,238 +4,236 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from sanic import Request
-from sanic.response import HTTPResponse, JSONResponse
+from sanic.response import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
-
-from renku_data_services import base_models, errors
+from renku_data_services import base_models
 from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.misc import validate
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
-from renku_data_services.notebooks import models as nb_models
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.session_runners import apispec
-from renku_data_services.session_runners.core import (
-    validate_patch_assigned_session_secrets,
-    validate_session_runner_contact_payload,
-    validate_unsaved_session_runner,
-)
-from renku_data_services.session_runners.db import SessionRunnersRepository
+from renku_data_services.session_runners.db import UserSessionRunnersRepository
 
 
 @dataclass(kw_only=True)
-class SessionRunnersBP(CustomBlueprint):
-    """Handlers for session runners."""
+class UserSessionRunnersBP(CustomBlueprint):
+    """Handlers for user-scoped session runners."""
 
-    session_runners_repo: SessionRunnersRepository
+    runners_repo: UserSessionRunnersRepository
     k8s_v2_client: NotebookK8sClient
     authenticator: base_models.Authenticator
     internal_authenticator: RenkuSelfAuthenticator
     internal_token_mint: RenkuSelfTokenMint
     session_maker: Callable[..., AsyncSession]
 
-    def get_all_session_runners(self) -> BlueprintFactoryResponse:
-        """Create a new session runner."""
+    def get_all_user_session_runners(self) -> BlueprintFactoryResponse:
+        """Get all user-scoped session runners."""
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_all_session_runners(_: Request, user: base_models.APIUser) -> JSONResponse:
+        @validate_query(query=apispec.SessionRunnersUserGetParametersQuery)
+        async def _get_all_user_session_runners(
+            _: Request, user: base_models.APIUser, query: apispec.SessionRunnersUserGetParametersQuery
+        ) -> JSONResponse:
+            all_users = query.all_users or False
             async with self.session_maker() as session, session.begin():
-                runners = self.session_runners_repo.get_all_runners(session=session, user=user)
+                runners = self.runners_repo.get_all_runners(session=session, user=user, all_users=all_users)
                 result = [item async for item in runners]
-            return validated_json(apispec.SessionRunners, result)
+            return validated_json(apispec.UserSessionRunners, result)
 
-        return "/session_runners", ["GET"], _get_all_session_runners
+        return "/session_runners/user", ["GET"], _get_all_user_session_runners
 
-    def post_session_runner(self) -> BlueprintFactoryResponse:
-        """Create a new session runner."""
+    # def post_session_runner(self) -> BlueprintFactoryResponse:
+    #     """Create a new session runner."""
 
-        @authenticate(self.authenticator)
-        @only_authenticated
-        @validate(json=apispec.SessionRunnerPost)
-        async def _post_session_runner(
-            _: Request, user: base_models.APIUser, body: apispec.SessionRunnerPost
-        ) -> JSONResponse:
-            new_runner = validate_unsaved_session_runner(runner=body)
-            async with self.session_maker() as session, session.begin():
-                runner = await self.session_runners_repo.insert_runner(session=session, user=user, runner=new_runner)
-            return validated_json(apispec.SessionRunner, runner, status=201)
+    #     @authenticate(self.authenticator)
+    #     @only_authenticated
+    #     @validate(json=apispec.SessionRunnerPost)
+    #     async def _post_session_runner(
+    #         _: Request, user: base_models.APIUser, body: apispec.SessionRunnerPost
+    #     ) -> JSONResponse:
+    #         new_runner = validate_unsaved_session_runner(runner=body)
+    #         async with self.session_maker() as session, session.begin():
+    #             runner = await self.session_runners_repo.insert_runner(session=session, user=user, runner=new_runner)
+    #         return validated_json(apispec.SessionRunner, runner, status=201)
 
-        return "/session_runners", ["POST"], _post_session_runner
+    #     return "/session_runners", ["POST"], _post_session_runner
 
-    def post_register_session_runner(self) -> BlueprintFactoryResponse:
-        """Register a session runner."""
+    # def post_register_session_runner(self) -> BlueprintFactoryResponse:
+    #     """Register a session runner."""
 
-        @validate(json=apispec.SessionRunnerRegisterPost)
-        async def _post_register_session_runner(_: Request, body: apispec.SessionRunnerRegisterPost) -> JSONResponse:
-            registration_token = body.registration_token
-            async with self.session_maker() as session, session.begin():
-                runner, user = await self.session_runners_repo.register_runner(
-                    session=session, registration_token=registration_token
-                )
-            internal_token_scope = f"runner:{str(runner.id)}"
-            internal_access_token = self.internal_token_mint.create_access_token(user=user, scope=internal_token_scope)
-            internal_refresh_token = self.internal_token_mint.create_refresh_token(
-                user=user, scope=internal_token_scope
-            )
-            auth: dict[str, str | int] = {
-                "access_token": internal_access_token,
-                "token_type": "Bearer",
-                "expires_in": int(self.internal_token_mint.default_access_token_expiration.total_seconds()),
-                "refresh_token": internal_refresh_token,
-                "refresh_expires_in": int(self.internal_token_mint.default_refresh_token_expiration.total_seconds()),
-                "scope": internal_token_scope,
-            }
-            return validated_json(apispec.SessionRunnerRegisterResponse, {"runner": runner, "auth": auth})
+    #     @validate(json=apispec.SessionRunnerRegisterPost)
+    #     async def _post_register_session_runner(_: Request, body: apispec.SessionRunnerRegisterPost) -> JSONResponse:
+    #         registration_token = body.registration_token
+    #         async with self.session_maker() as session, session.begin():
+    #             runner, user = await self.session_runners_repo.register_runner(
+    #                 session=session, registration_token=registration_token
+    #             )
+    #         internal_token_scope = f"runner:{str(runner.id)}"
+    #         internal_access_token = self.internal_token_mint.create_access_token(user=user, scope=internal_token_scope) #noqa: E501
+    #         internal_refresh_token = self.internal_token_mint.create_refresh_token(
+    #             user=user, scope=internal_token_scope
+    #         )
+    #         auth: dict[str, str | int] = {
+    #             "access_token": internal_access_token,
+    #             "token_type": "Bearer",
+    #             "expires_in": int(self.internal_token_mint.default_access_token_expiration.total_seconds()),
+    #             "refresh_token": internal_refresh_token,
+    #             "refresh_expires_in": int(self.internal_token_mint.default_refresh_token_expiration.total_seconds()),
+    #             "scope": internal_token_scope,
+    #         }
+    #         return validated_json(apispec.SessionRunnerRegisterResponse, {"runner": runner, "auth": auth})
 
-        return "/session_runners/register", ["POST"], _post_register_session_runner
+    #     return "/session_runners/register", ["POST"], _post_register_session_runner
 
-    def get_session_runner(self) -> BlueprintFactoryResponse:
-        """Get a session runner."""
-
-        @authenticate(self.authenticator)
-        @only_authenticated
-        async def _get_session_runner(_: Request, user: base_models.APIUser, session_runner_id: ULID) -> JSONResponse:
-            async with self.session_maker() as session, session.begin():
-                runner = await self.session_runners_repo.get_runner(session=session, user=user, id=session_runner_id)
-            return validated_json(apispec.SessionRunner, runner)
-
-        return "/session_runners/<session_runner_id:ulid>", ["GET"], _get_session_runner
-
-    def delete_session_runner(self) -> BlueprintFactoryResponse:
-        """Remove a session runner."""
+    def get_user_session_runner(self) -> BlueprintFactoryResponse:
+        """Get a user-scoped session runner."""
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _delete_session_runner(
-            _: Request, user: base_models.APIUser, session_runner_id: ULID
-        ) -> HTTPResponse:
+        async def _get_user_session_runner(_: Request, user: base_models.APIUser, session_runner_id: ULID) -> JSONResponse:
             async with self.session_maker() as session, session.begin():
-                await self.session_runners_repo.delete_runner(session=session, user=user, runner_id=session_runner_id)
-            return HTTPResponse(status=204)
+                runner = await self.runners_repo.get_runner(session=session, user=user, runner_id=session_runner_id)
+            return validated_json(apispec.UserSessionRunner, runner)
 
-        return "/session_runners/<session_runner_id:ulid>", ["DELETE"], _delete_session_runner
+        return "/session_runners/user/<session_runner_id:ulid>", ["GET"], _get_user_session_runner
 
-    def get_assigned_session_details(self) -> BlueprintFactoryResponse:
-        """Get the details of a session assigned to a given runner."""
 
-        @authenticate(self.internal_authenticator)
-        @only_authenticated
-        async def _get_assigned_session_details(
-            _: Request, user: base_models.APIUser, session_runner_id: ULID, session_id: str
-        ) -> JSONResponse:
-            async with self.session_maker() as session, session.begin():
-                assigned_session = await self.session_runners_repo.get_assigned_session(
-                    session=session, user=user, session_runner_id=session_runner_id, renku_session_id=session_id
-                )
-            user_id = user.id
-            assert user_id is not None
-            k8s_session = await self.k8s_v2_client.get_session(session_id, user_id)
-            if k8s_session is None:
-                raise errors.MissingResourceError(
-                    message=f"The assigned session {session_id} does not exist or you do not have access to it."
-                )
-            response = apispec.AssignedSessionDetails(
-                session_id=assigned_session.session_id,
-                runner_id=str(assigned_session.runner_id) if assigned_session.runner_id else None,  # TODO
-                spec=apispec.Spec(
-                    image=k8s_session.spec.session.image,
-                    url=k8s_session.base_url() or "None",
-                    session_type=nb_models.SessionType.interactive.value,  # TODO
-                    command=list(k8s_session.spec.session.command) if k8s_session.spec.session.command else [],
-                    args=list(k8s_session.spec.session.args) if k8s_session.spec.session.args else [],
-                ),
-            )
-            return validated_json(apispec.AssignedSessionDetails, response)
+    # def delete_session_runner(self) -> BlueprintFactoryResponse:
+    #     """Remove a session runner."""
 
-        return (
-            "/session_runners/<session_runner_id:ulid>/sessions/<session_id>",
-            ["GET"],
-            _get_assigned_session_details,
-        )
+    #     @authenticate(self.authenticator)
+    #     @only_authenticated
+    #     async def _delete_session_runner(
+    #         _: Request, user: base_models.APIUser, session_runner_id: ULID
+    #     ) -> HTTPResponse:
+    #         async with self.session_maker() as session, session.begin():
+    #             await self.session_runners_repo.delete_runner(session=session, user=user, runner_id=session_runner_id)
+    #         return HTTPResponse(status=204)
 
-    def get_assigned_session_secrets(self) -> BlueprintFactoryResponse:
-        """Get the secrets necesaary to run a session assigned to a given runner."""
+    #     return "/session_runners/<session_runner_id:ulid>", ["DELETE"], _delete_session_runner
 
-        @authenticate(self.internal_authenticator)
-        @only_authenticated
-        async def _get_assigned_session_secrets(
-            _: Request, user: base_models.APIUser, session_runner_id: ULID, session_id: str
-        ) -> JSONResponse:
-            async with self.session_maker() as session, session.begin():
-                secrets = await self.session_runners_repo.get_assigned_session_secrets(
-                    session=session, user=user, session_runner_id=session_runner_id, renku_session_id=session_id
-                )
-            return validated_json(apispec.AssignedSessionSecrets, secrets)
+    # def get_assigned_session_details(self) -> BlueprintFactoryResponse:
+    #     """Get the details of a session assigned to a given runner."""
 
-        return (
-            "/session_runners/<session_runner_id:ulid>/sessions/<session_id>/secrets",
-            ["GET"],
-            _get_assigned_session_secrets,
-        )
+    #     @authenticate(self.internal_authenticator)
+    #     @only_authenticated
+    #     async def _get_assigned_session_details(
+    #         _: Request, user: base_models.APIUser, session_runner_id: ULID, session_id: str
+    #     ) -> JSONResponse:
+    #         async with self.session_maker() as session, session.begin():
+    #             assigned_session = await self.session_runners_repo.get_assigned_session(
+    #                 session=session, user=user, session_runner_id=session_runner_id, renku_session_id=session_id
+    #             )
+    #         user_id = user.id
+    #         assert user_id is not None
+    #         k8s_session = await self.k8s_v2_client.get_session(session_id, user_id)
+    #         if k8s_session is None:
+    #             raise errors.MissingResourceError(
+    #                 message=f"The assigned session {session_id} does not exist or you do not have access to it."
+    #             )
+    #         response = apispec.AssignedSessionDetails(
+    #             session_id=assigned_session.session_id,
+    #             runner_id=str(assigned_session.runner_id) if assigned_session.runner_id else None,  # TODO
+    #             spec=apispec.Spec(
+    #                 image=k8s_session.spec.session.image,
+    #                 url=k8s_session.base_url() or "None",
+    #                 session_type=nb_models.SessionType.interactive.value,  # TODO
+    #                 command=list(k8s_session.spec.session.command) if k8s_session.spec.session.command else [],
+    #                 args=list(k8s_session.spec.session.args) if k8s_session.spec.session.args else [],
+    #             ),
+    #         )
+    #         return validated_json(apispec.AssignedSessionDetails, response)
 
-    def patch_assigned_session_secrets(self) -> BlueprintFactoryResponse:
-        """Update the secrets used in an assigned session."""
+    #     return (
+    #         "/session_runners/<session_runner_id:ulid>/sessions/<session_id>",
+    #         ["GET"],
+    #         _get_assigned_session_details,
+    #     )
 
-        @authenticate(self.internal_authenticator)
-        @only_authenticated
-        @validate(json=apispec.AssignedSessionSecrets)
-        async def _patch_assigned_session_secrets(
-            _: Request,
-            user: base_models.APIUser,
-            session_runner_id: ULID,
-            session_id: str,
-            body: apispec.AssignedSessionSecrets,
-        ) -> JSONResponse:
-            update = validate_patch_assigned_session_secrets(patch=body)
-            async with self.session_maker() as session, session.begin():
-                secrets = await self.session_runners_repo.update_assigned_session_secrets(
-                    session=session,
-                    user=user,
-                    session_runner_id=session_runner_id,
-                    renku_session_id=session_id,
-                    update=update,
-                )
-            return validated_json(apispec.AssignedSessionSecrets, secrets)
+    # def get_assigned_session_secrets(self) -> BlueprintFactoryResponse:
+    #     """Get the secrets necesaary to run a session assigned to a given runner."""
 
-        return (
-            "/session_runners/<session_runner_id:ulid>/sessions/<session_id>/secrets",
-            ["PATCH"],
-            _patch_assigned_session_secrets,
-        )
+    #     @authenticate(self.internal_authenticator)
+    #     @only_authenticated
+    #     async def _get_assigned_session_secrets(
+    #         _: Request, user: base_models.APIUser, session_runner_id: ULID, session_id: str
+    #     ) -> JSONResponse:
+    #         async with self.session_maker() as session, session.begin():
+    #             secrets = await self.session_runners_repo.get_assigned_session_secrets(
+    #                 session=session, user=user, session_runner_id=session_runner_id, renku_session_id=session_id
+    #             )
+    #         return validated_json(apispec.AssignedSessionSecrets, secrets)
 
-    def post_session_runner_contact(self) -> BlueprintFactoryResponse:
-        """Contact endpoint for session runners."""
+    #     return (
+    #         "/session_runners/<session_runner_id:ulid>/sessions/<session_id>/secrets",
+    #         ["GET"],
+    #         _get_assigned_session_secrets,
+    #     )
 
-        @authenticate(self.internal_authenticator)
-        @only_authenticated
-        @validate(json=apispec.SessionRunnerContactPost)
-        async def _post_session_runner_contact(
-            _: Request, user: base_models.APIUser, session_runner_id: ULID, body: apispec.SessionRunnerContactPost
-        ) -> JSONResponse:
-            payload = validate_session_runner_contact_payload(payload=body)
-            async with self.session_maker() as session, session.begin():
-                _runner, assigned_session_ids = await self.session_runners_repo.update_runner_from_contact(
-                    session=session, user=user, session_runner_id=session_runner_id, payload=payload
-                )
-            return validated_json(apispec.SessionRunnerContactResponse, {"sessions": assigned_session_ids})
+    # def patch_assigned_session_secrets(self) -> BlueprintFactoryResponse:
+    #     """Update the secrets used in an assigned session."""
 
-        return "/session_runners/<session_runner_id:ulid>/contact", ["POST"], _post_session_runner_contact
+    #     @authenticate(self.internal_authenticator)
+    #     @only_authenticated
+    #     @validate(json=apispec.AssignedSessionSecrets)
+    #     async def _patch_assigned_session_secrets(
+    #         _: Request,
+    #         user: base_models.APIUser,
+    #         session_runner_id: ULID,
+    #         session_id: str,
+    #         body: apispec.AssignedSessionSecrets,
+    #     ) -> JSONResponse:
+    #         update = validate_patch_assigned_session_secrets(patch=body)
+    #         async with self.session_maker() as session, session.begin():
+    #             secrets = await self.session_runners_repo.update_assigned_session_secrets(
+    #                 session=session,
+    #                 user=user,
+    #                 session_runner_id=session_runner_id,
+    #                 renku_session_id=session_id,
+    #                 update=update,
+    #             )
+    #         return validated_json(apispec.AssignedSessionSecrets, secrets)
 
-    def get_assigned_session_standalone(self) -> BlueprintFactoryResponse:
-        """Get the details of a session which needs a runner."""
+    #     return (
+    #         "/session_runners/<session_runner_id:ulid>/sessions/<session_id>/secrets",
+    #         ["PATCH"],
+    #         _patch_assigned_session_secrets,
+    #     )
 
-        @authenticate(self.internal_authenticator)
-        @only_authenticated
-        async def _get_assigned_session_standalone(
-            _: Request, user: base_models.APIUser, session_id: str
-        ) -> JSONResponse:
-            async with self.session_maker() as session, session.begin():
-                renku_session = await self.session_runners_repo.get_assigned_session_standalone(
-                    session=session, user=user, renku_session_id=session_id
-                )
-            return validated_json(apispec.AssignedSession, renku_session)
+    # def post_session_runner_contact(self) -> BlueprintFactoryResponse:
+    #     """Contact endpoint for session runners."""
 
-        return "/session_runners/sessions/<session_id>", ["GET"], _get_assigned_session_standalone
+    #     @authenticate(self.internal_authenticator)
+    #     @only_authenticated
+    #     @validate(json=apispec.SessionRunnerContactPost)
+    #     async def _post_session_runner_contact(
+    #         _: Request, user: base_models.APIUser, session_runner_id: ULID, body: apispec.SessionRunnerContactPost
+    #     ) -> JSONResponse:
+    #         payload = validate_session_runner_contact_payload(payload=body)
+    #         async with self.session_maker() as session, session.begin():
+    #             _runner, assigned_session_ids = await self.session_runners_repo.update_runner_from_contact(
+    #                 session=session, user=user, session_runner_id=session_runner_id, payload=payload
+    #             )
+    #         return validated_json(apispec.SessionRunnerContactResponse, {"sessions": assigned_session_ids})
+
+    #     return "/session_runners/<session_runner_id:ulid>/contact", ["POST"], _post_session_runner_contact
+
+    # def get_assigned_session_standalone(self) -> BlueprintFactoryResponse:
+    #     """Get the details of a session which needs a runner."""
+
+    #     @authenticate(self.internal_authenticator)
+    #     @only_authenticated
+    #     async def _get_assigned_session_standalone(
+    #         _: Request, user: base_models.APIUser, session_id: str
+    #     ) -> JSONResponse:
+    #         async with self.session_maker() as session, session.begin():
+    #             renku_session = await self.session_runners_repo.get_assigned_session_standalone(
+    #                 session=session, user=user, renku_session_id=session_id
+    #             )
+    #         return validated_json(apispec.AssignedSession, renku_session)
+
+    #     return "/session_runners/sessions/<session_id>", ["GET"], _get_assigned_session_standalone

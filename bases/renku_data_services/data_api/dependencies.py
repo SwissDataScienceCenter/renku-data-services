@@ -86,7 +86,7 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
-from renku_data_services.session_runners.db import SessionRunnersRepository, SessionRunnersSchedulingRepository
+from renku_data_services.session_runners.db import UserSessionRunnersRepository
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
@@ -185,8 +185,7 @@ class DependencyManager:
     resource_usage_service: ResourceUsageService
     session_logs_repo: AmaltheaSessionPersistedLogsReadRepository
     build_logs_repo: ImageBuildPersistedLogsReadRepository
-    session_runners_repo: SessionRunnersRepository
-    session_runners_scheduling_repo: SessionRunnersSchedulingRepository
+    user_session_runners_repo: UserSessionRunnersRepository
     zenodo_client: ZenodoAPIClient
     envidat_client: EnvidatClient
     scicat_client: ScicatAPIClient
@@ -372,12 +371,9 @@ class DependencyManager:
                     namespace=config.k8s_namespace,
                 )
 
-        session_runners_repo = SessionRunnersRepository(
+        user_session_runners_repo = UserSessionRunnersRepository(
             authz=authz,
             encryption_key=config.secrets.encryption_key,
-        )
-        session_runners_scheduling_repo = SessionRunnersSchedulingRepository(
-            session_maker=config.db.async_session_maker
         )
 
         internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
@@ -386,7 +382,7 @@ class DependencyManager:
             deposit_config=config.deposit_config,
             notebook_k8s_client=config.nb_config.k8s_v2_client,
             job_client=job_client,
-            session_runners_repo=session_runners_repo,
+            user_session_runners_repo=user_session_runners_repo,
             session_maker=config.db.async_session_maker,
         )
         resource_requests_repo = ResourceRequestsRepo(
@@ -585,8 +581,7 @@ class DependencyManager:
             resource_usage_service=resource_usage_service,
             session_logs_repo=session_logs_repo,
             build_logs_repo=build_logs_repo,
-            session_runners_repo=session_runners_repo,
-            session_runners_scheduling_repo=session_runners_scheduling_repo,
+            user_session_runners_repo=user_session_runners_repo,
             zenodo_client=ZenodoAPIClient(),
             envidat_client=EnvidatClient(),
             scicat_client=ScicatAPIClient(config.deposit_config.scicat.api_url),
