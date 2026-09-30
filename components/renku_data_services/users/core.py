@@ -49,7 +49,7 @@ def validate_secret_patch(patch: apispec.SecretPatch) -> SecretPatch:
     )
 
 
-def _fingerprint_ssh_public_key(public_key: str) -> str | None:
+def fingerprint_ssh_public_key(public_key: str) -> str | None:
     """Return the OpenSSH-compatible fingerprint of an SSH public key, or None if it cannot be parsed.
 
     Matches `ssh-keygen -l`: SHA256 over the decoded key blob, base64 without padding, `SHA256:` prefixed.
@@ -70,7 +70,7 @@ def _fingerprint_ssh_public_key(public_key: str) -> str | None:
 def validate_unsaved_ssh_key(public_key: str, name: str | None) -> UnsavedSSHKey:
     """Validate a new SSH public key and canonicalize it."""
     raw = public_key.strip()
-    fingerprint = _fingerprint_ssh_public_key(raw)
+    fingerprint = fingerprint_ssh_public_key(raw)
     if fingerprint is None:
         raise errors.ValidationError(message="The provided SSH public key is not valid.")
     parsed = ssh.load_ssh_public_key(raw.encode())
