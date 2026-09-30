@@ -524,7 +524,7 @@ components:
         id:
           $ref: "#/components/schemas/Ulid"
         name:
-         $ref: "#/components/schemas/SecretName"
+          $ref: "#/components/schemas/SecretName"
         kind:
           $ref: "#/components/schemas/SecretKind"
         expiration_timestamp:
@@ -598,7 +598,7 @@ components:
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
     UlidList:
       type: array
       items:
@@ -697,6 +697,7 @@ components:
       properties:
         public_key:
           type: string
+          maxLength: 10000
         name:
           type: string
           nullable: true
