@@ -24,7 +24,7 @@ def upgrade() -> None:
         "ssh_keys",
         sa.Column("id", ULIDType(), nullable=False),
         sa.Column("user_id", sa.String(length=36), nullable=False),
-        sa.Column("public_key", sa.String(length=2048), nullable=False),
+        sa.Column("public_key", sa.String(length=10000), nullable=False),
         sa.Column("key_type", sa.String(length=64), nullable=False),
         sa.Column("fingerprint", sa.String(length=128), nullable=False),
         sa.Column("name", sa.String(length=256), nullable=True),

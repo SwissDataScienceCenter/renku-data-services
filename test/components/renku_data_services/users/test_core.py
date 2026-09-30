@@ -1,7 +1,7 @@
 import pytest
 
 from renku_data_services.errors import errors
-from renku_data_services.users.core import fingerprint_ssh_public_key, validate_unsaved_ssh_key
+from renku_data_services.users.core import _fingerprint_ssh_public_key, validate_unsaved_ssh_key
 
 # Fixed ed25519 test vector. Fingerprint must equal what OpenSSH prints:
 #   ssh-keygen -l -f <file containing VALID_ED25519>
@@ -20,7 +20,7 @@ def test_validate_unsaved_ssh_key_canonicalizes_and_fingerprints():
 
 def test_fingerprint_matches_openssh_definition():
     # SHA256 over the decoded key blob, base64 without padding, SHA256: prefixed.
-    assert fingerprint_ssh_public_key(f"{VALID_ED25519} whatever@comment") == VALID_ED25519_FP
+    assert _fingerprint_ssh_public_key(f"{VALID_ED25519} whatever@comment") == VALID_ED25519_FP
 
 
 def test_validate_unsaved_ssh_key_rejects_garbage():
@@ -40,4 +40,4 @@ def test_fingerprint_is_stable_across_comments():
 
 
 def test_fingerprint_ssh_public_key_returns_none_for_garbage():
-    assert fingerprint_ssh_public_key("not a key") is None
+    assert _fingerprint_ssh_public_key("not a key") is None

@@ -127,7 +127,7 @@ class SSHKeyORM(BaseORM):
 
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     user_id: Mapped[str] = mapped_column("user_id", ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), index=True)
-    public_key: Mapped[str] = mapped_column(String(2048))
+    public_key: Mapped[str] = mapped_column(String(10000))
     key_type: Mapped[str] = mapped_column(String(64))
     fingerprint: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     name: Mapped[str | None] = mapped_column(String(256), default=None)
