@@ -168,3 +168,27 @@ class InternalAuthenticationConfig:
             issuer=issuer,
             audience=audience,
         )
+
+
+@dataclass
+class SshProxyConfig:
+    """Configuration of the ssh proxy component."""
+
+    enabled: bool
+    hostname: str
+    port: int
+
+    @classmethod
+    def from_env(cls) -> SshProxyConfig:
+        """Configuration of the ssh proxy component created from env variables."""
+        enabled = os.environ.get("SSH_PROXY_ENABLED", "false").lower() == "true"
+        if not enabled:
+            return SshProxyConfig(False, "", 0)
+
+        hostname = os.environ.get("SSH_PROXY_HOSTNAME")
+        port = os.environ.get("SSH_PROXY_PORT")
+        if not hostname:
+            raise errors.ConfigurationError(message="The ssh proxy hostname (SSH_PROXY_HOSTNAME) is missing.")
+        if not port:
+            raise errors.ConfigurationError(message="The ssh proxy port (SSH_PROXY_PORT) is missing.")
+        return SshProxyConfig(True, hostname, int(port))
