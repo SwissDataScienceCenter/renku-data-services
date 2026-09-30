@@ -2,13 +2,12 @@
 
 from dataclasses import dataclass
 
-from components.renku_data_services.crc.db import QuotaRepository, ResourcePoolQueryRepository
 from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz
 from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 from renku_data_services.capacity_reservation.k8s_client import CapacityReservationK8sClient
 from renku_data_services.capacity_reservation.tasks import CapacityReservationTasks
-from renku_data_services.crc.db import ClusterRepository
+from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolQueryRepository
 from renku_data_services.data_tasks.config import Config
 from renku_data_services.k8s.clients import DummyPriorityClassClient, DummyResourceQuotaClient, K8sClusterClientsPool
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
