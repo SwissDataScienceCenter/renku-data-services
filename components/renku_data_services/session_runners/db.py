@@ -5,9 +5,11 @@ from __future__ import annotations
 import base64
 import random
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession
+from sqlalchemy.orm import selectinload
 from ulid import ULID
 
 from renku_data_services import base_models, errors
@@ -86,7 +88,7 @@ class UserSessionRunnersRepository:
     async def insert_runner(
         self, session: AsyncSession, user: base_models.APIUser, runner: models.UnsavedUserSessionRunner
     ) -> models.UserSessionRunner:
-        """Insert a new session runner into the database."""
+        """Insert a new user-scoped session runner into the database."""
         if not user.is_authenticated or not user.id:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
         authorized = (
@@ -129,38 +131,61 @@ class UserSessionRunnersRepository:
         await session.flush()
         return runner_orm.dump(include_registration_token=True)
 
-    # async def register_runner(
-    #     self, session: AsyncSession, registration_token: str
-    # ) -> tuple[models.SessionRunner, base_models.AuthenticatedAPIUser]:
-    #     """Register a new session runner and update it in the database."""
-    #     stmt = (
-    #         select(schemas.SessionRunnerORM)
-    #         .where(schemas.SessionRunnerORM.registration_token == registration_token)
-    #         .options(selectinload(schemas.SessionRunnerORM.user))
-    #     )
-    #     res = await session.scalars(stmt)
-    #     runner_orm = res.one_or_none()
-    #     if runner_orm is None:
-    #         raise errors.MissingResourceError(
-    #             message=f"Session runner with registration token '{registration_token}' "
-    #             "does not exist or you do not have access to it."
-    #         )
-    #     user_orm = runner_orm.user
-    #     user_orm.dump()  # TODO
-    #     user = base_models.AuthenticatedAPIUser(
-    #         is_admin=False,
-    #         id=user_orm.keycloak_id,
-    #         access_token="",  # nosec B106
-    #         first_name=user_orm.first_name,
-    #         last_name=user_orm.last_name,
-    #         email=user_orm.email or "",
-    #         access_token_expires_at=None,
-    #         roles=[],
-    #     )
-    #     runner_orm.status = models.RunnerStatus.initializing
-    #     runner_orm.last_contact = datetime.now(tz=UTC)
-    #     await session.flush()
-    #     return runner_orm.dump(), user
+    async def register_runner(
+        self, session: AsyncSession, registration_token: str
+    ) -> tuple[models.UserSessionRunner, base_models.AuthenticatedAPIUser]:
+        """Register a new user-scoped session runner and update it in the database.
+
+        Returns the corresponding session runner and its owner so that authentication tokens can be minted.
+        """
+        stmt = (
+            select(schemas.UserSessionRunnerORM)
+            .where(schemas.UserSessionRunnerORM.registration_token == registration_token)
+            .options(selectinload(schemas.UserSessionRunnerORM.user))
+        )
+        res = await session.scalars(stmt)
+        runner_orm = res.one_or_none()
+        if runner_orm is None:
+            raise errors.MissingResourceError(
+                message=f"Session runner with registration token '{registration_token}' "
+                "does not exist or you do not have access to it."
+            )
+        user_orm = runner_orm.user
+        user = base_models.AuthenticatedAPIUser(
+            is_admin=False,
+            id=user_orm.keycloak_id,
+            access_token="",  # nosec B106
+            first_name=user_orm.first_name,
+            last_name=user_orm.last_name,
+            email=user_orm.email or "",
+            access_token_expires_at=None,
+            roles=[],
+        )
+        runner_orm.status = models.RunnerStatus.initializing
+        runner_orm.last_contact = datetime.now(tz=UTC)
+        await session.flush()
+        return runner_orm.dump(), user
+
+    async def update_runner(
+        self, session: AsyncSession, user: base_models.APIUser, runner_id: ULID, patch: models.UserSessionRunnerPatch
+    ) -> models.UserSessionRunner:
+        """Update a user-scoped session runner.
+
+        The runner's registration token is removed during this operation.
+        This prevents accidentally running the same runner on two different machines.
+        """
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        runner_orm = await self._get_runner_or_none_orm(session=session, user=user, runner_id=runner_id)
+        if runner_orm is None:
+            raise errors.MissingResourceError(
+                message=f"Session runner with id '{id}' does not exist or you do not have access to it."
+            )
+        runner_orm.status = patch.status
+        runner_orm.last_contact = datetime.now(tz=UTC)
+        runner_orm.registration_token = None
+        await session.flush()
+        return runner_orm.dump()
 
     # async def update_runner_from_contact(
     #     self,
@@ -197,19 +222,14 @@ class UserSessionRunnersRepository:
     #     await session.flush()
     #     return runner_orm.dump(), assigned_session_ids
 
-    # async def delete_runner(self, session: AsyncSession, user: base_models.APIUser, runner_id: ULID) -> None:
-    #     """Remove a session runner from the database."""
-    #     if not user.is_authenticated or not user.id:
-    #         raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
-    #     stmt = select(schemas.SessionRunnerORM).where(schemas.SessionRunnerORM.id == runner_id)
-    #     if not user.is_admin:
-    #         stmt = stmt.where(schemas.SessionRunnerORM.user_id == user.id)
-    #     res = await session.scalars(stmt)
-    #     runner_orm = res.one_or_none()
-    #     if runner_orm is None:
-    #         return None
-    #     await session.delete(runner_orm)
-    #     return None
+    async def delete_runner(self, session: AsyncSession, user: base_models.APIUser, runner_id: ULID) -> None:
+        """Remove a user-scoped session runner from the database."""
+        runner_orm = await self._get_runner_or_none_orm(session=session, user=user, runner_id=runner_id)
+        if runner_orm is None:
+            return None
+        await session.delete(runner_orm)
+        await session.flush()
+        return None
 
     # async def get_assigned_session(
     #     self, session: AsyncSession, user: base_models.APIUser, session_runner_id: ULID, renku_session_id: str

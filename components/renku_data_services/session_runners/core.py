@@ -1,23 +1,20 @@
 """Business logic for session runners."""
 
-# from collections.abc import Sequence
-# from typing import Literal, cast
+from typing import Literal, cast
 
 from renku_data_services.session_runners import apispec, models
 
 
 def validate_unsaved_session_runner(runner: apispec.UserSessionRunnerPost) -> models.UnsavedUserSessionRunner:
-    """Validate an unsaved session runner."""
+    """Validate an unsaved user-scoped session runner."""
     return models.UnsavedUserSessionRunner(resource_pool_id=runner.resource_pool_id)
 
 
-# def validate_session_runner_contact_payload(
-#     payload: apispec.SessionRunnerContactPost,
-# ) -> models.SessionRunnerContactPayload:
-#     """Validate the contact payload from a session runner."""
-#     status = models.RunnerStatus(payload.status.value)
-#     status = cast(Literal[models.RunnerStatus.ready] | Literal[models.RunnerStatus.not_ready], status)
-#     return models.SessionRunnerContactPayload(status=status)
+def validate_session_runner_patch(patch: apispec.UserSessionRunnerPatch) -> models.UserSessionRunnerPatch:
+    """Validate the update to a user-scoped session runner."""
+    status = models.RunnerStatus(patch.status.value)
+    status = cast(Literal[models.RunnerStatus.ready] | Literal[models.RunnerStatus.not_ready], status)
+    return models.UserSessionRunnerPatch(status=status)
 
 
 # def validate_patch_assigned_session_secrets(

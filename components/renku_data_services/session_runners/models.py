@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from ulid import ULID
 
@@ -25,14 +26,14 @@ class RunnerStatus(StrEnum):
 
 @dataclass(eq=True, frozen=True, kw_only=True)
 class UnsavedUserSessionRunner:
-    """Represents an unsaved session runner."""
+    """Represents an unsaved user-scoped session runner."""
 
     resource_pool_id: int
 
 
 @dataclass(eq=True, frozen=True, kw_only=True)
 class UserSessionRunner(UnsavedUserSessionRunner):
-    """Represents a session runner."""
+    """Represents a user-scoped session runner."""
 
     id: ULID
     user_id: str
@@ -43,11 +44,11 @@ class UserSessionRunner(UnsavedUserSessionRunner):
     last_contact: datetime | None
 
 
-# @dataclass(eq=True, frozen=True, kw_only=True)
-# class SessionRunnerContactPayload:
-#     """Payload sent by a session runner."""
+@dataclass(eq=True, frozen=True, kw_only=True)
+class UserSessionRunnerPatch:
+    """Update to a user-scoped session runner."""
 
-#     status: Literal[RunnerStatus.ready] | Literal[RunnerStatus.not_ready]
+    status: Literal[RunnerStatus.ready] | Literal[RunnerStatus.not_ready]
 
 
 # @dataclass(eq=True, frozen=True, kw_only=True)
