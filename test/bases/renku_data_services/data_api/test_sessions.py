@@ -2330,3 +2330,55 @@ async def test_patch_strip_prefix(
     assert "environment" in res.json
     env = res.json["environment"]
     assert env.get("strip_path_prefix")
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+async def test_starting_session_with_ssh_build_environment(
+    sanic_client: SanicASGITestClient,
+    create_project,
+    create_resource_pool,
+    create_session_launcher,
+    user_headers,
+    app_manager: DependencyManager,
+    admin_headers,
+    launch_session,
+    builds_enabled,
+) -> None:
+    project: dict[str, Any] = await create_project(
+        sanic_client,
+        "Some project",
+        visibility="public",
+        repositories=["https://github.com/SwissDataScienceCenter/renku"],
+    )
+    resource_pool = await create_resource_pool(admin=True)
+    launcher: dict[str, Any] = await create_session_launcher(
+        name="Launcher 2",
+        project_id=project["id"],
+        description="A session launcher",
+        resource_class_id=resource_pool["classes"][0]["id"],
+        environment={
+            "repository": "https://github.com/SwissDataScienceCenter/renku",
+            "builder_variant": "python",
+            "frontend_variant": "ssh",
+            "environment_image_source": "build",
+        },
+        env_variables=[
+            {"name": "TEST_ENV_VAR", "value": "some-random-value-1234"},
+        ],
+    )
+
+    launcher_id = launcher["id"]
+    project_id = project["id"]
+    payload = {"project_id": project_id, "launcher_id": launcher_id}
+
+    _, session_res = await sanic_client.post("/api/data/sessions", headers=user_headers, json=payload)
+    assert session_res.status_code == 201
+
+    _, res = await sanic_client.get(f"/api/data/sessions/{session_res.json['name']}", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert res.json["name"] == session_res.json["name"]
+    _, res = await sanic_client.get("/api/data/sessions", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert len(res.json) > 0
+    assert session_res.json["name"] in [i["name"] for i in res.json]
