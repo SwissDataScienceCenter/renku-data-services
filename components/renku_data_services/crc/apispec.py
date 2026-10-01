@@ -86,13 +86,26 @@ class Kind1(StrEnum):
     runai = "runai"
 
 
+class Kind2(StrEnum):
+    user_runners = "user_runners"
+
+
+class RemoteConfigurationUserRunners(BaseAPISpec):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Kind2 = Field(
+        ..., description="Kind of remote resource pool", examples=["user_runners"]
+    )
+
+
 class RemoteConfigurationPatchReset(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
     )
 
 
-class Kind2(StrEnum):
+class Kind3(StrEnum):
     firecrest = "firecrest"
 
 
@@ -100,7 +113,7 @@ class RemoteConfigurationFirecrestPatch(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
     )
-    kind: Kind2 | None = Field(
+    kind: Kind3 | None = Field(
         None, description="Kind of remote resource pool", examples=["firecrest"]
     )
     provider_id: str | None = Field(
@@ -125,7 +138,7 @@ class RemoteConfigurationFirecrestPatch(BaseAPISpec):
     )
 
 
-class Kind3(StrEnum):
+class Kind4(StrEnum):
     runai = "runai"
 
 
@@ -133,7 +146,7 @@ class RemoteConfigurationRunaiPatch(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
     )
-    kind: Kind3 | None = Field(
+    kind: Kind4 | None = Field(
         None, description="Kind of remote resource pool", examples=["runai"]
     )
     base_url: str | None = Field(
@@ -145,6 +158,19 @@ class RemoteConfigurationRunaiPatch(BaseAPISpec):
         None,
         description="The ID of a provider (see oauth2 section).\nThis is used to allow seamless authentication using Renku integrations.\n",
         examples=["my-provider"],
+    )
+
+
+class Kind5(StrEnum):
+    user_runners = "user_runners"
+
+
+class RemoteConfigurationUserRunnersPatch(BaseAPISpec):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Kind5 | None = Field(
+        None, description="Kind of remote resource pool", examples=["user_runners"]
     )
 
 
@@ -1009,6 +1035,7 @@ class ResourcePoolPatch(BaseAPISpec):
         RemoteConfigurationPatchReset
         | RemoteConfigurationFirecrestPatch
         | RemoteConfigurationRunaiPatch
+        | RemoteConfigurationUserRunnersPatch
         | None
     ) = Field(
         None,
@@ -1065,7 +1092,12 @@ class ResourcePool(BaseAPISpec):
         description="A default selection for resource classes or resource pools",
         examples=[False],
     )
-    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = Field(
+    remote: (
+        RemoteConfigurationFirecrest
+        | RemoteConfigurationRunai
+        | RemoteConfigurationUserRunners
+        | None
+    ) = Field(
         None,
         description="The configuration used by Renku to start sessions remotely.\nIf this field is present, the corresponding resource pool starts remote sessions.\n",
     )
@@ -1153,7 +1185,12 @@ class ResourcePoolPut(BaseAPISpec):
         description="A default selection for resource classes or resource pools",
         examples=[False],
     )
-    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = Field(
+    remote: (
+        RemoteConfigurationFirecrest
+        | RemoteConfigurationRunai
+        | RemoteConfigurationUserRunners
+        | None
+    ) = Field(
         None,
         description="The configuration used by Renku to start sessions remotely.\nIf this field is present, the corresponding resource pool starts remote sessions.\n",
     )
@@ -1214,7 +1251,12 @@ class ResourcePoolWithId(BaseAPISpec):
         description="A default selection for resource classes or resource pools",
         examples=[False],
     )
-    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = Field(
+    remote: (
+        RemoteConfigurationFirecrest
+        | RemoteConfigurationRunai
+        | RemoteConfigurationUserRunners
+        | None
+    ) = Field(
         None,
         description="The configuration used by Renku to start sessions remotely.\nIf this field is present, the corresponding resource pool starts remote sessions.\n",
     )
@@ -1274,7 +1316,12 @@ class ResourcePoolWithIdFiltered(BaseAPISpec):
         description="A default selection for resource classes or resource pools",
         examples=[False],
     )
-    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = Field(
+    remote: (
+        RemoteConfigurationFirecrest
+        | RemoteConfigurationRunai
+        | RemoteConfigurationUserRunners
+        | None
+    ) = Field(
         None,
         description="The configuration used by Renku to start sessions remotely.\nIf this field is present, the corresponding resource pool starts remote sessions.\n",
     )
