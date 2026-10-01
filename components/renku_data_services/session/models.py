@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Self
 
 from ulid import ULID
 
@@ -64,7 +64,23 @@ class BuilderVariant(StrEnum):
     r = "r"
 
 
-class SessionLauncherPolicy(StrEnum):
+class SafeStrEnum(StrEnum):
+    """Enum with safe parsing of arbitrary strings."""
+
+    @classmethod
+    def safe_parse(
+        cls,
+        value: str,
+        default: Self | None = None,
+    ) -> Self | None:
+        """Return the enum value or the default if invalid."""
+        try:
+            return cls(value)
+        except ValueError:
+            return default
+
+
+class SessionLauncherRepositoryPolicyName(SafeStrEnum):
     """The access mode of a resource within a session launcher."""
 
     excluded = "excluded"
@@ -74,7 +90,27 @@ class SessionLauncherPolicy(StrEnum):
     @property
     def requires_write_access(self) -> bool:
         """Policy requires write access."""
-        return self is SessionLauncherPolicy.read_write
+        return self is SessionLauncherRepositoryPolicyName.read_write
+
+
+class SessionLauncherDataConnectorPolicyName(SafeStrEnum):
+    """The access mode of a data connector within a session launcher."""
+
+    excluded = "excluded"
+    read_only = "readOnly"
+    read_write = "readWrite"
+
+    @property
+    def requires_write_access(self) -> bool:
+        """Policy requires write access."""
+        return self is SessionLauncherDataConnectorPolicyName.read_write
+
+
+class SessionLauncherSecretPolicyName(SafeStrEnum):
+    """The access mode of a resource within a session launcher."""
+
+    excluded = "excluded"
+    included = "included"
 
 
 class FrontendVariant(StrEnum):
@@ -451,7 +487,7 @@ class ShipwrightBuildStatusUpdate:
 class SessionLauncherRepositoryPolicy:
     """Model to represent a session launcher repository policy."""
 
-    policy: SessionLauncherPolicy
+    policy: SessionLauncherRepositoryPolicyName | None
     writable_references: list[str] | None = None
 
 
@@ -467,7 +503,7 @@ class SessionLauncherRepository(SessionLauncherRepositoryPolicy):
 class SessionLauncherDataConnectorPolicy:
     """The access policy on a given data connector."""
 
-    policy: SessionLauncherPolicy
+    policy: SessionLauncherDataConnectorPolicyName | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -489,7 +525,7 @@ class SessionLauncherDataConnectorPatch(SessionLauncherDataConnectorPolicy):
 class SessionLauncherSecretPolicy:
     """Model to represent the visibility of a secret."""
 
-    policy: SessionLauncherPolicy
+    policy: SessionLauncherSecretPolicyName | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

@@ -2,12 +2,33 @@
 
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import Any, Self
+from typing import Any
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Enum, Identity, Integer, MetaData, String, false, func
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Identity,
+    Integer,
+    MetaData,
+    PrimaryKeyConstraint,
+    String,
+    UniqueConstraint,
+    false,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
-from sqlalchemy.schema import ForeignKey
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    MappedAsDataclass,
+    mapped_column,
+    relationship,
+)
 from ulid import ULID
 
 from renku_data_services import errors
@@ -114,6 +135,7 @@ class SessionLauncherORM(BaseORM):
     """A Renku 2.0 session launcher."""
 
     __tablename__ = "launchers"
+    __table_args__ = (UniqueConstraint("id", "project_id", name="_unique_launcher_id_project_id"),)
 
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """Id of this session launcher object."""
@@ -347,16 +369,6 @@ class SessionLauncherRepositoryORM(BaseORM):
 
     policy: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
 
-    @classmethod
-    def load(cls, link: models.SessionLauncherRepository) -> Self:
-        """Create an ORM object from a SessionLauncherRepository object."""
-
-        return cls(
-            launcher_id=link.launcher_id,
-            repository_id=link.repository_id,
-            policy={"policy": link.policy.value, "writable_references": link.writable_references},
-        )
-
     def dump(self) -> models.SessionLauncherRepository:
         """Create a SessionLauncherRepository object from an ORM object."""
 
@@ -368,22 +380,12 @@ class SessionLauncherRepositoryORM(BaseORM):
         )
 
     @property
-    def _policy(self) -> models.SessionLauncherPolicy:
+    def _policy(self) -> models.SessionLauncherRepositoryPolicyName | None:
         try:
-            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
-        except (ValueError, TypeError):
-            return models.SessionLauncherPolicy.excluded
-        # TODO: Return models.SessionLauncherPolicy.read_only if repository is read only
-        return policy
-
-    @property
-    def _is_policy_valid(self) -> bool:
-        try:
-            _ = models.SessionLauncherPolicy(str(self.policy.get("policy")))
-        except (ValueError, TypeError):
-            return False
-        # TODO: Return False if session launcher escalates the repositoriy's permissions
-        return True
+            return models.SessionLauncherRepositoryPolicyName(str(self.policy.get("policy")))
+        except ValueError:
+            return None
+        # TODO: Return models.SessionLauncherRepositoryPolicyName.read_only if repository is read only
 
 
 class SessionLauncherDataConnectorORM(BaseORM):
@@ -405,17 +407,7 @@ class SessionLauncherDataConnectorORM(BaseORM):
         lazy="selectin",
     )
 
-    policy: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
-
-    @classmethod
-    def load(cls, link: models.SessionLauncherDataConnector) -> Self:
-        """Create an ORM object from a SessionLauncherDataConnector object."""
-
-        return cls(
-            launcher_id=link.launcher_id,
-            data_connector_to_project_link_id=link.data_connector_to_project_link_id,
-            policy={"policy": link.policy.value},
-        )
+    policy: Mapped[str] = mapped_column(String(), nullable=False)
 
     def dump(self) -> models.SessionLauncherDataConnector:
         """Create a SessionLauncherDataConnector object from an ORM object."""
@@ -427,58 +419,46 @@ class SessionLauncherDataConnectorORM(BaseORM):
         )
 
     @property
-    def _policy(self) -> models.SessionLauncherPolicy:
-        try:
-            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
-        except (ValueError, TypeError):
-            return models.SessionLauncherPolicy.excluded
-        if policy.requires_write_access and self.data_connector_to_project_link.data_connector.readonly:
-            return models.SessionLauncherPolicy.read_only
+    def _policy(self) -> models.SessionLauncherDataConnectorPolicyName | None:
+        policy = models.SessionLauncherDataConnectorPolicyName.safe_parse(self.policy)
+
+        if policy and policy.requires_write_access and self.data_connector_to_project_link.data_connector.readonly:
+            return models.SessionLauncherDataConnectorPolicyName.read_only
+
         return policy
-
-    @property
-    def _is_policy_valid(self) -> bool:
-        try:
-            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
-        except (ValueError, TypeError):
-            return False
-
-        return not policy.requires_write_access or not self.data_connector_to_project_link.data_connector.readonly
 
 
 class SessionLauncherSecretORM(BaseORM):
     """The secret parameters of a launcher."""
 
     __tablename__ = "launcher_secrets"
-
-    launcher_id: Mapped[ULID] = mapped_column(
-        ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"),
-        primary_key=True,
+    __table_args__ = (
+        PrimaryKeyConstraint("launcher_id", "secret_slot_id"),
+        ForeignKeyConstraint(
+            ["launcher_id", "project_id"],
+            ["sessions.launchers.id", "sessions.launchers.project_id"],
+            name="_fk_launcher_secrets_launcher",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["secret_slot_id", "project_id"],
+            [
+                SessionSecretSlotORM.id,
+                SessionSecretSlotORM.project_id,
+            ],
+            # ["projects.session_secret_slots.id", "projects.session_secret_slots.project_id"],
+            name="_fk_launcher_secrets_secret_slot",
+            ondelete="CASCADE",
+        ),
     )
 
-    secret_slot_id: Mapped[ULID] = mapped_column(
-        ForeignKey(SessionSecretSlotORM.id, ondelete="CASCADE"),
-        primary_key=True,
-    )
+    launcher_id: Mapped[ULID] = mapped_column(ULIDType, primary_key=True)
 
-    secret_slot: Mapped[SessionSecretSlotORM] = relationship(
-        init=False,
-        repr=False,
-        viewonly=True,
-        lazy="selectin",
-    )
+    secret_slot_id: Mapped[ULID] = mapped_column(ULIDType, primary_key=True, index=True)
 
-    policy: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
+    project_id: Mapped[ULID] = mapped_column(ULIDType, nullable=False, index=True)
 
-    @classmethod
-    def load(cls, link: models.SessionLauncherSecret) -> Self:
-        """Create an ORM object from a SessionLauncherSecret object."""
-
-        return cls(
-            launcher_id=link.launcher_id,
-            secret_slot_id=link.secret_slot_id,
-            policy={"policy": link.policy.value},
-        )
+    policy: Mapped[str] = mapped_column(String(), nullable=False)
 
     def dump(self) -> models.SessionLauncherSecret:
         """Create a SessionLauncherSecret object from an ORM object."""
@@ -486,16 +466,5 @@ class SessionLauncherSecretORM(BaseORM):
         return models.SessionLauncherSecret(
             launcher_id=self.launcher_id,
             secret_slot_id=self.secret_slot_id,
-            policy=self._policy,
+            policy=models.SessionLauncherSecretPolicyName.safe_parse(self.policy),
         )
-
-    @property
-    def _policy(self) -> models.SessionLauncherPolicy:
-        try:
-            policy = models.SessionLauncherPolicy(str(self.policy.get("policy")))
-        except (ValueError, TypeError):
-            return models.SessionLauncherPolicy.excluded
-        if policy is models.SessionLauncherPolicy.excluded:
-            return policy
-        else:
-            return models.SessionLauncherPolicy.read_only

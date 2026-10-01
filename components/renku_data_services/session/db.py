@@ -7,7 +7,7 @@ from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol
 
-from sqlalchemy import and_, cast, func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
@@ -1364,30 +1364,33 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         async with self.session_maker() as session:
             result = await session.execute(
                 select(
-                    schemas.SessionSecretSlotORM,
+                    SessionSecretSlotORM,
                     func.coalesce(
                         schemas.SessionLauncherSecretORM.policy,
-                        cast({"policy": models.SessionLauncherPolicy.read_only.value}, schemas.JSONVariant),
+                        models.SessionLauncherSecretPolicyName.included.value,
                     ).label("policy"),
                 )
                 .outerjoin(
                     schemas.SessionLauncherSecretORM,
                     and_(
-                        schemas.SessionLauncherSecretORM.secret_slot_id == schemas.SessionSecretSlotORM.id,
+                        schemas.SessionLauncherSecretORM.secret_slot_id == SessionSecretSlotORM.id,
                         schemas.SessionLauncherSecretORM.launcher_id == launcher.id,
                     ),
                 )
                 .where(
-                    schemas.SessionSecretSlotORM.project_id == launcher.project_id,
+                    SessionSecretSlotORM.project_id == launcher.project_id,
                 )
-                .order_by(schemas.SessionSecretSlotORM.id.desc())
+                .order_by(SessionSecretSlotORM.id.desc())
             )
 
             return [
                 models.SessionLauncherSecret(
                     launcher_id=launcher.id,
                     secret_slot_id=slot.id,
-                    policy=policy.get("policy"),
+                    policy=models.SessionLauncherSecretPolicyName.safe_parse(
+                        policy,
+                        models.SessionLauncherSecretPolicyName.excluded,
+                    ),
                 )
                 for slot, policy in result.all()
             ]
@@ -1416,12 +1419,6 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         if len(secret_slot_ids) != len(set(secret_slot_ids)):
             raise errors.ValidationError(message="A secret slot may only appear once in the list.")
 
-        if not all(
-            patch.policy in [models.SessionLauncherPolicy.read_only, models.SessionLauncherPolicy.excluded]
-            for patch in patches
-        ):
-            raise errors.ValidationError(message="A secret slot may only be excluded or readOnly.")
-
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(
                 select(schemas.SessionLauncherSecretORM).where(
@@ -1432,7 +1429,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             launcher_secrets = {secret.secret_slot_id: secret for secret in result.all()}
 
             result = await session.scalars(
-                select(schemas.SessionSecretSlotORM).where(schemas.SessionSecretSlotORM.project_id == project_id)
+                select(SessionSecretSlotORM).where(SessionSecretSlotORM.project_id == project_id)
             )
 
             project_secret_slot_ids = {slot.id for slot in result}
@@ -1453,13 +1450,14 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
                 if secret is None:
                     secret = schemas.SessionLauncherSecretORM(
+                        project_id=launcher.project_id,
                         launcher_id=launcher.id,
                         secret_slot_id=patch.secret_slot_id,
-                        policy={"policy": models.SessionLauncherPolicy.read_only.value},
+                        policy=models.SessionLauncherSecretPolicyName.included,
                     )
                     session.add(secret)
                 else:
-                    secret.policy = {"policy": patch.policy}
+                    secret.policy = patch.policy or models.SessionLauncherSecretPolicyName.excluded
 
                 updated.append(secret)
 
@@ -1472,7 +1470,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         user: base_models.APIUser,
         launcher: models.SessionLauncher,
     ) -> list[SessionSecret]:
-        """Get all session secrets from a project."""
+        """Get all session secrets included in a launcher."""
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
@@ -1507,7 +1505,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     SessionSecretSlotORM.project_id == launcher.project_id,
                     or_(
                         schemas.SessionLauncherSecretORM.secret_slot_id.is_(None),
-                        schemas.SessionLauncherSecretORM.policy["policy"] != models.SessionLauncherPolicy.excluded,
+                        schemas.SessionLauncherSecretORM.policy == models.SessionLauncherSecretPolicyName.included,
                     ),
                 )
                 .order_by(SessionSecretORM.id.desc())

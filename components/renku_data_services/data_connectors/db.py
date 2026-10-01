@@ -46,7 +46,7 @@ from renku_data_services.secrets.models import SecretKind
 from renku_data_services.session.models import (
     SessionLauncherDataConnector,
     SessionLauncherDataConnectorPatch,
-    SessionLauncherPolicy,
+    SessionLauncherDataConnectorPolicyName,
 )
 from renku_data_services.session.orm import SessionLauncherDataConnectorORM, SessionLauncherORM
 from renku_data_services.storage.rclone import RCloneValidator
@@ -1074,15 +1074,15 @@ class DataConnectorRepository:
                 connector_readonly,
                 case(
                     (
-                        launcher_policy == SessionLauncherPolicy.excluded,
-                        SessionLauncherPolicy.excluded,
+                        launcher_policy == SessionLauncherDataConnectorPolicyName.excluded,
+                        SessionLauncherDataConnectorPolicyName.excluded,
                     ),
-                    else_=SessionLauncherPolicy.read_only,
+                    else_=SessionLauncherDataConnectorPolicyName.read_only,
                 ),
             ),
             else_=func.coalesce(
                 launcher_policy,
-                SessionLauncherPolicy.read_write,
+                SessionLauncherDataConnectorPolicyName.read_write,
             ),
         ).label("policy")
 
@@ -1112,7 +1112,9 @@ class DataConnectorRepository:
             SessionLauncherDataConnector(
                 launcher_id=launcher.id,
                 data_connector_to_project_link_id=link.id,
-                policy=SessionLauncherPolicy(policy),
+                policy=SessionLauncherDataConnectorPolicyName.safe_parse(
+                    policy, SessionLauncherDataConnectorPolicyName.excluded
+                ),
             )
             async for link, policy in result
         ]
@@ -1199,7 +1201,7 @@ class DataConnectorRepository:
             dc_link = launcher_dc_links.get(patch.data_connector_to_project_link_id)
             data_connector = project_dc_links[patch.data_connector_to_project_link_id].data_connector
 
-            if patch.policy.requires_write_access and data_connector.readonly:
+            if not patch.policy or patch.policy.requires_write_access and data_connector.readonly:
                 raise errors.ValidationError(
                     message=f"Read only data connector cannot be made writable: {data_connector.id}"
                 )
@@ -1208,11 +1210,11 @@ class DataConnectorRepository:
                 dc_link = SessionLauncherDataConnectorORM(
                     launcher_id=launcher_id,
                     data_connector_to_project_link_id=patch.data_connector_to_project_link_id,
-                    policy={"policy": patch.policy},
+                    policy=patch.policy or SessionLauncherDataConnectorPolicyName.excluded,
                 )
                 session.add(dc_link)
             else:
-                dc_link.policy = {"policy": patch.policy}
+                dc_link.policy = patch.policy
 
             updated.append(dc_link)
 
@@ -1261,10 +1263,14 @@ class DataConnectorSecretRepository:
         async with self.session_maker() as session:
             if launcher_id is None:
                 stmt = (
-                    select(schemas.DataConnectorORM, schemas.DataConnectorORM.readonly.label("computed_readonly"))
-                    .join(schemas.DataConnectorToProjectLinkORM, schemas.DataConnectorORM.project_links)
+                    select(
+                        schemas.DataConnectorORM,
+                        schemas.DataConnectorORM.readonly.label("computed_readonly"),
+                    )
                     .where(
-                        schemas.DataConnectorToProjectLinkORM.project_id == project_id,
+                        schemas.DataConnectorORM.project_links.any(
+                            schemas.DataConnectorToProjectLinkORM.project_id == project_id
+                        ),
                         schemas.DataConnectorORM.id.in_(data_connector_ids),
                     )
                     .options(
@@ -1280,10 +1286,13 @@ class DataConnectorSecretRepository:
                         # If readOnly -> True, otherwise inherit DataConnectorORM.readonly
                         or_(
                             schemas.DataConnectorORM.readonly.is_(True),
-                            SessionLauncherDataConnectorORM.policy["policy"] == SessionLauncherPolicy.read_only,
+                            SessionLauncherDataConnectorORM.policy == SessionLauncherDataConnectorPolicyName.read_only,
                         ).label("computed_readonly"),
                     )
-                    .join(schemas.DataConnectorToProjectLinkORM, schemas.DataConnectorORM.project_links)
+                    .join(
+                        schemas.DataConnectorToProjectLinkORM,
+                        schemas.DataConnectorToProjectLinkORM.data_connector_id == schemas.DataConnectorORM.id,
+                    )
                     .outerjoin(
                         SessionLauncherDataConnectorORM,
                         and_(
@@ -1298,7 +1307,7 @@ class DataConnectorSecretRepository:
                         # Exclude 'excluded' policies, but keep NULL rows from the outer join
                         or_(
                             SessionLauncherDataConnectorORM.launcher_id.is_(None),
-                            SessionLauncherDataConnectorORM.policy["policy"] != SessionLauncherPolicy.excluded,
+                            SessionLauncherDataConnectorORM.policy != SessionLauncherDataConnectorPolicyName.excluded,
                         ),
                     )
                     .options(

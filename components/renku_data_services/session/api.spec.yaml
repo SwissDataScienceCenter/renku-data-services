@@ -259,7 +259,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
-    put:
+    patch:
       summary: Update a list of session launchers' repository parameters
       requestBody:
         required: true
@@ -310,7 +310,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
-    put:
+    patch:
       summary: Update a list of session launchers' data connector parameters
       requestBody:
         required: true
@@ -361,7 +361,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
-    put:
+    patch:
       summary: Update a list of session launchers' secret parameters
       requestBody:
         required: true

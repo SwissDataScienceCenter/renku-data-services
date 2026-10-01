@@ -1123,7 +1123,7 @@ def validate_session_launcher_dc_links_patch(
     return [
         session_models.SessionLauncherDataConnectorPatch(
             data_connector_to_project_link_id=ULID.from_str(patch.data_connector_link_id),
-            policy=session_models.SessionLauncherPolicy(patch.policy),
+            policy=session_models.SessionLauncherDataConnectorPolicyName(patch.policy),
         )
         for patch in patches.root
     ]
