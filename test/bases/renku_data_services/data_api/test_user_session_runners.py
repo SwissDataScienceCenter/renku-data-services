@@ -180,6 +180,41 @@ async def test_get_all_user_session_runners(
 
 
 @pytest.mark.asyncio
+async def test_get_all_user_session_runners_for_all_users_as_admin(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    create_user_session_runner,
+) -> None:
+    runner: dict[str, Any] = await create_user_session_runner()
+    runner_id = runner["id"]
+
+    params = {"all_users": True}
+    _, res = await sanic_client.get("/api/data/session_runners/user", params=params, headers=admin_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    runners = res.json
+    assert len(runners) == 1
+    assert runners[0].get("id") == runner_id
+
+
+@pytest.mark.asyncio
+async def test_get_all_user_session_runners_for_all_users_no_access(
+    sanic_client: SanicASGITestClient,
+    member_1_headers: dict[str, str],
+    create_user_session_runner,
+) -> None:
+    await create_user_session_runner()
+
+    params = {"all_users": True}
+    _, res = await sanic_client.get("/api/data/session_runners/user", params=params, headers=member_1_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json == []
+
+
+@pytest.mark.asyncio
 async def test_get_user_session_runner(
     sanic_client: SanicASGITestClient,
     user_headers: dict[str, str],
