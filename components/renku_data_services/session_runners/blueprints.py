@@ -123,16 +123,16 @@ class UserSessionRunnersBP(CustomBlueprint):
 
         return "/session_runners/user/<session_runner_id:ulid>", ["PATCH"], _patch_user_session_runner
 
-    def delete_get_user_session_runner(self) -> BlueprintFactoryResponse:
+    def delete_user_session_runner(self) -> BlueprintFactoryResponse:
         """Remove a user-scoped session runner."""
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _delete_get_user_session_runner(
+        async def _delete_user_session_runner(
             _: Request, user: base_models.APIUser, session_runner_id: ULID
         ) -> HTTPResponse:
             async with self.session_maker() as session, session.begin():
                 await self.runners_repo.delete_runner(session=session, user=user, runner_id=session_runner_id)
             return HTTPResponse(status=204)
 
-        return "/session_runners/user/<session_runner_id:ulid>", ["DELETE"], _delete_get_user_session_runner
+        return "/session_runners/user/<session_runner_id:ulid>", ["DELETE"], _delete_user_session_runner
