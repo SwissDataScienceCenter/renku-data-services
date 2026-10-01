@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import cast
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.base_models.core import APIUser, AuthenticatedAPIUser
@@ -15,7 +14,6 @@ from renku_data_services.errors import errors
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.users.db import DbUsernameResolver, SSHKeyRepository, UserRepo
 from renku_data_services.users.models import UnsavedSSHKey, UserInfo
-from renku_data_services.users.orm import SSHKeyORM
 
 
 @dataclass
@@ -57,13 +55,6 @@ def _unsaved(fingerprint: str, name: str | None = None) -> UnsavedSSHKey:
     return UnsavedSSHKey(public_key="ssh-ed25519 AAAA", key_type="ssh-ed25519", fingerprint=fingerprint, name=name)
 
 
-async def get_user_id_by_fingerprint(session_maker: Callable[..., AsyncSession], fingerprint: str) -> str | None:
-    """Resolve the owner of an SSH key by fingerprint. For internal use only."""
-    async with session_maker() as session:
-        res = await session.scalar(select(SSHKeyORM.user_id).where(SSHKeyORM.fingerprint == fingerprint))
-        return res
-
-
 @pytest.mark.asyncio
 async def test_ssh_key_repository_crud(app_manager_instance) -> None:
     run_migrations_for_app("common")
@@ -76,8 +67,8 @@ async def test_ssh_key_repository_crud(app_manager_instance) -> None:
 
     assert [k.id for k in await repo.get_ssh_keys(requested_by=user)] == [created.id]
     assert (await repo.get_ssh_key(requested_by=user, key_id=created.id)).id == created.id
-    assert await get_user_id_by_fingerprint(repo.session_maker, "fp1") == user.id
-    assert await get_user_id_by_fingerprint(repo.session_maker, "does-not-exist") is None
+    assert await repo.get_user_id_by_fingerprint("fp1") == user.id
+    assert await repo.get_user_id_by_fingerprint("does-not-exist") is None
 
     await repo.delete_ssh_key(requested_by=user, key_id=created.id)
     assert await repo.get_ssh_keys(requested_by=user) == []
