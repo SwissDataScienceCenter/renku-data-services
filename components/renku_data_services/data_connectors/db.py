@@ -1064,11 +1064,13 @@ class DataConnectorRepository:
 
         allowed_dcs = await self.authz.resources_with_permission(user, user.id, ResourceType.data_connector, Scope.READ)
 
-        launcher_policy = SessionLauncherDataConnectorORM.policy["policy"]
-        connector_readonly = schemas.DataConnectorToProjectLinkORM.data_connector.readonly.is_(True)
-
         # A launcher policy cannot be more permissive than the data connector's
-        # project-level policy.
+        # project-level policy. The project level's policy is used if a launcher
+        # policy is not specified.
+        connector_readonly = schemas.DataConnectorORM.readonly.is_(True)
+
+        launcher_policy = SessionLauncherDataConnectorORM.policy["policy"]
+
         effective_policy = case(
             (
                 connector_readonly,
@@ -1090,6 +1092,10 @@ class DataConnectorRepository:
             select(
                 schemas.DataConnectorToProjectLinkORM,
                 effective_policy,
+            )
+            .join(
+                schemas.DataConnectorORM,
+                schemas.DataConnectorORM.id == schemas.DataConnectorToProjectLinkORM.data_connector_id,
             )
             .outerjoin(
                 SessionLauncherDataConnectorORM,
@@ -1175,7 +1181,7 @@ class DataConnectorRepository:
 
         if invalid_dc_link_ids:
             raise errors.ValidationError(
-                message=f"Data connector links do not belong to project {project_id}: {invalid_dc_link_ids}"
+                message=f"Data connector links do not belong to project {project_id}: {invalid_dc_link_ids}."
             )
 
         result = await session.stream_scalars(
@@ -1203,7 +1209,7 @@ class DataConnectorRepository:
 
             if not patch.policy or patch.policy.requires_write_access and data_connector.readonly:
                 raise errors.ValidationError(
-                    message=f"Read only data connector cannot be made writable: {data_connector.id}"
+                    message=f"Read only data connector cannot be made writable: {data_connector.id}."
                 )
 
             if dc_link is None:
