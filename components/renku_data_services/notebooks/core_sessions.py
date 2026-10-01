@@ -36,6 +36,7 @@ from renku_data_services.crc.models import (
     RemoteConfigurationFirecrest,
     RemoteConfigurationKind,
     RemoteConfigurationRunai,
+    RemoteConfigurationUserRunners,
     ResourceClass,
     ResourcePool,
     SessionProtocol,
@@ -881,17 +882,20 @@ def _firecrest_resource_env_items(
 
 def get_remote_env(
     resource_class: ResourceClass,
-    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai,
+    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | RemoteConfigurationUserRunners,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
     env = [
         SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value),
     ]
-    if isinstance(remote, RemoteConfigurationRunai):
-        env.append(SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url))
-    else:
-        env.append(SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url))
-        env.extend(_firecrest_resource_env_items(resource_class, remote))
+    match remote:
+        case RemoteConfigurationFirecrest():
+            env.append(SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url))
+            env.extend(_firecrest_resource_env_items(resource_class, remote))
+        case RemoteConfigurationRunai():
+            env.append(SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url))
+        case RemoteConfigurationUserRunners():
+            logger.error(f"Support for {RemoteConfigurationKind.user_runners.value} not yet implemented.")
     return env
 
 
@@ -1166,6 +1170,11 @@ async def start_session(
                 remote_provider_id=resource_pool.remote.provider_id,
                 git_providers=git_providers,
                 internal_token_mint=internal_token_mint,
+            )
+        elif resource_pool.remote.kind == RemoteConfigurationKind.user_runners:
+            # TODO: support for launching implemented later
+            raise errors.ProgrammingError(
+                message=f"Support for {RemoteConfigurationKind.user_runners.value} not yet implemented"
             )
         if remote_secret is not None:
             session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
