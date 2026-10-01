@@ -97,7 +97,7 @@ class RCloneValidator:
             test_conf = (
                 transformed_config
                 if isinstance(transformed_config, RCloneConfig)
-                else RCloneConfig(config=transformed_config)
+                else RCloneConfig(config=transformed_config, validator=self)
             )
             test_conf.write(f, name="temp")
             # Handle SFTP retries, see https://github.com/SwissDataScienceCenter/renku-data-services/issues/893
