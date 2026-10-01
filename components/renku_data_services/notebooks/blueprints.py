@@ -198,6 +198,7 @@ class NotebooksNewBP(CustomBlueprint):
                 resource_requests_repo=self.resource_requests_repo,
                 project_storage_repo=self.project_storage_repo,
                 authz=self.authz,
+                cluster_repo=self.cluster_repo,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
