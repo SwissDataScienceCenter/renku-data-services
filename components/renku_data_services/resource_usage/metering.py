@@ -65,7 +65,7 @@ def _to_openmeter_event(
         "id": f"{req.uid}/{req.capture_date.astimezone(UTC).isoformat()}",
         "source": "renku-data-services",
         "specversion": "1.0",
-        "type": "renku_compute_units",
+        "type": "renku.compute",
         "subject": f"resource_pool_id-{req.resource_pool_id}",
         "time": req.capture_date.astimezone(UTC).isoformat(),
         "data": data,
@@ -77,10 +77,7 @@ class OpenMeterClient:
 
     def __init__(self, endpoint_url: str, token: str) -> None:
         self._endpoint_url = endpoint_url
-        self._headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/cloudevents-batch+json",
-        }
+        self._headers = {"Authorization": f"Bearer {token}"} if token else {}
 
     async def emit(
         self,
@@ -90,6 +87,7 @@ class OpenMeterClient:
         metric_code: MetricCode,
     ) -> None:
         """POST all resource requests as an OpenMeter CloudEvents batch. Never raises."""
+        headers = {"Content-Type": "application/cloudevents-batch+json", **self._headers}
         events = [
             _to_openmeter_event(r, costs, classes, metric_code)
             for r in requests
@@ -99,7 +97,7 @@ class OpenMeterClient:
             return
         try:
             async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.post(self._endpoint_url, headers=self._headers, json=events)
+                resp = await client.post(f"{self._endpoint_url}/api/v1/events", headers=headers, json=events)
                 if resp.status_code >= 300 or resp.status_code < 200:
                     logger.warning(
                         f"OpenMeter endpoint returned unexpected status {resp.status_code}: {resp.text[:200]}"
