@@ -1182,7 +1182,7 @@ async def test_patch_session_launcher_from_code_update_command(
     # create initial session launcher as a build-from-code
     payload = {
         "project_id": project["id"],
-        "resource_class_id": resource_pool["id"],
+        "resource_class_id": resource_pool["classes"][0]["id"],
         "name": "Test name from code",
         "launcher_type": "non-interactive",
         "environment": {
