@@ -336,6 +336,12 @@ class SSHKeyRepository:
         async with self.session_maker() as session, session.begin():
             await session.execute(delete(SSHKeyORM).where(SSHKeyORM.id == key_id, SSHKeyORM.user_id == requested_by.id))
 
+    async def get_user_id_by_fingerprint(self, fingerprint: str) -> str | None:
+        """Resolve the owner of an SSH key by fingerprint. For internal use only."""
+        async with self.session_maker() as session:
+            res = await session.scalar(select(SSHKeyORM.user_id).where(SSHKeyORM.fingerprint == fingerprint))
+            return res
+
 
 class UsersSync:
     """Sync users from Keycloak to the database."""
