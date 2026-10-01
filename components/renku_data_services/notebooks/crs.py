@@ -510,6 +510,8 @@ class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     culling: CullingPatch | ResetType | None = None
     service_account_name: str | ResetType | None = None
     template: TemplatePatch | ResetType | None = None
+    ingress: Ingress | ResetType | None = None
+    authentication: Authentication | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):

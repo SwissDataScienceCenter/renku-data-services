@@ -1193,32 +1193,16 @@ async def start_session(
 
     has_http_frontend = session_has_http_frontend(launcher.environment.build_parameters)
 
-    # Authentication (only HTTP frontends get the auth proxy and its secret)
-    authentication: Authentication | None = None
-    if has_http_frontend:
-        if isinstance(user, AuthenticatedAPIUser):
-            auth_secret = await get_auth_secret_authenticated(
-                nb_config, user, server_name, ingress_config.url, ingress_config.url_path
-            )
-        else:
-            auth_secret = get_auth_secret_anonymous(nb_config, server_name, request)
+    # Authentication
+    authentication, auth_secret = await _get_authentication(
+        request, user, launcher, nb_config, server_name, ingress_config
+    )
+    if auth_secret:
         session_extras = session_extras.concat(
             SessionExtraResources(
                 secrets=[auth_secret],
                 volumes=[auth_secret.volume] if auth_secret.volume else [],
             )
-        )
-        authn_extra_volume_mounts: list[ExtraVolumeMount] = []
-        if auth_secret.volume_mount:
-            authn_extra_volume_mounts.append(auth_secret.volume_mount)
-        cert_vol_mounts = init_containers.certificates_volume_mounts(nb_config)
-        if cert_vol_mounts:
-            authn_extra_volume_mounts.extend(cert_vol_mounts)
-        authentication = Authentication(
-            enabled=True,
-            type=AuthenticationType.oauth2proxy if isinstance(user, AuthenticatedAPIUser) else AuthenticationType.token,
-            secretRef=auth_secret.key_ref("auth"),
-            extraVolumeMounts=authn_extra_volume_mounts,
         )
 
     image_secret = await get_image_pull_secret(
@@ -1431,6 +1415,7 @@ async def patch_session(
     resource_requests_repo: ResourceRequestsRepo,
     project_storage_repo: ProjectStorageRepository,
     authz: Authz,
+    cluster_repo: ClusterRepository,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -1597,6 +1582,37 @@ async def patch_session(
     session_extras = session_extras.concat(
         ssh_proxy_session_extras(nb_config.sessions.ssh, storage_mount, launcher.environment.build_parameters)
     )
+
+    cluster_settings: ClusterSettings
+    try:
+        cluster_settings = await cluster_repo.select(cluster.id)
+    except errors.MissingResourceError:
+        # Fallback to global, main cluster parameters
+        cluster_settings = nb_config.local_cluster_settings()
+    ingress_config = SessionIngress(server_name=server_name, cluster_settings=cluster_settings)
+    has_http_frontend = session_has_http_frontend(launcher.environment.build_parameters)
+    # Handle ingress and authentication
+    if session_type.is_interactive and has_http_frontend:
+        patch.spec.ingress = ingress_config.get_k8s_ingress()
+        authentication, auth_secret = await _get_authentication(
+            request, user, launcher, nb_config, server_name, ingress_config
+        )
+        if not authentication or not auth_secret:
+            raise errors.ProgrammingError(
+                message="Cannot define the authentication specification when patching an interactive session "
+                "with HTTP frontend."
+            )
+        patch.spec.authentication = authentication
+        if auth_secret:
+            session_extras = session_extras.concat(
+                SessionExtraResources(
+                    secrets=[auth_secret],
+                    volumes=[auth_secret.volume] if auth_secret.volume else [],
+                )
+            )
+    else:
+        patch.spec.ingress = RESET
+        patch.spec.authentication = RESET
 
     # Data connectors: skip
     # TODO: How can we patch data connectors? Should we even patch them?
@@ -1846,3 +1862,38 @@ class SessionIngress:
         else:
             base_server_url = f"{self.cluster_settings.session_protocol.value}://{self.cluster_settings.session_host}:{self.cluster_settings.session_port}{self.url_path}"
         return base_server_url
+
+
+async def _get_authentication(
+    request: Request,
+    user: AnonymousAPIUser | AuthenticatedAPIUser,
+    launcher: SessionLauncher,
+    nb_config: NotebooksConfig,
+    server_name: str,
+    ingress_config: SessionIngress,
+) -> tuple[Authentication, ExtraSecret] | tuple[None, None]:
+    has_http_frontend = session_has_http_frontend(launcher.environment.build_parameters)
+
+    # Only http frontends get authentication
+    if not has_http_frontend:
+        return None, None
+
+    if isinstance(user, AuthenticatedAPIUser):
+        auth_secret = await get_auth_secret_authenticated(
+            nb_config, user, server_name, ingress_config.url, ingress_config.url_path
+        )
+    else:
+        auth_secret = get_auth_secret_anonymous(nb_config, server_name, request)
+    authn_extra_volume_mounts: list[ExtraVolumeMount] = []
+    if auth_secret.volume_mount:
+        authn_extra_volume_mounts.append(auth_secret.volume_mount)
+    cert_vol_mounts = init_containers.certificates_volume_mounts(nb_config)
+    if cert_vol_mounts:
+        authn_extra_volume_mounts.extend(cert_vol_mounts)
+    authentication = Authentication(
+        enabled=True,
+        type=AuthenticationType.oauth2proxy if isinstance(user, AuthenticatedAPIUser) else AuthenticationType.token,
+        secretRef=auth_secret.key_ref("auth"),
+        extraVolumeMounts=authn_extra_volume_mounts,
+    )
+    return authentication, auth_secret
