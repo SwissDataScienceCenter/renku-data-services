@@ -938,8 +938,20 @@ def ssh_proxy_session_extras(ssh_config: _SessionSshConfig, storage_mount: PureP
 
     The two secrets are created once by the Helm keygen job; data-services only mounts them here.
     """
-    if not ssh_config.proxy_host_key_secret or not ssh_config.proxy_auth_key_secret:
+    if not ssh_config.enabled:
         return SessionExtraResources()
+
+    if not ssh_config.proxy_auth_key_secret_name:
+        raise errors.ProgrammingError(
+            message="SSH is enabled but the name of the Kubernetes secret that stores the proxy authentication key "
+            "(specifically its public portion) has not been set by the Renku administrator."
+        )
+
+    if not ssh_config.session_host_key_secret_name:
+        raise errors.ProgrammingError(
+            message="SSH is enabled but the name of the Kubernetes secret that stores the session host key "
+            "(specifically its private portion) has not been set by the Renku administrator."
+        )
 
     ssh_dir = (storage_mount / ".ssh").as_posix()
     return SessionExtraResources(
@@ -947,15 +959,17 @@ def ssh_proxy_session_extras(ssh_config: _SessionSshConfig, storage_mount: PureP
             ExtraVolume(
                 name="ssh-session-host-key",
                 secret=SecretAsVolume(
-                    secretName=ssh_config.proxy_host_key_secret,
-                    items=[SecretAsVolumeItem(key="hostKey", path="dropbear_ed25519_host_key")],
+                    secretName=ssh_config.session_host_key_secret_name,
+                    items=[
+                        SecretAsVolumeItem(key=ssh_config.session_host_key_secret_key, path="dropbear_ed25519_host_key")
+                    ],
                 ),
             ),
             ExtraVolume(
                 name="ssh-proxy-session-auth-key",
                 secret=SecretAsVolume(
-                    secretName=ssh_config.proxy_auth_key_secret,
-                    items=[SecretAsVolumeItem(key="authKeyPub", path="proxy_auth_key.pub")],
+                    secretName=ssh_config.proxy_auth_key_secret_name,
+                    items=[SecretAsVolumeItem(key=ssh_config.proxy_auth_key_secret_key, path="proxy_auth_key.pub")],
                 ),
             ),
         ],
