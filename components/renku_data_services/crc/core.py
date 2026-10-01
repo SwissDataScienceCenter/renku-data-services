@@ -272,8 +272,8 @@ def _resolve_pool_kind_after_update(
             return models.RemoteConfigurationKind.firecrest
         case apispec.RemoteConfigurationRunai() | apispec.RemoteConfigurationRunaiPatch():
             return models.RemoteConfigurationKind.runai
-        case apispec.RemoteConfigurationRunners() | apispec.RemoteConfigurationRunnersPatch():
-            return models.RemoteConfigurationKind.runners
+        case apispec.RemoteConfigurationUserRunners() | apispec.RemoteConfigurationUserRunnersPatch():
+            return models.RemoteConfigurationKind.user_runners
         case None:
             if method == "PUT":
                 return None
@@ -333,13 +333,13 @@ def validate_resource_pool_put_or_patch(
             remote = validate_remote_patch(body=r)
         case apispec.RemoteConfigurationRunaiPatch() as r:
             remote = validate_remote_patch(body=r)
-        case apispec.RemoteConfigurationRunnersPatch() as r:
+        case apispec.RemoteConfigurationUserRunnersPatch() as r:
             remote = validate_remote_patch(body=r)
         case apispec.RemoteConfigurationFirecrest() as r:
             remote = validate_remote_put(r)
         case apispec.RemoteConfigurationRunai() as r:
             remote = validate_remote_put(r)
-        case apispec.RemoteConfigurationRunners() as r:
+        case apispec.RemoteConfigurationUserRunners() as r:
             remote = validate_remote_put(r)
 
     platform = __validate_runtime_platform(body=body.platform) if body.platform else None
@@ -464,7 +464,7 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
     remote: (
         models.RemoteConfigurationFirecrest
         | models.RemoteConfigurationRunai
-        | models.RemoteConfigurationRunners
+        | models.RemoteConfigurationUserRunners
         | ResetType
     )
     match (existing.remote, update.remote):
@@ -498,8 +498,8 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
                 base_url=base_url,
                 provider_id=update.remote.provider_id,
             )
-        case (None, models.RemoteConfigurationRunnersPatch()):
-            remote = models.RemoteConfigurationRunners()
+        case (None, models.RemoteConfigurationUserRunnersPatch()):
+            remote = models.RemoteConfigurationUserRunners()
         case (models.RemoteConfigurationFirecrest(), models.RemoteConfigurationFirecrestPatch()):
             remote = models.RemoteConfigurationFirecrest(
                 provider_id=update.remote.provider_id
@@ -518,8 +518,8 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
                 if update.remote.provider_id is not None
                 else existing.remote.provider_id,
             )
-        case (models.RemoteConfigurationRunners(), models.RemoteConfigurationRunnersPatch()):
-            remote = models.RemoteConfigurationRunners()
+        case (models.RemoteConfigurationUserRunners(), models.RemoteConfigurationUserRunnersPatch()):
+            remote = models.RemoteConfigurationUserRunners()
         case (models.RemoteConfigurationRunai(), models.RemoteConfigurationFirecrestPatch()):
             raise errors.ValidationError(
                 message="Cannot convert a RunAI remote into a Firecrest one. Please create a brand-new pool."
@@ -632,8 +632,10 @@ def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
 
 
 def validate_remote(
-    body: apispec.RemoteConfigurationFirecrest | apispec.RemoteConfigurationRunai | apispec.RemoteConfigurationRunners,
-) -> models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | models.RemoteConfigurationRunners:
+    body: apispec.RemoteConfigurationFirecrest
+    | apispec.RemoteConfigurationRunai
+    | apispec.RemoteConfigurationUserRunners,
+) -> models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | models.RemoteConfigurationUserRunners:
     """Validate a remote configuration object."""
     kind = models.RemoteConfigurationKind(body.kind.value)
     match (body, kind):
@@ -651,8 +653,8 @@ def validate_remote(
                 base_url=body.base_url,
                 provider_id=body.provider_id,
             )
-        case (apispec.RemoteConfigurationRunners(), models.RemoteConfigurationKind.runners):
-            return models.RemoteConfigurationRunners()
+        case (apispec.RemoteConfigurationUserRunners(), models.RemoteConfigurationKind.user_runners):
+            return models.RemoteConfigurationUserRunners()
         case _:
             raise errors.ValidationError(
                 message=f"The kind '{kind}' of remote configuration is not supported.", quiet=True
@@ -662,7 +664,7 @@ def validate_remote(
 def validate_remote_put(
     body: apispec.RemoteConfigurationFirecrest
     | apispec.RemoteConfigurationRunai
-    | apispec.RemoteConfigurationRunners
+    | apispec.RemoteConfigurationUserRunners
     | None,
 ) -> models.RemoteConfigurationPatch:
     """Validate the PUT update to a remote configuration object."""
@@ -683,9 +685,9 @@ def validate_remote_put(
                 base_url=body.base_url,
                 provider_id=remote.provider_id,
             )
-        case apispec.RemoteConfigurationRunners():
+        case apispec.RemoteConfigurationUserRunners():
             remote = validate_remote(body=body)
-            return models.RemoteConfigurationRunnersPatch()
+            return models.RemoteConfigurationUserRunnersPatch()
         case _:
             raise errors.ValidationError(message=f"Received an unexpected remote put request: {body}")
 
@@ -694,7 +696,7 @@ def validate_remote_patch(
     body: apispec.RemoteConfigurationPatchReset
     | apispec.RemoteConfigurationFirecrestPatch
     | apispec.RemoteConfigurationRunaiPatch
-    | apispec.RemoteConfigurationRunnersPatch,
+    | apispec.RemoteConfigurationUserRunnersPatch,
 ) -> models.RemoteConfigurationPatch:
     """Validate the patch to a remote configuration object."""
     if isinstance(body, apispec.RemoteConfigurationPatchReset):
@@ -716,8 +718,8 @@ def validate_remote_patch(
                 base_url=body.base_url,
                 provider_id=body.provider_id,
             )
-        case (apispec.RemoteConfigurationRunnersPatch(), models.RemoteConfigurationKind.runners):
-            return models.RemoteConfigurationRunnersPatch()
+        case (apispec.RemoteConfigurationUserRunnersPatch(), models.RemoteConfigurationKind.user_runners):
+            return models.RemoteConfigurationUserRunnersPatch()
         case _:
             raise errors.ValidationError(
                 message=f"The kind '{kind}' of remote configuration is not supported.", quiet=True

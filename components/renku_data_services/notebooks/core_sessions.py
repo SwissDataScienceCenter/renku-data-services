@@ -36,7 +36,7 @@ from renku_data_services.crc.models import (
     RemoteConfigurationFirecrest,
     RemoteConfigurationKind,
     RemoteConfigurationRunai,
-    RemoteConfigurationRunners,
+    RemoteConfigurationUserRunners,
     ResourceClass,
     ResourcePool,
     SessionProtocol,
@@ -882,7 +882,7 @@ def _firecrest_resource_env_items(
 
 def get_remote_env(
     resource_class: ResourceClass,
-    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | RemoteConfigurationRunners,
+    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | RemoteConfigurationUserRunners,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
     env = [
@@ -894,8 +894,8 @@ def get_remote_env(
             env.extend(_firecrest_resource_env_items(resource_class, remote))
         case RemoteConfigurationRunai():
             env.append(SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url))
-        case RemoteConfigurationRunners():
-            logger.error(f"Support for {RemoteConfigurationKind.runners.value} not yet implemented.")
+        case RemoteConfigurationUserRunners():
+            logger.error(f"Support for {RemoteConfigurationKind.user_runners.value} not yet implemented.")
     return env
 
 
@@ -1171,10 +1171,10 @@ async def start_session(
                 git_providers=git_providers,
                 internal_token_mint=internal_token_mint,
             )
-        elif resource_pool.remote.kind == RemoteConfigurationKind.runners:
+        elif resource_pool.remote.kind == RemoteConfigurationKind.user_runners:
             # TODO: support for launching implemented later
             raise errors.ProgrammingError(
-                message=f"Support for {RemoteConfigurationKind.runners.value} not yet implemented"
+                message=f"Support for {RemoteConfigurationKind.user_runners.value} not yet implemented"
             )
         if remote_secret is not None:
             session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))

@@ -25,14 +25,6 @@ class BaseORM(MappedAsDataclass, DeclarativeBase):
     registry = COMMON_ORM_REGISTRY
 
 
-# Table: sessions_runners.runners
-# - `id`: ULID of the runner
-# - `user_id`: user ID who owns the runner
-# - `resource_pool_id`: resource pool the runner is registered with
-# - `status`: status of the runner
-# - `resources`: available resources on the runner
-# - `last_contact`: timestamp of the last contact
-# - `registration_token`: random unique token for registration
 class UserSessionRunnerORM(BaseORM):
     """A user-scoped runner which can power a session in heterogeneous compute.
 
@@ -84,11 +76,6 @@ class UserSessionRunnerORM(BaseORM):
     )
     """The date and time of the last contact with the runner."""
 
-    # assigned_sessions: Mapped[Sequence[AssignedSessionORM]] = relationship(
-    #     back_populates="runner", init=False, collection_class=list
-    # )
-    # """The assigned sessions for this runner."""
-
     def dump(self, include_registration_token: bool = False) -> models.UserSessionRunner:
         """Create a user-scoped session runner model from the UserSessionRunnerORM."""
         return models.UserSessionRunner(
@@ -100,68 +87,3 @@ class UserSessionRunnerORM(BaseORM):
             creation_date=self.creation_date,
             last_contact=self.last_contact,
         )
-
-
-# # Table: sessions_runners.assigned_sessions
-# # - `id`: ID of the session (name), unique, pk
-# # - `user_id`: user ID who owns the session
-# # - `runner_id`: ID of the session runner assigned for the session, NULL if not yet assigned
-# # - `amalthea_status`: status on the amalthea side
-# # - `runner_status`: status on the runner side: unknown, running, (hibernated), error
-# # - `updated_at`: timestamp of the last row update
-# class AssignedSessionORM(BaseORM):
-#     """A session which needs to be assigned to a runner."""
-
-#     __tablename__ = "assigned_sessions"
-
-#     id: Mapped[str] = mapped_column("id", primary_key=True)
-#     """ID of the session (resource name in Kubernetes)."""
-
-#     user_id: Mapped[str] = mapped_column(
-#         ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), index=True, nullable=False
-#     )
-#     """User ID of the owner of the session."""
-
-#     user: Mapped[UserORM] = relationship(init=False, repr=False)
-#     """The owner of the session."""
-
-#     resource_pool_id: Mapped[int] = mapped_column(
-#         ForeignKey(ResourcePoolORM.id, ondelete="RESTRICT"), index=True, nullable=False
-#     )
-#     """Resource pool ID of the session."""
-
-#     runner_id: Mapped[ULID | None] = mapped_column(
-#         ForeignKey(SessionRunnerORM.id, ondelete="RESTRICT"), index=True, nullable=True
-#     )
-#     """ID of the runner picked to run the session."""
-
-#     runner: Mapped[SessionRunnerORM | None] = relationship(init=False, repr=False, back_populates="assigned_sessions")
-#     """The runner picked to run the session."""
-
-#     secrets: Mapped[dict[str, str] | None] = mapped_column(
-#         "secrets", JSONVariant, nullable=True, default=None, server_default=null()
-#     )
-#     """The session secrets needed by the runner."""
-
-#     creation_date: Mapped[datetime] = mapped_column(
-#         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
-#     )
-#     """Row creation timestamp."""
-
-#     updated_at: Mapped[datetime] = mapped_column(
-#         "updated_at",
-#         DateTime(timezone=True),
-#         default=None,
-#         server_default=func.now(),
-#         onupdate=func.now(),
-#         nullable=False,
-#     )
-#     """Row update timestamp."""
-
-#     def dump(self) -> models.AssignedSession:
-#         """Create an assigned session model from the AssignedSessionORM."""
-#         return models.AssignedSession(
-#             session_id=self.id,
-#             resource_pool_id=self.resource_pool_id,
-#             runner_id=self.runner_id,
-#         )

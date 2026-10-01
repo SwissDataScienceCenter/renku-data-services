@@ -49,26 +49,3 @@ class UserSessionRunnerPatch:
     """Update to a user-scoped session runner."""
 
     status: Literal[RunnerStatus.ready] | Literal[RunnerStatus.not_ready]
-
-
-# @dataclass(eq=True, frozen=True, kw_only=True)
-# class UnsavedAssignedSession:
-#     """Represents an unsaved assigned session."""
-
-#     session_id: str
-#     resource_pool_id: int
-
-
-# @dataclass(eq=True, frozen=True, kw_only=True)
-# class AssignedSession(UnsavedAssignedSession):
-#     """Represents a session which needs to be assigned to a runner."""
-
-#     runner_id: ULID | None
-
-
-# @dataclass(eq=True, frozen=True, kw_only=True)
-# class AssignedSessionSecret:
-#     """Represents a secret for an assigned session."""
-
-#     name: str
-#     value: str

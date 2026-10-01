@@ -32,7 +32,7 @@ async def create_resource_pool_for_runners(
                 }
             ],
             "remote": {
-                "kind": RemoteConfigurationKind.runners.value,
+                "kind": RemoteConfigurationKind.user_runners.value,
             },
         }
         _, res = await sanic_client.post("/api/data/resource_pools", headers=admin_headers, json=payload)

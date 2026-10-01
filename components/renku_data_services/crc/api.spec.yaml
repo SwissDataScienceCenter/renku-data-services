@@ -2196,7 +2196,7 @@ components:
       oneOf:
         - $ref: "#/components/schemas/RemoteConfigurationFirecrest"
         - $ref: "#/components/schemas/RemoteConfigurationRunai"
-        - $ref: "#/components/schemas/RemoteConfigurationRunners"
+        - $ref: "#/components/schemas/RemoteConfigurationUserRunners"
     RemoteConfigurationFirecrest:
       type: object
       description: |
@@ -2276,16 +2276,16 @@ components:
       type: string
       description: The base URL of the Runai server
       example: "https://sdsc.run.ai"
-    RemoteConfigurationRunners:
+    RemoteConfigurationUserRunners:
       type: object
-      description: The configuration for sending sessions to runners
+      description: The configuration for sending sessions to user-scoped runners
       additionalProperties: false
       properties:
         kind:
           type: string
-          enum: ["runners"]
+          enum: ["user_runners"]
           description: Kind of remote resource pool
-          example: "runners"
+          example: "user_runners"
       required:
         - kind
     RemoteConfigurationPatch:
@@ -2296,7 +2296,7 @@ components:
         - $ref: "#/components/schemas/RemoteConfigurationPatchReset"
         - $ref: "#/components/schemas/RemoteConfigurationFirecrestPatch"
         - $ref: "#/components/schemas/RemoteConfigurationRunaiPatch"
-        - $ref: "#/components/schemas/RemoteConfigurationRunnersPatch"
+        - $ref: "#/components/schemas/RemoteConfigurationUserRunnersPatch"
     RemoteConfigurationPatchReset:
       type: object
       description: Value used to unset the remote field (empty object).
@@ -2336,16 +2336,16 @@ components:
           $ref: "#/components/schemas/RemoteConfigurationRunaiApiUrl"
         provider_id:
           $ref: "#/components/schemas/RemoteConfigurationFirecrestProviderId"
-    RemoteConfigurationRunnersPatch:
+    RemoteConfigurationUserRunnersPatch:
       type: object
-      description: The configuration for starting sessions remotely with runners
+      description: The configuration for starting sessions remotely with user-scoped runners
       additionalProperties: false
       properties:
         kind:
           type: string
-          enum: ["runners"]
+          enum: ["user_runners"]
           description: Kind of remote resource pool
-          example: "runners"
+          example: "user_runners"
     IdleThreshold:
       type: integer
       description: A threshold in seconds after which a session gets hibernated (0 means no threshold)

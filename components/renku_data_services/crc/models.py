@@ -353,7 +353,7 @@ class UnsavedResourcePool:
     hibernation_warning_period: int | None = None
     default: bool = False
     public: bool = False
-    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | RemoteConfigurationRunners | None = None
+    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | RemoteConfigurationUserRunners | None = None
     cluster_id: ClusterId | None = None
     platform: RuntimePlatform
     cpu_limit_factor: float | None = None
@@ -375,7 +375,7 @@ class ResourcePool:
     hibernation_warning_period: int | None = None
     default: bool = False
     public: bool = False
-    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | RemoteConfigurationRunners | None = None
+    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | RemoteConfigurationUserRunners | None = None
     cluster: SavedClusterSettings | None = None
     platform: RuntimePlatform
     credits_used: int | None = None
@@ -428,7 +428,7 @@ class RemoteConfigurationKind(StrEnum):
 
     firecrest = "firecrest"
     runai = "runai"
-    runners = "runners"
+    user_runners = "user_runners"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -482,10 +482,10 @@ class RemoteConfigurationRunai:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class RemoteConfigurationRunners:
-    """Model for remote configurations using runners."""
+class RemoteConfigurationUserRunners:
+    """Model for remote configurations using user-scoped runners."""
 
-    kind: Final[RemoteConfigurationKind] = field(init=False, default=RemoteConfigurationKind.runners)
+    kind: Final[RemoteConfigurationKind] = field(init=False, default=RemoteConfigurationKind.user_runners)
     provider_id: None = None
 
     @classmethod
@@ -533,10 +533,10 @@ class RemoteConfigurationRunaiPatch:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class RemoteConfigurationRunnersPatch:
-    """Model for remote configurations using runners."""
+class RemoteConfigurationUserRunnersPatch:
+    """Model for remote configurations using user-scoped runners."""
 
-    kind: Final[RemoteConfigurationKind] = field(init=False, default=RemoteConfigurationKind.runners)
+    kind: Final[RemoteConfigurationKind] = field(init=False, default=RemoteConfigurationKind.user_runners)
     provider_id: None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -547,7 +547,7 @@ class RemoteConfigurationRunnersPatch:
 
 
 RemoteConfigurationPatch = (
-    ResetType | RemoteConfigurationFirecrestPatch | RemoteConfigurationRunaiPatch | RemoteConfigurationRunnersPatch
+    ResetType | RemoteConfigurationFirecrestPatch | RemoteConfigurationRunaiPatch | RemoteConfigurationUserRunnersPatch
 )
 
 

@@ -15,10 +15,3 @@ def validate_session_runner_patch(patch: apispec.UserSessionRunnerPatch) -> mode
     status = models.RunnerStatus(patch.status.value)
     status = cast(Literal[models.RunnerStatus.ready] | Literal[models.RunnerStatus.not_ready], status)
     return models.UserSessionRunnerPatch(status=status)
-
-
-# def validate_patch_assigned_session_secrets(
-#     patch: apispec.AssignedSessionSecrets,
-# ) -> Sequence[models.AssignedSessionSecret]:
-#     """Validate the update to secrets of a session assigned to a runner."""
-#     return [models.AssignedSessionSecret(name=item.name, value=item.value) for item in patch.root]

@@ -531,7 +531,6 @@ class DependencyManager:
             builds_config=config.builds,
             git_repositories_repo=git_repositories_repo,
         )
-
         return cls(
             config,
             k8s_client=client,
