@@ -14,6 +14,10 @@ dataService:
     image:
       repository: renku/data-service-k8s-watcher
       tag:
+mcpServer:
+  image:
+    repository: renku/renku-mcp-server
+    tag:
 secretsStorage:
   image:
     repository: renku/secrets-storage
