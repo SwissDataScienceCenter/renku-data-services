@@ -226,7 +226,7 @@ class SessionLaunchersBP(CustomBlueprint):
             )
             return validated_json(apispec.SessionLauncherSecretList, secrets)
 
-        return "/session_launchers/<launcher_id:ulid>/secrets", ["PUT"], _patch_secrets
+        return "/session_launchers/<launcher_id:ulid>/secrets", ["PATCH"], _patch_secrets
 
 
 @dataclass(kw_only=True)
