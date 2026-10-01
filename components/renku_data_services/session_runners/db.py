@@ -174,8 +174,6 @@ class UserSessionRunnersRepository:
         The runner's registration token is removed during this operation.
         This prevents accidentally running the same runner on two different machines.
         """
-        if not user.is_authenticated or not user.id:
-            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
         runner_orm = await self._get_runner_or_none_orm(session=session, user=user, runner_id=runner_id)
         if runner_orm is None:
             raise errors.MissingResourceError(
