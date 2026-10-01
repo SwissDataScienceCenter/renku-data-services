@@ -397,7 +397,7 @@ def validate_session_launcher_secrets_patch(
     return [
         models.SessionLauncherSecretPatch(
             secret_slot_id=ULID.from_str(patch.secret_slot_id),
-            policy=models.SessionLauncherPolicy(patch.policy),
+            policy=models.SessionLauncherSecretPolicyName(patch.policy),
         )
         for patch in patches.root
     ]
