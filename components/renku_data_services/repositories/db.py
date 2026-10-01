@@ -16,12 +16,13 @@ import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services import orm as connected_services_schemas
-from renku_data_services.connected_services.models import ConnectionStatus
+from renku_data_services.connected_services.models import ConnectedAccount, ConnectionStatus
 from renku_data_services.connected_services.oauth_http import OAuthHttpClientFactory
 from renku_data_services.connected_services.utils import GitHubProviderType, get_github_provider_type
 from renku_data_services.repositories import models
 from renku_data_services.repositories.git_url import GitUrl, GitUrlError
 from renku_data_services.repositories.provider_adapters import (
+    GitHubAdapter,
     GitProviderAdapter,
     get_internal_gitlab_adapter,
     get_provider_adapter,
@@ -205,7 +206,25 @@ class GitRepositoriesRepository:
             logger.warning(f"OAuth error accessing repository metadata: {err}", exc_info=err)
             return models.RepositoryMetadataError.metadata_oauth
 
-        return self._convert_metadata_response(adapter, response)
+        result = self._convert_metadata_response(adapter, response)
+
+        # TODO: lift this logic into GitProviderAdapter?
+        if isinstance(adapter, GitHubAdapter):
+            logger.warning("[GITHUB] Need to check integration permissions")
+            account = await oauth_client.get_connected_account()
+            if isinstance(account, ConnectedAccount):
+                permission_url = adapter.get_repository_permission_api_url(
+                    repository_url.render(), username=account.username
+                )
+                logger.info(f"[GITHUB] Checking: {permission_url}")
+                headers = adapter.api_common_headers or dict()
+                permission_response = await oauth_client.get(permission_url, headers=headers)
+                logger.info(f"[GITHUB] Got permission response: {permission_response.status_code}")
+            else:
+                logger.warning(f"OAuth error accessing repository metadata: {account}")
+                return models.RepositoryMetadataError.metadata_oauth
+
+        return result
 
     async def _get_repository_authenticated_or_anonym(
         self,
