@@ -135,7 +135,7 @@ class DependencyManager:
         resource_requests_recorder: ResourcesRequestRecorder
         if cfg.enable_resource_request_tracking:
             metering_client: ResourceUsageMetering | None = None
-            if cfg.openmeter.endpoint_url and cfg.openmeter.token:
+            if cfg.openmeter.enabled and cfg.openmeter.endpoint_url:
                 metering_client = OpenMeterClient(
                     endpoint_url=cfg.openmeter.endpoint_url,
                     token=cfg.openmeter.token,
