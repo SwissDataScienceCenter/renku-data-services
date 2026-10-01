@@ -46,6 +46,7 @@ packages = [
   { include = "renku_data_services/capacity_reservation", from = "../../components" },
   { include = "renku_data_services/resource_usage", from = "../../components" },
   { include = "renku_data_services/persisted_logs", from = "../../components" },
+  { include = "renku_data_services/session_runners", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]
