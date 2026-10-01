@@ -11,7 +11,9 @@ class TestSshProxySessionExtras:
 
     def test_mounts_both_secrets(self) -> None:
         """Both secrets are mounted as subPath files under the mount dir's .ssh."""
-        ssh = _SessionSshConfig(proxy_host_key_secret="host-secret", proxy_auth_key_secret="auth-secret")
+        ssh = _SessionSshConfig(
+            enabled=True, session_host_key_secret_name="host-secret", proxy_auth_key_secret_name="auth-secret"
+        )
         extras = ssh_proxy_session_extras(ssh, PurePosixPath("/workspace"))
 
         assert [v.name for v in extras.volumes] == ["ssh-session-host-key", "ssh-proxy-session-auth-key"]
