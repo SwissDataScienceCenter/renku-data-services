@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Final
 
-from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, func, null, text
+from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from ulid import ULID
@@ -126,11 +126,6 @@ class RemoteUserSessionORM(BaseORM):
         init=False, repr=False, back_populates="assigned_sessions"
     )
     """The runner picked to run the session."""
-
-    secrets: Mapped[dict[str, str] | None] = mapped_column(
-        "secrets", JSONVariant, nullable=True, default=None, server_default=null()
-    )
-    """The session secrets needed by the runner."""
 
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
