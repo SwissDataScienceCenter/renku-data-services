@@ -161,9 +161,7 @@ class DependencyManager:
             session_maker=cfg.db.async_session_maker,
         )
 
-        user_session_runners_scheduling_repo = UserSessionRunnersSchedulingRepository(
-            session_maker=cfg.db.async_session_maker
-        )
+        user_session_runners_scheduling_repo = UserSessionRunnersSchedulingRepository()
         user_session_runner_scheduler = UserSessionRunnerScheduler(
             session_maker=cfg.db.async_session_maker,
             scheduling_repo=user_session_runners_scheduling_repo,
