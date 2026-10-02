@@ -203,14 +203,14 @@ class SshProxyConfig:
         if not port:
             raise errors.ConfigurationError(message="The ssh proxy port (SSH_PROXY_PORT) is missing.")
 
-        session_host_key_secret_name = os.environ.get("SSH_SESSION_HOST_KEY_SECRET")
+        session_host_key_secret_name = os.environ.get("SSH_PROXY_HOST_KEY_SECRET")
         proxy_auth_key_secret_name = os.environ.get("SSH_PROXY_AUTH_KEY_SECRET")
 
         if not session_host_key_secret_name:
             raise errors.ValidationError(
                 message="SSH is enabled but the session host key Kubernetes secret name is not set."
             )
-        if proxy_auth_key_secret_name:
+        if not proxy_auth_key_secret_name:
             raise errors.ValidationError(
                 message="SSH is enabled but the proxy authentication key Kubernetes secret name is not defined."
             )
