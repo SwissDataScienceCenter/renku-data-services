@@ -361,6 +361,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         ):
             command_args = list(self.spec.session.args) if self.spec.session.args else []
 
+        frontend_variant = self.metadata.labels.get("renku.io/frontend-variant")
         return apispec.SessionResponse(
             image=self.spec.session.image,
             name=self.metadata.name,
@@ -389,10 +390,14 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             session_type=session_type,
             submission_id=submission_id,
             command_args=command_args,
+            frontend_variant=frontend_variant,
         )
 
     def base_url(self) -> str | None:
         """Get the URL of the session, excluding the default URL from the session launcher."""
+        if self.spec.session.urlPath.startswith("ssh://"):
+            return self.spec.session.urlPath
+
         if self.status.url and len(self.status.url) > 0:
             return self.status.url
         if self.spec.ingress is None:
@@ -508,6 +513,8 @@ class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     culling: CullingPatch | ResetType | None = None
     service_account_name: str | ResetType | None = None
     template: TemplatePatch | ResetType | None = None
+    ingress: Ingress | ResetType | None = None
+    authentication: Authentication | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):

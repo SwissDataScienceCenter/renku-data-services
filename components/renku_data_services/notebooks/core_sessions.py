@@ -24,6 +24,7 @@ from ulid import ULID
 from yaml import safe_dump
 
 from renku_data_services.app_config import logging
+from renku_data_services.app_config.config import SshProxyConfig
 from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.models import ResourceType, Scope
@@ -124,7 +125,7 @@ from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.models import Environment, SessionLauncher
+from renku_data_services.session.models import BuildParameters, Environment, FrontendVariant, SessionLauncher
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
@@ -932,6 +933,77 @@ async def get_mount_work_dir(
     return storage_mount, work_dir
 
 
+def ssh_proxy_session_extras(
+    ssh_config: SshProxyConfig, storage_mount: PurePosixPath, build_parameters: BuildParameters | None
+) -> SessionExtraResources:
+    """Volumes and mounts delivering the proxy-to-session keys to a session.
+
+    Only ssh frontends are reached by the proxy; every other session must not get the keys.
+    The two secrets are created once by the Helm keygen job; data-services only mounts them here.
+    """
+    if session_has_http_frontend(build_parameters):
+        return SessionExtraResources()
+    if not ssh_config.enabled:
+        return SessionExtraResources()
+
+    if not ssh_config.proxy_auth_key_secret_name:
+        raise errors.ProgrammingError(
+            message="SSH is enabled but the name of the Kubernetes secret that stores the proxy authentication key "
+            "(specifically its public portion) has not been set by the Renku administrator."
+        )
+
+    if not ssh_config.session_host_key_secret_name:
+        raise errors.ProgrammingError(
+            message="SSH is enabled but the name of the Kubernetes secret that stores the session host key "
+            "(specifically its private portion) has not been set by the Renku administrator."
+        )
+
+    ssh_dir = (storage_mount / ".ssh").as_posix()
+    return SessionExtraResources(
+        volumes=[
+            ExtraVolume(
+                name="ssh-session-host-key",
+                secret=SecretAsVolume(
+                    secretName=ssh_config.session_host_key_secret_name,
+                    items=[
+                        SecretAsVolumeItem(key=ssh_config.session_host_key_secret_key, path="dropbear_ed25519_host_key")
+                    ],
+                ),
+            ),
+            ExtraVolume(
+                name="ssh-proxy-session-auth-key",
+                secret=SecretAsVolume(
+                    secretName=ssh_config.proxy_auth_key_secret_name,
+                    items=[SecretAsVolumeItem(key=ssh_config.proxy_auth_key_secret_key, path="proxy_auth_key.pub")],
+                ),
+            ),
+        ],
+        volume_mounts=[
+            ExtraVolumeMount(
+                name="ssh-session-host-key",
+                mountPath=f"{ssh_dir}/dropbear_ed25519_host_key",
+                subPath="dropbear_ed25519_host_key",
+                readOnly=True,
+            ),
+            ExtraVolumeMount(
+                name="ssh-proxy-session-auth-key",
+                mountPath=f"{ssh_dir}/proxy_auth_key.pub",
+                subPath="proxy_auth_key.pub",
+                readOnly=True,
+            ),
+        ],
+    )
+
+
+def session_has_http_frontend(build_parameters: BuildParameters | None) -> bool:
+    """Whether the session serves an HTTP frontend.
+
+    ssh sessions run a bare ssh daemon on the session port and have no HTTP
+    frontend, so they get neither the authentication proxy nor an ingress.
+    """
+    return build_parameters is None or build_parameters.frontend_variant != FrontendVariant.ssh
+
+
 async def start_session(
     request: Request,
     launch_request: SessionLaunchRequest,
@@ -956,6 +1028,7 @@ async def start_session(
     internal_token_mint: RenkuSelfTokenMint,
     resource_usage_service: ResourceUsageService,
     authz: Authz,
+    ssh_proxy_config: SshProxyConfig,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -1047,6 +1120,11 @@ async def start_session(
         )
     )
 
+    # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
+    session_extras = session_extras.concat(
+        ssh_proxy_session_extras(ssh_proxy_config, storage_mount, launcher.environment.build_parameters)
+    )
+
     # Data connectors
     session_extras = session_extras.concat(
         await data_source_repo.get_data_sources(
@@ -1103,6 +1181,13 @@ async def start_session(
     service_account_name = cluster_settings.service_account_name
 
     ui_path = f"{ingress_config.url_path}/{environment.default_url.lstrip('/')}" if session_type.is_interactive else ""
+    if (
+        launcher.environment.build_parameters
+        and launcher.environment.build_parameters.frontend_variant.lower() == "ssh"
+    ):
+        ui_path = f"ssh://{server_name}@{ssh_proxy_config.hostname}"
+        if ssh_proxy_config.port != 22:
+            ui_path += f":{ssh_proxy_config.port}"
 
     # Annotations
     annotations: dict[str, str] = {
@@ -1114,26 +1199,19 @@ async def start_session(
     if launch_request.submission_id:
         annotations.update({"renku.io/submission_id": str(launch_request.submission_id)})
 
-    # Authentication
-    if isinstance(user, AuthenticatedAPIUser):
-        auth_secret = await get_auth_secret_authenticated(
-            nb_config, user, server_name, ingress_config.url, ingress_config.url_path
-        )
-    else:
-        auth_secret = get_auth_secret_anonymous(nb_config, server_name, request)
-    session_extras = session_extras.concat(
-        SessionExtraResources(
-            secrets=[auth_secret],
-            volumes=[auth_secret.volume] if auth_secret.volume else [],
-        )
-    )
-    authn_extra_volume_mounts: list[ExtraVolumeMount] = []
-    if auth_secret.volume_mount:
-        authn_extra_volume_mounts.append(auth_secret.volume_mount)
+    has_http_frontend = session_has_http_frontend(launcher.environment.build_parameters)
 
-    cert_vol_mounts = init_containers.certificates_volume_mounts(nb_config)
-    if cert_vol_mounts:
-        authn_extra_volume_mounts.extend(cert_vol_mounts)
+    # Authentication
+    authentication, auth_secret = await _get_authentication(
+        request, user, launcher, nb_config, server_name, ingress_config
+    )
+    if auth_secret:
+        session_extras = session_extras.concat(
+            SessionExtraResources(
+                secrets=[auth_secret],
+                volumes=[auth_secret.volume] if auth_secret.volume else [],
+            )
+        )
 
     image_secret = await get_image_pull_secret(
         launcher=launcher,
@@ -1212,6 +1290,9 @@ async def start_session(
         "renku.io/session-type": str(session_type),
     }
 
+    if launcher.environment.build_parameters:
+        labels["renku.io/frontend-variant"] = launcher.environment.build_parameters.frontend_variant
+
     if session_location == SessionLocation.remote:
         labels["renku.io/remote-tunnel"] = "allow"
 
@@ -1268,19 +1349,12 @@ async def start_session(
                 remoteSecretRef=remote_secret.ref() if remote_secret else None,
                 readinessProbe=_get_readiness_probe(session_type, session_location),
             ),
-            ingress=ingress_config.get_k8s_ingress() if session_type.is_interactive else None,
+            ingress=ingress_config.get_k8s_ingress() if session_type.is_interactive and has_http_frontend else None,
             extraContainers=session_extras.containers,
             initContainers=session_extras.init_containers,
             extraVolumes=session_extras.volumes,
             culling=get_culling(user, resource_pool, nb_config, session_type),
-            authentication=Authentication(
-                enabled=True,
-                type=AuthenticationType.oauth2proxy
-                if isinstance(user, AuthenticatedAPIUser)
-                else AuthenticationType.token,
-                secretRef=auth_secret.key_ref("auth"),
-                extraVolumeMounts=authn_extra_volume_mounts,
-            ),
+            authentication=authentication,
             dataSources=session_extras.data_sources,
             tolerations=tolerations_from_resource_class(resource_class, nb_config.sessions.tolerations_model),
             affinity=node_affinity_from_resource_class(resource_class, nb_config.sessions.affinity_model),
@@ -1349,6 +1423,8 @@ async def patch_session(
     resource_requests_repo: ResourceRequestsRepo,
     project_storage_repo: ProjectStorageRepository,
     authz: Authz,
+    cluster_repo: ClusterRepository,
+    ssh_proxy_config: SshProxyConfig,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -1436,6 +1512,13 @@ async def patch_session(
         labels["renku.io/anonymous-session"] = "true"
     if not labels.get("renku.io/session-type"):
         labels["renku.io/session-type"] = SessionType.interactive.value
+
+    launcher = await session_repo.get_launcher(user, session.launcher_id)
+    if launcher.environment.build_parameters:
+        labels["renku.io/frontend-variant"] = launcher.environment.build_parameters.frontend_variant
+    else:
+        labels.pop("renku.io/frontend-variant", None)
+
     if not patch.metadata:
         patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
     patch.metadata.labels = labels
@@ -1481,7 +1564,6 @@ async def patch_session(
         return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch.to_rfc7386())
 
     server_name = session.metadata.name
-    launcher = await session_repo.get_launcher(user, session.launcher_id)
     project = await project_repo.get_project(user=user, project_id=session.project_id)
     environment = launcher.environment
     storage_mount, work_dir = await get_mount_work_dir(user, environment, image_check_repo)
@@ -1504,6 +1586,42 @@ async def patch_session(
             session_secrets=session_secrets,
         )
     )
+
+    # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
+    session_extras = session_extras.concat(
+        ssh_proxy_session_extras(ssh_proxy_config, storage_mount, launcher.environment.build_parameters)
+    )
+
+    cluster_settings: ClusterSettings
+    try:
+        cluster_settings = await cluster_repo.select(cluster.id)
+    except errors.MissingResourceError:
+        # Fallback to global, main cluster parameters
+        cluster_settings = nb_config.local_cluster_settings()
+    ingress_config = SessionIngress(server_name=server_name, cluster_settings=cluster_settings)
+    has_http_frontend = session_has_http_frontend(launcher.environment.build_parameters)
+    # Handle ingress and authentication
+    if session_type.is_interactive and has_http_frontend:
+        patch.spec.ingress = ingress_config.get_k8s_ingress()
+        authentication, auth_secret = await _get_authentication(
+            request, user, launcher, nb_config, server_name, ingress_config
+        )
+        if not authentication or not auth_secret:
+            raise errors.ProgrammingError(
+                message="Cannot define the authentication specification when patching an interactive session "
+                "with HTTP frontend."
+            )
+        patch.spec.authentication = authentication
+        if auth_secret:
+            session_extras = session_extras.concat(
+                SessionExtraResources(
+                    secrets=[auth_secret],
+                    volumes=[auth_secret.volume] if auth_secret.volume else [],
+                )
+            )
+    else:
+        patch.spec.ingress = RESET
+        patch.spec.authentication = RESET
 
     # Data connectors: skip
     # TODO: How can we patch data connectors? Should we even patch them?
@@ -1753,3 +1871,38 @@ class SessionIngress:
         else:
             base_server_url = f"{self.cluster_settings.session_protocol.value}://{self.cluster_settings.session_host}:{self.cluster_settings.session_port}{self.url_path}"
         return base_server_url
+
+
+async def _get_authentication(
+    request: Request,
+    user: AnonymousAPIUser | AuthenticatedAPIUser,
+    launcher: SessionLauncher,
+    nb_config: NotebooksConfig,
+    server_name: str,
+    ingress_config: SessionIngress,
+) -> tuple[Authentication, ExtraSecret] | tuple[None, None]:
+    has_http_frontend = session_has_http_frontend(launcher.environment.build_parameters)
+
+    # Only http frontends get authentication
+    if not has_http_frontend:
+        return None, None
+
+    if isinstance(user, AuthenticatedAPIUser):
+        auth_secret = await get_auth_secret_authenticated(
+            nb_config, user, server_name, ingress_config.url, ingress_config.url_path
+        )
+    else:
+        auth_secret = get_auth_secret_anonymous(nb_config, server_name, request)
+    authn_extra_volume_mounts: list[ExtraVolumeMount] = []
+    if auth_secret.volume_mount:
+        authn_extra_volume_mounts.append(auth_secret.volume_mount)
+    cert_vol_mounts = init_containers.certificates_volume_mounts(nb_config)
+    if cert_vol_mounts:
+        authn_extra_volume_mounts.extend(cert_vol_mounts)
+    authentication = Authentication(
+        enabled=True,
+        type=AuthenticationType.oauth2proxy if isinstance(user, AuthenticatedAPIUser) else AuthenticationType.token,
+        secretRef=auth_secret.key_ref("auth"),
+        extraVolumeMounts=authn_extra_volume_mounts,
+    )
+    return authentication, auth_secret
