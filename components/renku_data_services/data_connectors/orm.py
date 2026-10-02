@@ -110,7 +110,7 @@ class DataConnectorORM(BaseORM):
         "expires_at", DateTime(timezone=True), nullable=True, default=None
     )
 
-    def dump(self) -> models.DataConnector | models.GlobalDataConnector:
+    def dump(self, readonly: bool | None = None) -> models.DataConnector | models.GlobalDataConnector:
         """Create a data connector model from the DataConnectorORM."""
         if self.global_slug:
             return models.GlobalDataConnector(
@@ -121,7 +121,7 @@ class DataConnectorORM(BaseORM):
                 created_by=self.created_by_id,  # TODO: should we use an admin id? Or drop it?
                 creation_date=self.creation_date,
                 updated_at=self.updated_at,
-                storage=self._dump_storage(),
+                storage=self._dump_storage(readonly),
                 description=self.description,
                 keywords=self.keywords,
                 publisher_name=self.publisher_name,
@@ -142,7 +142,7 @@ class DataConnectorORM(BaseORM):
             created_by=self.created_by_id,
             creation_date=self.creation_date,
             updated_at=self.updated_at,
-            storage=self._dump_storage(),
+            storage=self._dump_storage(readonly),
             description=self.description,
             keywords=self.keywords,
             expires_at=self.expires_at,
@@ -153,13 +153,13 @@ class DataConnectorORM(BaseORM):
             authz_models.Visibility.PUBLIC if self.visibility == Visibility.public else authz_models.Visibility.PRIVATE
         )
 
-    def _dump_storage(self) -> models.CloudStorageCore:
+    def _dump_storage(self, readonly: bool | None = None) -> models.CloudStorageCore:
         return models.CloudStorageCore(
             storage_type=self.storage_type,
             configuration=self.configuration,
             source_path=self.source_path,
             target_path=self.target_path,
-            readonly=self.readonly,
+            readonly=readonly or self.readonly,
         )
 
 

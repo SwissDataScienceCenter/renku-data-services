@@ -260,7 +260,7 @@ paths:
       tags:
         - session_launchers
     patch:
-      summary: Patch a session launchers' repository parameters
+      summary: Update a list of session launchers' repository parameters
       requestBody:
         required: true
         content:
@@ -311,7 +311,7 @@ paths:
       tags:
         - session_launchers
     patch:
-      summary: Patch a session launchers' data connector parameters
+      summary: Update a list of session launchers' data connector parameters
       requestBody:
         required: true
         content:
