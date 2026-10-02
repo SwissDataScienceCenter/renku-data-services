@@ -509,6 +509,7 @@ components:
       description: |
         Filename to give to this secret when mounted in Renku 1.0 sessions
       type: string
+      nullable: true
       minLength: 1
       maxLength: 99
       pattern: "^[a-zA-Z0-9_\\-.]*$"
