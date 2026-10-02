@@ -304,7 +304,9 @@ class DependencyManager:
             ),
         )
 
-        quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
+        quota_repo = QuotaRepository(
+            K8sResourceQuotaClient(client), K8sPriorityClassClient(client), namespace=config.k8s_namespace
+        )
         member_repo = MemberRepository(
             session_maker=config.db.async_session_maker,
             quotas_repo=quota_repo,

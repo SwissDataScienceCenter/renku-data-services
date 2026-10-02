@@ -57,6 +57,7 @@ def rc_non_default_strat(draw):
             memory=draw(a_rc_memory),
             default=False,
             quota_enforced=draw(a_bool),
+            preemptible=draw(a_bool),
             tolerations=draw(a_tolerations_list),
             node_affinities=draw(st.lists(node_affinity_strat(), max_size=3)),
         )
@@ -75,6 +76,7 @@ def rc_default_strat(draw):
             memory=draw(a_rc_memory),
             default=True,
             quota_enforced=draw(a_bool),
+            preemptible=draw(a_bool),
         )
     except errors.ValidationError:
         assume(False)
@@ -190,6 +192,7 @@ def _resource_class_base_kwargs(draw, *, pool_kind: models.RemoteConfigurationKi
         "tolerations": draw(st.one_of(st.none(), apispec_tolerations_strat())),
         "node_affinities": draw(st.one_of(st.none(), st.lists(apispec_node_affinity_strat(), min_size=0, max_size=3))),
         "quota_enforced": draw(a_bool),
+        "preemptible": draw(a_bool),
     }
 
 
@@ -283,6 +286,7 @@ def apispec_resource_class_patch_strat(
         tolerations=draw(st.one_of(st.none(), apispec_tolerations_strat())),
         node_affinities=draw(st.one_of(st.none(), st.lists(apispec_node_affinity_strat(), min_size=0, max_size=3))),
         quota_enforced=draw(st.one_of(st.none(), a_bool)),
+        preemptible=draw(st.one_of(st.none(), a_bool)),
         remote=remote,
     )
 
@@ -303,6 +307,7 @@ def apispec_resource_class_patch_with_id_strat(draw, *, existing_kind: models.Re
         tolerations=patch.tolerations,
         node_affinities=patch.node_affinities,
         quota_enforced=patch.quota_enforced,
+        preemptible=patch.preemptible,
         remote=patch.remote,
     )
 
@@ -323,6 +328,7 @@ def apispec_resource_class_with_id_strat(draw, *, pool_kind: models.RemoteConfig
         tolerations=base.tolerations,
         node_affinities=base.node_affinities,
         quota_enforced=base.quota_enforced,
+        preemptible=base.preemptible,
         remote=base.remote,
     )
 
@@ -342,6 +348,7 @@ def resource_class_model_strat(draw):
         default=draw(a_bool),
         default_storage=default_storage,
         quota_enforced=draw(a_bool),
+        preemptible=draw(a_bool),
     )
 
 
@@ -382,4 +389,5 @@ def resource_class_patch_update_strat(
         max_storage=max_storage,
         default_storage=default_storage,
         quota_enforced=draw(st.one_of(st.none(), a_bool)),
+        preemptible=draw(st.one_of(st.none(), a_bool)),
     )
