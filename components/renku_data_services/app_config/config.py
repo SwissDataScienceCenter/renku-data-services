@@ -168,3 +168,57 @@ class InternalAuthenticationConfig:
             issuer=issuer,
             audience=audience,
         )
+
+
+@dataclass
+class SshProxyConfig:
+    """Configuration of the ssh proxy component."""
+
+    enabled: bool
+    hostname: str
+    port: int
+    session_host_key_secret_name: str | None = None
+    """The name of the Kubernetes secret that contains the host key used to identify the session SSH server
+    as a valid host with the proxy. The session uses only the private portion of this key."""
+    session_host_key_secret_key: str = "hostKey"
+    """The name of the key inside the Kubernetes secret that holds the private portion of the session host key."""
+
+    proxy_auth_key_secret_name: str | None = None
+    """The name of the Kubernetes secret that contains the SSH key used to authenticate the proxy with the
+    session SSH server. The session uses only the public portion of this key."""
+    proxy_auth_key_secret_key: str = "authKeyPub"
+    """The name of the key inside the Kubernetes secret that holds the public portion of the SSH key."""
+
+    @classmethod
+    def from_env(cls) -> SshProxyConfig:
+        """Configuration of the ssh proxy component created from env variables."""
+        enabled = os.environ.get("SSH_PROXY_ENABLED", "false").lower() == "true"
+        if not enabled:
+            return SshProxyConfig(False, "", 0)
+
+        hostname = os.environ.get("SSH_PROXY_HOSTNAME")
+        port = os.environ.get("SSH_PROXY_PORT")
+        if not hostname:
+            raise errors.ConfigurationError(message="The ssh proxy hostname (SSH_PROXY_HOSTNAME) is missing.")
+        if not port:
+            raise errors.ConfigurationError(message="The ssh proxy port (SSH_PROXY_PORT) is missing.")
+
+        session_host_key_secret_name = os.environ.get("SSH_PROXY_HOST_KEY_SECRET")
+        proxy_auth_key_secret_name = os.environ.get("SSH_PROXY_AUTH_KEY_SECRET")
+
+        if not session_host_key_secret_name:
+            raise errors.ValidationError(
+                message="SSH is enabled but the session host key Kubernetes secret name is not set."
+            )
+        if not proxy_auth_key_secret_name:
+            raise errors.ValidationError(
+                message="SSH is enabled but the proxy authentication key Kubernetes secret name is not defined."
+            )
+
+        return SshProxyConfig(
+            enabled=True,
+            hostname=hostname,
+            port=int(port),
+            session_host_key_secret_name=session_host_key_secret_name,
+            proxy_auth_key_secret_name=proxy_auth_key_secret_name,
+        )

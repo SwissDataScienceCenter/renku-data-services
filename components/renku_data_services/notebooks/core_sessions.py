@@ -24,6 +24,7 @@ from ulid import ULID
 from yaml import safe_dump
 
 from renku_data_services.app_config import logging
+from renku_data_services.app_config.config import SshProxyConfig
 from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.models import ResourceType, Scope
@@ -53,7 +54,6 @@ from renku_data_services.notebooks.api.amalthea_patches.init_containers import u
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
-from renku_data_services.notebooks.config.dynamic import _SessionSshConfig
 from renku_data_services.notebooks.cr_amalthea_session import PersistentVolumeClaim
 from renku_data_services.notebooks.crs import (
     AmaltheaMetadata,
@@ -934,7 +934,7 @@ async def get_mount_work_dir(
 
 
 def ssh_proxy_session_extras(
-    ssh_config: _SessionSshConfig, storage_mount: PurePosixPath, build_parameters: BuildParameters | None
+    ssh_config: SshProxyConfig, storage_mount: PurePosixPath, build_parameters: BuildParameters | None
 ) -> SessionExtraResources:
     """Volumes and mounts delivering the proxy-to-session keys to a session.
 
@@ -1028,6 +1028,7 @@ async def start_session(
     internal_token_mint: RenkuSelfTokenMint,
     resource_usage_service: ResourceUsageService,
     authz: Authz,
+    ssh_proxy_config: SshProxyConfig,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -1121,7 +1122,7 @@ async def start_session(
 
     # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
     session_extras = session_extras.concat(
-        ssh_proxy_session_extras(nb_config.sessions.ssh, storage_mount, launcher.environment.build_parameters)
+        ssh_proxy_session_extras(ssh_proxy_config, storage_mount, launcher.environment.build_parameters)
     )
 
     # Data connectors
@@ -1180,6 +1181,13 @@ async def start_session(
     service_account_name = cluster_settings.service_account_name
 
     ui_path = f"{ingress_config.url_path}/{environment.default_url.lstrip('/')}" if session_type.is_interactive else ""
+    if (
+        launcher.environment.build_parameters
+        and launcher.environment.build_parameters.frontend_variant.lower() == "ssh"
+    ):
+        ui_path = f"ssh://{server_name}@{ssh_proxy_config.hostname}"
+        if ssh_proxy_config.port != 22:
+            ui_path += f":{ssh_proxy_config.port}"
 
     # Annotations
     annotations: dict[str, str] = {
@@ -1416,6 +1424,7 @@ async def patch_session(
     project_storage_repo: ProjectStorageRepository,
     authz: Authz,
     cluster_repo: ClusterRepository,
+    ssh_proxy_config: SshProxyConfig,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -1580,7 +1589,7 @@ async def patch_session(
 
     # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
     session_extras = session_extras.concat(
-        ssh_proxy_session_extras(nb_config.sessions.ssh, storage_mount, launcher.environment.build_parameters)
+        ssh_proxy_session_extras(ssh_proxy_config, storage_mount, launcher.environment.build_parameters)
     )
 
     cluster_settings: ClusterSettings

@@ -395,6 +395,9 @@ class AmaltheaSessionV1Alpha1(_ASModel):
 
     def base_url(self) -> str | None:
         """Get the URL of the session, excluding the default URL from the session launcher."""
+        if self.spec.session.urlPath.startswith("ssh://"):
+            return self.spec.session.urlPath
+
         if self.status.url and len(self.status.url) > 0:
             return self.status.url
         if self.spec.ingress is None:
