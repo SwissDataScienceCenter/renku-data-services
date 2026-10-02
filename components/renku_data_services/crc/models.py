@@ -180,6 +180,11 @@ def preemptible_priority_class_name(quota_id: str) -> str:
     return f"{quota_id}-preemptible"
 
 
+def pool_preemptible_priority_class_name(namespace: str, resource_pool_id: int) -> str:
+    """Return the name of the priority class for the preemptible resource classes of a pool without a quota."""
+    return f"{namespace}-pool-{resource_pool_id}-preemptible"
+
+
 def quota_scope_selector(quota_id: str) -> dict[str, Any]:
     """Return the resource quota scope selector that matches the normal and preemptible priority classes."""
     return {
