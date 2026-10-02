@@ -53,9 +53,60 @@ def upgrade() -> None:
         unique=False,
         schema="session_runners",
     )
+    op.create_table(
+        "remote_user_sessions",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("user_id", sa.String(length=36), nullable=False),
+        sa.Column("resource_pool_id", sa.Integer(), nullable=False),
+        sa.Column("runner_id", ULIDType(), nullable=True),
+        sa.Column("creation_date", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.ForeignKeyConstraint(["resource_pool_id"], ["resource_pools.resource_pools.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["runner_id"], ["session_runners.user_runners.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["user_id"], ["users.users.keycloak_id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        schema="session_runners",
+    )
+    op.create_index(
+        op.f("ix_session_runners_remote_user_sessions_resource_pool_id"),
+        "remote_user_sessions",
+        ["resource_pool_id"],
+        unique=False,
+        schema="session_runners",
+    )
+    op.create_index(
+        op.f("ix_session_runners_remote_user_sessions_runner_id"),
+        "remote_user_sessions",
+        ["runner_id"],
+        unique=False,
+        schema="session_runners",
+    )
+    op.create_index(
+        op.f("ix_session_runners_remote_user_sessions_user_id"),
+        "remote_user_sessions",
+        ["user_id"],
+        unique=False,
+        schema="session_runners",
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        op.f("ix_session_runners_remote_user_sessions_user_id"),
+        table_name="remote_user_sessions",
+        schema="session_runners",
+    )
+    op.drop_index(
+        op.f("ix_session_runners_remote_user_sessions_runner_id"),
+        table_name="remote_user_sessions",
+        schema="session_runners",
+    )
+    op.drop_index(
+        op.f("ix_session_runners_remote_user_sessions_resource_pool_id"),
+        table_name="remote_user_sessions",
+        schema="session_runners",
+    )
+    op.drop_table("remote_user_sessions", schema="session_runners")
     op.drop_index(op.f("ix_session_runners_user_runners_user_id"), table_name="user_runners", schema="session_runners")
     op.drop_index(
         op.f("ix_session_runners_user_runners_resource_pool_id"), table_name="user_runners", schema="session_runners"
