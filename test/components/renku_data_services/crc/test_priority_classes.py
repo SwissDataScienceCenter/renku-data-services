@@ -8,7 +8,6 @@ from renku_data_services.crc import models
 from renku_data_services.crc.db import PREEMPTIBLE_PRIORITY_VALUE, SESSION_PRIORITY_VALUE, QuotaRepository
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sObjectMeta, K8sPriorityClass, K8sResourceQuota
-from renku_data_services.notebooks.core_sessions import priority_class_from_resource_class
 
 
 class FakePriorityClassClient:
@@ -58,7 +57,7 @@ class FakeResourceQuotaClient:
 def _repo() -> tuple[QuotaRepository, FakeResourceQuotaClient, FakePriorityClassClient]:
     rq_client = FakeResourceQuotaClient()
     pc_client = FakePriorityClassClient()
-    return QuotaRepository(rq_client, pc_client), rq_client, pc_client  # type: ignore[arg-type]
+    return QuotaRepository(rq_client, pc_client, namespace="renku"), rq_client, pc_client  # type: ignore[arg-type]
 
 
 def _resource_class(quota: str | None, preemptible: bool) -> models.ResourceClass:
@@ -86,8 +85,8 @@ async def test_create_quota_makes_only_the_quota_priority_class() -> None:
 async def test_ensure_preemptible_priority_class() -> None:
     repo, _, pc_client = _repo()
 
-    await repo.ensure_preemptible_priority_class("q1", DEFAULT_K8S_CLUSTER)
-    await repo.ensure_preemptible_priority_class("q1", DEFAULT_K8S_CLUSTER)
+    await repo.ensure_preemptible_priority_class(1, "q1", DEFAULT_K8S_CLUSTER)
+    await repo.ensure_preemptible_priority_class(1, "q1", DEFAULT_K8S_CLUSTER)
 
     pc = pc_client.classes["q1-preemptible"].manifest
     assert pc.value == PREEMPTIBLE_PRIORITY_VALUE
@@ -125,15 +124,36 @@ async def test_migrate_quota_recreates_old_priority_class_and_patches_scope() ->
 async def test_delete_quota_deletes_both_priority_classes() -> None:
     repo, _, pc_client = _repo()
     quota = await repo.create_quota(models.UnsavedQuota(cpu=1, memory=1, gpu=0), DEFAULT_K8S_CLUSTER)
-    await repo.ensure_preemptible_priority_class(quota.id, DEFAULT_K8S_CLUSTER)
+    await repo.ensure_preemptible_priority_class(1, quota.id, DEFAULT_K8S_CLUSTER)
 
     await repo.delete_quota(quota.id, DEFAULT_K8S_CLUSTER)
 
     assert pc_client.classes == {}
 
 
-def test_priority_class_from_resource_class() -> None:
-    assert priority_class_from_resource_class(_resource_class(None, False)) is None
-    assert priority_class_from_resource_class(_resource_class(None, True)) is None
-    assert priority_class_from_resource_class(_resource_class("q1", False)) == "q1"
-    assert priority_class_from_resource_class(_resource_class("q1", True)) == "q1-preemptible"
+async def test_ensure_pool_preemptible_priority_class_without_quota() -> None:
+    repo, _, pc_client = _repo()
+
+    await repo.ensure_preemptible_priority_class(2, None, DEFAULT_K8S_CLUSTER)
+
+    assert list(pc_client.classes) == ["renku-pool-2-preemptible"]
+    pc = pc_client.classes["renku-pool-2-preemptible"].manifest
+    assert pc.value == PREEMPTIBLE_PRIORITY_VALUE
+    assert pc.preemptionPolicy == "Never"
+
+
+async def test_delete_pool_priority_class() -> None:
+    repo, _, pc_client = _repo()
+    await repo.ensure_preemptible_priority_class(2, None, DEFAULT_K8S_CLUSTER)
+
+    await repo.delete_pool_priority_class(2, DEFAULT_K8S_CLUSTER)
+
+    assert pc_client.classes == {}
+
+
+def test_priority_class_name() -> None:
+    repo, _, _ = _repo()
+    assert repo.priority_class_name(2, _resource_class(None, False)) is None
+    assert repo.priority_class_name(2, _resource_class(None, True)) == "renku-pool-2-preemptible"
+    assert repo.priority_class_name(2, _resource_class("q1", False)) == "q1"
+    assert repo.priority_class_name(2, _resource_class("q1", True)) == "q1-preemptible"
