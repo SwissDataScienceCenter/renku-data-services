@@ -1117,7 +1117,7 @@ class DataConnectorRepository:
         return [
             SessionLauncherDataConnector(
                 launcher_id=launcher.id,
-                data_connector_to_project_link_id=link.id,
+                data_connector_link_id=link.id,
                 policy=SessionLauncherDataConnectorPolicyName.safe_parse(
                     policy, SessionLauncherDataConnectorPolicyName.excluded
                 ),
@@ -1155,9 +1155,9 @@ class DataConnectorRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        patch_dc_link_ids_list = [patch.data_connector_to_project_link_id for patch in patches]
+        patch_dc_link_ids_list = [patch.data_connector_link_id for patch in patches]
 
-        patch_dc_link_ids = {patch.data_connector_to_project_link_id for patch in patches}
+        patch_dc_link_ids = {patch.data_connector_link_id for patch in patches}
 
         if len(patch_dc_link_ids_list) != len(patch_dc_link_ids):
             raise errors.ValidationError(message="A data connector link id may only appear once in the list.")
@@ -1204,8 +1204,8 @@ class DataConnectorRepository:
         updated = []
 
         for patch in patches:
-            dc_link = launcher_dc_links.get(patch.data_connector_to_project_link_id)
-            data_connector = project_dc_links[patch.data_connector_to_project_link_id].data_connector
+            dc_link = launcher_dc_links.get(patch.data_connector_link_id)
+            data_connector = project_dc_links[patch.data_connector_link_id].data_connector
             policy = patch.policy or SessionLauncherDataConnectorPolicyName.excluded
 
             if policy.requires_write_access and data_connector.readonly:
@@ -1216,7 +1216,7 @@ class DataConnectorRepository:
             if dc_link is None:
                 dc_link = SessionLauncherDataConnectorORM(
                     launcher_id=launcher_id,
-                    data_connector_to_project_link_id=patch.data_connector_to_project_link_id,
+                    data_connector_to_project_link_id=patch.data_connector_link_id,
                     policy=policy,
                 )
                 session.add(dc_link)

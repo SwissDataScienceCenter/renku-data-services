@@ -414,7 +414,7 @@ class SessionLauncherDataConnectorORM(BaseORM):
 
         return models.SessionLauncherDataConnector(
             launcher_id=self.launcher_id,
-            data_connector_to_project_link_id=self.data_connector_to_project_link_id,
+            data_connector_link_id=self.data_connector_to_project_link_id,
             policy=self._policy,
         )
 

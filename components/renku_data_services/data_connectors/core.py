@@ -1122,7 +1122,7 @@ def validate_session_launcher_dc_links_patch(
     """Validate the update to the data connector policy of a session launcher."""
     return [
         session_models.SessionLauncherDataConnectorPatch(
-            data_connector_to_project_link_id=ULID.from_str(patch.data_connector_link_id),
+            data_connector_link_id=ULID.from_str(patch.data_connector_link_id),
             policy=session_models.SessionLauncherDataConnectorPolicyName(patch.policy),
         )
         for patch in patches.root
