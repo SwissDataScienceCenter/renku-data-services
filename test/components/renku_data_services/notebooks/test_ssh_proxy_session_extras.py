@@ -2,9 +2,11 @@
 
 from pathlib import PurePosixPath
 
+import pytest
 from ulid import ULID
 
-from renku_data_services.notebooks.config.dynamic import _SessionSshConfig
+from renku_data_services.app_config.config import SshProxyConfig
+from renku_data_services.errors.errors import ProgrammingError
 from renku_data_services.notebooks.core_sessions import session_has_http_frontend, ssh_proxy_session_extras
 from renku_data_services.session.models import BuildParameters, FrontendVariant
 
@@ -24,8 +26,12 @@ class TestSshProxySessionExtras:
 
     def test_mounts_both_secrets(self) -> None:
         """Both secrets are mounted as subPath files under the mount dir's .ssh for ssh frontends."""
-        ssh = _SessionSshConfig(
-            enabled=True, session_host_key_secret_name="host-secret", proxy_auth_key_secret_name="auth-secret"
+        ssh = SshProxyConfig(
+            enabled=True,
+            hostname="host",
+            port=2222,
+            session_host_key_secret_name="host-secret",
+            proxy_auth_key_secret_name="auth-secret",
         )
         extras = ssh_proxy_session_extras(ssh, PurePosixPath("/workspace"), _build_parameters(FrontendVariant.ssh))
 
@@ -47,30 +53,57 @@ class TestSshProxySessionExtras:
         assert mounts["ssh-proxy-session-auth-key"].readOnly is True
 
     def test_no_mounts_without_secret_config(self) -> None:
+        """Error is raised when enabled, but no secrets are available."""
+        ssh_config = SshProxyConfig(
+            enabled=True,
+            hostname="host",
+            port=2222,
+            session_host_key_secret_name=None,
+            proxy_auth_key_secret_name=None,
+        )
+        with pytest.raises(ProgrammingError):
+            ssh_proxy_session_extras(ssh_config, PurePosixPath("/workspace"), _build_parameters(FrontendVariant.ssh))
+
+    def test_no_mounts_when_disabled(self) -> None:
         """Nothing is mounted when the chart has not provided secret names."""
+        ssh_config = SshProxyConfig(
+            enabled=False,
+            hostname="host",
+            port=2222,
+            session_host_key_secret_name="host-secret",
+            proxy_auth_key_secret_name="auth-secret",
+        )
         extras = ssh_proxy_session_extras(
-            _SessionSshConfig(), PurePosixPath("/workspace"), _build_parameters(FrontendVariant.ssh)
+            ssh_config, PurePosixPath("/workspace"), _build_parameters(FrontendVariant.ssh)
         )
         assert extras.volumes == []
         assert extras.volume_mounts == []
 
     def test_no_mounts_for_non_ssh_frontend(self) -> None:
         """Non-ssh sessions must not receive the proxy-to-session keys."""
-        ssh = _SessionSshConfig(
-            enabled=True, session_host_key_secret_name="host-secret", proxy_auth_key_secret_name="auth-secret"
+        ssh_config = SshProxyConfig(
+            enabled=True,
+            hostname="host",
+            port=2222,
+            session_host_key_secret_name="host-secret",
+            proxy_auth_key_secret_name="auth-secret",
         )
         extras = ssh_proxy_session_extras(
-            ssh, PurePosixPath("/workspace"), _build_parameters(FrontendVariant.jupyterlab)
+            ssh_config, PurePosixPath("/workspace"), _build_parameters(FrontendVariant.jupyterlab)
         )
         assert extras.volumes == []
         assert extras.volume_mounts == []
 
     def test_no_mounts_without_build_parameters(self) -> None:
         """Image-based sessions have no build parameters and must not receive the keys."""
-        ssh = _SessionSshConfig(
-            enabled=True, session_host_key_secret_name="host-secret", proxy_auth_key_secret_name="auth-secret"
+        ssh_config = SshProxyConfig(
+            enabled=True,
+            hostname="host",
+            port=2222,
+            session_host_key_secret_name="host-secret",
+            proxy_auth_key_secret_name="auth-secret",
         )
-        extras = ssh_proxy_session_extras(ssh, PurePosixPath("/workspace"), None)
+        extras = ssh_proxy_session_extras(ssh_config, PurePosixPath("/workspace"), None)
         assert extras.volumes == []
         assert extras.volume_mounts == []
 
