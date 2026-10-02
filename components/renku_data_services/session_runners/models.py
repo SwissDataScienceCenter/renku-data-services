@@ -49,3 +49,21 @@ class UserSessionRunnerPatch:
     """Update to a user-scoped session runner."""
 
     status: Literal[RunnerStatus.ready] | Literal[RunnerStatus.not_ready]
+
+
+@dataclass(eq=True, frozen=True, kw_only=True)
+class UnsavedRemoteUserSession:
+    """Represents an unsaved remote session which needs a user-scoped runner."""
+
+    session_id: str
+    resource_pool_id: int
+
+
+@dataclass(eq=True, frozen=True, kw_only=True)
+class RemoteUserSession(UnsavedRemoteUserSession):
+    """Represents a remote session which needs a user-scoped runner."""
+
+    user_id: str
+
+    runner_id: ULID | None
+    """The ID of the user-scoped runner assigned to run this session."""

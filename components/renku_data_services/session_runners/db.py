@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import random
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -199,3 +199,155 @@ class UserSessionRunnersRepository:
         """Returns a random code to use as a registration token."""
         rand = random.SystemRandom()
         return base64.urlsafe_b64encode(rand.randbytes(size)).decode()
+
+
+class UserSessionRunnersSchedulingRepository:
+    """Repository for scheduling sessions onto user-scoped runners.
+
+    This repository exposes database operations to be done by a service account,
+    i.e. calls are not authenticated.
+    """
+
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+    ) -> None:
+        self.session_maker = session_maker
+
+    async def get_all_remote_sessions(self, session: AsyncSession) -> AsyncIterator[models.RemoteUserSession]:
+        """Get all remote Renku sessions from the database."""
+        stmt = select(schemas.RemoteUserSessionORM).order_by(schemas.RemoteUserSessionORM.id.asc())
+        res = await session.stream_scalars(stmt)
+        async for session_orm in res:
+            yield session_orm.dump()
+
+    async def get_all_runners(
+        self, session: AsyncSession, filter_status: models.RunnerStatus | None = None
+    ) -> AsyncIterator[models.UserSessionRunner]:
+        """Get all user-scoped session runners from the database."""
+        stmt = select(schemas.UserSessionRunnerORM)
+        if filter_status is not None:
+            stmt = stmt.where(schemas.UserSessionRunnerORM.status == filter_status)
+        res = await session.stream_scalars(stmt)
+        async for runner_orm in res:
+            yield runner_orm.dump()
+
+    async def get_viable_runners(
+        self, session: AsyncSession, renku_session_id: str
+    ) -> AsyncIterator[models.UserSessionRunner]:
+        """Get all user-scoped session runners which can run a given remote Renku session."""
+        stmt_session = select(schemas.RemoteUserSessionORM).where(schemas.RemoteUserSessionORM.id == renku_session_id)
+        res_session = await session.scalars(stmt_session)
+        session_orm = res_session.one_or_none()
+        if session_orm is None:
+            return
+        stmt_runners = (
+            select(schemas.UserSessionRunnerORM)
+            .where(schemas.UserSessionRunnerORM.user_id == session_orm.user_id)
+            .where(schemas.UserSessionRunnerORM.resource_pool_id == session_orm.resource_pool_id)
+            .where(schemas.UserSessionRunnerORM.status == models.RunnerStatus.ready)
+            .order_by(schemas.UserSessionRunnerORM.id.desc())
+        )
+        res_runners = await session.stream_scalars(stmt_runners)
+        async for runner_orm in res_runners:
+            yield runner_orm.dump()
+
+    # async def insert_assigned_session(
+    #     self,
+    #     user: base_models.APIUser,
+    #     renku_session: models.UnsavedAssignedSession,
+    #     session: AsyncSession | None = None,
+    # ) -> models.AssignedSession:
+    #     """Insert a new assigned session into the database.
+
+    #     Note: will wrap into a database transaction if no DB session is passed.
+    #     """
+    #     if session is None:
+    #         async with self.session_maker() as db_session, db_session.begin():
+    #             return await self._insert_assigned_session_inner(
+    #                 session=db_session, user=user, renku_session=renku_session
+    #             )
+    #     return await self._insert_assigned_session_inner(session=session, user=user, renku_session=renku_session)
+
+    # async def _insert_assigned_session_inner(
+    #     self, session: AsyncSession, user: base_models.APIUser, renku_session: models.UnsavedAssignedSession
+    # ) -> models.AssignedSession:
+    #     if not user.is_authenticated or not user.id:
+    #         raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+    #     # TODO: handle:
+    #     # Database error occurred: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError)
+    #     # <class 'asyncpg.exceptions.UniqueViolationError'>: duplicate key value violates unique constraint
+    #     #   "assigned_sessions_pkey" DETAIL: Key (id)=(flora-thieba-380907b6c92d) already exists.
+    #     # -> Delete existing row (didn't happen in data-tasks yet)
+    #     await self._check_eventually_schedulable(session=session, user_id=user.id, renku_session=renku_session)
+    #     session_orm = schemas.AssignedSessionORM(
+    #         id=renku_session.session_id,
+    #         user_id=user.id,
+    #         resource_pool_id=renku_session.resource_pool_id,
+    #         runner_id=None,
+    #     )
+    #     session.add(session_orm)
+    #     await session.flush()
+    #     return session_orm.dump()
+
+    # async def _check_eventually_schedulable(
+    #     self, session: AsyncSession, user_id: str, renku_session: models.UnsavedAssignedSession
+    # ) -> None:
+    #     """Check that a new session is eventually schedulable.
+
+    #     This check will reject cases where there are no runners registered
+    #     with the resource pool picked for the session.
+    #     """
+    #     stmt = (
+    #         select(schemas.SessionRunnerORM)
+    #         .where(schemas.SessionRunnerORM.user_id == user_id)
+    #         .where(schemas.SessionRunnerORM.resource_pool_id == renku_session.resource_pool_id)
+    #         .where(schemas.SessionRunnerORM.status.in_([models.RunnerStatus.ready, models.RunnerStatus.not_ready]))
+    #         .limit(1)
+    #     )
+    #     res = await session.scalars(stmt)
+    #     runner_orm = res.first()
+    #     if runner_orm is None:
+    #         raise errors.ValidationError(
+    #             message="You do not have any registered session runner "
+    #             f"for resource pool {renku_session.resource_pool_id}."
+    #         )
+
+    async def update_remote_session_set_runner(
+        self, session: AsyncSession, renku_session_id: str, runner_id: ULID
+    ) -> models.RemoteUserSession:
+        """Update a remote Renku session by setting its runner."""
+        session_orm = await self._get_remote_session_orm_or_none(session=session, renku_session_id=renku_session_id)
+        if session_orm is None:
+            raise errors.ValidationError(message=f"The Renku session {renku_session_id} does not exist.")
+        session_orm.runner_id = runner_id
+        await session.flush()
+        return session_orm.dump()
+
+    async def delete_remote_session(self, session: AsyncSession, renku_session_id: str) -> None:
+        """Remove a remote Renku session from the database."""
+        session_orm = await self._get_remote_session_orm_or_none(session=session, renku_session_id=renku_session_id)
+        if session_orm is None:
+            return None
+        await session.delete(session_orm)
+        return None
+
+    async def _get_remote_session_orm_or_none(
+        self, session: AsyncSession, renku_session_id: str
+    ) -> schemas.RemoteUserSessionORM | None:
+        stmt = select(schemas.RemoteUserSessionORM).where(schemas.RemoteUserSessionORM.id == renku_session_id)
+        res = await session.scalars(stmt)
+        return res.one_or_none()
+
+    async def update_runner_status(
+        self, session: AsyncSession, runner_id: ULID, status: models.RunnerStatus
+    ) -> models.UserSessionRunner:
+        """Update the status of a user-scoped session runner."""
+        stmt = select(schemas.UserSessionRunnerORM).where(schemas.UserSessionRunnerORM.id == runner_id)
+        res = await session.scalars(stmt)
+        runner_orm = res.one_or_none()
+        if runner_orm is None:
+            raise errors.MissingResourceError(message=f"Session runner with id '{runner_id}' does not exist.")
+        runner_orm.status = status
+        await session.flush()
+        return runner_orm.dump()
