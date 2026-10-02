@@ -1069,7 +1069,7 @@ class DataConnectorRepository:
         # policy is not specified.
         connector_readonly = schemas.DataConnectorORM.readonly.is_(True)
 
-        launcher_policy = SessionLauncherDataConnectorORM.policy["policy"]
+        launcher_policy = SessionLauncherDataConnectorORM.policy
 
         effective_policy = case(
             (
@@ -1206,8 +1206,9 @@ class DataConnectorRepository:
         for patch in patches:
             dc_link = launcher_dc_links.get(patch.data_connector_to_project_link_id)
             data_connector = project_dc_links[patch.data_connector_to_project_link_id].data_connector
+            policy = patch.policy or SessionLauncherDataConnectorPolicyName.excluded
 
-            if not patch.policy or patch.policy.requires_write_access and data_connector.readonly:
+            if policy.requires_write_access and data_connector.readonly:
                 raise errors.ValidationError(
                     message=f"Read only data connector cannot be made writable: {data_connector.id}."
                 )
@@ -1216,11 +1217,11 @@ class DataConnectorRepository:
                 dc_link = SessionLauncherDataConnectorORM(
                     launcher_id=launcher_id,
                     data_connector_to_project_link_id=patch.data_connector_to_project_link_id,
-                    policy=patch.policy or SessionLauncherDataConnectorPolicyName.excluded,
+                    policy=policy,
                 )
                 session.add(dc_link)
             else:
-                dc_link.policy = patch.policy
+                dc_link.policy = policy
 
             updated.append(dc_link)
 
