@@ -1439,25 +1439,26 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             invalid_secret_slot_ids = patch_secret_slot_ids - project_secret_slot_ids
 
             if invalid_secret_slot_ids:
-                raise errors.ProgrammingError(
-                    message=f"Secret slots do not belong to the project: {invalid_secret_slot_ids}"
+                raise errors.ValidationError(
+                    message=f"Secret slots {invalid_secret_slot_ids} do not belong to project {project_id}."
                 )
 
             updated = []
 
             for patch in patches:
                 secret = launcher_secrets.get(patch.secret_slot_id)
+                policy = patch.policy or models.SessionLauncherSecretPolicyName.excluded
 
                 if secret is None:
                     secret = schemas.SessionLauncherSecretORM(
                         project_id=launcher.project_id,
                         launcher_id=launcher.id,
                         secret_slot_id=patch.secret_slot_id,
-                        policy=models.SessionLauncherSecretPolicyName.included,
+                        policy=policy,
                     )
                     session.add(secret)
                 else:
-                    secret.policy = patch.policy or models.SessionLauncherSecretPolicyName.excluded
+                    secret.policy = policy
 
                 updated.append(secret)
 
