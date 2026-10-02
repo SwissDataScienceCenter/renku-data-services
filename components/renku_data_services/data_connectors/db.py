@@ -1210,7 +1210,7 @@ class DataConnectorRepository:
 
             if policy.requires_write_access and data_connector.readonly:
                 raise errors.ValidationError(
-                    message=f"Read only data connector cannot be made writable: {data_connector.id}."
+                    message=f"Data connector {patch.data_connector_link_id}/{data_connector.id} is read only."
                 )
 
             if dc_link is None:
