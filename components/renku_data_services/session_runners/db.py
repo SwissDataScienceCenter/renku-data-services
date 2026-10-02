@@ -28,9 +28,15 @@ class UserSessionRunnersRepository:
     This repository exposes database operations to be done on behalf of authenticated users.
     """
 
-    def __init__(self, authz: Authz, encryption_key: bytes) -> None:
+    def __init__(
+        self,
+        authz: Authz,
+        encryption_key: bytes,
+        session_maker: Callable[..., AsyncSession],
+    ) -> None:
         self.authz: Authz = authz
         self._encryption_key = encryption_key
+        self.session_maker = session_maker
 
     async def get_all_runners(
         self, session: AsyncSession, user: base_models.APIUser, all_users: bool = False
@@ -194,6 +200,72 @@ class UserSessionRunnersRepository:
         await session.flush()
         return None
 
+    async def insert_remote_session(
+        self,
+        user: base_models.APIUser,
+        renku_session: models.UnsavedRemoteUserSession,
+        session: AsyncSession | None = None,
+    ) -> models.RemoteUserSession:
+        """Insert a new remote Renku session into the database.
+
+        Note: will wrap into a database transaction if no DB session is passed.
+        """
+        if session is None:
+            async with self.session_maker() as db_session, db_session.begin():
+                return await self._insert_remote_session_inner(
+                    session=db_session, user=user, renku_session=renku_session
+                )
+        return await self._insert_remote_session_inner(session=session, user=user, renku_session=renku_session)
+
+    async def _insert_remote_session_inner(
+        self, session: AsyncSession, user: base_models.APIUser, renku_session: models.UnsavedRemoteUserSession
+    ) -> models.RemoteUserSession:
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+
+        await self._check_eventually_schedulable(session=session, user_id=user.id, renku_session=renku_session)
+
+        # Handle existing entry in the database
+        stmt = select(schemas.RemoteUserSessionORM).where(schemas.RemoteUserSessionORM.id == renku_session.session_id)
+        res = await session.scalars(stmt)
+        session_orm = res.one_or_none()
+        if session_orm:
+            await session.delete(session_orm)
+            await session.flush()
+
+        session_orm = schemas.RemoteUserSessionORM(
+            id=renku_session.session_id,
+            user_id=user.id,
+            resource_pool_id=renku_session.resource_pool_id,
+            runner_id=None,
+        )
+        session.add(session_orm)
+        await session.flush()
+        return session_orm.dump()
+
+    async def _check_eventually_schedulable(
+        self, session: AsyncSession, user_id: str, renku_session: models.UnsavedRemoteUserSession
+    ) -> None:
+        """Check that a new remote Renku session is eventually schedulable.
+
+        This check will reject cases where there are no runners registered
+        with the resource pool picked for the session.
+        """
+        stmt = (
+            select(schemas.UserSessionRunnerORM)
+            .where(schemas.UserSessionRunnerORM.user_id == user_id)
+            .where(schemas.UserSessionRunnerORM.resource_pool_id == renku_session.resource_pool_id)
+            .where(schemas.UserSessionRunnerORM.status.in_([models.RunnerStatus.ready, models.RunnerStatus.not_ready]))
+            .limit(1)
+        )
+        res = await session.scalars(stmt)
+        runner_orm = res.first()
+        if runner_orm is None:
+            raise errors.ValidationError(
+                message="You do not have any registered session runner "
+                f"for the resource pool with ID {renku_session.resource_pool_id}."
+            )
+
     @staticmethod
     def _generate_registration_token(size: int = 18) -> str:
         """Returns a random code to use as a registration token."""
@@ -207,12 +279,6 @@ class UserSessionRunnersSchedulingRepository:
     This repository exposes database operations to be done by a service account,
     i.e. calls are not authenticated.
     """
-
-    def __init__(
-        self,
-        session_maker: Callable[..., AsyncSession],
-    ) -> None:
-        self.session_maker = session_maker
 
     async def get_all_remote_sessions(self, session: AsyncSession) -> AsyncIterator[models.RemoteUserSession]:
         """Get all remote Renku sessions from the database."""
@@ -251,67 +317,6 @@ class UserSessionRunnersSchedulingRepository:
         res_runners = await session.stream_scalars(stmt_runners)
         async for runner_orm in res_runners:
             yield runner_orm.dump()
-
-    # async def insert_assigned_session(
-    #     self,
-    #     user: base_models.APIUser,
-    #     renku_session: models.UnsavedAssignedSession,
-    #     session: AsyncSession | None = None,
-    # ) -> models.AssignedSession:
-    #     """Insert a new assigned session into the database.
-
-    #     Note: will wrap into a database transaction if no DB session is passed.
-    #     """
-    #     if session is None:
-    #         async with self.session_maker() as db_session, db_session.begin():
-    #             return await self._insert_assigned_session_inner(
-    #                 session=db_session, user=user, renku_session=renku_session
-    #             )
-    #     return await self._insert_assigned_session_inner(session=session, user=user, renku_session=renku_session)
-
-    # async def _insert_assigned_session_inner(
-    #     self, session: AsyncSession, user: base_models.APIUser, renku_session: models.UnsavedAssignedSession
-    # ) -> models.AssignedSession:
-    #     if not user.is_authenticated or not user.id:
-    #         raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
-    #     # TODO: handle:
-    #     # Database error occurred: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError)
-    #     # <class 'asyncpg.exceptions.UniqueViolationError'>: duplicate key value violates unique constraint
-    #     #   "assigned_sessions_pkey" DETAIL: Key (id)=(flora-thieba-380907b6c92d) already exists.
-    #     # -> Delete existing row (didn't happen in data-tasks yet)
-    #     await self._check_eventually_schedulable(session=session, user_id=user.id, renku_session=renku_session)
-    #     session_orm = schemas.AssignedSessionORM(
-    #         id=renku_session.session_id,
-    #         user_id=user.id,
-    #         resource_pool_id=renku_session.resource_pool_id,
-    #         runner_id=None,
-    #     )
-    #     session.add(session_orm)
-    #     await session.flush()
-    #     return session_orm.dump()
-
-    # async def _check_eventually_schedulable(
-    #     self, session: AsyncSession, user_id: str, renku_session: models.UnsavedAssignedSession
-    # ) -> None:
-    #     """Check that a new session is eventually schedulable.
-
-    #     This check will reject cases where there are no runners registered
-    #     with the resource pool picked for the session.
-    #     """
-    #     stmt = (
-    #         select(schemas.SessionRunnerORM)
-    #         .where(schemas.SessionRunnerORM.user_id == user_id)
-    #         .where(schemas.SessionRunnerORM.resource_pool_id == renku_session.resource_pool_id)
-    #         .where(schemas.SessionRunnerORM.status.in_([models.RunnerStatus.ready, models.RunnerStatus.not_ready]))
-    #         .limit(1)
-    #     )
-    #     res = await session.scalars(stmt)
-    #     runner_orm = res.first()
-    #     if runner_orm is None:
-    #         raise errors.ValidationError(
-    #             message="You do not have any registered session runner "
-    #             f"for resource pool {renku_session.resource_pool_id}."
-    #         )
 
     async def update_remote_session_set_runner(
         self, session: AsyncSession, renku_session_id: str, runner_id: ULID

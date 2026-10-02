@@ -374,6 +374,7 @@ class DependencyManager:
         user_session_runners_repo = UserSessionRunnersRepository(
             authz=authz,
             encryption_key=config.secrets.encryption_key,
+            session_maker=config.db.async_session_maker,
         )
 
         internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
