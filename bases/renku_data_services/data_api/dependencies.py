@@ -374,6 +374,7 @@ class DependencyManager:
         user_session_runners_repo = UserSessionRunnersRepository(
             authz=authz,
             encryption_key=config.secrets.encryption_key,
+            k8s_v2_client=config.nb_config.k8s_v2_client,
             session_maker=config.db.async_session_maker,
         )
 

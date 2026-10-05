@@ -14,9 +14,11 @@ from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate, validate_query
 from renku_data_services.base_models.validation import validated_json
+from renku_data_services.notebooks import models as nb_models
 from renku_data_services.session_runners import apispec
 from renku_data_services.session_runners.core import (
     get_runner_scope,
+    validate_patch_assigned_session_secrets,
     validate_session_runner_patch,
     validate_unsaved_session_runner,
 )
@@ -171,3 +173,66 @@ class UserSessionRunnersBP(CustomBlueprint):
             return validated_json(apispec.RemoteUserSession, renku_session)
 
         return "/session_runners/user/sessions/<session_id>", ["GET"], _get_user_session
+
+    def get_user_session_spec(self) -> BlueprintFactoryResponse:
+        """Get the spec of a session which is powered by a user-scoped runner."""
+
+        @authenticate(self.internal_authenticator)
+        @only_authenticated
+        async def _get_user_session_spec(_: Request, user: base_models.APIUser, session_id: str) -> HTTPResponse:
+            runner_id = get_runner_scope(user)
+            async with self.session_maker() as session, session.begin():
+                renku_session = await self.runners_repo.get_remote_session(
+                    session=session, user=user, renku_session_id=session_id, runner_id=runner_id
+                )
+            k8s_session = await self.runners_repo.get_remote_session_spec(user=user, renku_session_id=session_id)
+            response = apispec.RemoteUserSessionWithSpec(
+                session_id=renku_session.session_id,
+                user_id=renku_session.user_id,
+                resource_pool_id=renku_session.resource_pool_id,
+                runner_id=str(renku_session.runner_id) if renku_session.runner_id else None,
+                spec=apispec.RemoteUserSessionSpec(
+                    image=k8s_session.spec.session.image,
+                    url=k8s_session.base_url() or "None",
+                    session_type=nb_models.SessionType.interactive.value,
+                    command=list(k8s_session.spec.session.command) if k8s_session.spec.session.command else [],
+                    args=list(k8s_session.spec.session.args) if k8s_session.spec.session.args else [],
+                ),
+            )
+            return validated_json(apispec.RemoteUserSessionWithSpec, response)
+
+        return "/session_runners/user/sessions/<session_id>/spec", ["GET"], _get_user_session_spec
+
+    def get_user_session_secrets(self) -> BlueprintFactoryResponse:
+        """Get the secrets necessary to run a remote Renku session."""
+
+        @authenticate(self.internal_authenticator)
+        @only_authenticated
+        async def _get_user_session_secrets(_: Request, user: base_models.APIUser, session_id: str) -> HTTPResponse:
+            runner_id = get_runner_scope(user)
+            async with self.session_maker() as session, session.begin():
+                secrets = await self.runners_repo.get_remote_session_secrets(
+                    session=session, user=user, renku_session_id=session_id, runner_id=runner_id
+                )
+            return validated_json(apispec.RemoteUserSessionSecrets, secrets)
+
+        return "/session_runners/user/sessions/<session_id>/secrets", ["GET"], _get_user_session_secrets
+
+    def patch_user_session_secrets(self) -> BlueprintFactoryResponse:
+        """Update the secrets used in a remote Renku session."""
+
+        @authenticate(self.internal_authenticator)
+        @only_authenticated
+        @validate(json=apispec.RemoteUserSessionSecrets)
+        async def _patch_user_session_secrets(
+            _: Request, user: base_models.APIUser, session_id: str, body: apispec.RemoteUserSessionSecrets
+        ) -> HTTPResponse:
+            runner_id = get_runner_scope(user)
+            update = validate_patch_assigned_session_secrets(patch=body)
+            async with self.session_maker() as session, session.begin():
+                secrets = await self.runners_repo.update_remote_session_secrets(
+                    session=session, user=user, renku_session_id=session_id, runner_id=runner_id, update=update
+                )
+            return validated_json(apispec.RemoteUserSessionSecrets, secrets)
+
+        return "/session_runners/user/sessions/<session_id>/secrets", ["PATCH"], _patch_user_session_secrets
