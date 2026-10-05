@@ -200,6 +200,46 @@ class UserSessionRunnersRepository:
         await session.flush()
         return None
 
+    async def get_all_remote_sessions(
+        self, session: AsyncSession, user: base_models.APIUser, runner_id: ULID | None = None
+    ) -> AsyncIterator[models.RemoteUserSession]:
+        """Get all remote Renku sessions from the database.
+
+        When runner_id is provided, only return sessions assigned to the given runner.
+        """
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        stmt = select(schemas.RemoteUserSessionORM).where(schemas.RemoteUserSessionORM.user_id == user.id)
+        if runner_id is not None:
+            stmt = stmt.where(schemas.RemoteUserSessionORM.runner_id == runner_id)
+        sessions_orm = await session.stream_scalars(stmt)
+        async for session_orm in sessions_orm:
+            yield session_orm.dump()
+
+    async def get_remote_session(
+        self, session: AsyncSession, user: base_models.APIUser, renku_session_id: str, runner_id: ULID | None
+    ) -> models.RemoteUserSession:
+        """Get a remote Renku session from the database.
+
+        When runner_id is provided, only return then session if it is assigned to the given runner.
+        """
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        stmt = (
+            select(schemas.RemoteUserSessionORM)
+            .where(schemas.RemoteUserSessionORM.id == renku_session_id)
+            .where(schemas.RemoteUserSessionORM.user_id == user.id)
+        )
+        if runner_id is not None:
+            stmt = stmt.where(schemas.RemoteUserSessionORM.runner_id == runner_id)
+        res = await session.scalars(stmt)
+        session_orm = res.one_or_none()
+        if session_orm is None:
+            raise errors.MissingResourceError(
+                message=f"The session {renku_session_id} does not exist or you do not have access to it."
+            )
+        return session_orm.dump()
+
     async def insert_remote_session(
         self,
         user: base_models.APIUser,
