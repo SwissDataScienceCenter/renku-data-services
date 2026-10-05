@@ -1,5 +1,6 @@
 """Business logic for session runners."""
 
+from collections.abc import Sequence
 from typing import Literal, cast
 
 import jwt
@@ -23,6 +24,13 @@ def validate_session_runner_patch(patch: apispec.UserSessionRunnerPatch) -> mode
     status = models.RunnerStatus(patch.status.value)
     status = cast(Literal[models.RunnerStatus.ready] | Literal[models.RunnerStatus.not_ready], status)
     return models.UserSessionRunnerPatch(status=status)
+
+
+def validate_patch_assigned_session_secrets(
+    patch: apispec.RemoteUserSessionSecrets,
+) -> Sequence[models.RemoteUserSessionSecret]:
+    """Validate the update to secrets of a remote Renku session."""
+    return [models.RemoteUserSessionSecret(name=item.name, value=item.value) for item in patch.root]
 
 
 def get_runner_scope(user: base_models.APIUser) -> ULID | None:
