@@ -15,7 +15,11 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate, validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.session_runners import apispec
-from renku_data_services.session_runners.core import validate_session_runner_patch, validate_unsaved_session_runner
+from renku_data_services.session_runners.core import (
+    get_runner_scope,
+    validate_session_runner_patch,
+    validate_unsaved_session_runner,
+)
 from renku_data_services.session_runners.db import UserSessionRunnersRepository
 
 
@@ -136,3 +140,34 @@ class UserSessionRunnersBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/session_runners/user/<session_runner_id:ulid>", ["DELETE"], _delete_user_session_runner
+
+    def get_all_user_sessions(self) -> BlueprintFactoryResponse:
+        """List sessions which are powered by user-scoped runners."""
+
+        @authenticate(self.internal_authenticator)
+        @only_authenticated
+        async def _get_all_user_sessions(_: Request, user: base_models.APIUser) -> HTTPResponse:
+            runner_id = get_runner_scope(user)
+            async with self.session_maker() as session, session.begin():
+                renku_sessions = self.runners_repo.get_all_remote_sessions(
+                    session=session, user=user, runner_id=runner_id
+                )
+                result = [item async for item in renku_sessions]
+            return validated_json(apispec.RemoteUserSessions, result)
+
+        return "/session_runners/user/sessions", ["GET"], _get_all_user_sessions
+
+    def get_user_session(self) -> BlueprintFactoryResponse:
+        """Get a session which is powered by a user-scoped runner."""
+
+        @authenticate(self.internal_authenticator)
+        @only_authenticated
+        async def _get_user_session(_: Request, user: base_models.APIUser, session_id: str) -> HTTPResponse:
+            runner_id = get_runner_scope(user)
+            async with self.session_maker() as session, session.begin():
+                renku_session = await self.runners_repo.get_remote_session(
+                    session=session, user=user, renku_session_id=session_id, runner_id=runner_id
+                )
+            return validated_json(apispec.RemoteUserSession, renku_session)
+
+        return "/session_runners/user/sessions/<session_id>", ["GET"], _get_user_session
