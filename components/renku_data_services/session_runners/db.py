@@ -240,7 +240,12 @@ class UserSessionRunnersRepository:
         return session_orm.dump()
 
     async def _get_remote_session_or_none_orm(
-        self, session: AsyncSession, user: base_models.APIUser, renku_session_id: str, runner_id: ULID | None
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        renku_session_id: str,
+        runner_id: ULID | None,
+        load_user: bool = False,
     ) -> schemas.RemoteUserSessionORM | None:
         if not user.is_authenticated or not user.id:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
@@ -251,6 +256,8 @@ class UserSessionRunnersRepository:
         )
         if runner_id is not None:
             stmt = stmt.where(schemas.RemoteUserSessionORM.runner_id == runner_id)
+        if load_user:
+            stmt = stmt.options(selectinload(schemas.RemoteUserSessionORM.user))
         res = await session.scalars(stmt)
         return res.one_or_none()
 
@@ -315,7 +322,7 @@ class UserSessionRunnersRepository:
     ) -> Sequence[models.RemoteUserSessionSecret]:
         """Get the secrets necessary to run a remote Renku session from the database."""
         session_orm = await self._get_remote_session_or_none_orm(
-            session=session, user=user, renku_session_id=renku_session_id, runner_id=runner_id
+            session=session, user=user, renku_session_id=renku_session_id, runner_id=runner_id, load_user=True
         )
         assert user.id
         if session_orm is None:
@@ -340,7 +347,7 @@ class UserSessionRunnersRepository:
     ) -> Sequence[models.RemoteUserSessionSecret]:
         """Update the secrets of a remote Renku session in the database."""
         session_orm = await self._get_remote_session_or_none_orm(
-            session=session, user=user, renku_session_id=renku_session_id, runner_id=runner_id
+            session=session, user=user, renku_session_id=renku_session_id, runner_id=runner_id, load_user=True
         )
         assert user.id
         if session_orm is None:
