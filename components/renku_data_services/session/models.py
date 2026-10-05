@@ -327,6 +327,7 @@ class SessionLauncher(UnsavedSessionLauncher):
     creation_date: datetime
     created_by: Member
     environment: Environment
+    is_restricted: bool | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

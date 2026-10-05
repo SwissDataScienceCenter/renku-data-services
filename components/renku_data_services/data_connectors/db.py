@@ -1103,6 +1103,7 @@ class DataConnectorRepository:
                     SessionLauncherDataConnectorORM.data_connector_to_project_link_id
                     == schemas.DataConnectorToProjectLinkORM.id,
                     SessionLauncherDataConnectorORM.launcher_id == launcher.id,
+                    SessionLauncherDataConnectorORM.project_id == project_id,
                 ),
             )
             .where(
@@ -1189,6 +1190,7 @@ class DataConnectorRepository:
             .where(
                 and_(
                     SessionLauncherDataConnectorORM.launcher_id == launcher_id,
+                    SessionLauncherDataConnectorORM.project_id == project_id,
                     SessionLauncherDataConnectorORM.data_connector_to_project_link_id.in_(patch_dc_link_ids),
                 )
             )
@@ -1217,6 +1219,7 @@ class DataConnectorRepository:
                 dc_link = SessionLauncherDataConnectorORM(
                     launcher_id=launcher_id,
                     data_connector_to_project_link_id=patch.data_connector_link_id,
+                    project_id=project_id,
                     policy=policy,
                 )
                 session.add(dc_link)
@@ -1306,6 +1309,7 @@ class DataConnectorSecretRepository:
                             SessionLauncherDataConnectorORM.data_connector_to_project_link_id
                             == schemas.DataConnectorToProjectLinkORM.id,
                             SessionLauncherDataConnectorORM.launcher_id == launcher_id,
+                            SessionLauncherDataConnectorORM.project_id == project_id,
                         ),
                     )
                     .where(

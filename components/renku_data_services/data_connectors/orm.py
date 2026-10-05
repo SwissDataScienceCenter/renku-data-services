@@ -173,6 +173,11 @@ class DataConnectorToProjectLinkORM(BaseORM):
             "project_id",
             name="_unique_data_connector_id_project_id_uc",
         ),
+        UniqueConstraint(
+            "id",
+            "project_id",
+            name="_unique_id_project_id_uc",
+        ),
     )
 
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)

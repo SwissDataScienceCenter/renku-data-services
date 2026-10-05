@@ -208,7 +208,7 @@ class SessionLauncherORM(BaseORM):
             launcher_type=launcher.launcher_type,
         )
 
-    def dump(self) -> models.SessionLauncher:
+    def dump(self, is_restricted: bool | None = None) -> models.SessionLauncher:
         """Create a session launcher model from the SessionLauncherORM."""
         return models.SessionLauncher(
             id=self.id,
@@ -222,6 +222,7 @@ class SessionLauncherORM(BaseORM):
             env_variables=models.EnvVar.from_dict(self.env_variables) if self.env_variables else None,
             environment=self.environment.dump(),
             launcher_type=self.launcher_type,
+            is_restricted=is_restricted,
         )
 
 
@@ -393,12 +394,28 @@ class SessionLauncherDataConnectorORM(BaseORM):
 
     __tablename__ = "launcher_data_connectors"
 
-    launcher_id: Mapped[ULID] = mapped_column(ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"), primary_key=True)
-
-    data_connector_to_project_link_id: Mapped[ULID] = mapped_column(
-        ForeignKey(DataConnectorToProjectLinkORM.id, ondelete="CASCADE"),
-        primary_key=True,
+    __table_args__ = (
+        PrimaryKeyConstraint("launcher_id", "data_connector_to_project_link_id"),
+        ForeignKeyConstraint(
+            ["launcher_id", "project_id"],
+            ["sessions.launchers.id", "sessions.launchers.project_id"],
+            name="_fk_launcher_data_connectors_launcher",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["data_connector_to_project_link_id", "project_id"],
+            [
+                DataConnectorToProjectLinkORM.id,
+                DataConnectorToProjectLinkORM.project_id,
+            ],
+            name="_fk_launcher_data_connectors_project_link",
+            ondelete="CASCADE",
+        ),
     )
+
+    launcher_id: Mapped[ULID] = mapped_column(ULIDType, primary_key=True)
+
+    data_connector_to_project_link_id: Mapped[ULID] = mapped_column(ULIDType, primary_key=True, index=True)
 
     data_connector_to_project_link: Mapped[DataConnectorToProjectLinkORM] = relationship(
         init=False,
@@ -406,6 +423,8 @@ class SessionLauncherDataConnectorORM(BaseORM):
         viewonly=True,
         lazy="selectin",
     )
+
+    project_id: Mapped[ULID] = mapped_column(ULIDType, nullable=False, index=True)
 
     policy: Mapped[str] = mapped_column(String(), nullable=False)
 
