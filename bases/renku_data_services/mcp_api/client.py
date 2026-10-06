@@ -14,14 +14,11 @@ DEFAULT_TIMEOUT = 30.0
 class ApiError(RuntimeError):
     """A call to the data API failed.
 
-    Subclasses RuntimeError because the message is what the agent reads and acts on, and
-    tools already surface RuntimeError that way. The status is kept as an attribute for
-    callers that need to branch on it; 0 means the API never answered.
+    Exists for the message rather than the type: httpx reports a failed status as
+    "Client error '404 Not Found' for url '...'" with a link to MDN and no response body,
+    and a transport failure as a bare ConnectError. Both end up in an agent's context, so
+    they are restated here with the API's own error text, which is the part worth reading.
     """
-
-    def __init__(self, status: int, detail: str) -> None:
-        super().__init__(f"HTTP {status}: {detail}" if status else detail)
-        self.status = status
 
 
 class RenkuApiClient:
@@ -86,13 +83,12 @@ class RenkuApiClient:
                     headers=headers,
                 )
             except httpx.RequestError as exc:
-                # No response at all — a timeout, DNS failure, refused connection. Reported
-                # with status 0 so callers can treat it as "not this time" rather than "wrong".
-                raise ApiError(0, f"Could not reach the Renku data API: {exc}") from exc
+                # No response at all — a timeout, DNS failure, refused connection.
+                raise ApiError(f"Could not reach the Renku data API: {exc}") from exc
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:
-                raise ApiError(exc.response.status_code, exc.response.text) from exc
+                raise ApiError(f"HTTP {exc.response.status_code}: {exc.response.text}") from exc
 
             if full_response:
                 return resp

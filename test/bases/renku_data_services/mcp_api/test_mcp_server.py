@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from renku_data_services.mcp_api.client import ApiError, RenkuApiClient
+from renku_data_services.mcp_api.client import RenkuApiClient
 from renku_data_services.mcp_api.main import (
     TokenNotFoundError,
     _authorization_server_doc,
@@ -940,13 +940,6 @@ async def test_unlinked_connector_created_after_user_agrees(mock_api):
 # ------------------------------------------------------------------ #
 # Wait loops                                                           #
 # ------------------------------------------------------------------ #
-
-
-def test_api_error_keeps_the_status():
-    err = ApiError(404, "Session not found")
-    assert err.status == 404
-    assert "HTTP 404" in str(err)
-    assert isinstance(err, RuntimeError), "tools surface RuntimeError messages to the agent"
 
 
 @pytest.mark.asyncio
