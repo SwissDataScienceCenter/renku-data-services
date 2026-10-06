@@ -1,11 +1,6 @@
 """Data service app."""
 
-from collections.abc import Callable
-from typing import Any
-
 from sanic import Sanic
-from sanic_ext.exceptions import ValidationError
-from sanic_ext.extras.validation.validators import VALIDATION_ERROR
 from ulid import ULID
 
 from renku_data_services import errors
@@ -41,7 +36,7 @@ from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import ProjectStorageBP, StorageSchemaBP
-from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
+from renku_data_services.users.blueprints import KCUsersBP, SSHKeysBP, UserPreferencesBP, UserSecretsBP
 
 
 def str_to_slug(value: str) -> Slug:
@@ -50,25 +45,6 @@ def str_to_slug(value: str) -> Slug:
         return Slug(value)
     except errors.ValidationError as err:
         raise ValueError("Couldn't parse slug") from err
-
-
-def _patched_validate_body(
-    validator: Callable[[type[Any], dict[str, Any]], Any],
-    model: type[Any],
-    body: dict[str, Any],
-) -> Any:
-    """Validate body method for monkey patching.
-
-    sanic_ext does not return contained exceptions as errors anymore, instead it returns a string.
-    This undoes that change.
-    """
-    try:
-        return validator(model, body)
-    except VALIDATION_ERROR as e:
-        raise ValidationError(
-            f"Invalid request body: {model.__name__}. Error: {e}",
-            extra={"exception": e},
-        ) from e
 
 
 def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
@@ -98,6 +74,12 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         name="user_secrets",
         url_prefix=url_prefix,
         secret_repo=dm.user_secrets_repo,
+        authenticator=dm.authenticator,
+    )
+    ssh_keys = SSHKeysBP(
+        name="ssh_keys",
+        url_prefix=url_prefix,
+        ssh_key_repo=dm.ssh_key_repo,
         authenticator=dm.authenticator,
     )
     resource_pools_users = ResourcePoolUsersBP(
@@ -244,6 +226,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         resource_usage_service=dm.resource_usage_service,
         resource_requests_repo=dm.resource_requests_repo,
         authz=dm.authz,
+        ssh_proxy_config=dm.config.ssh_proxy_config,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",
@@ -352,6 +335,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             resource_pools_members.blueprint(),
             users.blueprint(),
             user_secrets.blueprint(),
+            ssh_keys.blueprint(),
             user_resource_pools.blueprint(),
             clusters.blueprint(),
             storage_schema.blueprint(),
@@ -383,11 +367,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         app.blueprint(persisted_logs.blueprint())
     if renku_apps is not None:
         app.blueprint(renku_apps.blueprint())
-
-    # We need to patch sanic_ext as since version 24.12 they only send a string representation of errors
-    import sanic_ext.extras.validation.setup
-
-    sanic_ext.extras.validation.setup.validate_body = _patched_validate_body
 
     app.error_handler = CustomErrorHandler(apispec)
     app.config.OAS = False
