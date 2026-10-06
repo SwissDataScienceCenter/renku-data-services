@@ -1,0 +1,257 @@
+r"""Entrypoint for the Renku MCP server.
+
+Usage
+-----
+stdio (local dev / Claude Desktop):
+    RENKU_ACCESS_TOKEN=<token> python -m renku_data_services.mcp_api
+
+streamable-http (production):
+    MCP_TRANSPORT=streamable-http MCP_HOST=0.0.0.0 MCP_PORT=9000 \\
+        python -m renku_data_services.mcp_api
+
+Token resolution
+----------------
+stdio mode reads RENKU_ACCESS_TOKEN, RENKU_TOKEN, or RENKU_CLI_ACCESS_TOKEN from the
+environment. This is what the MCP specification prescribes for stdio transports, which
+"SHOULD NOT" run the OAuth flow and should "retrieve credentials from the environment"
+instead. HTTP mode ignores all of this — there the token arrives per request as a Bearer
+header and the OAuth flow happens between the client and Keycloak.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+from collections.abc import Callable
+from typing import Any
+
+import jwt
+from jwt import PyJWKClientError
+
+from renku_data_services.mcp_api.auth import TokenVerifier
+from renku_data_services.mcp_api.client import RenkuApiClient
+from renku_data_services.mcp_api.server import create_server, set_current_token
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Credential resolution (stdio mode only)
+# ---------------------------------------------------------------------------
+
+_TOKEN_ENV_VARS = ("RENKU_ACCESS_TOKEN", "RENKU_TOKEN", "RENKU_CLI_ACCESS_TOKEN")
+
+
+def _base_url() -> str:
+    return os.environ.get("RENKU_BASE_URL", "https://renkulab.io").rstrip("/")
+
+
+class TokenNotFoundError(Exception):
+    """Raised when no Renku token is set in the environment."""
+
+
+def _resolve_token() -> str:
+    """Return the token from the environment, or raise TokenNotFoundError.
+
+    The token is forwarded to the Renku data API as-is; nothing is validated here,
+    since the data API is the authoritative validator (signature, issuer, expiry).
+    """
+    for var in _TOKEN_ENV_VARS:
+        if t := os.environ.get(var):
+            return t
+
+    raise TokenNotFoundError(
+        f"Not authenticated for {_base_url()}.\n"
+        f"Set one of {', '.join(_TOKEN_ENV_VARS)} in the MCP server's environment "
+        f"configuration, then restart the server."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Transport-specific startup
+# ---------------------------------------------------------------------------
+
+
+def _keycloak_issuer_url() -> str:
+    """Return the Keycloak realm issuer URL from KEYCLOAK_ISSUER_URL env var."""
+    return os.environ.get("KEYCLOAK_ISSUER_URL", "").rstrip("/")
+
+
+def _protected_resource_doc(base_url: str, keycloak_realm_url: str) -> dict[str, Any]:
+    """Build the RFC 9728 protected resource metadata document."""
+    doc: dict[str, Any] = {"resource": f"{base_url}/mcp"}
+    if keycloak_realm_url:
+        doc["authorization_servers"] = [keycloak_realm_url]
+    return doc
+
+
+async def _authorization_server_doc(keycloak_realm_url: str) -> tuple[dict[str, Any], int]:
+    """Fetch and reformat Keycloak OIDC discovery as RFC 8414 AS metadata.
+
+    Returns (body_dict, status_code).
+    """
+    import httpx
+
+    if not keycloak_realm_url:
+        return {"error": "KEYCLOAK_ISSUER_URL not configured"}, 503
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{keycloak_realm_url}/.well-known/openid-configuration", timeout=5)
+            resp.raise_for_status()
+            oidc = resp.json()
+    except Exception as exc:
+        return {"error": str(exc)}, 502
+    return {
+        "issuer": oidc.get("issuer"),
+        "authorization_endpoint": oidc.get("authorization_endpoint"),
+        "token_endpoint": oidc.get("token_endpoint"),
+        "token_endpoint_auth_methods_supported": oidc.get(
+            "token_endpoint_auth_methods_supported", ["client_secret_post", "client_secret_basic"]
+        ),
+        "jwks_uri": oidc.get("jwks_uri"),
+        # Advertise only the scopes the MCP server needs. Keycloak supports many
+        # more (address, phone, roles, web-origins, etc.) but advertising them
+        # causes clients to request them all, which Keycloak may reject or which
+        # add unnecessary claims to tokens.
+        "scopes_supported": ["openid", "profile", "email", "offline_access"],
+        "response_types_supported": oidc.get("response_types_supported"),
+        "grant_types_supported": oidc.get("grant_types_supported", ["authorization_code", "refresh_token"]),
+        "code_challenge_methods_supported": ["S256"],
+        "revocation_endpoint": oidc.get("revocation_endpoint"),
+        # Omit registration_endpoint — clients should use the pre-registered
+        # renku-mcp client rather than attempting dynamic client registration.
+    }, 200
+
+
+def _build_http_app(base_url: str) -> Any:
+    """Build the HTTP ASGI app with OAuth metadata endpoints and Bearer-token middleware.
+
+    Routes and middleware are added directly to the FastMCP app so its lifespan
+    (which initialises the task group) runs correctly under uvicorn.
+    """
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse, Response
+
+    keycloak_realm_url = _keycloak_issuer_url()
+
+    @mcp.custom_route("/.well-known/oauth-protected-resource", methods=["GET"])  # type: ignore[misc]
+    async def protected_resource_metadata(request: Request) -> JSONResponse:
+        return JSONResponse(_protected_resource_doc(base_url, keycloak_realm_url))
+
+    @mcp.custom_route("/.well-known/oauth-authorization-server", methods=["GET"])  # type: ignore[misc]
+    async def authorization_server_metadata(request: Request) -> JSONResponse:
+        body, status = await _authorization_server_doc(keycloak_realm_url)
+        return JSONResponse(body, status_code=status)
+
+    resource_metadata_url = f"{base_url}/.well-known/oauth-protected-resource"
+    verifier = TokenVerifier.from_env()
+
+    def _unauthorized(error: str | None = None) -> Response:
+        """401 pointing the client at the resource metadata, which is how it starts OAuth."""
+        challenge = f'Bearer resource_metadata="{resource_metadata_url}"'
+        if error:
+            challenge += f', error="invalid_token", error_description="{error}"'
+        return Response(status_code=401, headers={"WWW-Authenticate": challenge})
+
+    class _AuthMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next: Any) -> Response:
+            # Metadata endpoints are public — no auth required.
+            if request.url.path.startswith("/.well-known/"):
+                return await call_next(request)
+            auth_header = request.headers.get("Authorization", "")
+            token = auth_header.removeprefix("Bearer ").removeprefix("bearer ").strip()
+            if not token:
+                return _unauthorized()
+            # Verify the token was issued for this server before doing anything with it.
+            # The token is still forwarded to the data API, which applies its own
+            # validation and enforces permissions; this check only establishes that the
+            # caller was given the token for the MCP server rather than for some other
+            # Renku client.
+            if verifier is not None:
+                try:
+                    verifier.verify(token)
+                except jwt.InvalidAudienceError:
+                    # Either a token for another Renku client, or the audience mapper on the
+                    # renku-mcp Keycloak client is missing from this deployment.
+                    logger.info("Rejected a token issued for another audience")
+                    return _unauthorized(f"Token audience does not include {verifier.audience!r}")
+                except jwt.InvalidTokenError as err:
+                    logger.info("Rejected access token: %s", err)
+                    return _unauthorized(str(err))
+                except PyJWKClientError as err:
+                    # The keys could not be fetched, so nothing was decided about this token.
+                    # Saying "unauthorized" would send the user off to log in again over a
+                    # fault on our side that another login cannot fix.
+                    logger.error("Cannot verify tokens, Keycloak keys unavailable: %s", err)
+                    return Response(status_code=503, headers={"Retry-After": "10"})
+            set_current_token(token)
+            return await call_next(request)
+
+    # Add middleware directly to the FastMCP app — no outer wrapper so the
+    # FastMCP lifespan (task group init) runs correctly under uvicorn.
+    asgi_app = mcp.streamable_http_app()
+    asgi_app.add_middleware(_AuthMiddleware)
+    return asgi_app
+
+
+# Module-level objects so `mcp dev` can discover the server by name.
+_api_client = RenkuApiClient.from_env()
+
+# In stdio mode, pass _resolve_token as a lazy resolver so a missing token surfaces
+# on the first tool call rather than at import time.
+# In HTTP mode, the per-request middleware is the sole source of tokens.
+_is_stdio = os.environ.get("MCP_TRANSPORT", "stdio") != "streamable-http"
+_token_resolver: Callable[[], str] | None = _resolve_token if _is_stdio else None
+mcp = create_server(_api_client, token_resolver=_token_resolver)
+
+
+async def _run_stdio() -> None:
+    await mcp.run_stdio_async()
+
+
+def _check_http_auth_config() -> None:
+    """Refuse to serve unverified tokens by accident.
+
+    Without KEYCLOAK_ISSUER_URL there is nothing to verify signatures against, so every
+    presented token would be forwarded unchecked. That is a deliberate choice for local
+    development, never a default — so it has to be asked for.
+    """
+    if _keycloak_issuer_url():
+        return
+    if os.environ.get("RENKU_MCP_ALLOW_UNVERIFIED_TOKENS") == "1":
+        logger.warning(
+            "KEYCLOAK_ISSUER_URL is not set and RENKU_MCP_ALLOW_UNVERIFIED_TOKENS=1: "
+            "access tokens will be forwarded without verification. Never do this in a deployment."
+        )
+        return
+    raise RuntimeError(
+        "KEYCLOAK_ISSUER_URL must be set in HTTP mode so access tokens can be verified. "
+        "Set it to the Keycloak realm URL, or set RENKU_MCP_ALLOW_UNVERIFIED_TOKENS=1 to "
+        "run without verification (local development only)."
+    )
+
+
+def _run_http() -> None:
+    import uvicorn
+
+    _check_http_auth_config()
+    host = os.environ.get("MCP_HOST", "0.0.0.0")  # nosec B104 — intentional for server deployment
+    port = int(os.environ.get("MCP_PORT", "9000"))
+    app = _build_http_app(_api_client.base_url)
+    logger.info("Starting Renku MCP server (HTTP) on %s:%s", host, port)
+    uvicorn.run(app, host=host, port=port)
+
+
+def main() -> None:
+    """Start the MCP server using the transport configured via MCP_TRANSPORT env var."""
+    transport = os.environ.get("MCP_TRANSPORT", "stdio")
+    if transport == "streamable-http":
+        _run_http()
+    else:
+        asyncio.run(_run_stdio())
+
+
+if __name__ == "__main__":
+    main()
