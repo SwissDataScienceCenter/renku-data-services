@@ -139,7 +139,10 @@ class RCloneStorage(ICloudStorageRequest):
         string_data = {
             "remote": self.name or base_name,
             "remotePath": self.source_path,
-            "configData": rc.config_string(name=self.name or base_name),
+            # NOTE: The sensitive fields are injected separately if the user secret key for decrypting is present.
+            "configData": rc.config_string(
+                name=self.name or base_name, keep_sensitive=user_secret_key is None and self.user_secret_key is None
+            ),
         }
         string_data.update(self.mount_options())
         # NOTE: in Renku v1 this function is not directly called so the base name

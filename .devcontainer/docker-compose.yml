@@ -42,6 +42,10 @@ services:
       - type: bind
         source: ./generate_ulid_func.sql
         target: /docker-entrypoint-initdb.d/generate_ulid_func.sql
+        bind:
+          # Relabel the bind mount for SELinux hosts (enforcing); otherwise Postgres
+          # cannot read the init script and the ULID function is never created.
+          selinux: z
     environment:
       POSTGRES_USER: renku
       POSTGRES_DB: postgres
