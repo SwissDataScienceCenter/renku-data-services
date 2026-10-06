@@ -413,6 +413,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         async with self.session_maker() as session:
             secret_restricted = (
                 select(1)
+                .select_from(schemas.SessionLauncherSecretORM)
                 .where(
                     schemas.SessionLauncherSecretORM.launcher_id == schemas.SessionLauncherORM.id,
                     schemas.SessionLauncherSecretORM.project_id == schemas.SessionLauncherORM.project_id,
@@ -460,7 +461,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             res = await session.execute(
                 select(
                     schemas.SessionLauncherORM,
-                    is_restricted=or_(
+                    or_(
                         secret_restricted,
                         data_connectors_restricted,
                     ).label("is_restricted"),
@@ -495,6 +496,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
             secret_restricted = (
                 select(1)
+                .select_from(schemas.SessionLauncherSecretORM)
                 .where(
                     schemas.SessionLauncherSecretORM.launcher_id == launcher.id,
                     schemas.SessionLauncherSecretORM.project_id == launcher.project_id,
