@@ -536,8 +536,9 @@ def create_server(
     ) -> dict[str, Any]:
         """Add a Git repository URL to a project's repositories list."""
         resp = await _api(ctx, "GET", _project_path(project), full_response=True)
-        proj = resp.body
-        etag = resp.headers.get("ETag") or resp.headers.get("etag") or proj.get("etag")
+        proj = resp.json()
+        # httpx header lookups are case-insensitive; the body carries it on some versions.
+        etag = resp.headers.get("ETag") or proj.get("etag")
         if not etag:
             raise RuntimeError("Could not get project ETag — cannot PATCH safely")
         repos = list(proj.get("repositories") or [])
@@ -1120,8 +1121,8 @@ def create_server(
         # session already exists it is returned instead of a new one, and says so with 200
         # rather than 201.
         resp = await _api(ctx, "POST", "/sessions", body, full_response=True)
-        data: dict[str, Any] = resp.body
-        data["_created"] = resp.status == 201
+        data: dict[str, Any] = resp.json()
+        data["_created"] = resp.status_code == 201
         return data
 
     @mcp.tool()

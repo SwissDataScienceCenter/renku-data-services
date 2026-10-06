@@ -6,9 +6,10 @@ import asyncio
 from typing import Any
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
-from renku_data_services.mcp_api.client import ApiError, ApiResponse, RenkuApiClient
+from renku_data_services.mcp_api.client import ApiError, RenkuApiClient
 from renku_data_services.mcp_api.main import (
     TokenNotFoundError,
     _authorization_server_doc,
@@ -203,9 +204,9 @@ async def test_api_returns_status_and_headers_when_requested(httpx_mock):
     api = RenkuApiClient(base_url="https://test.renkulab.io")
     resp = await api.request("GET", "/projects/1", "tok", full_response=True)
 
-    assert resp.body == {"id": "1"}
-    assert resp.status == 201
-    assert "etag" in {k.lower() for k in resp.headers}
+    assert resp.json() == {"id": "1"}
+    assert resp.status_code == 201
+    assert resp.headers["etag"] == '"abc123"'
 
 
 # ------------------------------------------------------------------ #
@@ -356,7 +357,7 @@ async def test_job_run_marks_new_session(mock_api):
             return {"is_admin": False}
         if method == "GET" and "session_launchers" in path:
             return non_interactive_launcher
-        return ApiResponse(body=make_session("running"), status=201, headers={})
+        return httpx.Response(201, json=make_session("running"))
 
     mock_api.request.side_effect = fake_api
 
@@ -380,7 +381,7 @@ async def test_job_run_marks_stale_session(mock_api):
             return {"is_admin": False}
         if method == "GET" and "session_launchers" in path:
             return non_interactive_launcher
-        return ApiResponse(body=make_session("running"), status=200, headers={})
+        return httpx.Response(200, json=make_session("running"))
 
     mock_api.request.side_effect = fake_api
 
@@ -466,7 +467,7 @@ async def test_project_repo_add_sends_etag(mock_api):
         if path == "/user":
             return {"is_admin": False}
         if method == "GET" and kwargs.get("full_response"):
-            return ApiResponse(body=project, status=200, headers={"ETag": '"v1"'})
+            return httpx.Response(200, json=project, headers={"ETag": '"v1"'})
         return {"id": "proj-1", "repositories": ["https://github.com/x/y"]}
 
     mock_api.request.side_effect = fake_api

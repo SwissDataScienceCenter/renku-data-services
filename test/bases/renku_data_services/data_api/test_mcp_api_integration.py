@@ -12,10 +12,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 import pytest
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.mcp_api.client import ApiResponse, RenkuApiClient
+from renku_data_services.mcp_api.client import RenkuApiClient
 from renku_data_services.mcp_api.server import _admin_checked_token
 from test.bases.renku_data_services.mcp_api.conftest import (
     mcp_session,
@@ -59,7 +60,9 @@ class SanicRenkuApiClient(RenkuApiClient):
 
         result = response.json if response.content_type and "json" in response.content_type else None
         if full_response:
-            return ApiResponse(body=result, status=response.status, headers=dict(response.headers))
+            # The tools read .json(), .status_code and .headers off whatever the client
+            # returns, so the Sanic reply is restated as the httpx response they expect.
+            return httpx.Response(response.status, json=result, headers=dict(response.headers))
         return result
 
 
