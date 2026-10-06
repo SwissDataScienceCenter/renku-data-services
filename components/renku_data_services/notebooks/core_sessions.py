@@ -126,6 +126,8 @@ from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import Environment, SessionLauncher
+from renku_data_services.session_runners.db import UserSessionRunnersRepository
+from renku_data_services.session_runners.models import UnsavedRemoteUserSession
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
@@ -855,6 +857,29 @@ def get_remote_secret(
     return ExtraSecret(secret)
 
 
+def get_remote_secret_user_runners(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    config: NotebooksConfig,
+    server_name: str,
+    internal_token_mint: RenkuSelfTokenMint,
+) -> ExtraSecret | None:
+    """Returns the secret containing the configuration for the remote session controller when using runners."""
+    if not user.is_authenticated or user.access_token is None or user.refresh_token is None:
+        return None
+    internal_token_scope = f"session:{server_name}"
+    internal_access_token = internal_token_mint.create_access_token(user=user, scope=internal_token_scope)
+    internal_refresh_token = internal_token_mint.create_refresh_token(user=user, scope=internal_token_scope)
+    secret_data = {
+        "RSC_AUTH_KIND": "renku_v2",
+        "RSC_AUTH_TOKEN_URI": f"https://{config.sessions.ingress.host}/api/data/internal/authentication/token",
+        "RSC_AUTH_RENKU_ACCESS_TOKEN": internal_access_token,
+        "RSC_AUTH_RENKU_REFRESH_TOKEN": internal_refresh_token,
+    }
+    secret_name = f"{server_name}-remote-secret"
+    secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
+    return ExtraSecret(secret)
+
+
 def _firecrest_resource_env_items(
     resource_class: ResourceClass,
     pool_remote: RemoteConfigurationFirecrest,
@@ -883,6 +908,7 @@ def _firecrest_resource_env_items(
 def get_remote_env(
     resource_class: ResourceClass,
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | RemoteConfigurationUserRunners,
+    config: NotebooksConfig,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
     env = [
@@ -895,7 +921,9 @@ def get_remote_env(
         case RemoteConfigurationRunai():
             env.append(SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url))
         case RemoteConfigurationUserRunners():
-            logger.error(f"Support for {RemoteConfigurationKind.user_runners.value} not yet implemented.")
+            env.append(
+                SessionEnvItem(name="RSC_RUNNERS_API_URL", value=f"https://{config.sessions.ingress.host}/api/data/")
+            )
     return env
 
 
@@ -956,6 +984,7 @@ async def start_session(
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
     git_repositories_repo: GitRepositoriesRepository,
+    user_session_runners_repo: UserSessionRunnersRepository,
     builds_config: BuildsConfig,
     internal_token_mint: RenkuSelfTokenMint,
     resource_usage_service: ResourceUsageService,
@@ -1172,9 +1201,11 @@ async def start_session(
                 internal_token_mint=internal_token_mint,
             )
         elif resource_pool.remote.kind == RemoteConfigurationKind.user_runners:
-            # TODO: support for launching implemented later
-            raise errors.ProgrammingError(
-                message=f"Support for {RemoteConfigurationKind.user_runners.value} not yet implemented"
+            remote_secret = get_remote_secret_user_runners(
+                user=user,
+                config=nb_config,
+                server_name=server_name,
+                internal_token_mint=internal_token_mint,
             )
         if remote_secret is not None:
             session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
@@ -1212,7 +1243,7 @@ async def start_session(
         assert resource_pool.remote is not None
         if resource_pool.remote.kind == RemoteConfigurationKind.firecrest:
             resource_class = replace(resource_class, cpu=ceil(resource_class.cpu))
-        env.extend(get_remote_env(resource_class, resource_pool.remote))
+        env.extend(get_remote_env(resource_class, resource_pool.remote, config=nb_config))
     launcher_env_variables = get_launcher_env_variables(launcher, launch_request)
     env.extend(launcher_env_variables)
 
@@ -1318,6 +1349,15 @@ async def start_session(
         except Exception:
             await nb_config.k8s_v2_client.delete_session(server_name, user.id)
             raise
+
+    # Track remote sessions which need a user-scoped runner.
+    if session_location == SessionLocation.remote:
+        assert resource_pool.remote is not None
+        if resource_pool.remote.kind == RemoteConfigurationKind.user_runners:
+            await user_session_runners_repo.insert_remote_session(
+                user=user,
+                renku_session=UnsavedRemoteUserSession(session_id=server_name, resource_pool_id=resource_pool.id),
+            )
 
     await metrics.user_requested_session_launch(
         user=user,
