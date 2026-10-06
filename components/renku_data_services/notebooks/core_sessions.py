@@ -1329,15 +1329,6 @@ async def start_session(
         ),
     )
 
-    # Track remote sessions which need a user-scoped runner.
-    if session_location == SessionLocation.remote:
-        assert resource_pool.remote is not None
-        if resource_pool.remote.kind == RemoteConfigurationKind.user_runners:
-            await user_session_runners_repo.insert_remote_session(
-                user=user,
-                renku_session=UnsavedRemoteUserSession(session_id=server_name, resource_pool_id=resource_pool.id),
-            )
-
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
         logger.debug(f"Creating {len(secrets_to_create)} session secrets")
@@ -1358,6 +1349,15 @@ async def start_session(
         except Exception:
             await nb_config.k8s_v2_client.delete_session(server_name, user.id)
             raise
+
+    # Track remote sessions which need a user-scoped runner.
+    if session_location == SessionLocation.remote:
+        assert resource_pool.remote is not None
+        if resource_pool.remote.kind == RemoteConfigurationKind.user_runners:
+            await user_session_runners_repo.insert_remote_session(
+                user=user,
+                renku_session=UnsavedRemoteUserSession(session_id=server_name, resource_pool_id=resource_pool.id),
+            )
 
     await metrics.user_requested_session_launch(
         user=user,
