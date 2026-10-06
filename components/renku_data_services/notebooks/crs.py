@@ -384,6 +384,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 message=self.status.error,
             ),
             url=url,
+            external_url=self.external_url(),
             project_id=str(self.project_id),
             launcher_id=str(self.launcher_id),
             resource_class_id=self.resource_class_id(),
@@ -412,6 +413,27 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         query = None
         fragment = None
         url = str(urlunparse((scheme, host, path, params, query, fragment)))
+        return url
+
+    def external_url(self) -> str | None:
+        """Get the URL of the session for external access.
+
+        This is usually the stable session url as used in the UI.
+        The main use-case for this is to let third parties know where to redirect users
+        to access a session.
+        """
+        if self.spec.ingress is None:
+            return None
+
+        scheme = self.spec.ingress.scheme()
+        host = self.spec.ingress.host
+        params = None
+        query = None
+        fragment = None
+        path = f"/id/p/{self.project_id}/sessions/show/{self.metadata.name}"
+
+        url = str(urlunparse((scheme, host, path, params, query, fragment)))
+
         return url
 
 

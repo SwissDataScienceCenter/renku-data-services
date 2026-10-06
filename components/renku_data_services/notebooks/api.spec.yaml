@@ -37,13 +37,13 @@ paths:
     get:
       summary: Get a list of all sessions for a user
       parameters:
-      - description: Filter by session mode.
-        in: query
-        name: session_type
-        required: false
-        default: interactive
-        schema:
-          $ref: "#/components/schemas/SessionType"
+        - description: Filter by session mode.
+          in: query
+          name: session_type
+          required: false
+          default: interactive
+          schema:
+            $ref: "#/components/schemas/SessionType"
       responses:
         "200":
           description: Information about the sessions
@@ -59,12 +59,12 @@ paths:
     get:
       summary: Get information about a specific session
       parameters:
-      - description: The id of the session
-        in: path
-        name: session_id
-        required: true
-        schema:
-          type: string
+        - description: The id of the session
+          in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
       responses:
         "200":
           description: Information about the session
@@ -78,12 +78,12 @@ paths:
         - sessions
     delete:
       parameters:
-      - description: The id of the session that should be deleted
-        in: path
-        name: session_id
-        required: true
-        schema:
-          type: string
+        - description: The id of the session that should be deleted
+          in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
       summary: Fully remove a session
       responses:
         "204":
@@ -95,12 +95,12 @@ paths:
     patch:
       summary: Patch a session
       parameters:
-      - description: The id of the session
-        in: path
-        name: session_id
-        required: true
-        schema:
-          type: string
+        - description: The id of the session
+          in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -122,19 +122,19 @@ paths:
     get:
       summary: Get all logs from a specific session
       parameters:
-      - description: The id of the session
-        in: path
-        name: session_id
-        required: true
-        schema:
-          type: string
-      - description: The maximum number of most-recent lines to return for each container
-        in: query
-        name: max_lines
-        required: false
-        schema:
-          type: integer
-          default: 250
+        - description: The id of the session
+          in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+        - description: The maximum number of most-recent lines to return for each container
+          in: query
+          name: max_lines
+          required: false
+          schema:
+            type: integer
+            default: 250
       responses:
         "200":
           description: The session logs
@@ -150,13 +150,13 @@ paths:
     get:
       summary: Check if a session image exists
       parameters:
-      - description: The Docker image URL (tag included) that should be fetched.
-        in: query
-        name: image_url
-        required: true
-        schema:
-          type: string
-          minLength: 1
+        - description: The Docker image URL (tag included) that should be fetched.
+          in: query
+          name: image_url
+          required: true
+          schema:
+            type: string
+            minLength: 1
       responses:
         "200":
           description: Information about the accessibility of the image
@@ -276,6 +276,11 @@ components:
           "$ref": "#/components/schemas/SessionStatus"
         url:
           type: string
+          description: The direct URL of a session
+        external_url:
+          type: string
+          nullable: true
+          description: The URL to use for external access to a session (usually the UI page)
         project_id:
           $ref: "#/components/schemas/Ulid"
         launcher_id:
@@ -316,8 +321,8 @@ components:
           type: integer
         state:
           enum:
-          - running
-          - hibernated
+            - running
+            - hibernated
           type: string
         lastInteraction:
           oneOf:
@@ -326,19 +331,19 @@ components:
             - "$ref": "#/components/schemas/CurrentTime"
     CurrentTime:
       type: string
-      enum: [ "now" ]
+      enum: ["now"]
     SessionStatus:
       properties:
         message:
           type: string
         state:
           enum:
-          - running
-          - starting
-          - stopping
-          - failed
-          - hibernated
-          - succeeded
+            - running
+            - starting
+            - stopping
+            - failed
+            - hibernated
+            - succeeded
           type: string
         will_hibernate_at:
           format: date-time
@@ -355,9 +360,9 @@ components:
           type: integer
           minimum: 0
       required:
-      - state
-      - ready_containers
-      - total_containers
+        - state
+        - ready_containers
+        - total_containers
       type: object
     SessionResources:
       properties:
@@ -451,7 +456,7 @@ components:
       # The actual limit from k8s is 63 characters but we leave some leeway in case we need to make changes
       # Note that changing this should be compatible with the methods that generate server names in the code
       maxLength: 50
-      pattern: '^[a-z]([-a-z0-9]*[a-z0-9])?$'
+      pattern: "^[a-z]([-a-z0-9]*[a-z0-9])?$"
       example: d185e68d-d43-renku-2-b9ac279a4e8a85ac28d08
     SubmissionId:
       type: string
