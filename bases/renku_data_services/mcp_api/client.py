@@ -10,6 +10,16 @@ import httpx
 
 DEFAULT_TIMEOUT = 30.0
 
+# Built once at import rather than per client. httpx builds one for every client it creates,
+# and parsing the CA bundle costs ~14ms — nearly the entire cost of creating a client, and
+# more than many of these requests spend on the wire. Sharing a context is safe and standard;
+# sharing a whole client would not be, since its cookie jar would carry state between users.
+#
+# httpx's own helper rather than ssl.create_default_context: it honours SSL_CERT_FILE and
+# SSL_CERT_DIR, which is how a deployment with an internal CA supplies its bundle, and falls
+# back to certifi otherwise. Pinning certifi here would ignore that and break those clusters.
+_SSL_CONTEXT = httpx.create_ssl_context()
+
 
 class ApiError(RuntimeError):
     """A call to the data API failed.
@@ -43,13 +53,19 @@ class RenkuApiClient:
         """An httpx client pointed at the data API, so callers pass only a path.
 
         A new one per request, as everywhere else in this repository that calls out over
-        HTTP. It carries no credentials: the server handles one user per request, so the
-        Authorization header is supplied at the call rather than baked in here.
+        HTTP, and reusing the shared SSL context so that costs almost nothing. Per-request
+        clients also keep the server stateless between users: one shared client would keep
+        one cookie jar, and a cookie set on one user's response would travel on the next
+        user's request.
+
+        It carries no credentials either — the Authorization header is supplied at the call
+        rather than baked in here.
         """
         return httpx.AsyncClient(
             base_url=f"{self.base_url}/api/data",
             headers={"Content-Type": "application/json", "Accept": "application/json"},
             timeout=self.timeout,
+            verify=_SSL_CONTEXT,
         )
 
     async def request(
