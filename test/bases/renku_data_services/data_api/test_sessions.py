@@ -17,6 +17,7 @@ from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.constants import BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX, BUILD_RUN_GVK
 from renku_data_services.session.models import EnvVar
 from renku_data_services.users.models import UserInfo
+from test.bases.renku_data_services.data_api.utils import merge_headers
 from test.utils import KindCluster, MemberContext
 
 BuildRun = new_class(
@@ -106,6 +107,367 @@ def test_insecure_registries_handling(monkeypatch, private_registries, private_p
             _ = BuildsConfig.from_env()
     else:
         _ = BuildsConfig.from_env()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("data_connector_policy_name"), [None, "readOnly", "readWrite", "excluded"])
+@pytest.mark.parametrize(("secret_slot_policy_name"), [None, "excluded", "included"])
+@pytest.mark.xdist_group("sessions")
+async def test_launcher_restrictions_basic(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_session_launcher,
+    create_session_secret_slot,
+    create_data_connector_and_link_project,
+    secret_slot_policy_name: str,
+    data_connector_policy_name: str,
+) -> None:
+    launcher_ids: set[str] = set()
+    secret_slot_ids: set[str] = set()
+    data_connector_link_ids: set[str] = set()
+    project = await create_project(sanic_client, "Some project")
+
+    if secret_slot_policy_name is not None:
+        for i in range(0, 2):
+            secret_slot = await create_session_secret_slot(project_id=project["id"], filename=f"test_secret_{i}")
+            secret_slot_ids.add(secret_slot["id"])
+
+    # Create a read-write data connector
+    if data_connector_policy_name is not None:
+        storage_config = {
+            "configuration": {
+                "type": "s3",
+                "provider": "AWS",
+                "region": "us-east-1",
+            },
+            "source_path": "bucket/my-folder",
+            "target_path": "my/target",
+            "readonly": False,
+        }
+        for i in range(0, 2):
+            _, data_connector_link = await create_data_connector_and_link_project(
+                project_id=project["id"], name=f"data_connector_{i}", storage=storage_config,
+            )
+            data_connector_link_ids.add(data_connector_link["id"])
+
+    # Create two or more launchers, each can have separate policies
+    for i in range(0, 2):
+        launcher = await create_session_launcher(f"Launcher {i}", project_id=project["id"])
+        launcher_ids.add(launcher["id"])
+
+    for launcher_id in launcher_ids:
+        # launcher's is_restricted should be False
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher_id}", headers=user_headers)
+        assert res.json is not None
+        launcher_saved = res.json
+        assert not launcher_saved["is_restricted"]
+
+        # All secret slots defined at project level should be listed in the launcher secret policies
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher_id}/secrets", headers=user_headers)
+        assert res.status_code == 200, res.text
+        assert res.json is not None
+        launcher_secret_slot_policies = res.json
+        assert {
+            secret_slot_policy["secret_slot_id"] for secret_slot_policy in launcher_secret_slot_policies
+        } == secret_slot_ids
+
+        # All secret slots are "included" by default in the launcher
+        patch_secret_slot_policies = []
+        for secret_slot_policy in launcher_secret_slot_policies:
+            assert secret_slot_policy["policy"] == "included"
+            secret_slot_policy["policy"] = secret_slot_policy_name
+            patch_secret_slot_policies.append(secret_slot_policy)
+
+        # All secret slots policies can be independently modified for the launcher
+        _, res = await sanic_client.patch(
+            f"/api/data/session_launchers/{launcher_id}/secrets", headers=user_headers, json=patch_secret_slot_policies
+        )
+        assert res.status_code == 200, res.text
+        assert res.json is not None
+
+        # All secret slots modified for launcher should have their policies updated
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher_id}/secrets", headers=user_headers)
+        assert res.status_code == 200, res.text
+        assert res.json is not None
+        launcher_secret_slot_policies = res.json
+        assert {
+            secret_slot_policy["secret_slot_id"] for secret_slot_policy in launcher_secret_slot_policies
+        } == secret_slot_ids
+
+        for secret_slot_policy in launcher_secret_slot_policies:
+            assert secret_slot_policy["policy"] == secret_slot_policy_name
+
+        # All data connectors defined at project level should be listed in the launcher's policies
+        _, res = await sanic_client.get(
+            f"/api/data/session_launchers/{launcher_id}/data_connectors", headers=user_headers
+        )
+        assert res.status_code == 200, res.text
+        assert res.json is not None
+        launcher_dc_policies = res.json
+        assert {
+            dc_policy["data_connector_link_id"] for dc_policy in launcher_dc_policies
+        } == data_connector_link_ids
+
+        # All data connectors defined at project level should have maximum permission by default
+        patch_dc_policies = []
+        for patch_dc_policy in launcher_dc_policies:
+            assert patch_dc_policy["policy"] == "readWrite"
+            patch_dc_policy["policy"] = data_connector_policy_name
+            patch_dc_policies.append(patch_dc_policy)      
+
+        # All data connector policies can be independently modified for the launcher
+        _, res = await sanic_client.patch(
+            f"/api/data/session_launchers/{launcher_id}/data_connectors", headers=user_headers, json=patch_dc_policies
+        )
+        assert res.status_code == 200, res.text
+        assert res.json is not None
+
+        # All data connectors modified for launcher should have their policies updated
+        _, res = await sanic_client.get(
+            f"/api/data/session_launchers/{launcher_id}/data_connectors", headers=user_headers
+        )
+        assert res.status_code == 200, res.text
+        assert res.json is not None
+        launcher_dc_policies = res.json
+        assert {
+            dc_policy["data_connector_link_id"] for dc_policy in launcher_dc_policies
+        } == data_connector_link_ids
+
+        for launcher_dc_slot_policy in launcher_dc_policies:
+            assert launcher_dc_slot_policy["policy"] == data_connector_policy_name
+
+        # The launcher restriction flag should be properly updated
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher_id}", headers=user_headers)
+        assert res.json is not None
+        launcher_saved = res.json
+
+        if secret_slot_policy_name == 'excluded' or data_connector_policy_name in ['excluded', 'readOnly']:
+            assert launcher_saved["is_restricted"] == True
+        else:
+            assert launcher_saved["is_restricted"] == False
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_launcher_restrictions_readonly_data_connector(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_session_launcher,
+    create_data_connector_and_link_project,
+) -> None:
+    project = await create_project(sanic_client, "Some project")
+    launcher = await create_session_launcher(f"Some launcher", project_id=project["id"])
+    _, data_connector_link = await create_data_connector_and_link_project(
+        project_id=project["id"], name=f"Some data connector",
+    )
+
+    # Read-only data connector can be excluded by launcher
+    patch_dc_policy = {
+        "launcher_id": launcher["id"],
+        "data_connector_link_id": data_connector_link["id"],
+        "policy": "excluded",
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=user_headers, json=[patch_dc_policy],
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    dc_policy = res.json[0]
+    assert dc_policy["policy"] == "excluded"
+
+    # Launcher must be restricted if a data connector is excluded for launcher
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    assert res.json is not None
+    launcher_saved = res.json
+    assert launcher_saved["is_restricted"] == True
+
+    # Excluded data connector connector can be made read-only for launcher
+    patch_dc_policy["policy"] = "readOnly"
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=user_headers, json=[patch_dc_policy],
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    dc_policy = res.json[0]
+    assert dc_policy["policy"] == "readOnly"
+
+    # Launcher is unrestricted if read-only data connector is made read-only for launcher
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    assert res.json is not None
+    launcher_saved = res.json
+    assert launcher_saved["is_restricted"] == False
+
+    # Read only data connector cannot be made rear write
+    patch_dc_policy["policy"] = "readWrite"
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=user_headers, json=[patch_dc_policy],
+    )
+    assert res.status_code == 422, res.text
+
+    # Data connector policy should be unchanged for launcher after failed attempt to escalate permissions.
+    _, res = await sanic_client.get(
+        f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=user_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    dc_policy = res.json[0]
+    assert dc_policy["policy"] == "readOnly"
+
+    # launcher is restricted when a read-only connector is made read-write and it was made read-only for launcher.
+    _, res = await sanic_client.get(
+        f"/api/data/data_connectors/{data_connector_link["data_connector_id"]}", headers=user_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    data_connector = res.json
+    patch_headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
+    patch = {"storage": {"readonly": False}}
+    _, res = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_link["data_connector_id"]}", headers=patch_headers, json=patch,
+    )
+    assert res.status_code == 200, res.text
+
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    assert res.json is not None
+    launcher_saved = res.json
+    assert launcher_saved["is_restricted"] == True
+
+    # launcher restriction flag must be False when restricted data connector is deleted
+    _, res = await sanic_client.delete(
+        f"/api/data/data_connectors/{data_connector_link["data_connector_id"]}", headers=user_headers,
+    )
+    assert res.status_code == 204, res.text
+
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    assert res.json is not None
+    launcher_saved = res.json
+    assert launcher_saved["is_restricted"] == False
+
+    # Data connector should not be listed after deletion
+    _, res = await sanic_client.get(
+        f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=user_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert len(res.json) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_launcher_restrictions_delete_secrets(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_session_launcher,
+    create_session_secret_slot,
+) -> None:
+    project = await create_project(sanic_client, "Some project")
+    launcher = await create_session_launcher(f"Some launcher", project_id=project["id"])
+    secret_slot = await create_session_secret_slot("SuperSecret",  project_id=project["id"])
+
+    patch_secret_slot_policy = {
+        "launcher_id": launcher["id"],
+        "secret_slot_id": secret_slot["id"],
+        "policy": "excluded",
+    }
+
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher["id"]}/secrets", headers=user_headers, json=[patch_secret_slot_policy],
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    secret_slot_policy = res.json[0]
+    assert secret_slot_policy["policy"] == "excluded"
+
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    assert res.json is not None
+    launcher_saved = res.json
+    assert launcher_saved["is_restricted"] == True
+
+    _, res = await sanic_client.delete(f"/api/data/session_secret_slots/{secret_slot["id"]}", headers=user_headers)
+    assert res.status_code == 204, res.text
+
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    assert res.json is not None
+    launcher_saved = res.json
+    assert launcher_saved["is_restricted"] == False
+
+    # Secrets should not be listed after deletion
+    _, res = await sanic_client.get(
+        f"/api/data/session_launchers/{launcher["id"]}/secrets", headers=user_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert len(res.json) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_launcher_restrictions_lower_data_connector_permissions(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_session_launcher,
+    create_data_connector_and_link_project,
+) -> None:
+    project = await create_project(sanic_client, "Some project")
+    launcher = await create_session_launcher(f"Some launcher", project_id=project["id"])
+
+    storage_config = {
+        "configuration": {
+            "type": "s3",
+            "provider": "AWS",
+            "region": "us-east-1",
+        },
+        "source_path": "bucket/my-folder",
+        "target_path": "my/target",
+        "readonly": False,
+    }
+    _, data_connector_link = await create_data_connector_and_link_project(
+        project_id=project["id"], name=f"Some data connector", storage=storage_config,
+    )
+
+    patch_dc_policy = {
+        "launcher_id": launcher["id"],
+        "data_connector_link_id": data_connector_link["id"],
+        "policy": "readWrite",
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=user_headers, json=[patch_dc_policy],
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    dc_policy = res.json[0]
+    assert dc_policy["policy"] == "readWrite"
+
+    # launcher policy is downgraded if read-write only connector is made read-only
+    _, res = await sanic_client.get(
+        f"/api/data/data_connectors/{data_connector_link["data_connector_id"]}", headers=user_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    data_connector = res.json
+    patch_headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
+    patch = {"storage": {"readonly": True}}
+    _, res = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_link["data_connector_id"]}", headers=patch_headers, json=patch,
+    )
+    assert res.status_code == 200, res.text
+
+    _, res = await sanic_client.get(
+        f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=user_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    dc_policy = res.json[0]
+    assert dc_policy["policy"] == "readOnly"
+
+    # Launcher policy should be unrestricted
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    assert res.json is not None
+    launcher_saved = res.json
+    assert launcher_saved["is_restricted"] == False
 
 
 @pytest.mark.asyncio

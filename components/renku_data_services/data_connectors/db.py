@@ -1222,6 +1222,7 @@ class DataConnectorRepository:
                     project_id=project_id,
                     policy=policy,
                 )
+                dc_link.data_connector_to_project_link = project_dc_links[patch.data_connector_link_id]
                 session.add(dc_link)
             else:
                 dc_link.policy = policy
