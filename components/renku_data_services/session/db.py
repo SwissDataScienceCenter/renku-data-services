@@ -1784,17 +1784,17 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 )
             )
 
-            launcher_repository = {repo.repository_id: repo for repo in result.all()}
+            launcher_repositories = {repo.repository_id: repo for repo in result.all()}
 
             result = await session.scalars(
                 select(ProjectRepositoryORM).where(ProjectRepositoryORM.project_id == project_id)
             )
 
-            project_repository_ids = {repo.id for repo in result}
+            project_repositories = {repo.id: repo for repo in result}
 
-            patch_repositories_ids = {patch.repository_id for patch in patches}
+            patch_repositoriy_ids = {patch.repository_id for patch in patches}
 
-            invalid_repository_ids = patch_repositories_ids - project_repository_ids
+            invalid_repository_ids = patch_repositoriy_ids - set(project_repositories.keys())
 
             if invalid_repository_ids:
                 raise errors.ValidationError(
@@ -1804,27 +1804,31 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             updated: list[schemas.SessionLauncherRepositoryORM] = []
 
             for patch in patches:
-                repo = launcher_repository.get(patch.repository_id)
+                launcher_repo = launcher_repositories.get(patch.repository_id)
                 policy = patch.policy or models.SessionLauncherRepositoryPolicyName.excluded
 
-                if repo is None:
-                    repo = schemas.SessionLauncherRepositoryORM(
+                policy_data = {
+                    "policy": policy.value,
+                    "writable_references": (
+                        [reference.root for reference in patch.writable_references]
+                        if patch.writable_references
+                        else None
+                    ),
+                }
+
+                if launcher_repo is None:
+                    launcher_repo = schemas.SessionLauncherRepositoryORM(
                         # project_id=launcher.project_id,
                         launcher_id=launcher.id,
                         repository_id=patch.repository_id,
-                        policy={
-                            "policy": policy,
-                            "writable_references": patch.writable_references,
-                        },
+                        policy=policy_data,
                     )
-                    session.add(repo)
+                    launcher_repo.repository = project_repositories[patch.repository_id]
+                    session.add(launcher_repo)
                 else:
-                    repo.policy = {
-                        "policy": policy,
-                        "writable_references": patch.writable_references,
-                    }
+                    launcher_repo.policy = policy_data
 
-                updated.append(repo)
+                updated.append(launcher_repo)
 
             await session.flush()
 

@@ -407,9 +407,14 @@ def validate_session_launcher_repositories_patch(
     patches: apispec.SessionLauncherRepositoryPatchList,
 ) -> list[models.SessionLauncherRepositoryPatch]:
     """Validate the update to the repositories of a session launcher."""
+    if any(
+        patch.writable_references and not models.SessionLauncherRepositoryPolicyName(patch.policy).requires_write_access
+        for patch in patches.root
+    ):
+        raise errors.ValidationError(message="Cannot use 'writable_references' with a non-writable repository.")
     return [
         models.SessionLauncherRepositoryPatch(
-            repository_id=ULID.from_str(patch.repository_id),
+            repository_id=patch.repository_id,
             policy=models.SessionLauncherRepositoryPolicyName(patch.policy),
             writable_references=patch.writable_references,
         )

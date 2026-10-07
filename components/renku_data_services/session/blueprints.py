@@ -247,7 +247,7 @@ class SessionLaunchersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(json=apispec.SessionLauncherSecretPatchList)
+        @validate(json=apispec.SessionLauncherRepositoryPatchList)
         async def _patch_repositories(
             request: Request,
             user: base_models.APIUser,
@@ -255,12 +255,12 @@ class SessionLaunchersBP(CustomBlueprint):
             body: apispec.SessionLauncherRepositoryPatchList,
         ) -> JSONResponse:
             current_launcher = await self.session_repo.get_launcher(user, launcher_id)
-            secrets = await self.session_repo.update_launcher_repositories(
+            repositories = await self.session_repo.update_launcher_repositories(
                 user=user,
                 launcher=current_launcher,
                 patches=validate_session_launcher_repositories_patch(body),
             )
-            return validated_json(apispec.SessionLauncherRepositoryList, secrets)
+            return validated_json(apispec.SessionLauncherRepositoryList, repositories)
 
         return "/session_launchers/<launcher_id:ulid>/repositories", ["PATCH"], _patch_repositories
 
