@@ -489,7 +489,7 @@ class SessionLauncherRepositoryPolicy:
     """Model to represent a session launcher repository policy."""
 
     policy: SessionLauncherRepositoryPolicyName | None
-    writable_references: list[str] | None = None
+    writable_references: list[apispec.GitReference] | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -497,6 +497,13 @@ class SessionLauncherRepository(SessionLauncherRepositoryPolicy):
     """Model to represent a repository and its access policies for a launcher."""
 
     launcher_id: ULID
+    repository_id: int
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherRepositoryPatch(SessionLauncherRepositoryPolicy):
+    """Model to patch a repository and its access policies for a launcher."""
+
     repository_id: int
 
 

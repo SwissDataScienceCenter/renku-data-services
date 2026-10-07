@@ -21,7 +21,7 @@ from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.data_connectors.orm import DataConnectorORM, DataConnectorToProjectLinkORM
 from renku_data_services.project.apispec import Visibility as ProjectVisibility
 from renku_data_services.project.models import SessionSecret
-from renku_data_services.project.orm import SessionSecretORM, SessionSecretSlotORM
+from renku_data_services.project.orm import ProjectRepositoryORM, SessionSecretORM, SessionSecretSlotORM
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata, RepositoryVisibility
 from renku_data_services.secrets.orm import SecretORM
@@ -1693,3 +1693,131 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             secrets = result.all()
 
             return [s.dump() for s in secrets]
+
+    async def get_all_repositories_from_launcher(
+        self, user: base_models.APIUser, launcher: models.SessionLauncher
+    ) -> list[models.SessionLauncherRepository]:
+        """Get the repository parameters of a launcher entry."""
+
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # Get project, get project id, check if the project id is authorized
+        # Check that the user is allowed to access the project
+        authorized = await self.project_authz.has_permission(
+            user, ResourceType.project, launcher.project_id, Scope.READ
+        )
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{launcher.project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(
+                    ProjectRepositoryORM,
+                    func.coalesce(
+                        schemas.SessionLauncherSecretORM.policy,
+                        {"policy": models.SessionLauncherRepositoryPolicyName.read_write},
+                    ).label("policy"),
+                )
+                .where(ProjectRepositoryORM.project_id == launcher.project_id)
+                .outerjoin(
+                    schemas.SessionLauncherRepositoryORM,
+                    and_(
+                        schemas.SessionLauncherRepositoryORM.launcher_id == launcher.id,
+                        schemas.SessionLauncherRepositoryORM.launcher_id == ProjectRepositoryORM.id,
+                    ),
+                )
+                .order_by(ProjectRepositoryORM.id.desc())
+            )
+
+            return [
+                models.SessionLauncherRepository(
+                    launcher_id=launcher.id,
+                    repository_id=repository_link.id,
+                    policy=models.SessionLauncherRepositoryPolicyName.safe_parse(
+                        policy.get("policy"),
+                        models.SessionLauncherRepositoryPolicyName.excluded,
+                    ),
+                    writable_references=policy.get("writeable_references"),
+                )
+                for repository_link, policy in result.all()
+            ]
+
+    async def update_launcher_repositories(
+        self,
+        user: base_models.APIUser,
+        launcher: models.SessionLauncher,
+        patches: list[models.SessionLauncherRepositoryPatch],
+    ) -> list[models.SessionLauncherRepository]:
+        """Patch the repository parameters of the session launcher."""
+
+        project_id = launcher.project_id
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        repository_ids = [patch.repository_id for patch in patches]
+
+        if len(repository_ids) != len(set(repository_ids)):
+            raise errors.ValidationError(message="A repository may only appear once in the list.")
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.SessionLauncherRepositoryORM).where(
+                    schemas.SessionLauncherRepositoryORM.launcher_id == launcher.id
+                )
+            )
+
+            launcher_repository = {repo.repository_id: repo for repo in result.all()}
+
+            result = await session.scalars(
+                select(ProjectRepositoryORM).where(ProjectRepositoryORM.project_id == project_id)
+            )
+
+            project_repository_ids = {repo.id for repo in result}
+
+            patch_repositories_ids = {patch.repository_id for patch in patches}
+
+            invalid_repository_ids = patch_repositories_ids - project_repository_ids
+
+            if invalid_repository_ids:
+                raise errors.ValidationError(
+                    message=f"Repository links {invalid_repository_ids} do not belong to project {project_id}."
+                )
+
+            updated: list[schemas.SessionLauncherRepositoryORM] = []
+
+            for patch in patches:
+                repo = launcher_repository.get(patch.repository_id)
+                policy = patch.policy or models.SessionLauncherRepositoryPolicyName.excluded
+
+                if repo is None:
+                    repo = schemas.SessionLauncherRepositoryORM(
+                        # project_id=launcher.project_id,
+                        launcher_id=launcher.id,
+                        repository_id=patch.repository_id,
+                        policy={
+                            "policy": policy,
+                            "writable_references": patch.writable_references,
+                        },
+                    )
+                    session.add(repo)
+                else:
+                    repo.policy = {
+                        "policy": policy,
+                        "writable_references": patch.writable_references,
+                    }
+
+                updated.append(repo)
+
+            await session.flush()
+
+        return [repo.dump() for repo in updated]

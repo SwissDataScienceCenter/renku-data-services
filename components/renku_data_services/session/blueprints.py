@@ -18,6 +18,7 @@ from renku_data_services.session.core import (
     validate_build_patch,
     validate_environment_patch,
     validate_session_launcher_patch,
+    validate_session_launcher_repositories_patch,
     validate_session_launcher_secrets_patch,
     validate_unsaved_build,
     validate_unsaved_environment,
@@ -227,6 +228,41 @@ class SessionLaunchersBP(CustomBlueprint):
             return validated_json(apispec.SessionLauncherSecretList, secrets)
 
         return "/session_launchers/<launcher_id:ulid>/secrets", ["PATCH"], _patch_secrets
+
+    def get_launcher_repositories(self) -> BlueprintFactoryResponse:
+        """Get all repositories and their access policy parameters for the launcher."""
+
+        @authenticate(self.authenticator)
+        async def _get_repos(_: Request, user: base_models.APIUser, launcher_id: ULID) -> JSONResponse:
+            current_launcher = await self.session_repo.get_launcher(user, launcher_id)
+            repositories = await self.session_repo.get_all_repositories_from_launcher(
+                user=user, launcher=current_launcher
+            )
+            return validated_json(apispec.SessionLauncherRepositoryList, repositories)
+
+        return "/session_launchers/<launcher_id:ulid>/repositories", ["GET"], _get_repos
+
+    def update_launcher_repositories(self) -> BlueprintFactoryResponse:
+        """Update the repository access policies for the launcher."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.SessionLauncherSecretPatchList)
+        async def _patch_repositories(
+            request: Request,
+            user: base_models.APIUser,
+            launcher_id: ULID,
+            body: apispec.SessionLauncherRepositoryPatchList,
+        ) -> JSONResponse:
+            current_launcher = await self.session_repo.get_launcher(user, launcher_id)
+            secrets = await self.session_repo.update_launcher_repositories(
+                user=user,
+                launcher=current_launcher,
+                patches=validate_session_launcher_repositories_patch(body),
+            )
+            return validated_json(apispec.SessionLauncherRepositoryList, secrets)
+
+        return "/session_launchers/<launcher_id:ulid>/repositories", ["PATCH"], _patch_repositories
 
 
 @dataclass(kw_only=True)

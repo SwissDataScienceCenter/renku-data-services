@@ -403,6 +403,20 @@ def validate_session_launcher_secrets_patch(
     ]
 
 
+def validate_session_launcher_repositories_patch(
+    patches: apispec.SessionLauncherRepositoryPatchList,
+) -> list[models.SessionLauncherRepositoryPatch]:
+    """Validate the update to the repositories of a session launcher."""
+    return [
+        models.SessionLauncherRepositoryPatch(
+            repository_id=ULID.from_str(patch.repository_id),
+            policy=models.SessionLauncherRepositoryPolicyName(patch.policy),
+            writable_references=patch.writable_references,
+        )
+        for patch in patches.root
+    ]
+
+
 def __validate_build_parameters_platforms(platforms: list[apispec.BuildPlatform] | None) -> list[models.Platform]:
     """Validate the platforms field for build parameters."""
     platforms_str_list: list[str] = [models.Platform.linux_amd64]
