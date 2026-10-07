@@ -22,8 +22,6 @@ from renku_data_services.resource_usage.model import (
     ResourcePoolLimits,
     ResourcePoolUsage,
     ResourcesRequest,
-    ResourceUsageQuery,
-    ResourceUsageSummary,
 )
 
 if TYPE_CHECKING:
@@ -197,12 +195,18 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
 class ResourceUsageService:
     """Queries for resource usages."""
 
-    def __init__(self, repo: ResourceRequestsRepo) -> None:
+    def __init__(self, repo: ResourceRequestsRepo, metering_client: ResourceUsageMetering | None = None) -> None:
         self._repo = repo
+        if metering_client is None:
+            logger.warning(
+                "No metering client configured, resource usage will not be queried from the metering service."
+            )
+
+        self._metering_client = metering_client
 
     async def usage_of_running_week(
         self, resource_pool_id: int, user_id: str | None, current_time: datetime | None = None
-    ) -> ResourceUsageSummary:
+    ) -> float:
         """Return the resource usage for the given pool of the currently running week.
 
         The week start is Monday 0:00 UTC. Resource usage is returned in 'credits'. When a user_id
@@ -212,23 +216,16 @@ class ResourceUsageService:
         """
         now = current_time.replace(tzinfo=UTC) if current_time is not None else datetime.now(UTC)
         start = (now - timedelta(days=now.weekday())).date()
-        query = ResourceUsageQuery(since=start, until=now.date(), user_id=user_id, resource_pool_id=resource_pool_id)
-        result = ResourceUsageSummary.empty()
-        async for item in self._repo.find_usage(query):
-            result = result.add(item)
-
-        return result
+        return await self.usage_of_timespan(resource_pool_id, user_id, start, now.date())
 
     async def usage_of_timespan(
         self, resource_pool_id: int, user_id: str | None, start_date: date, end_date: date | None
-    ) -> ResourceUsageSummary:
+    ) -> float:
         """Return the resource usage for the given pool of the given timespan."""
-        until = end_date or datetime.now(UTC).date()
-        query = ResourceUsageQuery(since=start_date, until=until, user_id=user_id, resource_pool_id=resource_pool_id)
-        result = ResourceUsageSummary.empty()
-        async for item in self._repo.find_usage(query):
-            result = result.add(item)
+        if self._metering_client is None:
+            return 0.0
 
+        result = await self._metering_client.query_compute_usage(resource_pool_id, user_id, start_date, end_date)
         return result
 
     async def get_running_week(
