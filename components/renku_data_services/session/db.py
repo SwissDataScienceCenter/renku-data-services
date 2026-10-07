@@ -1745,6 +1745,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     models.SessionLauncherRepository(
                         launcher_id=launcher.id,
                         repository_id=repository_link.id,
+                        url=repository_link.url,
                         policy=policy_name,
                         writable_references=writeable_references,
                     )

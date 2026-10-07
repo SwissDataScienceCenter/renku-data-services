@@ -377,6 +377,7 @@ class SessionLauncherRepositoryORM(BaseORM):
             launcher_id=self.launcher_id,
             repository_id=self.repository_id,
             policy=self._policy,
+            url=self.repository.url,
             writable_references=self.policy.get("writable_references"),
         )
 

@@ -498,6 +498,7 @@ class SessionLauncherRepository(SessionLauncherRepositoryPolicy):
 
     launcher_id: ULID
     repository_id: int
+    url: str
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
