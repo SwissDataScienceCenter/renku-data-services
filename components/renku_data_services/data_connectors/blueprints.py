@@ -44,6 +44,7 @@ from renku_data_services.data_connectors.core import (
     validate_deposit,
     validate_deposit_patch,
     validate_deposit_status_change,
+    validate_session_launcher_dc_links_patch,
     validate_unsaved_data_connector,
 )
 from renku_data_services.data_connectors.db import (
@@ -56,6 +57,7 @@ from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.notebooks.data_sources import DataSourceRepository
+from renku_data_services.session import apispec as session_apispec
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -923,3 +925,37 @@ class DataConnectorsBP(CustomBlueprint):
             return validated_json(apispec.DepositLogs, output)
 
         return "/deposits/<deposit_id:ulid>/logs", ["GET"], _get_dc_deposit_logs
+
+    def get_dc_link_policies(self) -> BlueprintFactoryResponse:
+        """Get the data connector to project links with the launcher policies."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_dc_links(_: Request, user: base_models.AuthenticatedAPIUser, launcher_id: ULID) -> JSONResponse:
+            launcher_dc_links = await self.data_connector_repo.get_dc_link_policies_for_launcher(
+                user=user, launcher_id=launcher_id
+            )
+            return validated_json(session_apispec.SessionLauncherDataConnectorList, launcher_dc_links)
+
+        return "/session_launchers/<launcher_id:ulid>/data_connectors", ["GET"], _get_dc_links
+
+    def update_dc_link_policies(self) -> BlueprintFactoryResponse:
+        """Update the secret access policies for the launcher."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=session_apispec.SessionLauncherDataConnectorPatchList)
+        async def _patch_dc_links(
+            request: Request,
+            user: base_models.APIUser,
+            launcher_id: ULID,
+            body: session_apispec.SessionLauncherDataConnectorPatchList,
+        ) -> JSONResponse:
+            dc_links = await self.data_connector_repo.update_dc_link_policies_for_launcher(
+                user=user,
+                launcher_id=launcher_id,
+                patches=validate_session_launcher_dc_links_patch(body),
+            )
+            return validated_json(session_apispec.SessionLauncherDataConnectorList, dc_links)
+
+        return "/session_launchers/<launcher_id:ulid>/data_connectors", ["PATCH"], _patch_dc_links
