@@ -15,7 +15,11 @@ from renku_data_services import errors
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.constants import BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX, BUILD_RUN_GVK
-from renku_data_services.session.models import EnvVar
+from renku_data_services.session.models import (
+    EnvVar,
+    SessionLauncherDataConnectorPolicyName,
+    SessionLauncherSecretPolicyName,
+)
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import merge_headers
 from test.utils import KindCluster, MemberContext
@@ -110,8 +114,19 @@ def test_insecure_registries_handling(monkeypatch, private_registries, private_p
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("data_connector_policy_name"), [None, "readOnly", "readWrite", "excluded"])
-@pytest.mark.parametrize(("secret_slot_policy_name"), [None, "excluded", "included"])
+@pytest.mark.parametrize(
+    ("data_connector_policy_name"),
+    [
+        None,
+        SessionLauncherDataConnectorPolicyName.read_only,
+        SessionLauncherDataConnectorPolicyName.read_write,
+        SessionLauncherDataConnectorPolicyName.excluded,
+    ],
+)
+@pytest.mark.parametrize(
+    ("secret_slot_policy_name"),
+    [None, SessionLauncherSecretPolicyName.included, SessionLauncherSecretPolicyName.excluded],
+)
 @pytest.mark.xdist_group("sessions")
 async def test_launcher_restrictions_basic(
     sanic_client: SanicASGITestClient,
@@ -126,6 +141,13 @@ async def test_launcher_restrictions_basic(
     launcher_ids: set[str] = set()
     secret_slot_ids: set[str] = set()
     data_connector_link_ids: set[str] = set()
+
+    dc_RW = SessionLauncherDataConnectorPolicyName.read_write
+    dc_RO = SessionLauncherDataConnectorPolicyName.read_only
+    dc_EX = SessionLauncherDataConnectorPolicyName.excluded
+    sc_IN = SessionLauncherSecretPolicyName.included
+    sc_EX = SessionLauncherSecretPolicyName.excluded
+
     project = await create_project(sanic_client, "Some project")
 
     if secret_slot_policy_name is not None:
@@ -177,7 +199,7 @@ async def test_launcher_restrictions_basic(
         # All secret slots are "included" by default in the launcher
         patch_secret_slot_policies = []
         for secret_slot_policy in launcher_secret_slot_policies:
-            assert secret_slot_policy["policy"] == "included"
+            assert secret_slot_policy["policy"] == sc_IN
             secret_slot_policy["policy"] = secret_slot_policy_name
             patch_secret_slot_policies.append(secret_slot_policy)
 
@@ -212,7 +234,7 @@ async def test_launcher_restrictions_basic(
         # All data connectors defined at project level should have maximum permission by default
         patch_dc_policies = []
         for patch_dc_policy in launcher_dc_policies:
-            assert patch_dc_policy["policy"] == "readWrite"
+            assert patch_dc_policy["policy"] == dc_RW
             patch_dc_policy["policy"] = data_connector_policy_name
             patch_dc_policies.append(patch_dc_policy)
 
@@ -240,7 +262,7 @@ async def test_launcher_restrictions_basic(
         assert res.json is not None
         launcher_saved = res.json
 
-        if secret_slot_policy_name == "excluded" or data_connector_policy_name in ["excluded", "readOnly"]:
+        if secret_slot_policy_name == sc_EX or data_connector_policy_name in [dc_EX, dc_RO]:
             assert launcher_saved["is_restricted"]
         else:
             assert not launcher_saved["is_restricted"]
@@ -262,11 +284,15 @@ async def test_launcher_restrictions_readonly_data_connector(
         name="Some data connector",
     )
 
-    # Read-only data connector can be excluded by launcher
+    dc_RW = SessionLauncherDataConnectorPolicyName.read_write
+    dc_RO = SessionLauncherDataConnectorPolicyName.read_only
+    dc_EX = SessionLauncherDataConnectorPolicyName.excluded
+
+    # Read-only data connector can be excluded for launcher
     patch_dc_policy = {
         "launcher_id": launcher["id"],
         "data_connector_link_id": data_connector_link["id"],
-        "policy": "excluded",
+        "policy": dc_EX,
     }
     _, res = await sanic_client.patch(
         f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
@@ -276,7 +302,7 @@ async def test_launcher_restrictions_readonly_data_connector(
     assert res.status_code == 200, res.text
     assert res.json is not None
     dc_policy = res.json[0]
-    assert dc_policy["policy"] == "excluded"
+    assert dc_policy["policy"] == dc_EX
 
     # Launcher must be restricted if a data connector is excluded for launcher
     _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
@@ -285,7 +311,7 @@ async def test_launcher_restrictions_readonly_data_connector(
     assert launcher_saved["is_restricted"]
 
     # Excluded data connector connector can be made read-only for launcher
-    patch_dc_policy["policy"] = "readOnly"
+    patch_dc_policy["policy"] = dc_RO
     _, res = await sanic_client.patch(
         f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
         headers=user_headers,
@@ -294,7 +320,7 @@ async def test_launcher_restrictions_readonly_data_connector(
     assert res.status_code == 200, res.text
     assert res.json is not None
     dc_policy = res.json[0]
-    assert dc_policy["policy"] == "readOnly"
+    assert dc_policy["policy"] == dc_RO
 
     # Launcher is unrestricted if read-only data connector is made read-only for launcher
     _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
@@ -303,7 +329,7 @@ async def test_launcher_restrictions_readonly_data_connector(
     assert not launcher_saved["is_restricted"]
 
     # Read only data connector cannot be made rear write
-    patch_dc_policy["policy"] = "readWrite"
+    patch_dc_policy["policy"] = dc_RW
     _, res = await sanic_client.patch(
         f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
         headers=user_headers,
@@ -319,7 +345,7 @@ async def test_launcher_restrictions_readonly_data_connector(
     assert res.status_code == 200, res.text
     assert res.json is not None
     dc_policy = res.json[0]
-    assert dc_policy["policy"] == "readOnly"
+    assert dc_policy["policy"] == dc_RO
 
     # launcher is restricted when a read-only connector is made read-write and it was made read-only for launcher.
     _, res = await sanic_client.get(
@@ -378,10 +404,12 @@ async def test_launcher_restrictions_delete_secrets(
     launcher = await create_session_launcher("Some launcher", project_id=project["id"])
     secret_slot = await create_session_secret_slot("SuperSecret", project_id=project["id"])
 
+    sc_EX = SessionLauncherSecretPolicyName.excluded
+
     patch_secret_slot_policy = {
         "launcher_id": launcher["id"],
         "secret_slot_id": secret_slot["id"],
-        "policy": "excluded",
+        "policy": sc_EX,
     }
 
     _, res = await sanic_client.patch(
@@ -392,7 +420,7 @@ async def test_launcher_restrictions_delete_secrets(
     assert res.status_code == 200, res.text
     assert res.json is not None
     secret_slot_policy = res.json[0]
-    assert secret_slot_policy["policy"] == "excluded"
+    assert secret_slot_policy["policy"] == sc_EX
 
     _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
     assert res.json is not None
@@ -426,6 +454,9 @@ async def test_launcher_restrictions_lower_data_connector_permissions(
     create_session_launcher,
     create_data_connector_and_link_project,
 ) -> None:
+    dc_RO = SessionLauncherDataConnectorPolicyName.read_only
+    dc_RW = SessionLauncherDataConnectorPolicyName.read_write
+
     project = await create_project(sanic_client, "Some project")
     launcher = await create_session_launcher("Some launcher", project_id=project["id"])
 
@@ -448,7 +479,7 @@ async def test_launcher_restrictions_lower_data_connector_permissions(
     patch_dc_policy = {
         "launcher_id": launcher["id"],
         "data_connector_link_id": data_connector_link["id"],
-        "policy": "readWrite",
+        "policy": dc_RW,
     }
     _, res = await sanic_client.patch(
         f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
@@ -458,9 +489,9 @@ async def test_launcher_restrictions_lower_data_connector_permissions(
     assert res.status_code == 200, res.text
     assert res.json is not None
     dc_policy = res.json[0]
-    assert dc_policy["policy"] == "readWrite"
+    assert dc_policy["policy"] == dc_RW
 
-    # launcher policy is downgraded if read-write only connector is made read-only
+    # launcher policy is downgraded to read-only if data connector is made read-only
     _, res = await sanic_client.get(
         f"/api/data/data_connectors/{data_connector_link["data_connector_id"]}",
         headers=user_headers,
@@ -484,9 +515,9 @@ async def test_launcher_restrictions_lower_data_connector_permissions(
     assert res.status_code == 200, res.text
     assert res.json is not None
     dc_policy = res.json[0]
-    assert dc_policy["policy"] == "readOnly"
+    assert dc_policy["policy"] == dc_RO
 
-    # Launcher policy should be unrestricted
+    # Launcher should be unrestricted after downgrading the data connector permission
     _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
     assert res.json is not None
     launcher_saved = res.json

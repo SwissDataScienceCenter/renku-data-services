@@ -475,6 +475,13 @@ class SessionLauncherSecretORM(BaseORM):
 
     secret_slot_id: Mapped[ULID] = mapped_column(ULIDType, primary_key=True, index=True)
 
+    secret_slot: Mapped[SessionSecretSlotORM] = relationship(
+        init=False,
+        repr=False,
+        viewonly=True,
+        lazy="selectin",
+    )
+
     project_id: Mapped[ULID] = mapped_column(ULIDType, nullable=False, index=True)
 
     policy: Mapped[str] = mapped_column(String(), nullable=False)
