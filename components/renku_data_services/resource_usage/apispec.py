@@ -94,6 +94,6 @@ class ResourcePoolUsage(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
     )
-    total_usage: ResourceUsageSummary
-    user_usage: ResourceUsageSummary
+    total_usage: float
+    user_usage: float
     pool_limits: ResourcePoolLimits

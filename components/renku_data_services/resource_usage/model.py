@@ -653,6 +653,6 @@ class ResourceUsageSummary:
 class ResourcePoolUsage:
     """Overview of a resource pool in context of a user."""
 
-    total_usage: ResourceUsageSummary
-    user_usage: ResourceUsageSummary
+    total_usage: float
+    user_usage: float
     pool_limits: ResourcePoolLimits

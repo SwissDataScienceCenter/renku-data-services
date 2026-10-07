@@ -167,17 +167,13 @@ class ResourceUsageBP(CustomBlueprint):
                 result = await self.rr_svc.get_running_week(resource_pool_id, requested_by or "")
             if result:
                 output = apispec.ResourcePoolUsage(
-                    total_usage=apispec.ResourceUsageSummary(
-                        runtime=result.total_usage.runtime_hours, cost=result.total_usage.cost.value
-                    ),
+                    total_usage=result.total_usage,
                     pool_limits=apispec.ResourcePoolLimits(
                         pool_id=result.pool_limits.pool_id,
                         total_limit=result.pool_limits.total_limit.value,
                         user_limit=result.pool_limits.user_limit.value,
                     ),
-                    user_usage=apispec.ResourceUsageSummary(
-                        runtime=result.user_usage.runtime_hours, cost=result.user_usage.cost.value
-                    ),
+                    user_usage=result.user_usage,
                 )
                 return validated_json(
                     apispec.ResourcePoolUsage,
