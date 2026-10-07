@@ -1713,7 +1713,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             )
 
         async with self.session_maker() as session:
-            result = await session.scalars(
+            result = await session.execute(
                 select(
                     ProjectRepositoryORM,
                     func.coalesce(
@@ -1726,7 +1726,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     schemas.SessionLauncherRepositoryORM,
                     and_(
                         schemas.SessionLauncherRepositoryORM.launcher_id == launcher.id,
-                        schemas.SessionLauncherRepositoryORM.launcher_id == ProjectRepositoryORM.id,
+                        schemas.SessionLauncherRepositoryORM.repository_id == ProjectRepositoryORM.id,
                     ),
                 )
                 .order_by(ProjectRepositoryORM.id.desc())
