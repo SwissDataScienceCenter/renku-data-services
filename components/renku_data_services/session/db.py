@@ -1717,7 +1717,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 select(
                     ProjectRepositoryORM,
                     func.coalesce(
-                        schemas.SessionLauncherSecretORM.policy,
+                        schemas.SessionLauncherRepositoryORM.policy,
                         {"policy": models.SessionLauncherRepositoryPolicyName.read_write},
                     ).label("policy"),
                 )
