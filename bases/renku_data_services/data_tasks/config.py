@@ -9,6 +9,7 @@ from renku_data_services.app_config.config import KeycloakConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.persisted_logs.config import PersistedLogsConfig
+from renku_data_services.resource_usage.config import OpenMeterConfig
 from renku_data_services.solr.solr_client import SolrClientConfig
 
 
@@ -32,24 +33,6 @@ class PosthogConfig:
         environment = os.environ.get("POSTHOG_ENVIRONMENT", "development")
 
         return cls(enabled, api_key, host, environment)
-
-
-@dataclass
-class OpenMeterConfig:
-    """Configuration for the OpenMeter metering endpoint."""
-
-    enabled: bool
-    endpoint_url: str
-    token: str
-
-    @classmethod
-    def from_env(cls) -> OpenMeterConfig:
-        """Create OpenMeter config from environment variables."""
-        return cls(
-            enabled=os.environ.get("OPENMETER_ENABLED", "false").lower() == "true",
-            endpoint_url=os.environ.get("OPENMETER_ENDPOINT_URL", ""),
-            token=os.environ.get("OPENMETER_API_TOKEN", ""),
-        )
 
 
 @dataclass
@@ -88,7 +71,6 @@ class Config:
         main_tick = int(os.environ.get("MAIN_LOG_INTERVAL_SECONDS", "300"))
         solr_config = SolrClientConfig.from_env()
         posthog_config = PosthogConfig.from_env()
-        openmeter_config = OpenMeterConfig.from_env()
         tcp_host = os.environ.get("TCP_HOST", "127.0.0.1")
         tcp_port = int(os.environ.get("TCP_PORT", "8001"))
 
@@ -112,7 +94,7 @@ class Config:
             main_log_interval_seconds=main_tick,
             solr=solr_config,
             posthog=posthog_config,
-            openmeter=openmeter_config,
+            openmeter=OpenMeterConfig.from_env(),
             authz=authz,
             keycloak=keycloak,
             persisted_logs=PersistedLogsConfig.from_env(namespace=k8s_namespace),

@@ -905,7 +905,7 @@ async def _check_quota(resource_usage_service: ResourceUsageService, resource_po
     if total_quota <= 0:
         return
 
-    if usage.user_usage.cost.value >= total_quota:
+    if usage.user_usage >= total_quota:
         raise errors.ValidationError(
             message="Cannot start the session because your quota in the selected resource pool is exhausted."
         )

@@ -497,7 +497,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
             if total_quota <= 0:
                 continue
 
-            usage_p = (usage.user_usage.cost.value / total_quota) * 100
+            usage_p = (usage.user_usage / total_quota) * 100
             usage_threshold_p = 100 - dm.config.session_quota_alert_remaining_threshold_p
             if usage_p <= usage_threshold_p:
                 continue
@@ -505,7 +505,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
             # NOTE: Without the resource_class_id, we cannot calculate the remaining time or know if quota is enforced
             # on the resource class
             if resource_class_id:
-                if usage.user_usage.cost.value >= total_quota:
+                if usage.user_usage >= total_quota:
                     message = f"Your session {session_name} in resource pool {resource_pool_id} has exhausted its quota"
                     log_message = (
                         f"Session {session_name} for user {user_id} has exhausted its quota in resource pool "
@@ -537,7 +537,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
                 )
 
                 if resource_class_cost and resource_class_cost.cost.value > 0:
-                    remaining_credits = total_quota - usage.user_usage.cost.value
+                    remaining_credits = total_quota - usage.user_usage
                     remaining_minutes = (remaining_credits / resource_class_cost.cost.value) * 60
                     if remaining_minutes < dm.config.session_quota_alert_critical_m:
                         critical_alert = UnsavedAlert(
