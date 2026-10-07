@@ -1716,10 +1716,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             result = await session.execute(
                 select(
                     ProjectRepositoryORM,
-                    func.coalesce(
-                        schemas.SessionLauncherRepositoryORM.policy,
-                        {"policy": models.SessionLauncherRepositoryPolicyName.read_write},
-                    ).label("policy"),
+                    schemas.SessionLauncherRepositoryORM.policy,
                 )
                 .where(ProjectRepositoryORM.project_id == launcher.project_id)
                 .outerjoin(
@@ -1732,18 +1729,28 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 .order_by(ProjectRepositoryORM.id.desc())
             )
 
-            return [
-                models.SessionLauncherRepository(
-                    launcher_id=launcher.id,
-                    repository_id=repository_link.id,
-                    policy=models.SessionLauncherRepositoryPolicyName.safe_parse(
-                        policy.get("policy"),
-                        models.SessionLauncherRepositoryPolicyName.excluded,
-                    ),
-                    writable_references=policy.get("writeable_references"),
+            launcher_repos: list[models.SessionLauncherRepository] = []
+            for repository_link, policy in result.all():
+                if policy is None:
+                    policy_name = models.SessionLauncherRepositoryPolicyName.read_write
+                    writeable_references = None
+                else:
+                    policy_name = (
+                        models.SessionLauncherRepositoryPolicyName.safe_parse(policy["policy"])
+                        or models.SessionLauncherRepositoryPolicyName.excluded
+                    )
+                    writeable_references = policy.get("writeable_references")
+
+                launcher_repos.append(
+                    models.SessionLauncherRepository(
+                        launcher_id=launcher.id,
+                        repository_id=repository_link.id,
+                        policy=policy_name,
+                        writable_references=writeable_references,
+                    )
                 )
-                for repository_link, policy in result.all()
-            ]
+
+            return launcher_repos
 
     async def update_launcher_repositories(
         self,
