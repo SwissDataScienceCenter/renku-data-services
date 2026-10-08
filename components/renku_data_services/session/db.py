@@ -458,12 +458,23 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 .exists()
             )
 
+            repositories_restricted = (
+                select(1)
+                .select_from(schemas.SessionLauncherRepositoryORM)
+                .where(
+                    schemas.SessionLauncherRepositoryORM.launcher_id == schemas.SessionLauncherORM.id,
+                    schemas.SessionLauncherRepositoryORM.policy == models.SessionLauncherRepositoryPolicyName.excluded,
+                )
+                .exists()
+            )
+
             res = await session.execute(
                 select(
                     schemas.SessionLauncherORM,
                     or_(
                         secret_restricted,
                         data_connectors_restricted,
+                        repositories_restricted,
                     ).label("is_restricted"),
                 )
                 .where(
@@ -536,11 +547,22 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 .exists()
             )
 
+            repositories_restricted = (
+                select(1)
+                .select_from(schemas.SessionLauncherRepositoryORM)
+                .where(
+                    schemas.SessionLauncherRepositoryORM.launcher_id == launcher.id,
+                    schemas.SessionLauncherRepositoryORM.policy == models.SessionLauncherRepositoryPolicyName.excluded,
+                )
+                .exists()
+            )
+
             restricted = await session.scalar(
                 select(
                     or_(
                         secret_restricted,
                         data_connectors_restricted,
+                        repositories_restricted,
                     )
                 )
             )
@@ -757,14 +779,14 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 select(SessionSecretSlotORM).where(SessionSecretSlotORM.project_id == project_id)
             )
 
-            destination_secret_slot_by_filename = {link.filename: link for link in destination_secret_slots}
+            # join source and destinations secret slots on filenames
+            destination_secrets_by_filenames = {link.filename: link for link in destination_secret_slots}
 
             for secret_slot_policy in source_secret_policies:
                 secret_slot_filename = secret_slot_policy.secret_slot.filename
-                destination_secret_slot = destination_secret_slot_by_filename.get(secret_slot_filename)
+                destination_secret_slot = destination_secrets_by_filenames.get(secret_slot_filename)
 
-                # destination_secret_slots should be a superset of source_secret_policies, if it is not, e.g. due to
-                # a race condition (the secret slot was deleted before completing the copy), we ignore it.
+                # destination_secret_slots should be a superset of source_secret_policies
                 if destination_secret_slot is None:
                     continue
 
@@ -793,12 +815,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
             destination_dc_links_by_dc_id = {link.data_connector_id: link for link in destination_dc_links}
 
-            for dc_policy in source_dc_policies:
-                source_dc_id = dc_policy.data_connector_to_project_link.data_connector.id
+            for source_dc_policy in source_dc_policies:
+                source_dc_id = source_dc_policy.data_connector_to_project_link.data_connector.id
                 dc_link = destination_dc_links_by_dc_id.get(source_dc_id)
 
-                # destination_dc_links should be a superset of source_dc_policies, if it is not, e.g. due to
-                # a race condition (the data connector was deleted before completing the copy), we ignore it.
+                # destination_dc_links should be a superset of source_dc_policies
                 if dc_link is None:
                     continue
 
@@ -806,13 +827,40 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     project_id=project_id,
                     launcher_id=launcher_orm.id,
                     data_connector_to_project_link_id=dc_link.id,
-                    policy=dc_policy.policy,
+                    policy=source_dc_policy.policy,
                 )
                 session.add(new_dc_policy)
             await session.flush()
 
             # NOTE: copy session launcher repository permissions
-            # TODO...
+            source_repo_policies = await session.scalars(
+                select(schemas.SessionLauncherRepositoryORM).where(
+                    schemas.SessionLauncherRepositoryORM.launcher_id == launcher.id
+                )
+            )
+
+            destination_repo_links = await session.scalars(
+                select(ProjectRepositoryORM).where(ProjectRepositoryORM.project_id == project_id)
+            )
+
+            # join source and destinations git repositories on urls
+            destination_repos_by_urls = {link.url: link for link in destination_repo_links}
+
+            for source_repo_policy in source_repo_policies:
+                source_repo_url = source_repo_policy.repository.url
+                new_repo_link = destination_repos_by_urls.get(source_repo_url)
+
+                # destination_repo_links should be a superset of source_repo_policies
+                if new_repo_link is None:
+                    continue
+
+                new_repo_policy = schemas.SessionLauncherRepositoryORM(
+                    launcher_id=launcher_orm.id,
+                    repository_id=new_repo_link.id,
+                    policy=source_repo_policy.policy,
+                )
+                session.add(new_repo_policy)
+            await session.flush()
 
             await session.refresh(launcher_orm)
             return launcher_orm.dump()
@@ -1567,7 +1615,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     secret_slot_id=slot.id,
                     policy=models.SessionLauncherSecretPolicyName.safe_parse(
                         policy,
-                        models.SessionLauncherSecretPolicyName.excluded,
+                        default=models.SessionLauncherSecretPolicyName.excluded,
                     ),
                 )
                 for slot, policy in result.all()
@@ -1735,9 +1783,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     policy_name = models.SessionLauncherRepositoryPolicyName.read_write
                     writeable_references = None
                 else:
-                    policy_name = (
-                        models.SessionLauncherRepositoryPolicyName.safe_parse(policy["policy"])
-                        or models.SessionLauncherRepositoryPolicyName.excluded
+                    policy_name = models.SessionLauncherRepositoryPolicyName.safe_parse(
+                        policy["policy"],
+                        default=models.SessionLauncherRepositoryPolicyName.excluded,
                     )
                     writeable_references = policy.get("writeable_references")
 

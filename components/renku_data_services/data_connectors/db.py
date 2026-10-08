@@ -1120,7 +1120,8 @@ class DataConnectorRepository:
                 launcher_id=launcher.id,
                 data_connector_link_id=link.id,
                 policy=SessionLauncherDataConnectorPolicyName.safe_parse(
-                    policy, SessionLauncherDataConnectorPolicyName.excluded
+                    policy,
+                    default=SessionLauncherDataConnectorPolicyName.excluded,
                 ),
             )
             async for link, policy in result

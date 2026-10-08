@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Final, Self
+from typing import TYPE_CHECKING, Final, Self, overload
 
 from ulid import ULID
 
@@ -67,10 +67,19 @@ class BuilderVariant(StrEnum):
 class SafeStrEnum(StrEnum):
     """Enum with safe parsing of arbitrary strings."""
 
+    @overload
+    @classmethod
+    def safe_parse(cls, value: str) -> Self | None: ...
+
+    @overload
+    @classmethod
+    def safe_parse(cls, value: str, *, default: Self) -> Self: ...
+
     @classmethod
     def safe_parse(
         cls,
         value: str,
+        *,
         default: Self | None = None,
     ) -> Self | None:
         """Return the enum value or the default if invalid."""

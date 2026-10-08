@@ -647,6 +647,21 @@ async def test_launcher_restrictions_delete_repositories(
     assert {policy.get("url") for policy in repository_policies} == set(repositories)
     assert all(policy.get("policy") == rp_RW for policy in repository_policies)
 
+    # Patch session launcher, this will create the overwrite table
+    patch_repository_policies = [
+        {
+            "repository_id": policy["repository_id"],
+            "policy": rp_RW,
+        }
+        for policy in repository_policies
+    ]
+
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher["id"]}/repositories",
+        headers=user_headers,
+        json=patch_repository_policies,
+    )
+
     # Patch project, remove repositories
     patch_headers = merge_headers(user_headers, {"If-Match": project["etag"]})
     _, res = await sanic_client.patch(

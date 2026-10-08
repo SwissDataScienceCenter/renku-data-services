@@ -384,10 +384,9 @@ class SessionLauncherRepositoryORM(BaseORM):
     @property
     def _policy(self) -> models.SessionLauncherRepositoryPolicyName | None:
         try:
-            return models.SessionLauncherRepositoryPolicyName(str(self.policy.get("policy")))
+            return models.SessionLauncherRepositoryPolicyName.safe_parse(self.policy["policy"])
         except ValueError:
             return None
-        # TODO: Return models.SessionLauncherRepositoryPolicyName.read_only if repository is read only
 
 
 class SessionLauncherDataConnectorORM(BaseORM):
