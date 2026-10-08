@@ -463,7 +463,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 .select_from(schemas.SessionLauncherRepositoryORM)
                 .where(
                     schemas.SessionLauncherRepositoryORM.launcher_id == schemas.SessionLauncherORM.id,
-                    schemas.SessionLauncherRepositoryORM.policy == models.SessionLauncherRepositoryPolicyName.excluded,
+                    or_(
+                        schemas.SessionLauncherRepositoryORM.policy["policy"]
+                        != models.SessionLauncherRepositoryPolicyName.read_write,
+                        schemas.SessionLauncherRepositoryORM.policy["writable_references"].is_not(None),
+                    ),
                 )
                 .exists()
             )
@@ -552,7 +556,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 .select_from(schemas.SessionLauncherRepositoryORM)
                 .where(
                     schemas.SessionLauncherRepositoryORM.launcher_id == launcher.id,
-                    schemas.SessionLauncherRepositoryORM.policy == models.SessionLauncherRepositoryPolicyName.excluded,
+                    or_(
+                        schemas.SessionLauncherRepositoryORM.policy["policy"]
+                        != models.SessionLauncherRepositoryPolicyName.read_write,
+                        schemas.SessionLauncherRepositoryORM.policy["writable_references"].is_not(None),
+                    ),
                 )
                 .exists()
             )
