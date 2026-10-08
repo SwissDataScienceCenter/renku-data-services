@@ -403,7 +403,12 @@ class DependencyManager:
             internal_gitlab_url=config.gitlab_url,
             enable_internal_gitlab=config.enable_internal_gitlab,
         )
-
+        project_session_secret_repo = ProjectSessionSecretRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            user_repo=kc_user_repo,
+            secret_service_public_key=config.secrets.public_key,
+        )
         session_repo = SessionRepository(
             session_maker=config.db.async_session_maker,
             project_authz=authz,
@@ -421,12 +426,6 @@ class DependencyManager:
         project_member_repo = ProjectMemberRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
-        )
-        project_session_secret_repo = ProjectSessionSecretRepository(
-            session_maker=config.db.async_session_maker,
-            authz=authz,
-            user_repo=kc_user_repo,
-            secret_service_public_key=config.secrets.public_key,
         )
         user_preferences_repo = UserPreferencesRepository(
             session_maker=config.db.async_session_maker,

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Self
 
 from ulid import ULID
 
@@ -62,6 +62,55 @@ class BuilderVariant(StrEnum):
 
     python = "python"
     r = "r"
+
+
+class SafeStrEnum(StrEnum):
+    """Enum with safe parsing of arbitrary strings."""
+
+    @classmethod
+    def safe_parse(
+        cls,
+        value: str,
+        default: Self | None = None,
+    ) -> Self | None:
+        """Return the enum value or the default if invalid."""
+        try:
+            return cls(value)
+        except ValueError:
+            return default
+
+
+class SessionLauncherRepositoryPolicyName(SafeStrEnum):
+    """The access mode of a resource within a session launcher."""
+
+    excluded = "excluded"
+    read_only = "readOnly"
+    read_write = "readWrite"
+
+    @property
+    def requires_write_access(self) -> bool:
+        """Policy requires write access."""
+        return self is SessionLauncherRepositoryPolicyName.read_write
+
+
+class SessionLauncherDataConnectorPolicyName(SafeStrEnum):
+    """The access mode of a data connector within a session launcher."""
+
+    excluded = "excluded"
+    read_only = "readOnly"
+    read_write = "readWrite"
+
+    @property
+    def requires_write_access(self) -> bool:
+        """Policy requires write access."""
+        return self is SessionLauncherDataConnectorPolicyName.read_write
+
+
+class SessionLauncherSecretPolicyName(SafeStrEnum):
+    """The access mode of a resource within a session launcher."""
+
+    excluded = "excluded"
+    included = "included"
 
 
 class FrontendVariant(StrEnum):
@@ -432,6 +481,59 @@ class ShipwrightBuildStatusUpdate:
     """The update about a build.
 
     None represents "no update"."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class SessionLauncherRepositoryPolicy:
+    """Model to represent a session launcher repository policy."""
+
+    policy: SessionLauncherRepositoryPolicyName | None
+    writable_references: list[str] | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherRepository(SessionLauncherRepositoryPolicy):
+    """Model to represent a repository and its access policies for a launcher."""
+
+    launcher_id: ULID
+    repository_id: int
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherDataConnectorPolicy:
+    """The access policy on a given data connector."""
+
+    policy: SessionLauncherDataConnectorPolicyName | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherDataConnector(SessionLauncherDataConnectorPolicy):
+    """Model to represent a data connector and its access policies for a launcher."""
+
+    launcher_id: ULID
+    data_connector_to_project_link_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherSecretPolicy:
+    """Model to represent the visibility of a secret."""
+
+    policy: SessionLauncherSecretPolicyName | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherSecret(SessionLauncherSecretPolicy):
+    """Model to represent the visibility of a project secret in a launcher."""
+
+    launcher_id: ULID
+    secret_slot_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherSecretPatch(SessionLauncherSecretPolicy):
+    """Model to represent the visibility of a project secret in a launcher."""
+
+    secret_slot_id: ULID
 
 
 BUILD_ENVIRONMENT_CONFIGS: Final[dict[str, UnsavedEnvironment]] = {
