@@ -124,7 +124,12 @@ from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.models import Environment, SessionLauncher
+from renku_data_services.session.models import (
+    Environment,
+    SessionLauncher,
+    SessionLauncherRepository,
+    SessionLauncherRepositoryPolicyName,
+)
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
@@ -588,6 +593,16 @@ async def repositories_from_session(
     return repositories_from_project(project, git_providers)
 
 
+def merge_launcher_repositories(
+    repositories: list[Repository], launcher_policies: list[SessionLauncherRepository]
+) -> list[Repository]:
+    """Apply launcher restrictions to a list of project repositories."""
+    allowed_urls = {
+        policy.url for policy in launcher_policies if policy.policy != SessionLauncherRepositoryPolicyName.excluded
+    }
+    return [repo for repo in repositories if repo.url in allowed_urls]
+
+
 def _get_interactive_culling(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
     resource_pool: ResourcePool,
@@ -1031,7 +1046,9 @@ async def start_session(
     session_secrets = await session_repo.get_all_session_secrets_from_launcher(user=user, launcher=launcher)
     data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id, launcher.id)
     git_providers = await git_provider_helper.get_providers(user=user)
-    repositories = repositories_from_project(project, git_providers)
+    launcher_repositories = await session_repo.get_all_repositories_from_launcher(user=user, launcher=launcher)
+    project_repositories = repositories_from_project(project, git_providers)
+    repositories = merge_launcher_repositories(project_repositories, launcher_repositories)
 
     # User secrets
     session_extras = SessionExtraResources()
@@ -1487,7 +1504,9 @@ async def patch_session(
     session_secrets = await session_repo.get_all_session_secrets_from_launcher(user=user, launcher=launcher)
     data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id, launcher.id)
     git_providers = await git_provider_helper.get_providers(user=user)
-    repositories = repositories_from_project(project, git_providers)
+    launcher_repositories = await session_repo.get_all_repositories_from_launcher(user=user, launcher=launcher)
+    project_repositories = repositories_from_project(project, git_providers)
+    repositories = merge_launcher_repositories(project_repositories, launcher_repositories)
 
     # User secrets
     session_extras = SessionExtraResources()
