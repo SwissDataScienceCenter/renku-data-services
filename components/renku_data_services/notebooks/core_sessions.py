@@ -460,6 +460,7 @@ async def request_dc_secret_creation(
 
 
 async def request_dc_secret_creation_new(
+    secret_name: str,
     user: AuthenticatedAPIUser | AnonymousAPIUser,
     nb_config: NotebooksConfig,
     manifest: AmaltheaSessionV1Alpha1,
@@ -1444,7 +1445,10 @@ async def start_session(
                 user_secret_key = await user_repo.get_or_create_user_secret_key(user)
             else:
                 user_secret_key = None
-            await request_dc_secret_creation_new(user, nb_config, session, data_connectors_list, user_secret_key)
+            secret_name = f"{session.metadata.name}-dc-secrets"
+            await request_dc_secret_creation_new(
+                secret_name, user, nb_config, session, data_connectors_list, user_secret_key
+            )
         except Exception:
             await nb_config.k8s_v2_client.delete_session(server_name, user.id)
             raise
