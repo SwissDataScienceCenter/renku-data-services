@@ -594,13 +594,32 @@ async def repositories_from_session(
 
 
 def merge_launcher_repositories(
-    repositories: list[Repository], launcher_policies: list[SessionLauncherRepository]
+    repositories: list[Repository],
+    launcher_policies: list[SessionLauncherRepository],
 ) -> list[Repository]:
-    """Apply launcher restrictions to a list of project repositories."""
-    allowed_urls = {
-        policy.url for policy in launcher_policies if policy.policy != SessionLauncherRepositoryPolicyName.excluded
+    """Apply launcher restrictions to project repositories."""
+    policies_by_url = {
+        policy.url: policy
+        for policy in launcher_policies
+        if policy.policy != SessionLauncherRepositoryPolicyName.excluded
     }
-    return [repo for repo in repositories if repo.url in allowed_urls]
+
+    result = []
+    for repo in repositories:
+        policy = policies_by_url.get(repo.url)
+        if policy is None:
+            continue
+
+        if policy.policy == SessionLauncherRepositoryPolicyName.read_only:
+            repo.references = []
+        elif policy.writable_references:
+            repo.references = [f"refs/heads/{branch}" for branch in policy.writable_references]
+        else:
+            repo.references = None
+
+        result.append(repo)
+
+    return result
 
 
 def _get_interactive_culling(
