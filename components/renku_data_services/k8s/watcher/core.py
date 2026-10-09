@@ -217,21 +217,25 @@ async def __collect_session_metrics(
     rp_repo: ResourcePoolQueryRepository,
 ) -> None:
     """Track product metrics for sessions."""
+
+    # DEBUG: print events
+    logger.info(f"Session event {event_type}: {new_obj}")
+
     user = APIUser(id=user_id)
     if event_type == "DELETED":
         # session stopping
         await metrics.session_stopped(user=user, metadata={"session_id": new_obj.meta.name})
         return
 
-    # DEBUG: job events
-    session_type_raw1: str | None = new_obj.obj.spec.get("sessionType")
-    session_type = (
-        SessionType.from_amalthea(AmaltheaSessionType.from_str(session_type_raw1))
-        if session_type_raw1
-        else SessionType.interactive
-    )
-    if session_type == SessionType.interactive:
-        logger.info(f"JOB EVENT: {new_obj}")
+    # # DEBUG: job events
+    # session_type_raw1: str | None = new_obj.obj.spec.get("sessionType")
+    # session_type = (
+    #     SessionType.from_amalthea(AmaltheaSessionType.from_str(session_type_raw1))
+    #     if session_type_raw1
+    #     else SessionType.interactive
+    # )
+    # if session_type == SessionType.interactive:
+    #     logger.info(f"JOB EVENT: {new_obj}")
 
     previous_state = previous_obj.manifest.get("status", {}).get("state", None) if previous_obj else None
     match new_obj.obj.raw.get("status", {}).get("state"):
