@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import base64
 import random
-from collections.abc import AsyncIterator, Callable
+import secrets
+from base64 import b64decode, b64encode
+from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -18,8 +20,11 @@ from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import ResourceType
 from renku_data_services.crc import models as crc_models
 from renku_data_services.crc import orm as crc_schemas
+from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
+from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
 from renku_data_services.session_runners import models
 from renku_data_services.session_runners import orm as schemas
+from renku_data_services.utils import cryptography as crypt
 
 
 class UserSessionRunnersRepository:
@@ -32,10 +37,12 @@ class UserSessionRunnersRepository:
         self,
         authz: Authz,
         encryption_key: bytes,
+        k8s_v2_client: NotebookK8sClient,
         session_maker: Callable[..., AsyncSession],
     ) -> None:
         self.authz: Authz = authz
         self._encryption_key = encryption_key
+        self.k8s_v2_client = k8s_v2_client
         self.session_maker = session_maker
 
     async def get_all_runners(
@@ -200,6 +207,60 @@ class UserSessionRunnersRepository:
         await session.flush()
         return None
 
+    async def get_all_remote_sessions(
+        self, session: AsyncSession, user: base_models.APIUser, runner_id: ULID | None
+    ) -> AsyncIterator[models.RemoteUserSession]:
+        """Get all remote Renku sessions from the database.
+
+        When runner_id is provided, only return sessions assigned to the given runner.
+        """
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        stmt = select(schemas.RemoteUserSessionORM).where(schemas.RemoteUserSessionORM.user_id == user.id)
+        if runner_id is not None:
+            stmt = stmt.where(schemas.RemoteUserSessionORM.runner_id == runner_id)
+        sessions_orm = await session.stream_scalars(stmt)
+        async for session_orm in sessions_orm:
+            yield session_orm.dump()
+
+    async def get_remote_session(
+        self, session: AsyncSession, user: base_models.APIUser, renku_session_id: str, runner_id: ULID | None
+    ) -> models.RemoteUserSession:
+        """Get a remote Renku session from the database.
+
+        When runner_id is provided, only return then session if it is assigned to the given runner.
+        """
+        session_orm = await self._get_remote_session_or_none_orm(
+            session=session, user=user, renku_session_id=renku_session_id, runner_id=runner_id
+        )
+        if session_orm is None:
+            raise errors.MissingResourceError(
+                message=f"The session {renku_session_id} does not exist or you do not have access to it."
+            )
+        return session_orm.dump()
+
+    async def _get_remote_session_or_none_orm(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        renku_session_id: str,
+        runner_id: ULID | None,
+        load_user: bool = False,
+    ) -> schemas.RemoteUserSessionORM | None:
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        stmt = (
+            select(schemas.RemoteUserSessionORM)
+            .where(schemas.RemoteUserSessionORM.id == renku_session_id)
+            .where(schemas.RemoteUserSessionORM.user_id == user.id)
+        )
+        if runner_id is not None:
+            stmt = stmt.where(schemas.RemoteUserSessionORM.runner_id == runner_id)
+        if load_user:
+            stmt = stmt.options(selectinload(schemas.RemoteUserSessionORM.user))
+        res = await session.scalars(stmt)
+        return res.one_or_none()
+
     async def insert_remote_session(
         self,
         user: base_models.APIUser,
@@ -243,6 +304,69 @@ class UserSessionRunnersRepository:
         await session.flush()
         return session_orm.dump()
 
+    async def get_remote_session_spec(
+        self, user: base_models.APIUser, renku_session_id: str
+    ) -> AmaltheaSessionV1Alpha1:
+        """Get the spec a remote Renku session from Kubernetes."""
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        k8s_session = await self.k8s_v2_client.get_session(renku_session_id, user.id)
+        if k8s_session is None:
+            raise errors.MissingResourceError(
+                message=f"The session {renku_session_id} does not exist or you do not have access to it."
+            )
+        return k8s_session
+
+    async def get_remote_session_secrets(
+        self, session: AsyncSession, user: base_models.APIUser, renku_session_id: str, runner_id: ULID | None
+    ) -> Sequence[models.RemoteUserSessionSecret]:
+        """Get the secrets necessary to run a remote Renku session from the database."""
+        session_orm = await self._get_remote_session_or_none_orm(
+            session=session, user=user, renku_session_id=renku_session_id, runner_id=runner_id, load_user=True
+        )
+        assert user.id
+        if session_orm is None:
+            raise errors.MissingResourceError(
+                message=f"The session {renku_session_id} does not exist or you do not have access to it."
+            )
+        encrypted_secrets = session_orm.secrets
+        if encrypted_secrets is None:
+            return []
+        user_secret_key = await self._get_user_secret_key(session=session, user_orm=session_orm.user)
+        return self._decrypt_assigned_session_secrets(
+            encrypted_secrets, user_secret_key=user_secret_key, user_id=user.id
+        )
+
+    async def update_remote_session_secrets(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        renku_session_id: str,
+        runner_id: ULID | None,
+        update: Sequence[models.RemoteUserSessionSecret],
+    ) -> Sequence[models.RemoteUserSessionSecret]:
+        """Update the secrets of a remote Renku session in the database."""
+        session_orm = await self._get_remote_session_or_none_orm(
+            session=session, user=user, renku_session_id=renku_session_id, runner_id=runner_id, load_user=True
+        )
+        assert user.id
+        if session_orm is None:
+            raise errors.MissingResourceError(
+                message=f"The session {renku_session_id} does not exist or you do not have access to it."
+            )
+        if not update:
+            return []
+        user_secret_key = await self._get_user_secret_key(session=session, user_orm=session_orm.user)
+        session_orm.secrets = self._encrypt_assigned_session_secrets(
+            update, user_secret_key=user_secret_key, user_id=user.id, existing_secrets=session_orm.secrets
+        )
+
+        await session.flush()
+
+        return self._decrypt_assigned_session_secrets(
+            session_orm.secrets or dict(), user_secret_key=user_secret_key, user_id=user.id
+        )
+
     async def _check_eventually_schedulable(
         self, session: AsyncSession, user_id: str, renku_session: models.UnsavedRemoteUserSession
     ) -> None:
@@ -266,11 +390,49 @@ class UserSessionRunnersRepository:
                 f"for the resource pool with ID {renku_session.resource_pool_id}."
             )
 
+    async def _get_user_secret_key(self, session: AsyncSession, user_orm: schemas.UserORM) -> str:
+        """Get the user secret key from the ORM instance."""
+        if user_orm.secret_key is not None:
+            return crypt.decrypt_string(self._encryption_key, user_orm.keycloak_id, user_orm.secret_key)
+        # create a new secret key
+        secret_key = secrets.token_urlsafe(32)
+        user_orm.secret_key = crypt.encrypt_string(self._encryption_key, user_orm.keycloak_id, secret_key)
+        await session.flush()
+        return secret_key
+
     @staticmethod
     def _generate_registration_token(size: int = 18) -> str:
         """Returns a random code to use as a registration token."""
         rand = random.SystemRandom()
         return base64.urlsafe_b64encode(rand.randbytes(size)).decode()
+
+    @staticmethod
+    def _encrypt_assigned_session_secrets(
+        secrets: Sequence[models.RemoteUserSessionSecret],
+        user_secret_key: str,
+        user_id: str,
+        existing_secrets: dict[str, str] | None,
+    ) -> dict[str, str]:
+        """Encrypts the secrets for a remote Renku session."""
+        existing_secrets = existing_secrets or dict()
+        for secret in secrets:
+            existing_secrets[secret.name] = b64encode(
+                crypt.encrypt_string(user_secret_key.encode(), user_id, secret.value)
+            ).decode("ascii")
+        return existing_secrets
+
+    @staticmethod
+    def _decrypt_assigned_session_secrets(
+        encrypted_secrets: dict[str, str], user_secret_key: str, user_id: str
+    ) -> list[models.RemoteUserSessionSecret]:
+        """Decrypts the secrets for a remote Renku session."""
+        return [
+            models.RemoteUserSessionSecret(
+                name=key,
+                value=crypt.decrypt_string(user_secret_key.encode(), user_id, b64decode(encrypted_secrets[key])),
+            )
+            for key in sorted(encrypted_secrets.keys())
+        ]
 
 
 class UserSessionRunnersSchedulingRepository:

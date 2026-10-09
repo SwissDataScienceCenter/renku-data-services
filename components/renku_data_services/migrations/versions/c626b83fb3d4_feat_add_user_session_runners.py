@@ -8,6 +8,7 @@ Create Date: 2026-09-09 11:10:08.591340
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 from renku_data_services.utils.sqlalchemy import ULIDType
 
@@ -59,6 +60,12 @@ def upgrade() -> None:
         sa.Column("user_id", sa.String(length=36), nullable=False),
         sa.Column("resource_pool_id", sa.Integer(), nullable=False),
         sa.Column("runner_id", ULIDType(), nullable=True),
+        sa.Column(
+            "secrets",
+            sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"),
+            server_default=sa.text("NULL"),
+            nullable=True,
+        ),
         sa.Column("creation_date", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["resource_pool_id"], ["resource_pools.resource_pools.id"], ondelete="RESTRICT"),
