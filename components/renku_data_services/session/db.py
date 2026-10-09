@@ -1789,13 +1789,13 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             for repository_link, policy in result.all():
                 if policy is None:
                     policy_name = models.SessionLauncherRepositoryPolicyName.read_write
-                    writeable_references = None
+                    writable_references = None
                 else:
                     policy_name = models.SessionLauncherRepositoryPolicyName.safe_parse(
                         policy["policy"],
                         default=models.SessionLauncherRepositoryPolicyName.excluded,
                     )
-                    writeable_references = policy.get("writeable_references")
+                    writable_references = policy.get("writable_references")
 
                 launcher_repos.append(
                     models.SessionLauncherRepository(
@@ -1803,7 +1803,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                         repository_id=repository_link.id,
                         url=repository_link.url,
                         policy=policy_name,
-                        writable_references=writeable_references,
+                        writable_references=writable_references,
                     )
                 )
 
