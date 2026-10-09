@@ -1509,7 +1509,7 @@ components:
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/ResourceFlavourName"
         description:
           $ref: "#/components/schemas/ResourceFlavourDescription"
         cpu:
@@ -1544,9 +1544,11 @@ components:
         id:
           $ref: "#/components/schemas/Ulid"
         name:
-          $ref: "#/components/schemas/Name"
+          type: string
+          description: The name of the resource flavour
         description:
-          $ref: "#/components/schemas/ResourceFlavourDescription"
+          type: string
+          description: Why a resource flavour is sized the way it is
         cpu:
           $ref: "#/components/schemas/Cpu"
         memory:
@@ -1570,7 +1572,7 @@ components:
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/ResourceFlavourName"
         description:
           $ref: "#/components/schemas/ResourceFlavourDescription"
         cpu:
@@ -2500,6 +2502,12 @@ components:
       description: A name for a specific resource
       minLength: 5
       example: "the name of a resource"
+    ResourceFlavourName:
+      type: string
+      description: A name for a resource flavour
+      minLength: 5
+      maxLength: 40
+      example: "standard"
     ResourceFlavourDescription:
       type: string
       description: Why a resource flavour is sized the way it is
