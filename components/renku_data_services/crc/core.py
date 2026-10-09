@@ -160,21 +160,31 @@ def validate_resource_class_patch_or_put(
             partition=body.remote.partition,
             forward_resource_values=body.remote.forward_resource_values,
         )
-    body_cpu = getattr(body, "cpu", None)
-    if kind == models.RemoteConfigurationKind.firecrest and body_cpu is not None and not body_cpu.is_integer():
+    if isinstance(body, apispec.ResourceClassFromFlavour):
+        cpu, memory, gpu, max_storage, default_storage = None, None, None, None, None
+        raw_flavour_id: str | None = body.resource_flavour_id
+    else:
+        cpu, memory, gpu, max_storage, default_storage = (
+            body.cpu,
+            body.memory,
+            body.gpu,
+            body.max_storage,
+            body.default_storage,
+        )
+        raw_flavour_id = None if isinstance(body, apispec.ResourceClass) else body.resource_flavour_id
+    flavour_id = ULID.from_str(raw_flavour_id) if raw_flavour_id is not None else None
+    if kind == models.RemoteConfigurationKind.firecrest and cpu is not None and not cpu.is_integer():
         raise errors.ValidationError(message="FirecREST resource classes require an integer value for cpu.")
-    raw_flavour_id = getattr(body, "resource_flavour_id", None)
-    flavour_id = ULID.from_str(raw_flavour_id) if isinstance(raw_flavour_id, str) else None
     if rc_id:
         return models.ResourceClassPatchWithId(
             id=rc_id,
             name=body.name,
-            cpu=getattr(body, "cpu", None),
-            memory=getattr(body, "memory", None),
-            max_storage=getattr(body, "max_storage", None),
-            gpu=getattr(body, "gpu", None),
+            cpu=cpu,
+            memory=memory,
+            max_storage=max_storage,
+            gpu=gpu,
             default=body.default,
-            default_storage=getattr(body, "default_storage", None),
+            default_storage=default_storage,
             node_affinities=node_affinities,
             tolerations=tolerations,
             quota_enforced=body.quota_enforced,
@@ -183,12 +193,12 @@ def validate_resource_class_patch_or_put(
         )
     return models.ResourceClassPatch(
         name=body.name,
-        cpu=getattr(body, "cpu", None),
-        memory=getattr(body, "memory", None),
-        max_storage=getattr(body, "max_storage", None),
-        gpu=getattr(body, "gpu", None),
+        cpu=cpu,
+        memory=memory,
+        max_storage=max_storage,
+        gpu=gpu,
         default=body.default,
-        default_storage=getattr(body, "default_storage", None),
+        default_storage=default_storage,
         node_affinities=node_affinities,
         tolerations=tolerations,
         quota_enforced=body.quota_enforced,
@@ -199,8 +209,6 @@ def validate_resource_class_patch_or_put(
 
 def validate_resource_flavour(body: apispec.ResourceFlavour) -> models.UnsavedResourceFlavour:
     """Validate a resource flavour object."""
-    if len(body.name) > 40:
-        raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
     if body.default_storage > body.max_storage:
         raise errors.ValidationError(message="The default storage cannot be larger than the max allowable storage.")
     return models.UnsavedResourceFlavour(
@@ -216,8 +224,6 @@ def validate_resource_flavour(body: apispec.ResourceFlavour) -> models.UnsavedRe
 
 def validate_resource_flavour_patch(body: apispec.ResourceFlavourPatch) -> models.ResourceFlavourPatch:
     """Validate the patch of a resource flavour."""
-    if body.name is not None and len(body.name) > 40:
-        raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
     return models.ResourceFlavourPatch(
         name=body.name,
         cpu=body.cpu,

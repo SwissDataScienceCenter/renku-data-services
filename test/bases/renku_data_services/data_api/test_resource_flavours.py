@@ -69,6 +69,23 @@ async def test_flavour_name_is_unique(sanic_client: SanicASGITestClient, admin_h
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("field,value", [("name", "n" * 41), ("description", "d" * 501)])
+async def test_flavour_rejects_values_longer_than_the_db_allows(
+    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], field: str, value: str
+) -> None:
+    _, res = await sanic_client.post(
+        "/api/data/resource_flavours", headers=admin_headers, json={**_FLAVOUR, field: value}
+    )
+    assert res.status_code == 422, res.text
+
+    flavour = await _create_flavour(sanic_client, admin_headers)
+    _, res = await sanic_client.patch(
+        f"/api/data/resource_flavours/{flavour['id']}", headers=admin_headers, json={field: value}
+    )
+    assert res.status_code == 422, res.text
+
+
+@pytest.mark.asyncio
 async def test_class_created_from_a_link_only(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],

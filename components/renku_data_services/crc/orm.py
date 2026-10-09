@@ -149,7 +149,7 @@ class ResourceClassORM(BaseORM):
     resource_flavour_id: Mapped[ULID | None] = mapped_column(
         ForeignKey("resource_flavours.id", ondelete="RESTRICT"), default=None, index=True, nullable=True
     )
-    resource_flavour: Mapped[Optional[ResourceFlavourORM]] = relationship(default=None, lazy="joined")
+    resource_flavour: Mapped[ResourceFlavourORM | None] = relationship(default=None, lazy="joined")
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, default=None, init=False)
     remote_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONVariant, default=None, server_default=None, nullable=True

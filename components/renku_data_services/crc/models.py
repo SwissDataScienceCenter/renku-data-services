@@ -108,10 +108,15 @@ class UnsavedResourceFlavour(ResourcesCompareMixin):
 
     name: str
     cpu: float
+    """Number of cores."""
     memory: int
+    """RAM in gigabytes."""
     max_storage: int
+    """Maximum allowed disk storage in gigabytes."""
     gpu: int = 0
+    """Number of gpus."""
     default_storage: int = 1
+    """The default disk storage used when launching a session (in gigabytes)."""
     description: str | None = None
 
 
@@ -128,10 +133,15 @@ class ResourceFlavourPatch:
 
     name: str | None = None
     cpu: float | None = None
+    """Number of cores."""
     memory: int | None = None
+    """RAM in gigabytes."""
     max_storage: int | None = None
+    """Maximum allowed disk storage in gigabytes."""
     gpu: int | None = None
+    """Number of gpus."""
     default_storage: int | None = None
+    """The default disk storage used when launching a session (in gigabytes)."""
     description: str | None | ResetType = None
 
 
