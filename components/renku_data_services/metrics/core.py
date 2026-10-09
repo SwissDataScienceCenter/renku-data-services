@@ -140,3 +140,7 @@ class StagingMetricsService(MetricsService):
     async def user_requested_session_resume(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send event about user requesting session resume."""
         await self._store_event(MetricsEvent.user_requested_session_resume, user, metadata)
+
+    async def session_job_terminated(self, user: APIUser, metadata: MetricsMetadata) -> None:
+        """Send ???."""
+        await self._store_event(MetricsEvent.session_job_terminated, user, metadata)
