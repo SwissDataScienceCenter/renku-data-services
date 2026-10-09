@@ -31,6 +31,7 @@ class MetricsEvent(StrEnum):
     session_stopped = "session_stopped"
     user_requested_session_launch = "user_requested_session_launch"
     user_requested_session_resume = "user_requested_session_resume"
+    session_job_terminated = "session_job_terminated"
 
 
 type MetricsMetadata = dict[str, str | int | bool]
@@ -146,6 +147,10 @@ class MetricsService(Protocol):
 
     async def user_requested_session_resume(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send event about user requesting session resume."""
+        ...
+
+    async def session_job_terminated(self, user: APIUser, metadata: MetricsMetadata) -> None:
+        """Send ???."""
         ...
 
 
