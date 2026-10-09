@@ -1349,6 +1349,8 @@ components:
           $ref: "#/components/schemas/NodeAffinityList"
         quota_enforced:
           $ref: "#/components/schemas/QuotaEnforced"
+        preemptible:
+          $ref: "#/components/schemas/Preemptible"
         remote:
           $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
     ResourceClass:
@@ -1376,6 +1378,10 @@ components:
         quota_enforced:
           allOf:
             - $ref: "#/components/schemas/QuotaEnforced"
+          default: false
+        preemptible:
+          allOf:
+            - $ref: "#/components/schemas/Preemptible"
           default: false
         remote:
           $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
@@ -1441,6 +1447,10 @@ components:
         quota_enforced:
           allOf:
             - $ref: "#/components/schemas/QuotaEnforced"
+          default: false
+        preemptible:
+          allOf:
+            - $ref: "#/components/schemas/Preemptible"
           default: false
         remote:
           $ref: "#/components/schemas/RemoteClassConfigurationFirecrest"
@@ -2183,6 +2193,10 @@ components:
       type: boolean
       description: Whether sessions in this resource class should be hibernated when quota is exhausted
       example: true
+    Preemptible:
+      type: boolean
+      description: Whether sessions and jobs in this resource class have a low priority, so that other sessions can evict them
+      example: false
     PublicFlag:
       type: boolean
       description: A resource pool whose classes can be accessed by anyone

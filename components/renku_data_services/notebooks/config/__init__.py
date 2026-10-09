@@ -185,7 +185,11 @@ class NotebooksConfig:
         secrets_client = K8sSecretClient(client)
 
         authz = Authz(authz_config)
-        quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
+        quota_repo = QuotaRepository(
+            K8sResourceQuotaClient(client),
+            K8sPriorityClassClient(client),
+            namespace=os.environ.get("K8S_NAMESPACE", "default"),
+        )
         rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo, authz=authz)
         crc_validator = CRCValidator(rp_repo)
         k8s_v2_client = NotebookK8sClient(
