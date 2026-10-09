@@ -18,9 +18,10 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.data_connectors.orm import DataConnectorORM, DataConnectorToProjectLinkORM
 from renku_data_services.project.apispec import Visibility as ProjectVisibility
 from renku_data_services.project.models import SessionSecret
-from renku_data_services.project.orm import SessionSecretORM, SessionSecretSlotORM
+from renku_data_services.project.orm import ProjectRepositoryORM, SessionSecretORM, SessionSecretSlotORM
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata, RepositoryVisibility
 from renku_data_services.secrets.orm import SecretORM
@@ -410,13 +411,85 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             )
 
         async with self.session_maker() as session:
-            res = await session.scalars(
-                select(schemas.SessionLauncherORM)
-                .where(schemas.SessionLauncherORM.project_id == project_id)
-                .order_by(schemas.SessionLauncherORM.creation_date.desc())
+            secret_restricted = (
+                select(1)
+                .select_from(schemas.SessionLauncherSecretORM)
+                .where(
+                    schemas.SessionLauncherSecretORM.launcher_id == schemas.SessionLauncherORM.id,
+                    schemas.SessionLauncherSecretORM.project_id == schemas.SessionLauncherORM.project_id,
+                    schemas.SessionLauncherSecretORM.policy == models.SessionLauncherSecretPolicyName.excluded,
+                )
+                .exists()
             )
-            launcher = res.all()
-            return [item.dump() for item in launcher]
+
+            allowed_dcs = await self.project_authz.resources_with_permission(
+                user, user.id, ResourceType.data_connector, Scope.READ
+            )
+
+            data_connectors_restricted = (
+                select(1)
+                .select_from(DataConnectorToProjectLinkORM)
+                .join(
+                    DataConnectorORM,
+                    DataConnectorORM.id == DataConnectorToProjectLinkORM.data_connector_id,
+                )
+                .join(
+                    schemas.SessionLauncherDataConnectorORM,
+                    and_(
+                        schemas.SessionLauncherDataConnectorORM.data_connector_to_project_link_id
+                        == DataConnectorToProjectLinkORM.id,
+                        schemas.SessionLauncherDataConnectorORM.launcher_id == schemas.SessionLauncherORM.id,
+                        schemas.SessionLauncherDataConnectorORM.project_id == schemas.SessionLauncherORM.project_id,
+                    ),
+                )
+                .where(
+                    DataConnectorToProjectLinkORM.project_id == project_id,
+                    DataConnectorToProjectLinkORM.data_connector_id.in_(allowed_dcs),
+                    or_(
+                        schemas.SessionLauncherDataConnectorORM.policy
+                        == models.SessionLauncherDataConnectorPolicyName.excluded,
+                        and_(
+                            schemas.SessionLauncherDataConnectorORM.policy
+                            == models.SessionLauncherDataConnectorPolicyName.read_only,
+                            DataConnectorORM.readonly.is_(False),
+                        ),
+                    ),
+                )
+                .exists()
+            )
+
+            repositories_restricted = (
+                select(1)
+                .select_from(schemas.SessionLauncherRepositoryORM)
+                .where(
+                    schemas.SessionLauncherRepositoryORM.launcher_id == schemas.SessionLauncherORM.id,
+                    or_(
+                        schemas.SessionLauncherRepositoryORM.policy["policy"]
+                        != models.SessionLauncherRepositoryPolicyName.read_write,
+                        schemas.SessionLauncherRepositoryORM.policy["writable_references"].is_not(None),
+                    ),
+                )
+                .exists()
+            )
+
+            res = await session.execute(
+                select(
+                    schemas.SessionLauncherORM,
+                    or_(
+                        secret_restricted,
+                        data_connectors_restricted,
+                        repositories_restricted,
+                    ).label("is_restricted"),
+                )
+                .where(
+                    schemas.SessionLauncherORM.project_id == project_id,
+                )
+                .order_by(
+                    schemas.SessionLauncherORM.creation_date.desc(),
+                )
+            )
+
+            return [item.dump(is_restricted=restricted) for item, restricted in res.all()]
 
     async def get_launcher(self, user: base_models.APIUser, launcher_id: ULID) -> models.SessionLauncher:
         """Get one session launcher from the database."""
@@ -436,7 +509,73 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     message=f"Session launcher with id '{launcher_id}' does not exist or you do not have access to it."
                 )
 
-            return launcher.dump()
+            secret_restricted = (
+                select(1)
+                .select_from(schemas.SessionLauncherSecretORM)
+                .where(
+                    schemas.SessionLauncherSecretORM.launcher_id == launcher.id,
+                    schemas.SessionLauncherSecretORM.project_id == launcher.project_id,
+                    schemas.SessionLauncherSecretORM.policy == models.SessionLauncherSecretPolicyName.excluded,
+                )
+                .exists()
+            )
+
+            data_connectors_restricted = (
+                select(1)
+                .select_from(DataConnectorToProjectLinkORM)
+                .join(
+                    DataConnectorORM,
+                    DataConnectorORM.id == DataConnectorToProjectLinkORM.data_connector_id,
+                )
+                .join(
+                    schemas.SessionLauncherDataConnectorORM,
+                    and_(
+                        schemas.SessionLauncherDataConnectorORM.data_connector_to_project_link_id
+                        == DataConnectorToProjectLinkORM.id,
+                        schemas.SessionLauncherDataConnectorORM.launcher_id == launcher.id,
+                        schemas.SessionLauncherDataConnectorORM.project_id == launcher.project_id,
+                    ),
+                )
+                .where(
+                    DataConnectorToProjectLinkORM.project_id == launcher.project_id,
+                    or_(
+                        schemas.SessionLauncherDataConnectorORM.policy
+                        == models.SessionLauncherDataConnectorPolicyName.excluded,
+                        and_(
+                            schemas.SessionLauncherDataConnectorORM.policy
+                            == models.SessionLauncherDataConnectorPolicyName.read_only,
+                            DataConnectorORM.readonly.is_(False),
+                        ),
+                    ),
+                )
+                .exists()
+            )
+
+            repositories_restricted = (
+                select(1)
+                .select_from(schemas.SessionLauncherRepositoryORM)
+                .where(
+                    schemas.SessionLauncherRepositoryORM.launcher_id == launcher.id,
+                    or_(
+                        schemas.SessionLauncherRepositoryORM.policy["policy"]
+                        != models.SessionLauncherRepositoryPolicyName.read_write,
+                        schemas.SessionLauncherRepositoryORM.policy["writable_references"].is_not(None),
+                    ),
+                )
+                .exists()
+            )
+
+            restricted = await session.scalar(
+                select(
+                    or_(
+                        secret_restricted,
+                        data_connectors_restricted,
+                        repositories_restricted,
+                    )
+                )
+            )
+
+            return launcher.dump(is_restricted=restricted)
 
     async def insert_launcher(
         self, user: base_models.APIUser, launcher: models.UnsavedSessionLauncher
@@ -636,6 +775,101 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             )
             session.add(launcher_orm)
             await session.flush()
+
+            # NOTE: copy session launchers secret permissions
+            source_secret_policies = await session.scalars(
+                select(schemas.SessionLauncherSecretORM).where(
+                    schemas.SessionLauncherSecretORM.launcher_id == launcher.id
+                )
+            )
+
+            destination_secret_slots = await session.scalars(
+                select(SessionSecretSlotORM).where(SessionSecretSlotORM.project_id == project_id)
+            )
+
+            # join source and destinations secret slots on filenames
+            destination_secrets_by_filenames = {link.filename: link for link in destination_secret_slots}
+
+            for secret_slot_policy in source_secret_policies:
+                secret_slot_filename = secret_slot_policy.secret_slot.filename
+                destination_secret_slot = destination_secrets_by_filenames.get(secret_slot_filename)
+
+                # destination_secret_slots should be a superset of source_secret_policies
+                if destination_secret_slot is None:
+                    continue
+
+                new_secret_slot_policy = schemas.SessionLauncherSecretORM(
+                    project_id=project_id,
+                    launcher_id=launcher_orm.id,
+                    secret_slot_id=destination_secret_slot.id,
+                    policy=secret_slot_policy.policy,
+                )
+                session.add(new_secret_slot_policy)
+            await session.flush()
+
+            # NOTE: copy session launcher data connector permissions
+            # this will also copy permissions for data connectors that are invisible to the user
+            # This is intentional, otherwise users who have access to the data connectors will be
+            # given default permissions.
+            source_dc_policies = await session.scalars(
+                select(schemas.SessionLauncherDataConnectorORM).where(
+                    schemas.SessionLauncherDataConnectorORM.launcher_id == launcher.id
+                )
+            )
+
+            destination_dc_links = await session.scalars(
+                select(DataConnectorToProjectLinkORM).where(DataConnectorToProjectLinkORM.project_id == project_id)
+            )
+
+            destination_dc_links_by_dc_id = {link.data_connector_id: link for link in destination_dc_links}
+
+            for source_dc_policy in source_dc_policies:
+                source_dc_id = source_dc_policy.data_connector_to_project_link.data_connector.id
+                dc_link = destination_dc_links_by_dc_id.get(source_dc_id)
+
+                # destination_dc_links should be a superset of source_dc_policies
+                if dc_link is None:
+                    continue
+
+                new_dc_policy = schemas.SessionLauncherDataConnectorORM(
+                    project_id=project_id,
+                    launcher_id=launcher_orm.id,
+                    data_connector_to_project_link_id=dc_link.id,
+                    policy=source_dc_policy.policy,
+                )
+                session.add(new_dc_policy)
+            await session.flush()
+
+            # NOTE: copy session launcher repository permissions
+            source_repo_policies = await session.scalars(
+                select(schemas.SessionLauncherRepositoryORM).where(
+                    schemas.SessionLauncherRepositoryORM.launcher_id == launcher.id
+                )
+            )
+
+            destination_repo_links = await session.scalars(
+                select(ProjectRepositoryORM).where(ProjectRepositoryORM.project_id == project_id)
+            )
+
+            # join source and destinations git repositories on urls
+            destination_repos_by_urls = {link.url: link for link in destination_repo_links}
+
+            for source_repo_policy in source_repo_policies:
+                source_repo_url = source_repo_policy.repository.url
+                new_repo_link = destination_repos_by_urls.get(source_repo_url)
+
+                # destination_repo_links should be a superset of source_repo_policies
+                if new_repo_link is None:
+                    continue
+
+                new_repo_policy = schemas.SessionLauncherRepositoryORM(
+                    launcher_id=launcher_orm.id,
+                    repository_id=new_repo_link.id,
+                    policy=source_repo_policy.policy,
+                )
+                session.add(new_repo_policy)
+            await session.flush()
+
             await session.refresh(launcher_orm)
             return launcher_orm.dump()
 
@@ -1389,7 +1623,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     secret_slot_id=slot.id,
                     policy=models.SessionLauncherSecretPolicyName.safe_parse(
                         policy,
-                        models.SessionLauncherSecretPolicyName.excluded,
+                        default=models.SessionLauncherSecretPolicyName.excluded,
                     ),
                 )
                 for slot, policy in result.all()
@@ -1515,3 +1749,143 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             secrets = result.all()
 
             return [s.dump() for s in secrets]
+
+    async def get_all_repositories_from_launcher(
+        self, user: base_models.APIUser, launcher: models.SessionLauncher
+    ) -> list[models.SessionLauncherRepository]:
+        """Get the repository parameters of a launcher entry."""
+
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # Get project, get project id, check if the project id is authorized
+        # Check that the user is allowed to access the project
+        authorized = await self.project_authz.has_permission(
+            user, ResourceType.project, launcher.project_id, Scope.READ
+        )
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{launcher.project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            result = await session.execute(
+                select(
+                    ProjectRepositoryORM,
+                    schemas.SessionLauncherRepositoryORM.policy,
+                )
+                .where(ProjectRepositoryORM.project_id == launcher.project_id)
+                .outerjoin(
+                    schemas.SessionLauncherRepositoryORM,
+                    and_(
+                        schemas.SessionLauncherRepositoryORM.launcher_id == launcher.id,
+                        schemas.SessionLauncherRepositoryORM.repository_id == ProjectRepositoryORM.id,
+                    ),
+                )
+                .order_by(ProjectRepositoryORM.id.desc())
+            )
+
+            launcher_repos: list[models.SessionLauncherRepository] = []
+            for repository_link, policy in result.all():
+                if policy is None:
+                    policy_name = models.SessionLauncherRepositoryPolicyName.read_write
+                    writable_references = None
+                else:
+                    policy_name = models.SessionLauncherRepositoryPolicyName.safe_parse(
+                        policy["policy"],
+                        default=models.SessionLauncherRepositoryPolicyName.excluded,
+                    )
+                    writable_references = policy.get("writable_references")
+
+                launcher_repos.append(
+                    models.SessionLauncherRepository(
+                        launcher_id=launcher.id,
+                        repository_id=repository_link.id,
+                        url=repository_link.url,
+                        policy=policy_name,
+                        writable_references=writable_references,
+                    )
+                )
+
+            return launcher_repos
+
+    async def update_launcher_repositories(
+        self,
+        user: base_models.APIUser,
+        launcher: models.SessionLauncher,
+        patches: list[models.SessionLauncherRepositoryPatch],
+    ) -> list[models.SessionLauncherRepository]:
+        """Patch the repository parameters of the session launcher."""
+
+        project_id = launcher.project_id
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        repository_ids = [patch.repository_id for patch in patches]
+
+        if len(repository_ids) != len(set(repository_ids)):
+            raise errors.ValidationError(message="A repository may only appear once in the list.")
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.SessionLauncherRepositoryORM).where(
+                    schemas.SessionLauncherRepositoryORM.launcher_id == launcher.id
+                )
+            )
+
+            launcher_repositories = {repo.repository_id: repo for repo in result.all()}
+
+            result = await session.scalars(
+                select(ProjectRepositoryORM).where(ProjectRepositoryORM.project_id == project_id)
+            )
+
+            project_repositories = {repo.id: repo for repo in result}
+
+            patch_repositoriy_ids = {patch.repository_id for patch in patches}
+
+            invalid_repository_ids = patch_repositoriy_ids - set(project_repositories.keys())
+
+            if invalid_repository_ids:
+                raise errors.ValidationError(
+                    message=f"Repository links {invalid_repository_ids} do not belong to project {project_id}."
+                )
+
+            updated: list[schemas.SessionLauncherRepositoryORM] = []
+
+            for patch in patches:
+                launcher_repo = launcher_repositories.get(patch.repository_id)
+                policy = patch.policy or models.SessionLauncherRepositoryPolicyName.excluded
+
+                policy_data = {
+                    "policy": policy.value,
+                    "writable_references": (
+                        [reference.root for reference in patch.writable_references]
+                        if patch.writable_references
+                        else None
+                    ),
+                }
+
+                if launcher_repo is None:
+                    launcher_repo = schemas.SessionLauncherRepositoryORM(
+                        # project_id=launcher.project_id,
+                        launcher_id=launcher.id,
+                        repository_id=patch.repository_id,
+                        policy=policy_data,
+                    )
+                    launcher_repo.repository = project_repositories[patch.repository_id]
+                    session.add(launcher_repo)
+                else:
+                    launcher_repo.policy = policy_data
+
+                updated.append(launcher_repo)
+
+            await session.flush()
+
+        return [repo.dump() for repo in updated]

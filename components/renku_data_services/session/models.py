@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Final, Self
+from typing import TYPE_CHECKING, Final, Self, overload
 
 from ulid import ULID
 
@@ -67,10 +67,19 @@ class BuilderVariant(StrEnum):
 class SafeStrEnum(StrEnum):
     """Enum with safe parsing of arbitrary strings."""
 
+    @overload
+    @classmethod
+    def safe_parse(cls, value: str) -> Self | None: ...
+
+    @overload
+    @classmethod
+    def safe_parse(cls, value: str, *, default: Self) -> Self: ...
+
     @classmethod
     def safe_parse(
         cls,
         value: str,
+        *,
         default: Self | None = None,
     ) -> Self | None:
         """Return the enum value or the default if invalid."""
@@ -327,6 +336,7 @@ class SessionLauncher(UnsavedSessionLauncher):
     creation_date: datetime
     created_by: Member
     environment: Environment
+    is_restricted: bool | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -488,7 +498,7 @@ class SessionLauncherRepositoryPolicy:
     """Model to represent a session launcher repository policy."""
 
     policy: SessionLauncherRepositoryPolicyName | None
-    writable_references: list[str] | None = None
+    writable_references: list[apispec.GitReference] | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -496,6 +506,14 @@ class SessionLauncherRepository(SessionLauncherRepositoryPolicy):
     """Model to represent a repository and its access policies for a launcher."""
 
     launcher_id: ULID
+    repository_id: int
+    url: str
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherRepositoryPatch(SessionLauncherRepositoryPolicy):
+    """Model to patch a repository and its access policies for a launcher."""
+
     repository_id: int
 
 
@@ -511,7 +529,14 @@ class SessionLauncherDataConnector(SessionLauncherDataConnectorPolicy):
     """Model to represent a data connector and its access policies for a launcher."""
 
     launcher_id: ULID
-    data_connector_to_project_link_id: ULID
+    data_connector_link_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherDataConnectorPatch(SessionLauncherDataConnectorPolicy):
+    """Model to patch a data connector and its access policies for a launcher."""
+
+    data_connector_link_id: ULID
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
