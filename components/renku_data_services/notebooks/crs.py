@@ -425,7 +425,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         params = None
         query = None
         fragment = None
-        path = f"/id/p/{self.project_id}/sessions/show/{self.metadata.name}"
+        path = f"/s/{self.metadata.name}?projectId={self.project_id}"
 
         url = str(urlunparse((scheme, host, path, params, query, fragment)))
 
