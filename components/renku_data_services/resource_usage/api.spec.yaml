@@ -240,27 +240,17 @@ components:
       additionalProperties: false
       properties:
         total_usage:
-          $ref: "#/components/schemas/ResourceUsageSummary"
+          type: number
+          format: double
         user_usage:
-          $ref: "#/components/schemas/ResourceUsageSummary"
+          type: number
+          format: double
         pool_limits:
           $ref: "#/components/schemas/ResourcePoolLimits"
       required:
         - total_usage
         - user_usage
         - pool_limits
-    ResourceUsageSummary:
-      type: object
-      additionalProperties: false
-      properties:
-        runtime:
-          type: number
-          format: double
-        cost:
-          type: integer
-      required:
-        - runtime
-        - cost
     ResourcePoolLimitPut:
       type: object
       additionalProperties: false

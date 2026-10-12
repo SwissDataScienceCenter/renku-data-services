@@ -11,14 +11,6 @@ from pydantic import ConfigDict, Field, RootModel
 from renku_data_services.resource_usage.apispec_base import BaseAPISpec
 
 
-class ResourceUsageSummary(BaseAPISpec):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    runtime: float
-    cost: int
-
-
 class ResourcePoolLimitPut(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
