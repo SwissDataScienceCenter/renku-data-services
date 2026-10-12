@@ -2063,10 +2063,7 @@ class ResourceFlavourRepository:
     async def update_flavour(
         self, api_user: base_models.APIUser, flavour_id: ULID, update: models.ResourceFlavourPatch
     ) -> models.ResourceFlavour:
-        """Update a resource flavour in the database.
-
-        The new values are not copied onto the linked resource classes: they take effect on read.
-        """
+        """Update a resource flavour in the database."""
         async with self.session_maker() as session, session.begin():
             flavour = await _get_flavour_orm(session, flavour_id)
             if update.name is not None and update.name != flavour.name:

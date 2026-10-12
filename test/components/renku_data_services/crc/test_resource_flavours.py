@@ -59,9 +59,7 @@ def test_dump_matching_reads_the_resolved_values() -> None:
 
 
 def test_pool_dump_sorts_by_the_resolved_size() -> None:
-    """The class rows are stale, so the SQL order is wrong and the Python sort has to fix it."""
-    # Row values and ids are both in the opposite order to the resolved sizes, so an unsorted
-    # dump, or one sorted on the class's own columns, returns these the other way round.
+    """A pool lists its classes by their flavour size, not by the values saved on the class."""
     resolves_large = _class_orm("resolves-large", cpu=1.0, memory=2)
     resolves_small = _class_orm("resolves-small", cpu=32.0, memory=128)
     resolves_large.id, resolves_small.id = 1, 2
