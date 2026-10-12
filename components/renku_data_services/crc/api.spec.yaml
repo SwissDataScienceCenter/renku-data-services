@@ -1815,8 +1815,6 @@ components:
         default_storage: 10
         id: 1
         matching: true
-    # NOTE: inline rather than $ref ResourceClassCreate — a third reference makes
-    # --collapse-root-models drop its RootModel wrapper, which @validate needs.
     ResourceClasses:
       type: array
       items:
