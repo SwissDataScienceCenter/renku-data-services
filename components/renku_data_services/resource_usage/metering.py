@@ -1,6 +1,6 @@
 """OpenMeter event emission for session resource usage metering."""
 
-from datetime import UTC, date
+from datetime import UTC
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from renku_data_services.app_config import logging
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.errors import errors
-from renku_data_services.resource_usage.model import Credit, ResourcesRequest
+from renku_data_services.resource_usage.model import Credit, ResourcePoolLimits, ResourcePoolUsage, ResourcesRequest
 
 logger = logging.getLogger(__file__)
 
@@ -35,7 +35,7 @@ class ResourceUsageMetering(Protocol):
         ...
 
     async def query_compute_usage(
-        self, resource_pool_id: int, user_id: str | None, start_date: date | None = None, end_date: date | None = None
+        self, resource_pool_id: int, user_id: str | None, start_date: str | None = None, end_date: str | None = None
     ) -> float:
         """Query compute usage from the metering service."""
         ...
@@ -80,7 +80,7 @@ def _to_openmeter_event(
     }
 
 
-COMPUTE_USAGE_METER_ID = "compute_units"
+COMPUTE_USAGE_KEY = "compute_units"
 
 
 class MeterQueryResponse(BaseModel):
@@ -89,10 +89,25 @@ class MeterQueryResponse(BaseModel):
     data: list[dict[str, Any]]
 
 
+class EntitlementQueryResponse(BaseModel):
+    """Response from OpenMeter entitlement query."""
+
+    activeFrom: str
+    currentUsagePeriod: dict[str, str]
+    customerId: str
+    customerKey: str
+    featureId: str
+    featureKey: str
+    isSoftLimit: bool
+    measureUsageFrom: str
+    type: str
+    usagePeriod: dict[str, str]
+
+
 class EntitlementValueQueryResponse(BaseModel):
     """Response from OpenMeter entitlement value query."""
 
-    hasAccess: bool
+    hasAccess: bool | None = None
     balance: float
     usage: float
     overage: float
@@ -153,9 +168,9 @@ class OpenMeterClient:
         self,
         resource_pool_id: int,
         user_id: str | None,
-        start_date: date | None = None,
-        end_date: date | None = None,
-        meter_id_or_slug: str = COMPUTE_USAGE_METER_ID,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        meter_key: str = COMPUTE_USAGE_KEY,
     ) -> float:
         """Query compute usage from OpenMeter."""
         body: dict[str, Any] = {
@@ -164,14 +179,36 @@ class OpenMeterClient:
             ]
         }
         if start_date is not None:
-            body["from"] = start_date.strftime("%Y-%m-%dT00:00:00Z")
+            body["from"] = start_date
         if end_date is not None:
-            body["to"] = end_date.strftime("%Y-%m-%dT23:59:59Z")
+            body["to"] = end_date
         if user_id is not None:
             user_body = {"advancedMeterGroupByFilters": {"user_id": {"$eq": user_id}}, "groupBy": ["user_id"]}
             body.update(user_body)
-        res = await self.query_meter(meter_id_or_slug, body)
+        res = await self.query_meter(meter_key, body)
         return res.data[0].get("value", 0.0) if res.data else 0.0
+
+    async def query_customer_entitlement(self, customer_id: str, feature_key: str) -> EntitlementQueryResponse | None:
+        """Query a customer entitlement in OpenMeter."""
+        resp = await self._client.get(
+            f"{self._endpoint_url}/api/v2/customers/{customer_id}/entitlements/{feature_key}",
+            headers=self._headers,
+        )
+        if resp.status_code == 404:
+            logger.warning(f"No customer or feature found for customer_id={customer_id} and feature_key={feature_key}")
+            return None
+
+        if resp.status_code >= 300 or resp.status_code < 200:
+            logger.warning(f"OpenMeter endpoint returned unexpected status {resp.status_code}: {resp.text[:200]}")
+            raise errors.ThirdPartyAPIError(
+                message=f"Received unexpected status code {resp.status_code} when querying OpenMeter entitlement.",
+                detail=f"Message from OpenMeter: {resp.text}",
+            )
+        if resp.json() == {}:
+            logger.warning(f"No customer entitlement found for customer_id={customer_id}, feature_key={feature_key}")
+            return None
+
+        return EntitlementQueryResponse.model_validate(resp.json())
 
     async def query_customer_entitlement_value(
         self, customer_id: str, feature_key: str
@@ -196,3 +233,46 @@ class OpenMeterClient:
             return None
 
         return EntitlementValueQueryResponse.model_validate(resp.json())
+
+    async def query_compute_usage_with_limits(
+        self, resource_pool_id: int, user_id: str | None, feature_key: str = COMPUTE_USAGE_KEY
+    ) -> ResourcePoolUsage:
+        """Query compute usage and limits from OpenMeter.
+
+        Assumptions:
+        - Customers have only one subject and share the same key `renku-pool-{resource_pool_id}`
+        - Feature and meter for compute usage share the same key `compute_units`
+        """
+        customer_id = f"renku-pool-{resource_pool_id}"
+        entitlement = await self.query_customer_entitlement(customer_id, feature_key)
+        if entitlement is None:
+            # We compute usage over the entire history and return limits with zero values
+            user_usage = await self.query_compute_usage(resource_pool_id, user_id, meter_key=feature_key)
+            total_usage = await self.query_compute_usage(resource_pool_id, None, meter_key=feature_key)
+            limits = ResourcePoolLimits(
+                pool_id=resource_pool_id,
+                total_limit=Credit.zero(),
+                user_limit=Credit.zero(),
+            )
+            return ResourcePoolUsage(total_usage, user_usage, limits)
+
+        entitlement_value = await self.query_customer_entitlement_value(customer_id, feature_key)
+        if entitlement_value is None:
+            # If entitlement is not None, it should have a value, otherwise we raise an error
+            raise errors.ValidationError(
+                message=f"Unexpected entitlement value for customer_id={customer_id} and feature_key={feature_key}.",
+                detail=f"Entitlement: {entitlement}",
+            )
+
+        start_date = entitlement.currentUsagePeriod["from"]
+        end_date = entitlement.currentUsagePeriod["to"]
+        user_usage = await self.query_compute_usage(
+            resource_pool_id, user_id, start_date, end_date, meter_key=feature_key
+        )
+        total_usage = entitlement_value.usage
+        limits = ResourcePoolLimits(
+            pool_id=resource_pool_id,
+            total_limit=Credit.from_int(int(entitlement_value.totalAvailableGrantAmount)),
+            user_limit=Credit.zero(),  # TODO: check how we can get the user limit
+        )
+        return ResourcePoolUsage(total_usage, user_usage, limits)

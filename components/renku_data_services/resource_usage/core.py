@@ -225,7 +225,11 @@ class ResourceUsageService:
         if self._metering_client is None:
             return 0.0
 
-        result = await self._metering_client.query_compute_usage(resource_pool_id, user_id, start_date, end_date)
+        start_date_str = start_date.strftime("%Y-%m-%dT00:00:00Z")
+        end_date_str = end_date.strftime("%Y-%m-%dT23:59:59Z") if end_date is not None else None
+        result = await self._metering_client.query_compute_usage(
+            resource_pool_id, user_id, start_date_str, end_date_str
+        )
         return result
 
     async def get_running_week(
