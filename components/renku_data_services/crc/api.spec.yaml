@@ -2195,7 +2195,7 @@ components:
       example: true
     Preemptible:
       type: boolean
-      description: Whether sessions and jobs in this resource class have a low priority, so that other sessions can evict them
+      description: Whether sessions and jobs in this resource class can be preempted by resources in non-preemptible resource classes
       example: false
     PublicFlag:
       type: boolean
