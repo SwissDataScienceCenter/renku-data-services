@@ -89,6 +89,18 @@ class MeterQueryResponse(BaseModel):
     data: list[dict[str, Any]]
 
 
+class EntitlementValueQueryResponse(BaseModel):
+    """Response from OpenMeter entitlement value query."""
+
+    hasAccess: bool
+    balance: float
+    usage: float
+    overage: float
+    totalAvailableGrantAmount: float
+    config: str | None = None
+    grantBalances: dict[str, float] | None = None
+
+
 class OpenMeterClient:
     """Emits session resource usage events to OpenMeter."""
 
@@ -156,10 +168,31 @@ class OpenMeterClient:
         if end_date is not None:
             body["to"] = end_date.strftime("%Y-%m-%dT23:59:59Z")
         if user_id is not None:
-            # TODO: hash user_id to map to OpenMeter user_id: hash("hmac_sha256", $salt).encode("hex")
-            # user_id = hashlib.sha256(f"{user_id}{self._salt}".encode("utf-8")).hexdigest()
             user_body = {"advancedMeterGroupByFilters": {"user_id": {"$eq": user_id}}, "groupBy": ["user_id"]}
             body.update(user_body)
-        logger.info(f"Querying OpenMeter meter '{meter_id_or_slug}' with body: {body}")
         res = await self.query_meter(meter_id_or_slug, body)
         return res.data[0].get("value", 0.0) if res.data else 0.0
+
+    async def query_customer_entitlement_value(
+        self, customer_id: str, feature_key: str
+    ) -> EntitlementValueQueryResponse | None:
+        """Query a customer entitlement value in OpenMeter."""
+        resp = await self._client.get(
+            f"{self._endpoint_url}/api/v2/customers/{customer_id}/entitlements/{feature_key}/value",
+            headers=self._headers,
+        )
+        if resp.status_code == 404:
+            logger.warning(f"No customer found for customer_id={customer_id}")
+            return None
+
+        if resp.status_code >= 300 or resp.status_code < 200:
+            logger.warning(f"OpenMeter endpoint returned unexpected status {resp.status_code}: {resp.text[:200]}")
+            raise errors.ThirdPartyAPIError(
+                message=f"Received unexpected status code {resp.status_code} when querying OpenMeter entitlement.",
+                detail=f"Message from OpenMeter: {resp.text}",
+            )
+        if resp.json() == {}:
+            logger.warning(f"No customer entitlement found for customer_id={customer_id}, feature_key={feature_key}")
+            return None
+
+        return EntitlementValueQueryResponse.model_validate(resp.json())
