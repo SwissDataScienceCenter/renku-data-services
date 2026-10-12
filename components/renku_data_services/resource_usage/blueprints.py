@@ -155,13 +155,8 @@ class ResourceUsageBP(CustomBlueprint):
             if requested_by != user.id and (user.access_token is None or not user.is_admin):
                 raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
-            rp = await self.rp_repo.get_resource_pool(user, resource_pool_id)
-            enforcement_enabled = any([c.quota_enforced for c in rp.classes])
-
             result: model.ResourcePoolUsage | None = None
-            if not enforcement_enabled:
-                result = None
-            elif start_date:
+            if start_date:
                 result = await self.rr_svc.get_for_date(resource_pool_id, requested_by or "", start_date, end_date)
             else:
                 result = await self.rr_svc.get_running_week(resource_pool_id, requested_by or "")
