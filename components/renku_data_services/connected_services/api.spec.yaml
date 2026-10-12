@@ -530,6 +530,7 @@ components:
         - "gitlab"
         - "google"
         - "zenodo"
+        - "scicat"
       example: "gitlab"
     ApplicationSlug:
       description: |

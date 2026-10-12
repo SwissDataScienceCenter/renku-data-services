@@ -216,6 +216,10 @@ class ProjectStorageRepository:
         self, user: base_models.APIUser, input: models.ProjectStorageAllow, *, session: AsyncSession | None = None
     ) -> models.ProjectStorageAllow:
         """Insert a new project storage allow entry."""
+        # When the feature is disabled, we disallow insertion, but still allow managing existing data
+        if not self.project_storage_config.enabled:
+            raise errors.MissingResourceError(message="The project storage api is not enabled.")
+
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
         if user.id is None or not user.is_admin:

@@ -19,6 +19,7 @@ class ProviderKind(StrEnum):
     gitlab = "gitlab"
     google = "google"
     zenodo = "zenodo"
+    scicat = "scicat"
 
 
 class ConnectionStatus(StrEnum):

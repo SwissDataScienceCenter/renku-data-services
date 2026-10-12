@@ -196,9 +196,6 @@ class ConnectedServicesRepository:
                 client.oidc_issuer_url = patch.oidc_issuer_url
             elif patch.oidc_issuer_url == "":
                 client.oidc_issuer_url = None
-            # Unset oidc_issuer_url when the kind has been changed to a value other than 'generic_oidc'
-            if client.kind != models.ProviderKind.generic_oidc:
-                client.oidc_issuer_url = None
 
             await session.flush()
             await session.refresh(client)

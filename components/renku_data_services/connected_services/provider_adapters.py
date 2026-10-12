@@ -361,6 +361,7 @@ _adapter_map: dict[models.ProviderKind, type[ProviderAdapter]] = {
     models.ProviderKind.gitlab: GitLabAdapter,
     models.ProviderKind.google: GoogleAdapter,
     models.ProviderKind.zenodo: ZenodoAdapter,
+    models.ProviderKind.scicat: GenericOidcAdapter,
 }
 
 
