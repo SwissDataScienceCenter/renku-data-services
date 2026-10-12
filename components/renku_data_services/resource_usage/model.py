@@ -606,50 +606,6 @@ class ResourcesRequest:
 
 
 @dataclass(frozen=True)
-class ResourceUsageSummary:
-    """Summarizes resource usage across a time period."""
-
-    first_capture: date
-    last_capture: date
-    entries: int
-    runtime_hours: float
-    cost_raw: float
-
-    @property
-    def cost(self) -> Credit:
-        """Return the costs."""
-        return Credit.from_int(round(self.cost_raw))
-
-    def is_empty(self) -> bool:
-        """Return whether this summary is empty."""
-        return self.entries == 0
-
-    def add(self, entry: ResourceUsage) -> ResourceUsageSummary:
-        """Adds an resource usage entry to this summary.
-
-        Takes the largest runtime and applies the cost of the associated resource class to calculate
-        the overall cost for that entry.
-        """
-        # we don't look at disk_hours for now
-        runtime_h = entry.runtime_hour.total_seconds() / 3600.0
-        cost = runtime_h * entry.resource_class_cost.value
-        return ResourceUsageSummary(
-            entries=self.entries + 1,
-            first_capture=min(self.first_capture, entry.capture_date),
-            last_capture=max(self.last_capture, entry.capture_date),
-            runtime_hours=self.runtime_hours + runtime_h,
-            cost_raw=self.cost_raw + cost,
-        )
-
-    @classmethod
-    def empty(cls) -> ResourceUsageSummary:
-        """Return an empty instance."""
-        return ResourceUsageSummary(
-            entries=0, first_capture=datetime.max.date(), last_capture=datetime.min.date(), runtime_hours=0, cost_raw=0
-        )
-
-
-@dataclass(frozen=True)
 class ResourcePoolUsage:
     """Overview of a resource pool in context of a user."""
 
