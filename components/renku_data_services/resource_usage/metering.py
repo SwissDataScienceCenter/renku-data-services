@@ -2,7 +2,7 @@
 
 from datetime import UTC
 from enum import StrEnum
-from typing import Any, Protocol
+from typing import Any, Optional, Protocol
 
 import httpx
 from pydantic import BaseModel
@@ -13,6 +13,9 @@ from renku_data_services.errors import errors
 from renku_data_services.resource_usage.model import Credit, ResourcePoolLimits, ResourcePoolUsage, ResourcesRequest
 
 logger = logging.getLogger(__file__)
+
+
+COMPUTE_USAGE_KEY = "compute_units"
 
 
 class MetricCode(StrEnum):
@@ -38,6 +41,12 @@ class ResourceUsageMetering(Protocol):
         self, resource_pool_id: int, user_id: str | None, start_date: str | None = None, end_date: str | None = None
     ) -> float:
         """Query compute usage from the metering service."""
+        ...
+
+    async def query_compute_usage_with_limits(
+        self, resource_pool_id: int, user_id: str, feature_key: str = COMPUTE_USAGE_KEY
+    ) -> ResourcePoolUsage:
+        """Query compute usage and limits from the metering service."""
         ...
 
 
@@ -80,9 +89,6 @@ def _to_openmeter_event(
     }
 
 
-COMPUTE_USAGE_KEY = "compute_units"
-
-
 class MeterQueryResponse(BaseModel):
     """Response from OpenMeter meter query."""
 
@@ -107,13 +113,13 @@ class EntitlementQueryResponse(BaseModel):
 class EntitlementValueQueryResponse(BaseModel):
     """Response from OpenMeter entitlement value query."""
 
-    hasAccess: bool | None = None
+    hasAccess: Optional[bool] = None
     balance: float
     usage: float
     overage: float
     totalAvailableGrantAmount: float
-    config: str | None = None
-    grantBalances: dict[str, float] | None = None
+    config: Optional[str] = None
+    grantBalances: Optional[dict[str, float]] = None
 
 
 class OpenMeterClient:
@@ -172,7 +178,11 @@ class OpenMeterClient:
         end_date: str | None = None,
         meter_key: str = COMPUTE_USAGE_KEY,
     ) -> float:
-        """Query compute usage from OpenMeter."""
+        """Query compute usage from OpenMeter.
+
+        If user_id is None, the total usage for the resource pool is returned.
+        Otherwise, the usage for the specified user within the resource pool is returned.
+        """
         body: dict[str, Any] = {
             "subject": [
                 f"renku-pool-{resource_pool_id}",
@@ -235,7 +245,7 @@ class OpenMeterClient:
         return EntitlementValueQueryResponse.model_validate(resp.json())
 
     async def query_compute_usage_with_limits(
-        self, resource_pool_id: int, user_id: str | None, feature_key: str = COMPUTE_USAGE_KEY
+        self, resource_pool_id: int, user_id: str, feature_key: str = COMPUTE_USAGE_KEY
     ) -> ResourcePoolUsage:
         """Query compute usage and limits from OpenMeter.
 
