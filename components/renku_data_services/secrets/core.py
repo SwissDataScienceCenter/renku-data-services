@@ -123,7 +123,7 @@ async def create_dc_config_secret(
     )
     ini_config = __create_ini_style_config(config)
     return __create_secret_manifest(
-        body.name, body.namespace, body.cluster_id, body.owner_references, {"config": ini_config}
+        body.name, body.namespace, body.cluster_id, body.owner_references or [], {"config": ini_config}
     )
 
 
