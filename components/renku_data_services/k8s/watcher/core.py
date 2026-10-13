@@ -230,6 +230,10 @@ async def __collect_session_metrics(
         else SessionType.interactive
     )
     previous_state = previous_obj.manifest.get("status", {}).get("state", None) if previous_obj else None
+
+    new_state = new_obj.obj.raw.get("status", {}).get("state")
+    logger.info(f"DEBUG EVENT {event_type}: {previous_state} => {new_state}")
+
     match new_obj.obj.raw.get("status", {}).get("state"):
         case State.Running.value if previous_state is None or previous_state == State.NotReady.value:
             # session starting
