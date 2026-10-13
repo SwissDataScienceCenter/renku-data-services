@@ -51,7 +51,6 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
-from renku_data_services.resource_usage.model import Credit
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
 
@@ -283,8 +282,10 @@ class ResourcePoolQueryRepository:
                 # TODO: Enable resource usage reporting broadly when the resource usage
                 # tracking / queries are more performant.
                 if self.resource_usage_service and api_user.is_authenticated and enforcement_enabled:
-                    user_usage = await self.resource_usage_service.usage_of_running_week(rp.id, api_user.id)
-                    credits_used = Credit.from_int(int(user_usage))  # TODO
+                    # user_usage = await self.resource_usage_service.usage_of_running_week(rp.id, api_user.id)
+                    # credits_used = Credit.from_int(int(user_usage))
+                    # TODO: update this and `calculate_usage_hours`
+                    pass
 
                 rp_model = rp.dump(quota, criteria, credits_used)
 

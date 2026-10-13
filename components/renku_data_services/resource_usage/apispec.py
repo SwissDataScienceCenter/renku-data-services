@@ -77,8 +77,6 @@ class Ulid(RootModel[str]):
 
 
 class ResourcePoolsResourcePoolIdUsageGetParametersQuery(BaseAPISpec):
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
     user_id: Optional[str] = None
 
 
