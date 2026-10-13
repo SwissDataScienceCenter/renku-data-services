@@ -196,7 +196,6 @@ class ResourceUsageService:
     """Queries for resource usages."""
 
     def __init__(self, repo: ResourceRequestsRepo, metering_client: ResourceUsageMetering | None = None) -> None:
-        self._repo = repo
         if metering_client is None:
             logger.warning(
                 "No metering client configured, resource usage will not be queried from the metering service."
@@ -204,57 +203,27 @@ class ResourceUsageService:
 
         self._metering_client = metering_client
 
-    async def usage_of_running_week(
-        self, resource_pool_id: int, user_id: str | None, current_time: datetime | None = None
-    ) -> float:
-        """Return the resource usage for the given pool of the currently running week.
-
-        The week start is Monday 0:00 UTC. Resource usage is returned in 'credits'. When a user_id
-        is given, the results represent the usage of only that user. Otherwise, the overall pool usage
-        is returned. The running week is calculated from the `current_time` argument, which is the current
-        time if not specified.
-        """
-        now = current_time.replace(tzinfo=UTC) if current_time is not None else datetime.now(UTC)
-        start = (now - timedelta(days=now.weekday())).date()
-        return await self.usage_of_timespan(resource_pool_id, user_id, start, now.date())
-
-    async def usage_of_timespan(
-        self, resource_pool_id: int, user_id: str | None, start_date: date, end_date: date | None
-    ) -> float:
+    async def get_usage(
+        self, resource_pool_id: int, user_id: str | None, start_date: date | None, end_date: date | None
+    ) -> float | None:
         """Return the resource usage for the given pool of the given timespan."""
         if self._metering_client is None:
-            return 0.0
+            return None
 
-        start_date_str = start_date.strftime("%Y-%m-%dT00:00:00Z")
+        start_date_str = start_date.strftime("%Y-%m-%dT00:00:00Z") if start_date is not None else None
         end_date_str = end_date.strftime("%Y-%m-%dT23:59:59Z") if end_date is not None else None
         result = await self._metering_client.query_compute_usage(
             resource_pool_id, user_id, start_date_str, end_date_str
         )
         return result
 
-    async def get_running_week(
-        self, resource_pool_id: int, user_id: str, current_time: datetime | None = None
+    async def get_usage_with_limits(
+        self,
+        resource_pool_id: int,
+        user_id: str,
     ) -> ResourcePoolUsage | None:
         """Get resource pool usage and its limits."""
-
-        limits = await self._repo.find_resource_pool_limits(resource_pool_id)
-
-        if limits:
-            user_usage = await self.usage_of_running_week(resource_pool_id, user_id, current_time)
-            total_usage = await self.usage_of_running_week(resource_pool_id, None, current_time)
-            return ResourcePoolUsage(total_usage, user_usage, limits)
-        else:
+        if self._metering_client is None:
             return None
 
-    async def get_for_date(
-        self, resource_pool_id: int, user_id: str, start_date: date, end_date: date | None
-    ) -> ResourcePoolUsage | None:
-        """Get resource pool usage given a time span."""
-
-        limits = await self._repo.find_resource_pool_limits(resource_pool_id)
-        if limits:
-            user_usage = await self.usage_of_timespan(resource_pool_id, user_id, start_date, end_date)
-            total_usage = await self.usage_of_timespan(resource_pool_id, None, start_date, end_date)
-            return ResourcePoolUsage(total_usage, user_usage, limits)
-        else:
-            return None
+        return await self._metering_client.query_compute_usage_with_limits(resource_pool_id, user_id)
