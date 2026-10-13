@@ -34,7 +34,6 @@ from renku_data_services.notifications.models import UnsavedAlert
 from renku_data_services.solr.entity_schema import all_migrations
 from renku_data_services.solr.solr_client import DefaultSolrClient
 from renku_data_services.solr.solr_migrate import SchemaMigrator
-from renku_data_services.utils.core import get_effective_quota
 
 logger = logging.getLogger(__name__)
 
@@ -492,23 +491,18 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
             usage = await dm.resource_usage_service.get_usage_with_limits(
                 resource_pool_id=resource_pool_id, user_id=user_id
             )
-            if not usage:
-                continue
-
-            # TODO: we should actually do a check for the user (if user_limit > 0) and the total (if total_limit > 0)
-            total_quota = get_effective_quota(usage.pool_limits.user_limit.value, usage.pool_limits.total_limit.value)
-            if total_quota <= 0:
-                continue
-
-            usage_p = (usage.user_usage / total_quota) * 100
-            usage_threshold_p = 100 - dm.config.session_quota_alert_remaining_threshold_p
-            if usage_p <= usage_threshold_p:
+            remaining_quota, remaining_quota_p = dm.resource_usage_service.get_remaining_quota(usage)
+            if (
+                remaining_quota is None
+                or remaining_quota_p is None
+                or remaining_quota_p > dm.config.session_quota_alert_remaining_threshold_p
+            ):
                 continue
 
             # NOTE: Without the resource_class_id, we cannot calculate the remaining time or know if quota is enforced
             # on the resource class
             if resource_class_id:
-                if usage.user_usage >= total_quota:
+                if remaining_quota <= 0:
                     message = f"Your session {session_name} in resource pool {resource_pool_id} has exhausted its quota"
                     log_message = (
                         f"Session {session_name} for user {user_id} has exhausted its quota in resource pool "
@@ -540,8 +534,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
                 )
 
                 if resource_class_cost and resource_class_cost.cost.value > 0:
-                    remaining_credits = total_quota - usage.user_usage
-                    remaining_minutes = (remaining_credits / resource_class_cost.cost.value) * 60
+                    remaining_minutes = (remaining_quota / resource_class_cost.cost.value) * 60
                     if remaining_minutes < dm.config.session_quota_alert_critical_m:
                         critical_alert = UnsavedAlert(
                             user_id=user_id,
@@ -560,7 +553,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
                 event_type="session_quota_low",
                 session_name=session_name,
                 title="Session quota running low",
-                message=f"You have used {usage_p:.1f}% of your quota in resource pool {resource_pool_id}.",
+                message=f"Only {remaining_quota_p:.1f}% of your quota remains in resource pool {resource_pool_id}.",
             )
             await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=alert)
             logger.info(f"Created quota alert for user {user_id}, session {session_name}")

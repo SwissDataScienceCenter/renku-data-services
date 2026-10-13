@@ -128,7 +128,6 @@ from renku_data_services.session.models import Environment, SessionLauncher
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
-from renku_data_services.utils.core import get_effective_quota
 
 logger = logging.getLogger(__name__)
 
@@ -898,15 +897,11 @@ def get_remote_env(
 async def _check_quota(resource_usage_service: ResourceUsageService, resource_pool_id: int, user_id: str) -> None:
     """Raise a ValidationError if the user has exhausted their quota, do nothing otherwise."""
     usage = await resource_usage_service.get_usage_with_limits(resource_pool_id=resource_pool_id, user_id=user_id)
-    if usage is None:
+    remaining_quota, _ = resource_usage_service.get_remaining_quota(usage)
+    if remaining_quota is None:
         return
 
-    # TODO: we should actually do a check for the user (if user_limit > 0) and the total (if total_limit > 0)
-    total_quota = get_effective_quota(usage.pool_limits.user_limit.value, usage.pool_limits.total_limit.value)
-    if total_quota <= 0:
-        return
-
-    if usage.user_usage >= total_quota:
+    if remaining_quota <= 0:
         raise errors.ValidationError(
             message="Cannot start the session because your quota in the selected resource pool is exhausted."
         )
