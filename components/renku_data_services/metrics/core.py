@@ -142,5 +142,5 @@ class StagingMetricsService(MetricsService):
         await self._store_event(MetricsEvent.user_requested_session_resume, user, metadata)
 
     async def session_job_terminated(self, user: APIUser, metadata: MetricsMetadata) -> None:
-        """Send ???."""
+        """Send job (non-interactive session) termination event."""
         await self._store_event(MetricsEvent.session_job_terminated, user, metadata)

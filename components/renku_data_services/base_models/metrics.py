@@ -150,7 +150,7 @@ class MetricsService(Protocol):
         ...
 
     async def session_job_terminated(self, user: APIUser, metadata: MetricsMetadata) -> None:
-        """Send ???."""
+        """Send job (non-interactive session) termination event."""
         ...
 
 
