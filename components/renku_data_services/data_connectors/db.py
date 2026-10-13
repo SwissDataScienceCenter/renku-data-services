@@ -1207,7 +1207,10 @@ class DataConnectorRepository:
 
         for patch in patches:
             dc_link = launcher_dc_links.get(patch.data_connector_link_id)
-            data_connector = project_dc_links[patch.data_connector_link_id].data_connector
+            project_dc_link = project_dc_links.get(patch.data_connector_link_id)
+            if not project_dc_link:
+                raise errors.ValidationError(message=f"The data connector with link ID {patch.data_connector_link_id} cannot be found in the project.")
+            data_connector = project_dc_link.data_connector
             policy = patch.policy or SessionLauncherDataConnectorPolicyName.excluded
 
             if policy.requires_write_access and data_connector.readonly:
