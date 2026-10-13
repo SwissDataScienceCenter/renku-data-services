@@ -265,6 +265,27 @@ async def __collect_session_metrics(
             previous_state != State.Succeeded.value and session_type == SessionType.non_interactive
         ):
             # job terminated successfully
+            if previous_state == State.NotReady.value:
+                # job ran fast, without going through the running phase,
+                # emit session_started before session_job_terminated
+                resource_class_id = int(new_obj.obj.metadata.annotations.get("renku.io/resource_class_id"))
+                resource_pool = await rp_repo.get_resource_pool_from_class(k8s_watcher_admin_user, resource_class_id)
+                resource_class = await rp_repo.get_resource_class(k8s_watcher_admin_user, resource_class_id)
+                await metrics.session_started(
+                    user=user,
+                    metadata={
+                        "cpu": int(resource_class.cpu * 1000),
+                        "memory": resource_class.memory,
+                        "gpu": resource_class.gpu,
+                        "storage": new_obj.obj.spec.session.storage.size,
+                        "resource_class_id": resource_class_id,
+                        "resource_pool_id": resource_pool.id or "",
+                        "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
+                        "session_id": new_obj.meta.name,
+                        "session_type": session_type.value.lower(),
+                    },
+                )
+
             logger.info(f"JOB EVENT: session_job_terminated: {State.Succeeded.value.lower()}")
             await metrics.session_job_terminated(
                 user=user, metadata={"session_id": new_obj.meta.name, "status": State.Succeeded.value.lower()}
@@ -277,6 +298,30 @@ async def __collect_session_metrics(
             # NOTE: we only get a text message as a way to match for job failures
             if isinstance(error_msg, str) and "container amalthea-session terminated" in error_msg:
                 # job terminated with an error
+
+                if previous_state == State.NotReady.value:
+                    # job ran fast, without going through the running phase,
+                    # emit session_started before session_job_terminated
+                    resource_class_id = int(new_obj.obj.metadata.annotations.get("renku.io/resource_class_id"))
+                    resource_pool = await rp_repo.get_resource_pool_from_class(
+                        k8s_watcher_admin_user, resource_class_id
+                    )
+                    resource_class = await rp_repo.get_resource_class(k8s_watcher_admin_user, resource_class_id)
+                    await metrics.session_started(
+                        user=user,
+                        metadata={
+                            "cpu": int(resource_class.cpu * 1000),
+                            "memory": resource_class.memory,
+                            "gpu": resource_class.gpu,
+                            "storage": new_obj.obj.spec.session.storage.size,
+                            "resource_class_id": resource_class_id,
+                            "resource_pool_id": resource_pool.id or "",
+                            "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
+                            "session_id": new_obj.meta.name,
+                            "session_type": session_type.value.lower(),
+                        },
+                    )
+
                 logger.info(f"JOB EVENT: session_job_terminated: {State.Failed.value.lower()}")
                 await metrics.session_job_terminated(
                     user=user, metadata={"session_id": new_obj.meta.name, "status": State.Failed.value.lower()}
