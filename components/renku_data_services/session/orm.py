@@ -398,7 +398,7 @@ class SessionLauncherDataConnectorORM(BaseORM):
         PrimaryKeyConstraint("launcher_id", "data_connector_to_project_link_id"),
         ForeignKeyConstraint(
             ["launcher_id", "project_id"],
-            ["sessions.launchers.id", "sessions.launchers.project_id"],
+            [SessionLauncherORM.id, SessionLauncherORM.project_id],
             name="_fk_launcher_data_connectors_launcher",
             ondelete="CASCADE",
         ),
