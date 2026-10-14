@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import jwt
 import pytest
@@ -207,3 +208,18 @@ async def test_authenticator_valid_access_token(
     assert response.json["is_authenticated"], "user should be authenticated"
     assert response.json.get("id") == "some-user-id"
     assert response.json.get("email") == "jane.doe@example.org"
+
+
+async def _auth(token: str, authenticator: RenkuSelfAuthenticator):
+    request = MagicMock()
+    request.headers = {"Authorization": f"Bearer {token}"}
+    return await authenticator.authenticate(f"Bearer {token}", request)
+
+
+@pytest.mark.asyncio
+async def test_plain_internal_authenticator_unaffected(
+    local_test_user, shared_internal_authn_config, shared_internal_token_mint
+):
+    authenticator = RenkuSelfAuthenticator.from_config(config=shared_internal_authn_config)
+    token = shared_internal_token_mint.create_access_token(user=local_test_user)
+    assert (await _auth(token, authenticator)).is_authenticated
