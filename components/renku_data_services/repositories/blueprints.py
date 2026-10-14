@@ -109,17 +109,16 @@ class RepositoriesBP(CustomBlueprint):
         # return "/resource_pools/<resource_pool_id>/classes", ["GET"], _get_all
 
         @authenticate(self.authenticator)
-        @validate_query(query=apispec.RepositoryPermissionsGetParametersQuery)
+        @validate_query(query=apispec.RepositoryPermissionsParams)
         @extract_if_none_match
         async def _get_repository_permissions(
             req: Request,
             user: base_models.APIUser,
-            query: apispec.RepositoryPermissionsGetParametersQuery,
+            query: apispec.RepositoryPermissionsParams,
             etag: str | None,
         ) -> JSONResponse | HTTPResponse:
-            repository_url = query.repository_permissions_params.url
-            connection_id_str = query.repository_permissions_params.connection_id
-
+            repository_url = query.url
+            connection_id_str = query.connection_id
             try:
                 connection_id = ULID.from_str(connection_id_str)
             except ValueError as e:
