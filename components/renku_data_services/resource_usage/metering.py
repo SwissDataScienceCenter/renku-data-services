@@ -183,11 +183,8 @@ class OpenMeterClient:
         If user_id is None, the total usage for the resource pool is returned.
         Otherwise, the usage for the specified user within the resource pool is returned.
         """
-        body: dict[str, Any] = {
-            "subject": [
-                f"renku-pool-{resource_pool_id}",
-            ]
-        }
+        subject_key = f"renku-pool-{resource_pool_id}"
+        body: dict[str, Any] = {"subject": [subject_key]}
         if start_date is not None:
             body["from"] = start_date
         if end_date is not None:
@@ -198,14 +195,18 @@ class OpenMeterClient:
         res = await self.query_meter(meter_key, body)
         return res.data[0].get("value", 0.0) if res.data else 0.0
 
-    async def query_customer_entitlement(self, customer_id: str, feature_key: str) -> EntitlementQueryResponse | None:
+    async def query_customer_entitlement(
+        self, customer_id_or_key: str, feature_key: str
+    ) -> EntitlementQueryResponse | None:
         """Query a customer entitlement in OpenMeter."""
         resp = await self._client.get(
-            f"{self._endpoint_url}/api/v2/customers/{customer_id}/entitlements/{feature_key}",
+            f"{self._endpoint_url}/api/v2/customers/{customer_id_or_key}/entitlements/{feature_key}",
             headers=self._headers,
         )
         if resp.status_code == 404:
-            logger.warning(f"No customer or feature found for customer_id={customer_id} and feature_key={feature_key}")
+            logger.warning(
+                f"No customer or feature found for customer={customer_id_or_key} and feature_key={feature_key}"
+            )
             return None
 
         if resp.status_code >= 300 or resp.status_code < 200:
@@ -215,21 +216,23 @@ class OpenMeterClient:
                 detail=f"Message from OpenMeter: {resp.text}",
             )
         if resp.json() == {}:
-            logger.warning(f"No customer entitlement found for customer_id={customer_id}, feature_key={feature_key}")
+            logger.warning(
+                f"No customer entitlement found for customer={customer_id_or_key}, feature_key={feature_key}"
+            )
             return None
 
         return EntitlementQueryResponse.model_validate(resp.json())
 
     async def query_customer_entitlement_value(
-        self, customer_id: str, feature_key: str
+        self, customer_id_or_key: str, feature_key: str
     ) -> EntitlementValueQueryResponse | None:
         """Query a customer entitlement value in OpenMeter."""
         resp = await self._client.get(
-            f"{self._endpoint_url}/api/v2/customers/{customer_id}/entitlements/{feature_key}/value",
+            f"{self._endpoint_url}/api/v2/customers/{customer_id_or_key}/entitlements/{feature_key}/value",
             headers=self._headers,
         )
         if resp.status_code == 404:
-            logger.warning(f"No customer found for customer_id={customer_id}")
+            logger.warning(f"No customer found for customer={customer_id_or_key}")
             return None
 
         if resp.status_code >= 300 or resp.status_code < 200:
@@ -239,7 +242,9 @@ class OpenMeterClient:
                 detail=f"Message from OpenMeter: {resp.text}",
             )
         if resp.json() == {}:
-            logger.warning(f"No customer entitlement found for customer_id={customer_id}, feature_key={feature_key}")
+            logger.warning(
+                f"No customer entitlement found for customer={customer_id_or_key}, feature_key={feature_key}"
+            )
             return None
 
         return EntitlementValueQueryResponse.model_validate(resp.json())
@@ -253,8 +258,8 @@ class OpenMeterClient:
         - Customers have only one subject and share the same key `renku-pool-{resource_pool_id}`
         - Feature and meter for compute usage share the same key `compute_units`
         """
-        customer_id = f"renku-pool-{resource_pool_id}"
-        entitlement = await self.query_customer_entitlement(customer_id, feature_key)
+        customer_key = f"renku-pool-{resource_pool_id}"
+        entitlement = await self.query_customer_entitlement(customer_key, feature_key)
         if entitlement is None:
             # We compute usage over the entire history and return limits with zero values
             user_usage = await self.query_compute_usage(resource_pool_id, user_id, meter_key=feature_key)
@@ -266,11 +271,11 @@ class OpenMeterClient:
             )
             return ResourcePoolUsage(total_usage, user_usage, limits)
 
-        entitlement_value = await self.query_customer_entitlement_value(customer_id, feature_key)
+        entitlement_value = await self.query_customer_entitlement_value(customer_key, feature_key)
         if entitlement_value is None:
             # If entitlement is not None, it should have a value, otherwise we raise an error
             raise errors.ValidationError(
-                message=f"Unexpected entitlement value for customer_id={customer_id} and feature_key={feature_key}.",
+                message=f"Unexpected entitlement value for customer={customer_key} and feature_key={feature_key}.",
                 detail=f"Entitlement: {entitlement}",
             )
 
