@@ -9,6 +9,7 @@ import pytest
 
 from renku_data_services.errors import errors
 from renku_data_services.resource_usage.metering import EntitlementValueQueryResponse, OpenMeterClient
+from renku_data_services.resource_usage.model import Credit
 
 ENDPOINT_URL = "http://openmeter.test"
 EXISTING_USER_ID = "test-user"
@@ -120,8 +121,8 @@ async def test_query_compute_usage_nonexisting_user(client: OpenMeterClient) -> 
     result = await client.query_compute_usage(
         resource_pool_id=1, user_id=NON_EXISTING_USER_ID, start_date=None, end_date=None
     )
-    assert isinstance(result, (float, int))
-    assert result == 0.0
+    assert isinstance(result, Credit)
+    assert result == Credit.zero()
 
 
 async def test_query_compute_usage_existing_user(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
@@ -129,7 +130,7 @@ async def test_query_compute_usage_existing_user(client: OpenMeterClient, fake_o
     result = await client.query_compute_usage(
         resource_pool_id=1, user_id=EXISTING_USER_ID, start_date=None, end_date=None
     )
-    assert result == 12.5
+    assert result.value == 12
 
     request = fake_openmeter.requests[-1]
     assert request.headers["Authorization"] == "Bearer test-token"
@@ -143,7 +144,7 @@ async def test_query_compute_usage_existing_user(client: OpenMeterClient, fake_o
 async def test_query_compute_usage_no_user(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
     """Test querying compute usage without specifying a user."""
     result = await client.query_compute_usage(resource_pool_id=1, user_id=None, start_date=None, end_date=None)
-    assert result == 20.0
+    assert result.value == 20
     assert fake_openmeter.meter_query_bodies()[-1] == {"subject": ["renku-pool-1"]}
 
 
@@ -199,8 +200,8 @@ async def test_query_compute_usage_with_limits_no_entitlement(
     result = await client.query_compute_usage_with_limits(
         resource_pool_id=2, user_id=EXISTING_USER_ID, feature_key=EXISTING_FEATURE_KEY
     )
-    assert result.user_usage == 3.0
-    assert result.total_usage == 3.0
+    assert result.user_usage.value == 3
+    assert result.total_usage.value == 3
     assert result.pool_limits.total_limit.value == 0
     assert result.pool_limits.user_limit.value == 0
     # Usage is computed over the entire history
@@ -214,8 +215,8 @@ async def test_query_compute_usage_with_limits_existing_entitlement(
     result = await client.query_compute_usage_with_limits(
         resource_pool_id=1, user_id=EXISTING_USER_ID, feature_key=EXISTING_FEATURE_KEY
     )
-    assert result.user_usage == 12.5
-    assert result.total_usage == 20.0
+    assert result.user_usage.value == 12
+    assert result.total_usage.value == 20
     assert result.pool_limits.total_limit.value == 100
     assert result.pool_limits.user_limit.value == 0
     # Usage is restricted to the current usage period of the entitlement
