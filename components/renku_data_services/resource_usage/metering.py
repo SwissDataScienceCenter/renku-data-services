@@ -43,6 +43,17 @@ class ResourceUsageMetering(Protocol):
         """Query compute usage from the metering service."""
         ...
 
+    async def get_usage_timeframe(
+        self,
+        resource_pool_id: int,
+        user_id: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        feature_key: str = COMPUTE_USAGE_KEY,
+    ) -> ResourcePoolUsage:
+        """Get total usage and user usage for a specific timeframe from the metering service."""
+        ...
+
     async def get_current_usage(
         self, resource_pool_id: int, user_id: str, feature_key: str = COMPUTE_USAGE_KEY
     ) -> ResourcePoolUsage:

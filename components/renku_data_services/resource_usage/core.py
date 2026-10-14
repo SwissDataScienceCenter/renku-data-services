@@ -239,7 +239,7 @@ class ResourceUsageService:
         resource_pool_id: int,
         user_id: str,
     ) -> ResourcePoolUsageLimits | None:
-        """Get resource pool usage and its limits."""
+        """Get current resource pool usage and its limits."""
         if self._metering_client is None:
             return None
 
@@ -257,22 +257,50 @@ class ResourceUsageService:
             logger.error(f"Error querying compute usage with limits: {e}")
             return None
 
+    async def get_usage_timeframe_with_limits(
+        self,
+        resource_pool_id: int,
+        user_id: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> ResourcePoolUsageLimits | None:
+        """Get resource pool usage and its limits for a given timeframe."""
+        if self._metering_client is None:
+            return None
+
+        try:
+            usage = await self._metering_client.get_usage_timeframe(resource_pool_id, user_id, start_date, end_date)
+            limits = await self.get_limits(resource_pool_id)
+            return ResourcePoolUsageLimits(
+                total_usage=usage.total_usage,
+                user_usage=usage.user_usage,
+                pool_limits=limits,
+            )
+        except errors.ThirdPartyAPIError as e:
+            logger.error(f"Error querying compute usage with limits: {e}")
+            return None
+
     def get_remaining_quota(self, usage: ResourcePoolUsageLimits | None) -> tuple[float | None, float | None]:
         """Compute the remaining quota and its percentage based on the usage and limits."""
         if usage is None:
             return None, None
-        if usage.pool_limits.user_limit.is_unlimited() and usage.pool_limits.total_limit.is_unlimited():
+
+        user_limit = usage.pool_limits.user_limit
+        total_limit = usage.pool_limits.total_limit
+        if user_limit.is_unlimited() and total_limit.is_unlimited():
             return None, None
 
-        user_limit = usage.pool_limits.user_limit.value
-        total_limit = usage.pool_limits.total_limit.value
-        remaining_user_quota = user_limit - usage.user_usage.value if user_limit > 0 else float("inf")
-        remaining_total_quota = total_limit - usage.total_usage.value if total_limit > 0 else float("inf")
+        remaining_user_quota = (
+            user_limit.value - usage.user_usage.value if not user_limit.is_unlimited() else float("inf")
+        )
+        remaining_total_quota = (
+            total_limit.value - usage.total_usage.value if not total_limit.is_unlimited() else float("inf")
+        )
         remaining_quota = min(remaining_user_quota, remaining_total_quota)
 
         if remaining_quota == remaining_user_quota:
-            remaining_quota_p = (remaining_user_quota / user_limit) * 100
+            remaining_quota_p = (remaining_user_quota / user_limit.value) * 100
         else:
-            remaining_quota_p = (remaining_total_quota / total_limit) * 100
+            remaining_quota_p = (remaining_total_quota / total_limit.value) * 100
 
         return remaining_quota, remaining_quota_p
