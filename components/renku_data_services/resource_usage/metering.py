@@ -261,13 +261,13 @@ class OpenMeterClient:
         customer_key = f"renku-pool-{resource_pool_id}"
         entitlement = await self.query_customer_entitlement(customer_key, feature_key)
         if entitlement is None:
-            # We compute usage over the entire history and return limits with zero values
+            # We compute usage over the entire history
             user_usage = await self.query_compute_usage(resource_pool_id, user_id, meter_key=feature_key)
             total_usage = await self.query_compute_usage(resource_pool_id, None, meter_key=feature_key)
             limits = ResourcePoolLimits(
                 pool_id=resource_pool_id,
-                total_limit=Credit.zero(),
-                user_limit=Credit.zero(),
+                total_limit=Credit.unlimited(),
+                user_limit=Credit.unlimited(),
             )
             return ResourcePoolUsage(total_usage, user_usage, limits)
 
@@ -288,6 +288,6 @@ class OpenMeterClient:
         limits = ResourcePoolLimits(
             pool_id=resource_pool_id,
             total_limit=Credit.from_float(entitlement_value.totalAvailableGrantAmount),
-            user_limit=Credit.zero(),  # TODO: check how we can get the user limit
+            user_limit=Credit.unlimited(),  # TODO: check how we can get the user limit
         )
         return ResourcePoolUsage(total_usage, user_usage, limits)

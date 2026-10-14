@@ -236,13 +236,11 @@ class ResourceUsageService:
         """Compute the remaining quota and its percentage based on the usage and limits."""
         if usage is None:
             return None, None
+        if usage.pool_limits.user_limit.is_unlimited() and usage.pool_limits.total_limit.is_unlimited():
+            return None, None
 
         user_limit = usage.pool_limits.user_limit.value
         total_limit = usage.pool_limits.total_limit.value
-        if user_limit <= 0 and total_limit <= 0:
-            # If both limits are zero, then the resource pool does not enforce any quota
-            return None, None
-
         remaining_user_quota = user_limit - usage.user_usage.value if user_limit > 0 else float("inf")
         remaining_total_quota = total_limit - usage.total_usage.value if total_limit > 0 else float("inf")
         remaining_quota = min(remaining_user_quota, remaining_total_quota)
