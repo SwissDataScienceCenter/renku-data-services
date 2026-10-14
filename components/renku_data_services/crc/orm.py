@@ -88,10 +88,10 @@ class UserORM(BaseORM):
         return base_models.User(id=self.id, keycloak_id=self.keycloak_id, no_default_access=self.no_default_access)
 
 
-class ResourceFlavourORM(BaseORM):
+class ResourceFlavorORM(BaseORM):
     """A named shape that resource classes can link to instead of setting their own values."""
 
-    __tablename__ = "resource_flavours"
+    __tablename__ = "resource_flavors"
     name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     cpu: Mapped[float] = mapped_column()
     memory: Mapped[int] = mapped_column(BigInteger)
@@ -102,21 +102,21 @@ class ResourceFlavourORM(BaseORM):
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
 
     @classmethod
-    def from_unsaved_model(cls, new_flavour: models.UnsavedResourceFlavour) -> ResourceFlavourORM:
-        """Create a new ORM object from an unsaved resource flavour model."""
+    def from_unsaved_model(cls, new_flavor: models.UnsavedResourceFlavor) -> ResourceFlavorORM:
+        """Create a new ORM object from an unsaved resource flavor model."""
         return cls(
-            name=new_flavour.name,
-            cpu=new_flavour.cpu,
-            memory=new_flavour.memory,
-            max_storage=new_flavour.max_storage,
-            default_storage=new_flavour.default_storage,
-            gpu=new_flavour.gpu,
-            description=new_flavour.description,
+            name=new_flavor.name,
+            cpu=new_flavor.cpu,
+            memory=new_flavor.memory,
+            max_storage=new_flavor.max_storage,
+            default_storage=new_flavor.default_storage,
+            gpu=new_flavor.gpu,
+            description=new_flavor.description,
         )
 
-    def dump(self) -> models.ResourceFlavour:
-        """Create a resource flavour model from the ORM object."""
-        return models.ResourceFlavour(
+    def dump(self) -> models.ResourceFlavor:
+        """Create a resource flavor model from the ORM object."""
+        return models.ResourceFlavor(
             id=self.id,
             name=self.name,
             cpu=self.cpu,
@@ -146,10 +146,10 @@ class ResourceClassORM(BaseORM):
     resource_pool: Mapped[Optional[ResourcePoolORM]] = relationship(
         back_populates="classes", default=None, lazy="joined"
     )
-    resource_flavour_id: Mapped[ULID | None] = mapped_column(
-        ForeignKey("resource_flavours.id", ondelete="RESTRICT"), default=None, index=True, nullable=True
+    resource_flavor_id: Mapped[ULID | None] = mapped_column(
+        ForeignKey("resource_flavors.id", ondelete="RESTRICT"), default=None, index=True, nullable=True
     )
-    resource_flavour: Mapped[ResourceFlavourORM | None] = relationship(default=None, lazy="joined")
+    resource_flavor: Mapped[ResourceFlavorORM | None] = relationship(default=None, lazy="joined")
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, default=None, init=False)
     remote_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONVariant, default=None, server_default=None, nullable=True
@@ -191,16 +191,16 @@ class ResourceClassORM(BaseORM):
             gpu=new_resource_class.gpu,
             quota_enforced=new_resource_class.quota_enforced,
             resource_pool_id=resource_pool_id,
-            resource_flavour_id=new_resource_class.resource_flavour_id,
+            resource_flavor_id=new_resource_class.resource_flavor_id,
             tolerations=tolerations,
             node_affinities=node_affinities,
             remote_json=remote_json,
         )
 
     @property
-    def shape(self) -> ResourceFlavourORM | ResourceClassORM:
+    def shape(self) -> ResourceFlavorORM | ResourceClassORM:
         """The source of truth for this class's resource values."""
-        return self.resource_flavour if self.resource_flavour is not None else self
+        return self.resource_flavor if self.resource_flavor is not None else self
 
     def dump(
         self, matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None
@@ -234,7 +234,7 @@ class ResourceClassORM(BaseORM):
             quota=quota,
             quota_enforced=self.quota_enforced,
             remote=remote,
-            resource_flavour_id=self.resource_flavour_id,
+            resource_flavor_id=self.resource_flavor_id,
         )
 
 
@@ -337,7 +337,7 @@ class ResourcePoolORM(BaseORM):
         cascade="save-update, merge, delete",
         lazy="selectin",
         # NOTE: ResourcePoolORM.dump sorts by size, using the values resolved from the resource
-        # flavour, which this column order cannot see.
+        # flavor, which this column order cannot see.
         order_by="[ResourceClassORM.id]",
     )
     idle_threshold: Mapped[Optional[int]] = mapped_column(default=None)
