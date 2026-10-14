@@ -1,5 +1,6 @@
 """Data connectors blueprint."""
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -32,6 +33,7 @@ from renku_data_services.connected_services.db import ConnectedServicesRepositor
 from renku_data_services.connected_services.models import ProviderKind
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.config import DepositConfig
+from renku_data_services.data_connectors.constants import _UNSAFE_SCICAT_COMBINE_PROVIDER
 from renku_data_services.data_connectors.core import (
     create_deposit_upload,
     dump_storage_with_sensitive_fields,
@@ -553,6 +555,17 @@ class DataConnectorsBP(CustomBlueprint):
         data_connector: models.DataConnector | models.GlobalDataConnector, validator: RCloneValidator
     ) -> dict[str, Any]:
         """Dumps a data connector for API responses."""
+        if (
+            isinstance(data_connector, models.GlobalDataConnector)
+            and data_connector.publisher_name == "PSI Open Data Provider"
+        ):
+            # Only in the scicat case we use the combine remote.
+            # Allowing the combine remote type in other cases is dangerous.
+            # This can be removed when we start using a dedicated sidecar to mount rclone storage for each session
+            # and we eliminate the use of CSI rclone.
+            validator = deepcopy(validator)
+            validator.providers["combine"] = _UNSAFE_SCICAT_COMBINE_PROVIDER
+            validator._additional_allowed_storages = {"combine"}
         storage = dump_storage_with_sensitive_fields(data_connector.storage, validator=validator)
         if data_connector.namespace is None:
             return dict(
