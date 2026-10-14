@@ -202,8 +202,8 @@ async def test_query_compute_usage_with_limits_no_entitlement(
     )
     assert result.user_usage.value == 3
     assert result.total_usage.value == 3
-    assert result.pool_limits.total_limit.value == 0
-    assert result.pool_limits.user_limit.value == 0
+    assert result.pool_limits.total_limit.is_unlimited() is True
+    assert result.pool_limits.user_limit.is_unlimited() is True
     # Usage is computed over the entire history
     assert all("from" not in body and "to" not in body for body in fake_openmeter.meter_query_bodies())
 
@@ -218,7 +218,7 @@ async def test_query_compute_usage_with_limits_existing_entitlement(
     assert result.user_usage.value == 12
     assert result.total_usage.value == 20
     assert result.pool_limits.total_limit.value == 100
-    assert result.pool_limits.user_limit.value == 0
+    assert result.pool_limits.user_limit.is_unlimited() is True
     # Usage is restricted to the current usage period of the entitlement
     body = fake_openmeter.meter_query_bodies()[-1]
     assert body["from"] == PERIOD_FROM
