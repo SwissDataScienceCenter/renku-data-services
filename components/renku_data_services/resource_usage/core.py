@@ -226,7 +226,11 @@ class ResourceUsageService:
         if self._metering_client is None:
             return None
 
-        return await self._metering_client.query_compute_usage_with_limits(resource_pool_id, user_id)
+        try:
+            return await self._metering_client.query_compute_usage_with_limits(resource_pool_id, user_id)
+        except errors.ThirdPartyAPIError as e:
+            logger.error(f"Error querying compute usage with limits: {e}")
+            return None
 
     def get_remaining_quota(self, usage: ResourcePoolUsage | None) -> tuple[float | None, float | None]:
         """Compute the remaining quota and its percentage based on the usage and limits."""
