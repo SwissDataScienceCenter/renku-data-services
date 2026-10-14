@@ -534,6 +534,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
                 )
 
                 if resource_class_cost and resource_class_cost.cost.value > 0:
+                    # TODO: update or remove this
                     remaining_minutes = (remaining_quota / resource_class_cost.cost.value) * 60
                     if remaining_minutes < dm.config.session_quota_alert_critical_m:
                         critical_alert = UnsavedAlert(

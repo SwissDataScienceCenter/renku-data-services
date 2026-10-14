@@ -77,10 +77,20 @@ class ResourcePoolsResourcePoolIdUsageGetParametersQuery(BaseAPISpec):
     user_id: str | None = None
 
 
-class ResourcePoolUsage(BaseAPISpec):
+class ResourcePoolUsageLimits(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
     )
     total_usage: int
     user_usage: int
     pool_limits: ResourcePoolLimits
+    start_date: str | None = Field(
+        None,
+        description="The start date of the usage period, in ISO 8601 format",
+        examples=["2023-01-01T00:00:00Z"],
+    )
+    end_date: str | None = Field(
+        None,
+        description="The end date of the usage period, in ISO 8601 format",
+        examples=["2023-01-31T23:59:59Z"],
+    )

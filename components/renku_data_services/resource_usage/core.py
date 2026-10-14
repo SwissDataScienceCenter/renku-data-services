@@ -20,7 +20,7 @@ from renku_data_services.resource_usage.model import (
     ResourceClassCost,
     ResourceDataFacade,
     ResourcePoolLimits,
-    ResourcePoolUsage,
+    ResourcePoolUsageLimits,
     ResourcesRequest,
 )
 
@@ -217,22 +217,47 @@ class ResourceUsageService:
         )
         return result
 
+    async def get_limits(self, resource_pool_id: int) -> ResourcePoolLimits:
+        """Get resource pool limits."""
+        # TODO: retrieve user limit from db, for the moment user limit is unlimited
+        if self._metering_client is None:
+            return ResourcePoolLimits(
+                pool_id=resource_pool_id,
+                total_limit=Credit.unlimited(),
+                user_limit=Credit.unlimited(),
+            )
+
+        total_limit = await self._metering_client.get_resource_pool_total_limit(resource_pool_id)
+        return ResourcePoolLimits(
+            pool_id=resource_pool_id,
+            total_limit=total_limit,
+            user_limit=Credit.unlimited(),
+        )
+
     async def get_usage_with_limits(
         self,
         resource_pool_id: int,
         user_id: str,
-    ) -> ResourcePoolUsage | None:
+    ) -> ResourcePoolUsageLimits | None:
         """Get resource pool usage and its limits."""
         if self._metering_client is None:
             return None
 
         try:
-            return await self._metering_client.query_compute_usage_with_limits(resource_pool_id, user_id)
+            usage = await self._metering_client.get_current_usage(resource_pool_id, user_id)
+            limits = await self.get_limits(resource_pool_id)
+            return ResourcePoolUsageLimits(
+                total_usage=usage.total_usage,
+                user_usage=usage.user_usage,
+                pool_limits=limits,
+                start_date=usage.start_date,
+                end_date=usage.end_date,
+            )
         except errors.ThirdPartyAPIError as e:
             logger.error(f"Error querying compute usage with limits: {e}")
             return None
 
-    def get_remaining_quota(self, usage: ResourcePoolUsage | None) -> tuple[float | None, float | None]:
+    def get_remaining_quota(self, usage: ResourcePoolUsageLimits | None) -> tuple[float | None, float | None]:
         """Compute the remaining quota and its percentage based on the usage and limits."""
         if usage is None:
             return None, None

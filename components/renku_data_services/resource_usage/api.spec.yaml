@@ -36,7 +36,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/ResourcePoolUsage"
+                $ref: "#/components/schemas/ResourcePoolUsageLimits"
         "404":
           description: "The resource pool doesn't exist."
           content:
@@ -223,7 +223,7 @@ paths:
 
 components:
   schemas:
-    ResourcePoolUsage:
+    ResourcePoolUsageLimits:
       type: object
       additionalProperties: false
       properties:
@@ -233,6 +233,14 @@ components:
           type: integer
         pool_limits:
           $ref: "#/components/schemas/ResourcePoolLimits"
+        start_date:
+          type: string
+          format: date-time
+          description: "The start date of the usage period, in ISO 8601 format"
+        end_date:
+          type: string
+          format: date-time
+          description: "The end date of the usage period, in ISO 8601 format"
       required:
         - total_usage
         - user_usage
