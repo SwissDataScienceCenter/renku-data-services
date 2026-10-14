@@ -54,7 +54,7 @@ from renku_data_services.notebooks.api.amalthea_patches.init_containers import u
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
-from renku_data_services.notebooks.cr_amalthea_session import PersistentVolumeClaim
+from renku_data_services.notebooks.cr_amalthea_session import PersistentVolumeClaim, RcloneDataSource
 from renku_data_services.notebooks.crs import (
     AmaltheaMetadata,
     AmaltheaSessionSpec,
@@ -77,6 +77,7 @@ from renku_data_services.notebooks.crs import (
     Limits,
     LimitsStr,
     Metadata,
+    Mount,
     ReadinessProbe,
     ReconcileStrategy,
     Requests,
@@ -85,6 +86,7 @@ from renku_data_services.notebooks.crs import (
     ResourcesPatch,
     SecretAsVolume,
     SecretAsVolumeItem,
+    SecretKeyRef,
     Session,
     SessionEnvItem,
     SessionLocation,
@@ -457,6 +459,76 @@ async def request_dc_secret_creation(
                     "Please contact a Renku administrator.",
                     detail=res.text,
                 )
+
+
+async def dc_secret_creation_payload(
+    secret_name: str,
+    combined_remote_name: str,
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    nb_config: NotebooksConfig,
+    resource_class_id: int | None,
+    data_connectors: list[DataConnectorWithSecrets],
+    user_key: str | None,
+    session_work_dir: PurePosixPath,
+) -> tuple[httpx.Request, list[Mount]] | tuple[None, None]:
+    """Request the specified data connector secrets to be created by the secret service."""
+    if isinstance(user, AnonymousAPIUser):
+        return None, None
+    secrets_url = nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/data_connectors/kubernetes"
+    headers = {"Authorization": f"bearer {user.access_token}"}
+
+    cluster_id = None
+    namespace = await nb_config.k8s_v2_client.namespace()
+    if (cluster := await nb_config.k8s_v2_client.cluster_by_class_id(resource_class_id, user)) is not None:
+        cluster_id = cluster.id
+        namespace = cluster.namespace
+
+    request_data_connectors = []
+    mounts: list[Mount] = []
+    for dc in data_connectors:
+        secrets_config = {str(sec.secret_id): [sec.name] for sec in dc.secrets}
+        remote_name = str(dc.data_connector.id) + "_" + dc.data_connector.slug
+        request_data_connectors.append(
+            {
+                "remote_name": remote_name,
+                "remote_path": dc.data_connector.storage.source_path,
+                "config": dc.data_connector.storage.configuration,
+                "secrets": secrets_config,
+            }
+        )
+        dc_target_path = PurePosixPath(dc.data_connector.storage.target_path)
+        mount_path = dc_target_path if dc_target_path.is_absolute() else session_work_dir / dc_target_path
+        # Each DC is placed inside the combined remote in a folder named by the remote_name
+        mounts.append(
+            Mount(
+                readOnly=dc.data_connector.storage.readonly,
+                mountPath=mount_path.as_posix(),
+                subPath=remote_name,
+            )
+        )
+    request_data = {
+        "name": secret_name,
+        "namespace": namespace,
+        "cluster_id": str(cluster_id),
+        "combined_remote_name": combined_remote_name,
+        "user_private_key": user_key,
+        "data_connectors": request_data_connectors,
+    }
+    req = httpx.Request(url=secrets_url, headers=headers, method="POST", json=request_data)
+    return req, mounts
+
+
+async def request_dc_secret_creation_new(request: httpx.Request) -> None:
+    """Sends a request to create a data connector configuration."""
+    async with httpx.AsyncClient(timeout=10) as clnt:
+        res = await clnt.send(request)
+        if res.status_code >= 300 or res.status_code < 200:
+            raise errors.ProgrammingError(
+                message=f"The secret for data connectors could not be "
+                f"successfully created, the status code was {res.status_code}."
+                "Please contact a Renku administrator.",
+                detail=res.text,
+            )
 
 
 def get_launcher_env_variables(launcher: SessionLauncher, launch_request: SessionLaunchRequest) -> list[SessionEnvItem]:
@@ -1104,7 +1176,9 @@ async def start_session(
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id
     )
-    data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
+    data_connectors_list = [
+        i async for i in data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
+    ]
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
@@ -1132,12 +1206,29 @@ async def start_session(
             user=user,
             resource_type="session",
             base_name=server_name,
-            data_connectors_stream=data_connectors_stream,
+            data_connectors=data_connectors_list,
             work_dir=work_dir,
             data_connectors_overrides=launch_request.data_connectors_overrides or [],
             namespace=await nb_config.k8s_v2_client.namespace(),
             storage_class=nb_config.cloud_storage.storage_class,
         )
+    )
+    dcs_have_secrets = len(data_connectors_list) > 0 and any([len(i.secrets) > 0 for i in data_connectors_list])
+    if dcs_have_secrets and isinstance(user, AuthenticatedAPIUser):
+        user_secret_key = await user_repo.get_or_create_user_secret_key(user)
+    else:
+        user_secret_key = None
+    dc_secret_name = server_name + "-dc-secrets"
+    dc_combined_remote = "__combined__"
+    dc_secret_request, dc_mounts = await dc_secret_creation_payload(
+        dc_secret_name,
+        dc_combined_remote,
+        user,
+        nb_config,
+        resource_class_id,
+        data_connectors_list,
+        user_secret_key,
+        work_dir,
     )
 
     # More init containers
@@ -1355,11 +1446,17 @@ async def start_session(
             extraVolumes=session_extras.volumes,
             culling=get_culling(user, resource_pool, nb_config, session_type),
             authentication=authentication,
-            dataSources=session_extras.data_sources,
             tolerations=tolerations_from_resource_class(resource_class, nb_config.sessions.tolerations_model),
             affinity=node_affinity_from_resource_class(resource_class, nb_config.sessions.affinity_model),
             serviceAccountName=service_account_name,
             template=Template(metadata=AmaltheaMetadata(annotations=annotations, labels=labels)),
+            rcloneDataSource=RcloneDataSource(
+                secret=SecretKeyRef(adopt=True, name=dc_secret_name, key="config"),
+                mounts=dc_mounts,
+                remoteName=dc_combined_remote,
+            )
+            if dc_mounts
+            else None,
         ),
     )
 
@@ -1378,8 +1475,8 @@ async def start_session(
     else:
         try:
             await request_session_secret_creation(user, nb_config, session, session_secrets)
-            data_connector_secrets = session_extras.data_connector_secrets or dict()
-            await request_dc_secret_creation(user, nb_config, session, data_connector_secrets)
+            if dc_secret_request:
+                await request_dc_secret_creation_new(dc_secret_request)
         except Exception:
             await nb_config.k8s_v2_client.delete_session(server_name, user.id)
             raise

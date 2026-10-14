@@ -31,12 +31,14 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     ImagePullSecret,
     InitContainer,
     MatchExpression,
+    Mount,
     NodeAffinity,
     NodeSelectorTerm,
     PodAffinity,
     PodAntiAffinity,
     Preference,
     PreferredDuringSchedulingIgnoredDuringExecutionItem,
+    RcloneDataSource,
     ReconcileStrategy,
     RemoteSecretRef,
     RequiredDuringSchedulingIgnoredDuringExecution,
@@ -56,8 +58,8 @@ from renku_data_services.notebooks.cr_amalthea_session import (
 from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as SessionEnvItem
 from renku_data_services.notebooks.cr_amalthea_session import Ingress as _Ingress
 from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem
-from renku_data_services.notebooks.cr_amalthea_session import Limits6 as _Limits
-from renku_data_services.notebooks.cr_amalthea_session import Limits7 as LimitsStr
+from renku_data_services.notebooks.cr_amalthea_session import Limits8 as _Limits
+from renku_data_services.notebooks.cr_amalthea_session import Limits9 as LimitsStr
 from renku_data_services.notebooks.cr_amalthea_session import Location as SessionLocation
 from renku_data_services.notebooks.cr_amalthea_session import Metadata as AmaltheaMetadata
 from renku_data_services.notebooks.cr_amalthea_session import Model as _ASModel
@@ -68,17 +70,18 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     PreferredDuringSchedulingIgnoredDuringExecutionItem2 as PreferredPodAntiAffinityItem,
 )
 from renku_data_services.notebooks.cr_amalthea_session import ReadinessProbe2 as ReadinessProbe
-from renku_data_services.notebooks.cr_amalthea_session import Requests6 as _Requests
-from renku_data_services.notebooks.cr_amalthea_session import Requests7 as RequestsStr
+from renku_data_services.notebooks.cr_amalthea_session import Requests8 as _Requests
+from renku_data_services.notebooks.cr_amalthea_session import Requests9 as RequestsStr
 from renku_data_services.notebooks.cr_amalthea_session import (
     RequiredDuringSchedulingIgnoredDuringExecutionItem1 as RequiredPodAntiAffinityItem,
 )
-from renku_data_services.notebooks.cr_amalthea_session import Resources3 as _Resources
+from renku_data_services.notebooks.cr_amalthea_session import Resources4 as _Resources
 from renku_data_services.notebooks.cr_amalthea_session import Secret1 as SecretAsVolume
+from renku_data_services.notebooks.cr_amalthea_session import Secret2 as SecretKeyRef
 from renku_data_services.notebooks.cr_amalthea_session import SecretRef as _SecretRef
 from renku_data_services.notebooks.cr_amalthea_session import Session as _ASSession
 from renku_data_services.notebooks.cr_amalthea_session import ShmSize1 as ShmSizeStr
-from renku_data_services.notebooks.cr_amalthea_session import Size1 as SizeStr
+from renku_data_services.notebooks.cr_amalthea_session import Size3 as SizeStr
 from renku_data_services.notebooks.cr_amalthea_session import Spec as _ASSpec
 from renku_data_services.notebooks.cr_amalthea_session import Type as AuthenticationType
 from renku_data_services.notebooks.cr_amalthea_session import Type1 as CodeRepositoryType
@@ -343,7 +346,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 will_delete_at = hibernated_since + max_hibernated
 
         session_type_str = self.metadata.labels.get("renku.io/session-type")
-        match SessionType.from_str_or_none(session_type_str):
+        match session_type_from_str_or_none(session_type_str):
             case SessionType.NonInteractive:
                 session_type = apispec.SessionType.non_interactive
             case _:
@@ -610,7 +613,19 @@ class Affinity(_Affinity):
         return node_affinity_is_empty and pod_affinity_is_empty and pod_antiaffinity_is_empty
 
 
-class AmaltheaSessionV1Alpha2(AmaltheaSessionV1Alpha1):
-    """Placeholder for a new session type."""
+def session_type_from_str(v: str) -> SessionType | None:
+    """Create a SessionType from a string."""
+    if v.lower() == "interactive":
+        return SessionType.Interactive
+    elif v.lower() in ["non_interactive", "noninteractive"]:
+        return SessionType.NonInteractive
+    else:
+        return None
 
-    pass
+
+def session_type_from_str_or_none(v: str | None) -> SessionType | None:
+    """Create a SessionType from a string or None."""
+    if v is None:
+        return None
+    else:
+        return session_type_from_str(v)

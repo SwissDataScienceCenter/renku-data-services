@@ -4,7 +4,6 @@ import json
 import math
 import random
 import string
-from collections.abc import AsyncIterator
 from configparser import ConfigParser
 from copy import deepcopy
 from dataclasses import dataclass
@@ -272,7 +271,7 @@ class DataSourceRepository:
         user: AnonymousAPIUser | AuthenticatedAPIUser,
         resource_type: Literal["session", "deposit_job"],
         base_name: str,
-        data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
+        data_connectors: list[DataConnectorWithSecrets],
         work_dir: PurePosixPath,
         data_connectors_overrides: list[SessionDataConnectorOverride],
         namespace: str,
@@ -285,7 +284,7 @@ class DataSourceRepository:
         dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
         user_secret_key: str | None = None
         internal_token_scope = f"{resource_type}:{base_name}"
-        async for dc in data_connectors_stream:
+        for dc in data_connectors:
             configuration = await self.handle_configuration(
                 request=request,
                 user=user,
