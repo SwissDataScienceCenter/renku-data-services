@@ -193,33 +193,69 @@ async def test_query_customer_entitlement_value_error(client: OpenMeterClient, f
         await client.query_customer_entitlement_value(EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY)
 
 
-async def test_query_compute_usage_with_limits_no_entitlement(
-    client: OpenMeterClient, fake_openmeter: FakeOpenMeter
-) -> None:
-    """Test querying compute usage with limits when no entitlement is found."""
-    result = await client.query_compute_usage_with_limits(
-        resource_pool_id=2, user_id=EXISTING_USER_ID, feature_key=EXISTING_FEATURE_KEY
+async def test_get_resource_pool_total_limit(client: OpenMeterClient) -> None:
+    """Test getting the total limit of a resource pool with an entitlement."""
+    result = await client.get_resource_pool_total_limit(resource_pool_id=1, feature_key=EXISTING_FEATURE_KEY)
+    assert result == Credit.from_int(100)
+
+
+async def test_get_resource_pool_total_limit_no_entitlement(client: OpenMeterClient) -> None:
+    """Test getting the total limit of a resource pool without an entitlement."""
+    result = await client.get_resource_pool_total_limit(resource_pool_id=2, feature_key=EXISTING_FEATURE_KEY)
+    assert result.is_unlimited() is True
+
+
+async def test_get_resource_pool_total_limit_error(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
+    """Test that an unexpected status from OpenMeter raises an error."""
+    fake_openmeter.fail_with_status = 500
+    with pytest.raises(errors.ThirdPartyAPIError):
+        await client.get_resource_pool_total_limit(resource_pool_id=1)
+
+
+async def test_get_usage_timeframe(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
+    """Test getting the total and user usage for a given timeframe."""
+    result = await client.get_usage_timeframe(
+        resource_pool_id=1,
+        user_id=EXISTING_USER_ID,
+        start_date=PERIOD_FROM,
+        end_date=PERIOD_TO,
+        feature_key=EXISTING_FEATURE_KEY,
     )
+    assert result.user_usage.value == 12
+    assert result.total_usage.value == 20
+    assert result.start_date == PERIOD_FROM
+    assert result.end_date == PERIOD_TO
+    bodies = fake_openmeter.meter_query_bodies()
+    assert len(bodies) == 2
+    assert all(body["from"] == PERIOD_FROM and body["to"] == PERIOD_TO for body in bodies)
+
+
+async def test_get_current_usage_no_entitlement(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
+    """Test getting the current usage when no entitlement is found."""
+    result = await client.get_current_usage(resource_pool_id=2, user_id=EXISTING_USER_ID)
     assert result.user_usage.value == 3
     assert result.total_usage.value == 3
-    assert result.pool_limits.total_limit.is_unlimited() is True
-    assert result.pool_limits.user_limit.is_unlimited() is True
+    assert result.start_date is None
+    assert result.end_date is None
     # Usage is computed over the entire history
     assert all("from" not in body and "to" not in body for body in fake_openmeter.meter_query_bodies())
 
 
-async def test_query_compute_usage_with_limits_existing_entitlement(
-    client: OpenMeterClient, fake_openmeter: FakeOpenMeter
-) -> None:
-    """Test querying compute usage with limits when an entitlement is found."""
-    result = await client.query_compute_usage_with_limits(
-        resource_pool_id=1, user_id=EXISTING_USER_ID, feature_key=EXISTING_FEATURE_KEY
-    )
+async def test_get_current_usage_existing_entitlement(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
+    """Test getting the current usage when an entitlement is found."""
+    result = await client.get_current_usage(resource_pool_id=1, user_id=EXISTING_USER_ID)
     assert result.user_usage.value == 12
     assert result.total_usage.value == 20
-    assert result.pool_limits.total_limit.value == 100
-    assert result.pool_limits.user_limit.is_unlimited() is True
+    assert result.start_date == PERIOD_FROM
+    assert result.end_date == PERIOD_TO
     # Usage is restricted to the current usage period of the entitlement
-    body = fake_openmeter.meter_query_bodies()[-1]
-    assert body["from"] == PERIOD_FROM
-    assert body["to"] == PERIOD_TO
+    bodies = fake_openmeter.meter_query_bodies()
+    assert len(bodies) == 2
+    assert all(body["from"] == PERIOD_FROM and body["to"] == PERIOD_TO for body in bodies)
+
+
+async def test_get_current_usage_nonexisting_user(client: OpenMeterClient) -> None:
+    """Test getting the current usage for a user without usage in the pool."""
+    result = await client.get_current_usage(resource_pool_id=1, user_id=NON_EXISTING_USER_ID)
+    assert result.user_usage == Credit.zero()
+    assert result.total_usage.value == 20
