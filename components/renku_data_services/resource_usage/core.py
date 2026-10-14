@@ -205,7 +205,7 @@ class ResourceUsageService:
 
     async def get_usage(
         self, resource_pool_id: int, user_id: str | None, start_date: date | None, end_date: date | None
-    ) -> float | None:
+    ) -> Credit | None:
         """Return the resource usage for the given pool of the given timespan."""
         if self._metering_client is None:
             return None
@@ -243,8 +243,8 @@ class ResourceUsageService:
             # If both limits are zero, then the resource pool does not enforce any quota
             return None, None
 
-        remaining_user_quota = user_limit - usage.user_usage if user_limit > 0 else float("inf")
-        remaining_total_quota = total_limit - usage.total_usage if total_limit > 0 else float("inf")
+        remaining_user_quota = user_limit - usage.user_usage.value if user_limit > 0 else float("inf")
+        remaining_total_quota = total_limit - usage.total_usage.value if total_limit > 0 else float("inf")
         remaining_quota = min(remaining_user_quota, remaining_total_quota)
 
         if remaining_quota == remaining_user_quota:

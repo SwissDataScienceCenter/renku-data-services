@@ -406,6 +406,11 @@ class Credit:
         return Credit(value=n)
 
     @classmethod
+    def from_float(cls, f: float) -> Credit:
+        """Create new credit from the given number."""
+        return Credit(value=round(f))
+
+    @classmethod
     def zero(cls) -> Credit:
         """Return zero credit."""
         return cls.from_int(0)
@@ -609,6 +614,6 @@ class ResourcesRequest:
 class ResourcePoolUsage:
     """Overview of a resource pool in context of a user."""
 
-    total_usage: float
-    user_usage: float
+    total_usage: Credit
+    user_usage: Credit
     pool_limits: ResourcePoolLimits

@@ -39,7 +39,7 @@ class ResourceUsageMetering(Protocol):
 
     async def query_compute_usage(
         self, resource_pool_id: int, user_id: str | None, start_date: str | None = None, end_date: str | None = None
-    ) -> float:
+    ) -> Credit:
         """Query compute usage from the metering service."""
         ...
 
@@ -177,7 +177,7 @@ class OpenMeterClient:
         start_date: str | None = None,
         end_date: str | None = None,
         meter_key: str = COMPUTE_USAGE_KEY,
-    ) -> float:
+    ) -> Credit:
         """Query compute usage from OpenMeter.
 
         If user_id is None, the total usage for the resource pool is returned.
@@ -193,7 +193,7 @@ class OpenMeterClient:
             user_body = {"advancedMeterGroupByFilters": {"user_id": {"$eq": user_id}}, "groupBy": ["user_id"]}
             body.update(user_body)
         res = await self.query_meter(meter_key, body)
-        return res.data[0].get("value", 0.0) if res.data else 0.0
+        return Credit.from_float(res.data[0].get("value", 0)) if res.data else Credit.zero()
 
     async def query_customer_entitlement(
         self, customer_id_or_key: str, feature_key: str
@@ -284,10 +284,10 @@ class OpenMeterClient:
         user_usage = await self.query_compute_usage(
             resource_pool_id, user_id, start_date, end_date, meter_key=feature_key
         )
-        total_usage = entitlement_value.usage
+        total_usage = Credit.from_float(entitlement_value.usage)
         limits = ResourcePoolLimits(
             pool_id=resource_pool_id,
-            total_limit=Credit.from_int(int(entitlement_value.totalAvailableGrantAmount)),
+            total_limit=Credit.from_float(entitlement_value.totalAvailableGrantAmount),
             user_limit=Credit.zero(),  # TODO: check how we can get the user limit
         )
         return ResourcePoolUsage(total_usage, user_usage, limits)

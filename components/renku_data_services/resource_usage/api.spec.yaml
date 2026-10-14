@@ -228,11 +228,9 @@ components:
       additionalProperties: false
       properties:
         total_usage:
-          type: number
-          format: double
+          type: integer
         user_usage:
-          type: number
-          format: double
+          type: integer
         pool_limits:
           $ref: "#/components/schemas/ResourcePoolLimits"
       required:
