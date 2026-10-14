@@ -620,9 +620,21 @@ class ResourcesRequest:
 
 
 @dataclass(frozen=True)
-class ResourcePoolUsage:
+class ResourcePoolUsageLimits:
     """Overview of a resource pool in context of a user."""
 
     total_usage: Credit
     user_usage: Credit
     pool_limits: ResourcePoolLimits
+    start_date: str | None = None
+    end_date: str | None = None
+
+
+@dataclass(frozen=True)
+class ResourcePoolUsage:
+    """Overview of a resource pool usage in context of a user."""
+
+    total_usage: Credit
+    user_usage: Credit
+    start_date: str | None = None
+    end_date: str | None = None

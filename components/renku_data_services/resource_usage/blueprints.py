@@ -153,7 +153,7 @@ class ResourceUsageBP(CustomBlueprint):
             # TODO: Check if resource pool exists, and return 404 if not.
             result = await self.rr_svc.get_usage_with_limits(resource_pool_id, user_id or "")
             if result:
-                output = apispec.ResourcePoolUsage(
+                output = apispec.ResourcePoolUsageLimits(
                     total_usage=result.total_usage.value,
                     pool_limits=apispec.ResourcePoolLimits(
                         pool_id=result.pool_limits.pool_id,
@@ -161,9 +161,11 @@ class ResourceUsageBP(CustomBlueprint):
                         user_limit=result.pool_limits.user_limit.value,
                     ),
                     user_usage=result.user_usage.value,
+                    start_date=result.start_date,
+                    end_date=result.end_date,
                 )
                 return validated_json(
-                    apispec.ResourcePoolUsage,
+                    apispec.ResourcePoolUsageLimits,
                     output,
                 )
             else:
