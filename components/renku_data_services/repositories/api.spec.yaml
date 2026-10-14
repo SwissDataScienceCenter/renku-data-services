@@ -41,6 +41,46 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - repositories
+  /repository/permissions:
+    get:
+      summary: Get detailed permissions from a repository
+      description: |
+        Get detailed permissions from a repository hosted on GitHub.
+
+        Works only for authenticated users: this endpoint is used
+        to check that the OAuth2 client has access to the repository.
+      parameters:
+        - in: query
+          description: query parameters
+          name: repository_permissions_params
+          style: form
+          explode: true
+          required: true
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              url:
+                description: Repository URL
+                type: string
+              connection_id:
+                $ref: "#/components/schemas/Ulid"
+            required:
+              - url
+              - connection_id
+      responses:
+        # "200":
+        #   description: The repository metadata.
+        #   content:
+        #     application/json:
+        #       schema:
+        #         $ref: "#/components/schemas/RepositoryProviderData"
+        # "404":
+        #   description: There is no available provider for this repository.
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - repositories
 components:
   schemas:
     Metadata:

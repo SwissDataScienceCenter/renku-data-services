@@ -184,3 +184,18 @@ class RepositoryDataResult:
     def is_success(self) -> bool:
         """Return whether this is a success result."""
         return not self.error and self.metadata is not None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RepositoryIntegrationPermissions:
+    """Permission of the integration wrt. the repository."""
+
+    integration_access: bool
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RepositoryPermissionsResult:
+    """Information when retrieving detailed permissions from a repository hosted on GitHub."""
+
+    error: RepositoryError | None = None
+    permissions: RepositoryIntegrationPermissions | Literal["Unmodified"] | None = None

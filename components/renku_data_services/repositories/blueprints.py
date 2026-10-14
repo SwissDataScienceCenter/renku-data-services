@@ -4,11 +4,14 @@ from dataclasses import dataclass
 
 from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
+from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors.errors import ValidationError
 from renku_data_services.repositories import apispec, models
@@ -90,3 +93,47 @@ class RepositoriesBP(CustomBlueprint):
         return apispec.RepositoryProviderData(
             status=status, connection=conn, provider=prov, metadata=meta, error_code=error_code
         )
+
+    def get_repository_permissions(self) -> BlueprintFactoryResponse:
+        """Get detailed permissions from a repository hosted on GitHub."""
+
+        # @authenticate(self.authenticator)
+        # @validate_query(query=apispec.ResourceClassParams)
+        # @validate_db_ids
+        # async def _get_all(
+        #     request: Request, user: base_models.APIUser, resource_pool_id: int, query: apispec.ResourceClassParams
+        # ) -> HTTPResponse:
+        #     res = await self.repo.get_classes(api_user=user, resource_pool_id=resource_pool_id, name=query.name)
+        #     return validated_json(apispec.ResourceClassesWithIdResponse, res)
+
+        # return "/resource_pools/<resource_pool_id>/classes", ["GET"], _get_all
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.RepositoryPermissionsGetParametersQuery)
+        @extract_if_none_match
+        async def _get_repository_permissions(
+            req: Request,
+            user: base_models.APIUser,
+            query: apispec.RepositoryPermissionsGetParametersQuery,
+            etag: str | None,
+        ) -> JSONResponse | HTTPResponse:
+            repository_url = query.repository_permissions_params.url
+            connection_id_str = query.repository_permissions_params.connection_id
+
+            try:
+                connection_id = ULID.from_str(connection_id_str)
+            except ValueError as e:
+                raise errors.ValidationError(message=f"Connection ID {connection_id_str} must be a valid ULID.") from e
+
+            result = await self.git_repositories_repo.get_repository_permissions(
+                repository_url=repository_url, connection_id=connection_id, user=user, etag=etag
+            )
+            if result.permissions == "Unmodified":
+                return HTTPResponse(status=304)
+
+            # TODO
+            # headers = {"ETag": result.metadata.etag} if result.metadata and result.metadata.etag else None
+
+            raise NotImplementedError()
+
+        return "/repository/permissions", ["GET"], _get_repository_permissions

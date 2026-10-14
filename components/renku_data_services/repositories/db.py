@@ -113,6 +113,47 @@ class GitRepositoriesRepository:
 
         return result
 
+    async def get_repository_permissions(
+        self,
+        repository_url: str,
+        connection_id: ULID,
+        user: base_models.APIUser,
+        etag: str | None,
+    ) -> models.RepositoryPermissionsResult:
+        """Get detailed permissions from a repository hosted on GitHub."""
+        match GitUrl.parse(repository_url):
+            case GitUrlError() as err:
+                return models.RepositoryPermissionsResult(error=err)
+            case url:
+                valid_url = url
+
+        oauth_client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
+        adapter = get_provider_adapter(oauth_client.client)
+
+        if not isinstance(adapter, GitHubAdapter):
+            # Not GitHub, we assume the integration can access the repository like the user can.
+            return models.RepositoryPermissionsResult(
+                permissions=models.RepositoryIntegrationPermissions(integration_access=True)
+            )
+
+        # TODO: lift this logic into GitProviderAdapter?
+        logger.warning("[GITHUB] Need to check integration permissions")
+        account = await oauth_client.get_connected_account()
+        if not isinstance(account, ConnectedAccount):
+            return models.RepositoryPermissionsResult(error=models.RepositoryMetadataError.metadata_oauth)
+
+        permission_url = adapter.get_repository_permission_api_url(valid_url.render(), username=account.username)
+        logger.info(f"[GITHUB] Checking: {permission_url}")
+        headers = adapter.api_common_headers or dict()
+        if etag:
+            headers["If-None-Match"] = etag
+        permission_response = await oauth_client.get(permission_url, headers=headers)
+        logger.info(f"[GITHUB] Got permission response: {permission_response.status_code}")
+        # TODO
+        return models.RepositoryPermissionsResult(
+            permissions=models.RepositoryIntegrationPermissions(integration_access=False)
+        )
+
     async def _check_arbitrary_git_repo(self, url: GitUrl) -> models.RepositoryError | None:
         if url.parsed_url.netloc == "localhost":
             return models.RepositoryMetadataError.metadata_unknown
@@ -206,25 +247,7 @@ class GitRepositoriesRepository:
             logger.warning(f"OAuth error accessing repository metadata: {err}", exc_info=err)
             return models.RepositoryMetadataError.metadata_oauth
 
-        result = self._convert_metadata_response(adapter, response)
-
-        # TODO: lift this logic into GitProviderAdapter?
-        if isinstance(adapter, GitHubAdapter):
-            logger.warning("[GITHUB] Need to check integration permissions")
-            account = await oauth_client.get_connected_account()
-            if isinstance(account, ConnectedAccount):
-                permission_url = adapter.get_repository_permission_api_url(
-                    repository_url.render(), username=account.username
-                )
-                logger.info(f"[GITHUB] Checking: {permission_url}")
-                headers = adapter.api_common_headers or dict()
-                permission_response = await oauth_client.get(permission_url, headers=headers)
-                logger.info(f"[GITHUB] Got permission response: {permission_response.status_code}")
-            else:
-                logger.warning(f"OAuth error accessing repository metadata: {account}")
-                return models.RepositoryMetadataError.metadata_oauth
-
-        return result
+        return self._convert_metadata_response(adapter, response)
 
     async def _get_repository_authenticated_or_anonym(
         self,
