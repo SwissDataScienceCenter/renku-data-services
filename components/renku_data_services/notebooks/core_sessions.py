@@ -1279,6 +1279,11 @@ async def start_session(
                 internal_token_mint=internal_token_mint,
             )
         elif resource_pool.remote.kind == RemoteConfigurationKind.user_runners:
+            # Check that the user has at least one runner registered
+            await user_session_runners_repo.check_eventually_schedulable(
+                user=user,
+                renku_session=UnsavedRemoteUserSession(session_id=server_name, resource_pool_id=resource_pool.id),
+            )
             remote_secret = get_remote_secret_user_runners(
                 user=user,
                 config=nb_config,
