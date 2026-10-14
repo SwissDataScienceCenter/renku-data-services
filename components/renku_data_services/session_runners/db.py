@@ -284,7 +284,7 @@ class UserSessionRunnersRepository:
         if not user.is_authenticated or not user.id:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
 
-        await self._check_eventually_schedulable(session=session, user_id=user.id, renku_session=renku_session)
+        await self._check_eventually_schedulable_inner(session=session, user_id=user.id, renku_session=renku_session)
 
         # Handle existing entry in the database
         stmt = select(schemas.RemoteUserSessionORM).where(schemas.RemoteUserSessionORM.id == renku_session.session_id)
@@ -367,7 +367,31 @@ class UserSessionRunnersRepository:
             session_orm.secrets or dict(), user_secret_key=user_secret_key, user_id=user.id
         )
 
-    async def _check_eventually_schedulable(
+    async def check_eventually_schedulable(
+        self,
+        user: base_models.APIUser,
+        renku_session: models.UnsavedRemoteUserSession,
+        session: AsyncSession | None = None,
+    ) -> None:
+        """Check that a new remote Renku session is eventually schedulable.
+
+        This check will reject cases where there are no runners registered
+        with the resource pool picked for the session.
+
+        Note: will wrap into a database transaction if no DB session is passed.
+        """
+        if not user.is_authenticated or not user.id:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        if session is None:
+            async with self.session_maker() as db_session, db_session.begin():
+                return await self._check_eventually_schedulable_inner(
+                    session=db_session, user_id=user.id, renku_session=renku_session
+                )
+        return await self._check_eventually_schedulable_inner(
+            session=session, user_id=user.id, renku_session=renku_session
+        )
+
+    async def _check_eventually_schedulable_inner(
         self, session: AsyncSession, user_id: str, renku_session: models.UnsavedRemoteUserSession
     ) -> None:
         """Check that a new remote Renku session is eventually schedulable.
