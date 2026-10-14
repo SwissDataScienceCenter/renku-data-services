@@ -1,4 +1,4 @@
-"""add_resource_flavours
+"""add_resource_flavors
 
 Revision ID: 9f2ad1c7b04e
 Revises: fc1a97661d0c
@@ -20,7 +20,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "resource_flavours",
+        "resource_flavors",
         sa.Column("id", ULIDType(), nullable=False),
         sa.Column("name", sa.String(length=40), nullable=False),
         sa.Column("cpu", sa.Float(), nullable=False),
@@ -33,29 +33,29 @@ def upgrade() -> None:
         schema="resource_pools",
     )
     op.create_index(
-        op.f("ix_resource_pools_resource_flavours_name"),
-        "resource_flavours",
+        op.f("ix_resource_pools_resource_flavors_name"),
+        "resource_flavors",
         ["name"],
         unique=True,
         schema="resource_pools",
     )
     op.add_column(
         "resource_classes",
-        sa.Column("resource_flavour_id", ULIDType(), nullable=True),
+        sa.Column("resource_flavor_id", ULIDType(), nullable=True),
         schema="resource_pools",
     )
     op.create_index(
-        op.f("ix_resource_pools_resource_classes_resource_flavour_id"),
+        op.f("ix_resource_pools_resource_classes_resource_flavor_id"),
         "resource_classes",
-        ["resource_flavour_id"],
+        ["resource_flavor_id"],
         unique=False,
         schema="resource_pools",
     )
     op.create_foreign_key(
-        "resource_classes_resource_flavour_id_fkey",
+        "resource_classes_resource_flavor_id_fkey",
         "resource_classes",
-        "resource_flavours",
-        ["resource_flavour_id"],
+        "resource_flavors",
+        ["resource_flavor_id"],
         ["id"],
         source_schema="resource_pools",
         referent_schema="resource_pools",
@@ -65,20 +65,20 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_constraint(
-        "resource_classes_resource_flavour_id_fkey",
+        "resource_classes_resource_flavor_id_fkey",
         "resource_classes",
         schema="resource_pools",
         type_="foreignkey",
     )
     op.drop_index(
-        op.f("ix_resource_pools_resource_classes_resource_flavour_id"),
+        op.f("ix_resource_pools_resource_classes_resource_flavor_id"),
         table_name="resource_classes",
         schema="resource_pools",
     )
-    op.drop_column("resource_classes", "resource_flavour_id", schema="resource_pools")
+    op.drop_column("resource_classes", "resource_flavor_id", schema="resource_pools")
     op.drop_index(
-        op.f("ix_resource_pools_resource_flavours_name"),
-        table_name="resource_flavours",
+        op.f("ix_resource_pools_resource_flavors_name"),
+        table_name="resource_flavors",
         schema="resource_pools",
     )
-    op.drop_table("resource_flavours", schema="resource_pools")
+    op.drop_table("resource_flavors", schema="resource_pools")

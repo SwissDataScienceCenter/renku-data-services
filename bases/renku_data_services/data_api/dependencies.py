@@ -37,7 +37,7 @@ from renku_data_services.crc.db import (
     ClusterRepository,
     MemberRepository,
     QuotaRepository,
-    ResourceFlavourRepository,
+    ResourceFlavorRepository,
     ResourcePoolRepository,
 )
 from renku_data_services.data_api.config import Config
@@ -153,7 +153,7 @@ class DependencyManager:
     authz: Authz
     member_repo: MemberRepository
     rp_repo: ResourcePoolRepository
-    resource_flavour_repo: ResourceFlavourRepository
+    resource_flavor_repo: ResourceFlavorRepository
     project_repo: ProjectRepository
     project_migration_repo: ProjectMigrationRepository
     group_repo: GroupRepository
@@ -392,7 +392,7 @@ class DependencyManager:
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
-        resource_flavour_repo = ResourceFlavourRepository(
+        resource_flavor_repo = ResourceFlavorRepository(
             session_maker=config.db.async_session_maker, quotas_repo=quota_repo
         )
         project_storage_k8s = ProjectStorageK8s(config.nb_config.k8s_v2_client)
@@ -541,7 +541,7 @@ class DependencyManager:
             kc_api=kc_api,
             member_repo=member_repo,
             rp_repo=rp_repo,
-            resource_flavour_repo=resource_flavour_repo,
+            resource_flavor_repo=resource_flavor_repo,
             reprovisioning_repo=reprovisioning_repo,
             search_updates_repo=search_updates_repo,
             search_reprovisioning=search_reprovisioning,

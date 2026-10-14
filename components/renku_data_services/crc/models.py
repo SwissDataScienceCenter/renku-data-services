@@ -103,7 +103,7 @@ class FirecrestClassRemote:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class UnsavedResourceFlavour(ResourcesCompareMixin):
+class UnsavedResourceFlavor(ResourcesCompareMixin):
     """A named shape that resource classes can link to instead of setting their own values."""
 
     name: str
@@ -121,15 +121,15 @@ class UnsavedResourceFlavour(ResourcesCompareMixin):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ResourceFlavour(UnsavedResourceFlavour):
-    """Resource flavour model."""
+class ResourceFlavor(UnsavedResourceFlavor):
+    """Resource flavor model."""
 
     id: ULID
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ResourceFlavourPatch:
-    """Model for changes requested on a resource flavour."""
+class ResourceFlavorPatch:
+    """Model for changes requested on a resource flavor."""
 
     name: str | None = None
     cpu: float | None = None
@@ -147,7 +147,7 @@ class ResourceFlavourPatch:
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class LinkedResourceClass:
-    """A resource class linked to a resource flavour, with the pool it belongs to."""
+    """A resource class linked to a resource flavor, with the pool it belongs to."""
 
     id: int
     name: str
@@ -170,7 +170,7 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     tolerations: list[str] = field(default_factory=list)
     quota_enforced: bool = False
     remote: FirecrestClassRemote | None = None
-    resource_flavour_id: ULID | None = None
+    resource_flavor_id: ULID | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -193,7 +193,7 @@ class ResourceClass(ResourcesCompareMixin):
     usage_hours_total: float | None = None
     quota_enforced: bool = False
     remote: FirecrestClassRemote | None = None
-    resource_flavour_id: ULID | None = None
+    resource_flavor_id: ULID | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -211,7 +211,7 @@ class ResourceClassPatch:
     tolerations: list[str] | None = None
     quota_enforced: bool | None = None
     remote: FirecrestClassRemote | None = None
-    resource_flavour_id: ULID | None = None
+    resource_flavor_id: ULID | ResetType | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

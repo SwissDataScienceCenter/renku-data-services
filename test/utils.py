@@ -37,7 +37,7 @@ from renku_data_services.crc.db import (
     ClusterRepository,
     MemberRepository,
     QuotaRepository,
-    ResourceFlavourRepository,
+    ResourceFlavorRepository,
     ResourcePoolRepository,
 )
 from renku_data_services.data_api.config import Config
@@ -290,7 +290,7 @@ class TestDependencyManager(DependencyManager):
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
-        resource_flavour_repo = ResourceFlavourRepository(
+        resource_flavor_repo = ResourceFlavorRepository(
             session_maker=config.db.async_session_maker, quotas_repo=quota_repo
         )
         reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
@@ -445,7 +445,7 @@ class TestDependencyManager(DependencyManager):
             kc_api=kc_api,
             member_repo=member_repo,
             rp_repo=rp_repo,
-            resource_flavour_repo=resource_flavour_repo,
+            resource_flavor_repo=resource_flavor_repo,
             reprovisioning_repo=reprovisioning_repo,
             search_updates_repo=search_updates_repo,
             search_reprovisioning=search_reprovisioning,
