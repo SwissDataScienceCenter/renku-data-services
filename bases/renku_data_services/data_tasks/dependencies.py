@@ -7,9 +7,9 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 from renku_data_services.capacity_reservation.k8s_client import CapacityReservationK8sClient
 from renku_data_services.capacity_reservation.tasks import CapacityReservationTasks
-from renku_data_services.crc.db import ClusterRepository
+from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolQueryRepository
 from renku_data_services.data_tasks.config import Config
-from renku_data_services.k8s.clients import K8sClusterClientsPool
+from renku_data_services.k8s.clients import DummyPriorityClassClient, DummyResourceQuotaClient, K8sClusterClientsPool
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.metrics.core import StagingMetricsService
@@ -27,6 +27,10 @@ from renku_data_services.resource_usage.core import (
     ResourceUsageService,
 )
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.resource_usage.metering import (
+    OpenMeterClient,
+    ResourceUsageMetering,
+)
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.tasks import SessionTasks
@@ -121,12 +125,27 @@ class DependencyManager:
         )
 
         resource_requests_repo = ResourceRequestsRepo(cfg.db.async_session_maker)
+        # NOTE: We only need the QuotaRepository to instantiate the ResourcePoolQueryRepository which is used
+        # to get the resource class and pool information for metrics. We don't need quota information for metrics
+        # at all so we use the dummy client for quotas here as we don't actually access k8s, just the db.
+        quota_repo = QuotaRepository(DummyResourceQuotaClient(), DummyPriorityClassClient())
+        resource_pool_repo = ResourcePoolQueryRepository(cfg.db.async_session_maker, quota_repo, authz)
         resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
 
         resource_requests_recorder: ResourcesRequestRecorder
         if cfg.enable_resource_request_tracking:
+            metering_client: ResourceUsageMetering | None = None
+            if cfg.openmeter.enabled and cfg.openmeter.endpoint_url:
+                metering_client = OpenMeterClient(
+                    endpoint_url=cfg.openmeter.endpoint_url,
+                    token=cfg.openmeter.token,
+                )
+
             resource_requests_recorder = DefaultResourcesRequestRecorder(
-                repo=resource_requests_repo, fetch=ResourceRequestsFetch(k8s_client)
+                requests_repo=resource_requests_repo,
+                pool_repo=resource_pool_repo,
+                fetch=ResourceRequestsFetch(k8s_client),
+                metering=metering_client,
             )
         else:
             logger.warning("Resource request tracking is disabled!")
