@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Any, NamedTuple
 
 from pydantic import BaseModel, Field
+from ulid import ULID
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import errors
@@ -338,3 +339,22 @@ class UserPreferences(BaseModel):
     user_id: str = Field(min_length=3)
     pinned_projects: PinnedProjects
     show_project_migration_banner: bool = True
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedSSHKey:
+    """A new SSH public key to store for a user."""
+
+    public_key: str
+    key_type: str
+    fingerprint: str
+    name: str | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SSHKey(UnsavedSSHKey):
+    """An SSH public key registered by a user."""
+
+    id: ULID
+    user_id: str
+    created_at: datetime

@@ -195,6 +195,9 @@ class SessionResponse(BaseAPISpec):
     )
     resource_class_id: int
     session_type: SessionType
+    frontend_variant: str | None = Field(
+        None, description="User's Frontend Choice.", max_length=99, min_length=1
+    )
     submission_id: str | None = None
     command_args: list[str] | None = None
 

@@ -13,6 +13,7 @@ import yaml
 from kubernetes import client
 from kubernetes.client import ApiClient, V1Affinity, V1Toleration
 
+from renku_data_services.errors import errors
 from renku_data_services.notebooks.crs import Affinity, Toleration
 
 latest_version: str = "1.25.3"
@@ -350,20 +351,34 @@ class _SessionContainers:
 @dataclass
 class _SessionSshConfig:
     enabled: bool = False
-    service_port: int = 22
-    container_port: int = 2022
-    host_key_secret: str | None = None
-    host_key_location: str = "/opt/ssh/ssh_host_keys"
+    session_host_key_secret_name: str | None = None
+    """The name of the Kubernetes secret that contains the host key used to identify the session SSH server
+    as a valid host with the proxy. The session uses only the private portion of this key."""
+    session_host_key_secret_key: str = "hostKey"
+    """The name of the key inside the Kubernetes secret that holds the private portion of the session host key."""
+
+    proxy_auth_key_secret_name: str | None = None
+    """The name of the Kubernetes secret that contains the SSH key used to authenticate the proxy with the
+    session SSH server. The session uses only the public portion of this key."""
+    proxy_auth_key_secret_key: str = "authKeyPub"
+    """The name of the key inside the Kubernetes secret that holds the public portion of the SSH key."""
 
     @classmethod
     def from_env(cls) -> Self:
-        return cls(
-            enabled=_parse_str_as_bool(os.environ.get("NB_SESSIONS__SSH__ENABLED", False)),
-            service_port=_parse_value_as_int(os.environ.get("NB_SESSIONS__SSH__SERVICE_PORT", 22)),
-            container_port=_parse_value_as_int(os.environ.get("NB_SESSIONS__SSH__CONTAINER_PORT", 2022)),
-            host_key_secret=os.environ.get("NB_SESSIONS__SSH__HOST_KEY_SECRET"),
-            host_key_location=os.environ.get("NB_SESSIONS__SSH__HOST_KEY_LOCATION", "/opt/ssh/ssh_host_keys"),
+        output = cls(
+            enabled=_parse_str_as_bool(os.environ.get("SSH_ENABLED", False)),
+            session_host_key_secret_name=os.environ.get("SSH_SESSION_HOST_KEY_SECRET"),
+            proxy_auth_key_secret_name=os.environ.get("SSH_PROXY_AUTH_KEY_SECRET"),
         )
+        if output.enabled and not output.session_host_key_secret_name:
+            raise errors.ValidationError(
+                message="SSH is enabled but the session host key Kubernetes secret name is not set."
+            )
+        if output.enabled and not output.proxy_auth_key_secret_name:
+            raise errors.ValidationError(
+                message="SSH is enabled but the proxy authentication key Kubernetes secret name is not defined."
+            )
+        return output
 
 
 def _get_renku_url_fallback(ingress_config: _SessionIngress) -> str:

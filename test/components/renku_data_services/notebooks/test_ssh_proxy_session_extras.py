@@ -1,0 +1,121 @@
+"""Tests for ssh_proxy_session_extras and session_has_http_frontend in core_sessions."""
+
+from pathlib import PurePosixPath
+
+import pytest
+from ulid import ULID
+
+from renku_data_services.app_config.config import SshProxyConfig
+from renku_data_services.errors.errors import ProgrammingError
+from renku_data_services.notebooks.core_sessions import session_has_http_frontend, ssh_proxy_session_extras
+from renku_data_services.session.models import BuildParameters, FrontendVariant
+
+
+def _build_parameters(frontend_variant: str) -> BuildParameters:
+    return BuildParameters(
+        id=ULID(),
+        repository="https://github.com/SwissDataScienceCenter/renku",
+        platforms=[],
+        builder_variant="python",
+        frontend_variant=frontend_variant,
+    )
+
+
+class TestSshProxySessionExtras:
+    """Unit tests for the proxy-to-session volume helper."""
+
+    def test_mounts_both_secrets(self) -> None:
+        """Both secrets are mounted as subPath files under the mount dir's .ssh for ssh frontends."""
+        ssh = SshProxyConfig(
+            enabled=True,
+            hostname="host",
+            port=2222,
+            session_host_key_secret_name="host-secret",
+            proxy_auth_key_secret_name="auth-secret",
+        )
+        extras = ssh_proxy_session_extras(ssh, PurePosixPath("/workspace"), _build_parameters(FrontendVariant.ssh))
+
+        assert [v.name for v in extras.volumes] == ["ssh-session-host-key", "ssh-proxy-session-auth-key"]
+        host_volume, auth_volume = extras.volumes
+        assert host_volume.secret is not None
+        assert host_volume.secret.secretName == "host-secret"
+        assert [i.path for i in host_volume.secret.items or []] == ["dropbear_ed25519_host_key"]
+        assert auth_volume.secret is not None
+        assert auth_volume.secret.secretName == "auth-secret"
+        assert [i.path for i in auth_volume.secret.items or []] == ["proxy_auth_key.pub"]
+
+        mounts = {m.name: m for m in extras.volume_mounts}
+        assert mounts["ssh-session-host-key"].mountPath == "/workspace/.ssh/dropbear_ed25519_host_key"
+        assert mounts["ssh-session-host-key"].subPath == "dropbear_ed25519_host_key"
+        assert mounts["ssh-session-host-key"].readOnly is True
+        assert mounts["ssh-proxy-session-auth-key"].mountPath == "/workspace/.ssh/proxy_auth_key.pub"
+        assert mounts["ssh-proxy-session-auth-key"].subPath == "proxy_auth_key.pub"
+        assert mounts["ssh-proxy-session-auth-key"].readOnly is True
+
+    def test_no_mounts_without_secret_config(self) -> None:
+        """Error is raised when enabled, but no secrets are available."""
+        ssh_config = SshProxyConfig(
+            enabled=True,
+            hostname="host",
+            port=2222,
+            session_host_key_secret_name=None,
+            proxy_auth_key_secret_name=None,
+        )
+        with pytest.raises(ProgrammingError):
+            ssh_proxy_session_extras(ssh_config, PurePosixPath("/workspace"), _build_parameters(FrontendVariant.ssh))
+
+    def test_no_mounts_when_disabled(self) -> None:
+        """Nothing is mounted when the chart has not provided secret names."""
+        ssh_config = SshProxyConfig(
+            enabled=False,
+            hostname="host",
+            port=2222,
+            session_host_key_secret_name="host-secret",
+            proxy_auth_key_secret_name="auth-secret",
+        )
+        extras = ssh_proxy_session_extras(
+            ssh_config, PurePosixPath("/workspace"), _build_parameters(FrontendVariant.ssh)
+        )
+        assert extras.volumes == []
+        assert extras.volume_mounts == []
+
+    def test_no_mounts_for_non_ssh_frontend(self) -> None:
+        """Non-ssh sessions must not receive the proxy-to-session keys."""
+        ssh_config = SshProxyConfig(
+            enabled=True,
+            hostname="host",
+            port=2222,
+            session_host_key_secret_name="host-secret",
+            proxy_auth_key_secret_name="auth-secret",
+        )
+        extras = ssh_proxy_session_extras(
+            ssh_config, PurePosixPath("/workspace"), _build_parameters(FrontendVariant.jupyterlab)
+        )
+        assert extras.volumes == []
+        assert extras.volume_mounts == []
+
+    def test_no_mounts_without_build_parameters(self) -> None:
+        """Image-based sessions have no build parameters and must not receive the keys."""
+        ssh_config = SshProxyConfig(
+            enabled=True,
+            hostname="host",
+            port=2222,
+            session_host_key_secret_name="host-secret",
+            proxy_auth_key_secret_name="auth-secret",
+        )
+        extras = ssh_proxy_session_extras(ssh_config, PurePosixPath("/workspace"), None)
+        assert extras.volumes == []
+        assert extras.volume_mounts == []
+
+
+class TestSessionHasHttpFrontend:
+    """Unit tests for the session HTTP-frontend predicate."""
+
+    def test_ssh_frontend_has_no_http(self) -> None:
+        assert session_has_http_frontend(_build_parameters(FrontendVariant.ssh)) is False
+
+    def test_jupyterlab_frontend_has_http(self) -> None:
+        assert session_has_http_frontend(_build_parameters(FrontendVariant.jupyterlab)) is True
+
+    def test_no_build_parameters_has_http(self) -> None:
+        assert session_has_http_frontend(None) is True
