@@ -626,8 +626,8 @@ class ResourcePoolUsageLimits:
     total_usage: Credit
     user_usage: Credit | None
     pool_limits: ResourcePoolLimits
-    start_date: str | None = None
-    end_date: str | None = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -636,5 +636,5 @@ class ResourcePoolUsage:
 
     total_usage: Credit
     user_usage: Credit | None
-    start_date: str | None = None
-    end_date: str | None = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None

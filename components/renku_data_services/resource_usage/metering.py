@@ -1,6 +1,6 @@
 """OpenMeter event emission for session resource usage metering."""
 
-from datetime import UTC
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Optional, Protocol
 
@@ -38,7 +38,11 @@ class ResourceUsageMetering(Protocol):
         ...
 
     async def query_compute_usage(
-        self, resource_pool_id: int, user_id: str | None, start_date: str | None = None, end_date: str | None = None
+        self,
+        resource_pool_id: int,
+        user_id: str | None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
     ) -> Credit:
         """Query compute usage from the metering service."""
         ...
@@ -47,8 +51,8 @@ class ResourceUsageMetering(Protocol):
         self,
         resource_pool_id: int,
         user_id: str | None,
-        start_date: str | None = None,
-        end_date: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
         feature_key: str = COMPUTE_USAGE_KEY,
     ) -> ResourcePoolUsage:
         """Get total usage and user usage for a specific timeframe from the metering service."""
@@ -200,8 +204,8 @@ class OpenMeterClient:
         self,
         resource_pool_id: int,
         user_id: str | None,
-        start_date: str | None = None,
-        end_date: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
         meter_key: str = COMPUTE_USAGE_KEY,
     ) -> Credit:
         """Query compute usage from OpenMeter.
@@ -212,9 +216,9 @@ class OpenMeterClient:
         subject_key = self.get_resource_pool_key(resource_pool_id)
         body: dict[str, Any] = {"subject": [subject_key]}
         if start_date is not None:
-            body["from"] = start_date
+            body["from"] = start_date.isoformat()
         if end_date is not None:
-            body["to"] = end_date
+            body["to"] = end_date.isoformat()
         if user_id is not None:
             user_body = {"advancedMeterGroupByFilters": {"user_id": {"$eq": user_id}}, "groupBy": ["user_id"]}
             body.update(user_body)
@@ -290,8 +294,8 @@ class OpenMeterClient:
         self,
         resource_pool_id: int,
         user_id: str | None,
-        start_date: str | None = None,
-        end_date: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
         feature_key: str = COMPUTE_USAGE_KEY,
     ) -> ResourcePoolUsage:
         """Get total usage and user usage for a specific timeframe from OpenMeter."""
@@ -319,7 +323,7 @@ class OpenMeterClient:
             start_date = None
             end_date = None
         else:
-            start_date = entitlement.currentUsagePeriod.get("from")
-            end_date = entitlement.currentUsagePeriod.get("to")
+            start_date = datetime.fromisoformat(entitlement.currentUsagePeriod["from"])
+            end_date = datetime.fromisoformat(entitlement.currentUsagePeriod["to"])
 
         return await self.get_usage_timeframe(resource_pool_id, user_id, start_date, end_date, feature_key)

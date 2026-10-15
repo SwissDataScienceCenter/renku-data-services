@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Protocol
 
 from renku_data_services import errors
@@ -204,17 +204,13 @@ class ResourceUsageService:
         self._metering_client = metering_client
 
     async def get_usage(
-        self, resource_pool_id: int, user_id: str | None, start_date: date | None, end_date: date | None
+        self, resource_pool_id: int, user_id: str | None, start_date: datetime | None, end_date: datetime | None
     ) -> Credit | None:
         """Return the resource usage for the given pool of the given timespan."""
         if self._metering_client is None:
             return None
 
-        start_date_str = start_date.strftime("%Y-%m-%dT00:00:00Z") if start_date is not None else None
-        end_date_str = end_date.strftime("%Y-%m-%dT23:59:59Z") if end_date is not None else None
-        result = await self._metering_client.query_compute_usage(
-            resource_pool_id, user_id, start_date_str, end_date_str
-        )
+        result = await self._metering_client.query_compute_usage(resource_pool_id, user_id, start_date, end_date)
         return result
 
     async def get_limits(self, resource_pool_id: int) -> ResourcePoolLimits:
@@ -261,8 +257,8 @@ class ResourceUsageService:
         self,
         resource_pool_id: int,
         user_id: str | None,
-        start_date: str | None = None,
-        end_date: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
     ) -> ResourcePoolUsageLimits | None:
         """Get resource pool usage and its limits for a given timeframe."""
         if self._metering_client is None:
