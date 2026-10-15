@@ -12,13 +12,9 @@ paths:
   /resource_pools/{resource_pool_id}/usage:
     get:
       summary: |
-        Get usage and limits of the supplied pool. If a `start_date`
-        is not given, the usage of the current week is returned.
-
-        A query parameter `user_id` can be specified and the current
-        user is used if this is not present. This endpoint requires
-        admin privileges, if the `user_id` query parameter is not the
-        current user.
+        Get usage and limits of the supplied pool. If `start_date` and `end_date`
+        are not provided, the usage for the entire history is returned. A query
+        parameter `user_id` can be specified to include a specific user's usage.
       parameters:
         - in: path
           name: resource_pool_id
@@ -44,7 +40,7 @@ paths:
             type: string
       responses:
         "200":
-          description: "Return the pool limits and current usage."
+          description: "Return the pool limits and usage."
           content:
             "application/json":
               schema:
@@ -255,7 +251,6 @@ components:
           description: "The end date of the usage period, in ISO 8601 format"
       required:
         - total_usage
-        - user_usage
         - pool_limits
     ResourcePoolLimitPut:
       type: object
