@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -18,6 +19,7 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.data_connectors.orm import DataConnectorORM, DataConnectorToProjectLinkORM
 from renku_data_services.project.apispec import Visibility as ProjectVisibility
 from renku_data_services.project.models import SessionSecret
 from renku_data_services.project.orm import SessionSecretORM, SessionSecretSlotORM
@@ -42,6 +44,65 @@ def _validate_app_launcher_project_visibility(
         launcher_type, project_is_public=project_visibility == ProjectVisibility.public
     ):
         raise errors.ValidationError(message="An app launcher can only be created in a public project.")
+
+
+def _build_launcher_restriction_expression(
+    project_id: ULID,
+    allowed_dcs: list[str] | None = None,
+) -> ColumnElement[bool]:
+    """Build the SQL expression that determines whether a launcher is restricted."""
+
+    DC_P = models.SessionLauncherDataConnectorPolicyName
+    SL_P = models.SessionLauncherSecretPolicyName
+    DC = DataConnectorORM
+    DCLink = DataConnectorToProjectLinkORM
+    Launcher = schemas.SessionLauncherORM
+    LauncherDC = schemas.SessionLauncherDataConnectorORM
+    LauncherSL = schemas.SessionLauncherSecretORM
+
+    secret_restricted = (
+        select(1)
+        .select_from(LauncherSL)
+        .where(
+            LauncherSL.launcher_id == Launcher.id,
+            LauncherSL.project_id == Launcher.project_id,
+            LauncherSL.policy == SL_P.excluded,
+        )
+        .exists()
+    )
+
+    data_connectors_restricted = (
+        select(1)
+        .select_from(DCLink)
+        .join(DC, DC.id == DCLink.data_connector_id)
+        .join(
+            LauncherDC,
+            and_(
+                LauncherDC.data_connector_to_project_link_id == DCLink.id,
+                LauncherDC.launcher_id == Launcher.id,
+                LauncherDC.project_id == Launcher.project_id,
+            ),
+        )
+        .where(
+            DCLink.project_id == project_id,
+            or_(
+                LauncherDC.policy == DC_P.excluded,
+                and_(
+                    LauncherDC.policy == DC_P.read_only,
+                    DataConnectorORM.readonly.is_(False),
+                ),
+            ),
+        )
+    )
+
+    if allowed_dcs is not None:
+        data_connectors_restricted = data_connectors_restricted.where(
+            DataConnectorToProjectLinkORM.data_connector_id.in_(allowed_dcs)
+        )
+
+    data_connectors_restricted = data_connectors_restricted.exists()
+
+    return or_(secret_restricted, data_connectors_restricted)
 
 
 class SessionEnvironmentRepositoryProtocol(Protocol):
@@ -410,13 +471,23 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             )
 
         async with self.session_maker() as session:
-            res = await session.scalars(
-                select(schemas.SessionLauncherORM)
+            allowed_dcs = await self.project_authz.resources_with_permission(
+                user, user.id, ResourceType.data_connector, Scope.READ
+            )
+
+            restricted = _build_launcher_restriction_expression(project_id, allowed_dcs)
+
+            res = await session.execute(
+                select(
+                    schemas.SessionLauncherORM,
+                    restricted.label("is_restricted"),
+                )
                 .where(schemas.SessionLauncherORM.project_id == project_id)
                 .order_by(schemas.SessionLauncherORM.creation_date.desc())
             )
+
             launcher = res.all()
-            return [item.dump() for item in launcher]
+            return [item.dump(is_restricted=is_restricted) for item, is_restricted in launcher]
 
     async def get_launcher(self, user: base_models.APIUser, launcher_id: ULID) -> models.SessionLauncher:
         """Get one session launcher from the database."""
@@ -436,7 +507,22 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     message=f"Session launcher with id '{launcher_id}' does not exist or you do not have access to it."
                 )
 
-            return launcher.dump()
+            allowed_dcs = await self.project_authz.resources_with_permission(
+                user, user.id, ResourceType.data_connector, Scope.READ
+            )
+
+            restricted = _build_launcher_restriction_expression(launcher.project_id, allowed_dcs)
+
+            is_restricted = await session.scalar(
+                select(restricted)
+                .select_from(schemas.SessionLauncherORM)
+                .where(
+                    schemas.SessionLauncherORM.id == launcher.id,
+                    schemas.SessionLauncherORM.project_id == launcher.project_id,
+                )
+            )
+
+            return launcher.dump(is_restricted=is_restricted)
 
     async def insert_launcher(
         self, user: base_models.APIUser, launcher: models.UnsavedSessionLauncher
@@ -636,6 +722,75 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             )
             session.add(launcher_orm)
             await session.flush()
+
+            # NOTE: copy session launchers secret permissions
+            source_secret_policies = await session.scalars(
+                select(schemas.SessionLauncherSecretORM).where(
+                    schemas.SessionLauncherSecretORM.launcher_id == launcher.id
+                )
+            )
+
+            destination_secret_slots = await session.scalars(
+                select(SessionSecretSlotORM).where(SessionSecretSlotORM.project_id == project_id)
+            )
+
+            destination_secret_slot_by_filename = {link.filename: link for link in destination_secret_slots}
+
+            for secret_slot_policy in source_secret_policies:
+                secret_slot_filename = secret_slot_policy.secret_slot.filename
+                destination_secret_slot = destination_secret_slot_by_filename.get(secret_slot_filename)
+
+                # destination_secret_slots should be a superset of source_secret_policies, if it is not, e.g. due to
+                # a race condition (the secret slot was deleted before completing the copy), we ignore it.
+                if destination_secret_slot is None:
+                    continue
+
+                new_secret_slot_policy = schemas.SessionLauncherSecretORM(
+                    project_id=project_id,
+                    launcher_id=launcher_orm.id,
+                    secret_slot_id=destination_secret_slot.id,
+                    policy=secret_slot_policy.policy,
+                )
+                session.add(new_secret_slot_policy)
+            await session.flush()
+
+            # NOTE: copy session launcher data connector permissions
+            # this will also copy permissions for data connectors that are invisible to the user
+            # This is intentional, otherwise users who have access to the data connectors will be
+            # given default permissions.
+            source_dc_policies = await session.scalars(
+                select(schemas.SessionLauncherDataConnectorORM).where(
+                    schemas.SessionLauncherDataConnectorORM.launcher_id == launcher.id
+                )
+            )
+
+            destination_dc_links = await session.scalars(
+                select(DataConnectorToProjectLinkORM).where(DataConnectorToProjectLinkORM.project_id == project_id)
+            )
+
+            destination_dc_links_by_dc_id = {link.data_connector_id: link for link in destination_dc_links}
+
+            for dc_policy in source_dc_policies:
+                source_dc_id = dc_policy.data_connector_to_project_link.data_connector.id
+                dc_link = destination_dc_links_by_dc_id.get(source_dc_id)
+
+                # destination_dc_links should be a superset of source_dc_policies, if it is not, e.g. due to
+                # a race condition (the data connector was deleted before completing the copy), we ignore it.
+                if dc_link is None:
+                    continue
+
+                new_dc_policy = schemas.SessionLauncherDataConnectorORM(
+                    project_id=project_id,
+                    launcher_id=launcher_orm.id,
+                    data_connector_to_project_link_id=dc_link.id,
+                    policy=dc_policy.policy,
+                )
+                session.add(new_dc_policy)
+            await session.flush()
+
+            # NOTE: copy session launcher repository permissions
+            # TODO...
+
             await session.refresh(launcher_orm)
             return launcher_orm.dump()
 

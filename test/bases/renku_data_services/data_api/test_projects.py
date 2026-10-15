@@ -1274,6 +1274,79 @@ async def test_project_copy_includes_session_launchers(
 
 
 @pytest.mark.asyncio
+async def test_project_copy_includes_session_launchers_with_permissions(
+    sanic_client,
+    user_headers,
+    regular_user,
+    create_project,
+    create_session_environment,
+    create_session_launcher,
+    create_project_copy,
+    create_data_connector_and_link_project,
+    create_session_secret_slot,
+) -> None:
+    project = await create_project(sanic_client, "Project")
+    project_id = project["id"]
+    environment = await create_session_environment("Some environment")
+    _, link = await create_data_connector_and_link_project("Data connector", project_id=project_id)
+    secret_slot = await create_session_secret_slot("secret-slot", project_id=project_id)
+    launcher = await create_session_launcher("Launcher", project_id, environment={"id": environment["id"]})
+
+    patch_dc_policy = {
+        "data_connector_link_id": link["id"],
+        "policy": "excluded",
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
+        headers=user_headers,
+        json=[patch_dc_policy],
+    )
+    assert res.status_code == 200, res.text
+
+    patch_sc_policy = {
+        "secret_slot_id": secret_slot["id"],
+        "policy": "excluded",
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher["id"]}/secrets",
+        headers=user_headers,
+        json=[patch_sc_policy],
+    )
+    assert res.status_code == 200, res.text
+
+    copy_project = await create_project_copy(
+        sanic_client, project_id, regular_user.namespace.path.serialize(), "Copy Project"
+    )
+
+    project_id = copy_project["id"]
+    _, res = await sanic_client.get(f"/api/data/projects/{project_id}/session_launchers", headers=user_headers)
+    assert res.status_code == 200, res.text
+    launchers = res.json
+
+    for launcher in launchers:
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+        assert res.status_code == 200, res.text
+        launcher_orm = res.json
+        assert launcher_orm["is_restricted"]
+
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}/secrets", headers=user_headers)
+        assert res.status_code == 200, res.text
+        secret_slot_policies = res.json
+        assert len(secret_slot_policies) > 0
+        for secret_slot_policy in secret_slot_policies:
+            assert secret_slot_policy["policy"] == "excluded"
+
+        _, res = await sanic_client.get(
+            f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=user_headers
+        )
+        assert res.status_code == 200, res.text
+        dc_policies = res.json
+        assert len(dc_policies) > 0
+        for dc_policy in dc_policies:
+            assert dc_policy["policy"] == "excluded"
+
+
+@pytest.mark.asyncio
 async def test_project_copy_creates_new_custom_environment_instance(
     sanic_client,
     user_headers,
