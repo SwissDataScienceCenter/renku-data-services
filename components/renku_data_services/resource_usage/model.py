@@ -624,7 +624,7 @@ class ResourcePoolUsageLimits:
     """Overview of a resource pool in context of a user."""
 
     total_usage: Credit
-    user_usage: Credit
+    user_usage: Credit | None
     pool_limits: ResourcePoolLimits
     start_date: str | None = None
     end_date: str | None = None
@@ -635,6 +635,6 @@ class ResourcePoolUsage:
     """Overview of a resource pool usage in context of a user."""
 
     total_usage: Credit
-    user_usage: Credit
+    user_usage: Credit | None
     start_date: str | None = None
     end_date: str | None = None

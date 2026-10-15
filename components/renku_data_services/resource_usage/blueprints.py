@@ -151,11 +151,12 @@ class ResourceUsageBP(CustomBlueprint):
         ) -> HTTPResponse:
             start_date = query.start_date.strftime("%Y-%m-%dT00:00:00Z") if query.start_date else None
             end_date = query.end_date.strftime("%Y-%m-%dT23:59:59Z") if query.end_date else None
-            user_id = str(query.user_id) if query.user_id else user.id
-            # TODO: Check if resource pool exists, and return 404 if not.
-            result = await self.rr_svc.get_usage_timeframe_with_limits(
-                resource_pool_id, user_id or "", start_date, end_date
-            )
+            user_id = str(query.user_id) if query.user_id else None
+
+            # Validate that the resource pool exists and the user has access to it
+            await self.rp_repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
+
+            result = await self.rr_svc.get_usage_timeframe_with_limits(resource_pool_id, user_id, start_date, end_date)
             if result:
                 output = apispec.ResourcePoolUsageLimits(
                     total_usage=result.total_usage.value,
@@ -164,7 +165,7 @@ class ResourceUsageBP(CustomBlueprint):
                         total_limit=result.pool_limits.total_limit.value,
                         user_limit=result.pool_limits.user_limit.value,
                     ),
-                    user_usage=result.user_usage.value,
+                    user_usage=result.user_usage.value if result.user_usage is not None else None,
                     start_date=result.start_date,
                     end_date=result.end_date,
                 )
