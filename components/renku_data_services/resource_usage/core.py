@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Protocol
 
 from renku_data_services import errors
@@ -20,10 +21,8 @@ from renku_data_services.resource_usage.model import (
     ResourceClassCost,
     ResourceDataFacade,
     ResourcePoolLimits,
-    ResourcePoolUsage,
+    ResourcePoolUsageLimits,
     ResourcesRequest,
-    ResourceUsageQuery,
-    ResourceUsageSummary,
 )
 
 if TYPE_CHECKING:
@@ -197,63 +196,118 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
 class ResourceUsageService:
     """Queries for resource usages."""
 
-    def __init__(self, repo: ResourceRequestsRepo) -> None:
-        self._repo = repo
+    def __init__(self, repo: ResourceRequestsRepo, metering_client: ResourceUsageMetering | None = None) -> None:
+        if metering_client is None:
+            logger.warning(
+                "No metering client configured, resource usage will not be queried from the metering service."
+            )
 
-    async def usage_of_running_week(
-        self, resource_pool_id: int, user_id: str | None, current_time: datetime | None = None
-    ) -> ResourceUsageSummary:
-        """Return the resource usage for the given pool of the currently running week.
+        self._metering_client = metering_client
 
-        The week start is Monday 0:00 UTC. Resource usage is returned in 'credits'. When a user_id
-        is given, the results represent the usage of only that user. Otherwise, the overall pool usage
-        is returned. The running week is calculated from the `current_time` argument, which is the current
-        time if not specified.
-        """
-        now = current_time.replace(tzinfo=UTC) if current_time is not None else datetime.now(UTC)
-        start = (now - timedelta(days=now.weekday())).date()
-        query = ResourceUsageQuery(since=start, until=now.date(), user_id=user_id, resource_pool_id=resource_pool_id)
-        result = ResourceUsageSummary.empty()
-        async for item in self._repo.find_usage(query):
-            result = result.add(item)
-
-        return result
-
-    async def usage_of_timespan(
-        self, resource_pool_id: int, user_id: str | None, start_date: date, end_date: date | None
-    ) -> ResourceUsageSummary:
+    async def get_usage(
+        self, resource_pool_id: int, user_id: str | None, start_date: datetime | None, end_date: datetime | None
+    ) -> Credit | None:
         """Return the resource usage for the given pool of the given timespan."""
-        until = end_date or datetime.now(UTC).date()
-        query = ResourceUsageQuery(since=start_date, until=until, user_id=user_id, resource_pool_id=resource_pool_id)
-        result = ResourceUsageSummary.empty()
-        async for item in self._repo.find_usage(query):
-            result = result.add(item)
+        if self._metering_client is None:
+            return None
 
+        result = await self._metering_client.query_compute_usage(resource_pool_id, user_id, start_date, end_date)
         return result
 
-    async def get_running_week(
-        self, resource_pool_id: int, user_id: str, current_time: datetime | None = None
-    ) -> ResourcePoolUsage | None:
-        """Get resource pool usage and its limits."""
+    async def get_limits(self, resource_pool_id: int) -> ResourcePoolLimits:
+        """Get resource pool limits."""
+        # TODO: retrieve user limit from db, for the moment user limit is unlimited
+        if self._metering_client is None:
+            return ResourcePoolLimits(
+                pool_id=resource_pool_id,
+                total_limit=Credit.unlimited(),
+                user_limit=Credit.unlimited(),
+            )
 
-        limits = await self._repo.find_resource_pool_limits(resource_pool_id)
+        total_limit = await self._metering_client.get_resource_pool_total_limit(resource_pool_id)
+        return ResourcePoolLimits(
+            pool_id=resource_pool_id,
+            total_limit=total_limit,
+            user_limit=Credit.unlimited(),
+        )
 
-        if limits:
-            user_usage = await self.usage_of_running_week(resource_pool_id, user_id, current_time)
-            total_usage = await self.usage_of_running_week(resource_pool_id, None, current_time)
-            return ResourcePoolUsage(total_usage, user_usage, limits)
-        else:
+    async def get_usage_with_limits(
+        self,
+        resource_pool_id: int,
+        user_id: str | None,
+    ) -> ResourcePoolUsageLimits | None:
+        """Get current resource pool usage and its limits."""
+        if self._metering_client is None:
             return None
 
-    async def get_for_date(
-        self, resource_pool_id: int, user_id: str, start_date: date, end_date: date | None
-    ) -> ResourcePoolUsage | None:
-        """Get resource pool usage given a time span."""
-
-        limits = await self._repo.find_resource_pool_limits(resource_pool_id)
-        if limits:
-            user_usage = await self.usage_of_timespan(resource_pool_id, user_id, start_date, end_date)
-            total_usage = await self.usage_of_timespan(resource_pool_id, None, start_date, end_date)
-            return ResourcePoolUsage(total_usage, user_usage, limits)
-        else:
+        try:
+            usage, limits = await asyncio.gather(
+                self._metering_client.get_current_usage(resource_pool_id, user_id),
+                self.get_limits(resource_pool_id),
+            )
+            return ResourcePoolUsageLimits(
+                total_usage=usage.total_usage,
+                user_usage=usage.user_usage,
+                pool_limits=limits,
+                start_date=usage.start_date,
+                end_date=usage.end_date,
+            )
+        except errors.ThirdPartyAPIError as e:
+            logger.error(f"Error querying compute usage with limits: {e}")
             return None
+
+    async def get_usage_timeframe_with_limits(
+        self,
+        resource_pool_id: int,
+        user_id: str | None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> ResourcePoolUsageLimits | None:
+        """Get resource pool usage and its limits for a given timeframe."""
+        if self._metering_client is None:
+            return None
+
+        try:
+            usage, limits = await asyncio.gather(
+                self._metering_client.get_usage_timeframe(resource_pool_id, user_id, start_date, end_date),
+                self.get_limits(resource_pool_id),
+            )
+            return ResourcePoolUsageLimits(
+                total_usage=usage.total_usage,
+                user_usage=usage.user_usage,
+                pool_limits=limits,
+                start_date=usage.start_date,
+                end_date=usage.end_date,
+            )
+        except errors.ThirdPartyAPIError as e:
+            logger.error(f"Error querying compute usage with limits: {e}")
+            return None
+
+    def get_remaining_quota(self, usage: ResourcePoolUsageLimits | None) -> tuple[float | None, float | None]:
+        """Compute the remaining quota and its percentage based on the usage and limits."""
+        if usage is None:
+            return None, None
+
+        user_limit = usage.pool_limits.user_limit
+        total_limit = usage.pool_limits.total_limit
+
+        if user_limit.is_unlimited() or usage.user_usage is None:
+            remaining_user_quota = float("inf")
+        else:
+            remaining_user_quota = user_limit.value - usage.user_usage.value
+        if total_limit.is_unlimited():
+            remaining_total_quota = float("inf")
+        else:
+            remaining_total_quota = total_limit.value - usage.total_usage.value
+
+        if remaining_user_quota == float("inf") and remaining_total_quota == float("inf"):
+            return None, None
+
+        remaining_quota = min(remaining_user_quota, remaining_total_quota)
+
+        if remaining_quota == remaining_user_quota:
+            remaining_quota_p = (remaining_user_quota / user_limit.value) * 100
+        else:
+            remaining_quota_p = (remaining_total_quota / total_limit.value) * 100
+
+        return remaining_quota, remaining_quota_p

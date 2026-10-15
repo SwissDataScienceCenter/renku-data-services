@@ -12,13 +12,9 @@ paths:
   /resource_pools/{resource_pool_id}/usage:
     get:
       summary: |
-        Get usage and limits of the supplied pool. If a `start_date`
-        is not given, the usage of the current week is returned.
-
-        A query parameter `user_id` can be specified and the current
-        user is used if this is not present. This endpoint requires
-        admin privileges, if the `user_id` query parameter is not the
-        current user.
+        Get usage and limits of the supplied pool. If `start_date` and `end_date`
+        are not provided, the usage for the entire history is returned. A query
+        parameter `user_id` can be specified to include a specific user's usage.
       parameters:
         - in: path
           name: resource_pool_id
@@ -30,13 +26,13 @@ paths:
           required: false
           schema:
             type: string
-            format: date
+            format: date-time
         - in: query
           name: end_date
           required: false
           schema:
             type: string
-            format: date
+            format: date-time
         - in: query
           name: user_id
           required: false
@@ -44,11 +40,11 @@ paths:
             type: string
       responses:
         "200":
-          description: "Return the pool limits and current usage."
+          description: "Return the pool limits and usage."
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/ResourcePoolUsage"
+                $ref: "#/components/schemas/ResourcePoolUsageLimits"
         "404":
           description: "The resource pool doesn't exist."
           content:
@@ -235,32 +231,27 @@ paths:
 
 components:
   schemas:
-    ResourcePoolUsage:
+    ResourcePoolUsageLimits:
       type: object
       additionalProperties: false
       properties:
         total_usage:
-          $ref: "#/components/schemas/ResourceUsageSummary"
+          type: integer
         user_usage:
-          $ref: "#/components/schemas/ResourceUsageSummary"
+          type: integer
         pool_limits:
           $ref: "#/components/schemas/ResourcePoolLimits"
+        start_date:
+          type: string
+          format: date-time
+          description: "The start date of the usage period, in ISO 8601 format"
+        end_date:
+          type: string
+          format: date-time
+          description: "The end date of the usage period, in ISO 8601 format"
       required:
         - total_usage
-        - user_usage
         - pool_limits
-    ResourceUsageSummary:
-      type: object
-      additionalProperties: false
-      properties:
-        runtime:
-          type: number
-          format: double
-        cost:
-          type: integer
-      required:
-        - runtime
-        - cost
     ResourcePoolLimitPut:
       type: object
       additionalProperties: false
