@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -43,6 +44,65 @@ def _validate_app_launcher_project_visibility(
         launcher_type, project_is_public=project_visibility == ProjectVisibility.public
     ):
         raise errors.ValidationError(message="An app launcher can only be created in a public project.")
+
+
+def _build_launcher_restriction_expression(
+    project_id: ULID,
+    allowed_dcs: list[str] | None = None,
+) -> ColumnElement[bool]:
+    """Build the SQL expression that determines whether a launcher is restricted."""
+
+    DC_P = models.SessionLauncherDataConnectorPolicyName
+    SL_P = models.SessionLauncherSecretPolicyName
+    DC = DataConnectorORM
+    DCLink = DataConnectorToProjectLinkORM
+    Launcher = schemas.SessionLauncherORM
+    LauncherDC = schemas.SessionLauncherDataConnectorORM
+    LauncherSL = schemas.SessionLauncherSecretORM
+
+    secret_restricted = (
+        select(1)
+        .select_from(LauncherSL)
+        .where(
+            LauncherSL.launcher_id == Launcher.id,
+            LauncherSL.project_id == Launcher.project_id,
+            LauncherSL.policy == SL_P.excluded,
+        )
+        .exists()
+    )
+
+    data_connectors_restricted = (
+        select(1)
+        .select_from(DCLink)
+        .join(DC, DC.id == DCLink.data_connector_id)
+        .join(
+            LauncherDC,
+            and_(
+                LauncherDC.data_connector_to_project_link_id == DCLink.id,
+                LauncherDC.launcher_id == Launcher.id,
+                LauncherDC.project_id == Launcher.project_id,
+            ),
+        )
+        .where(
+            DCLink.project_id == project_id,
+            or_(
+                LauncherDC.policy == DC_P.excluded,
+                and_(
+                    LauncherDC.policy == DC_P.read_only,
+                    DataConnectorORM.readonly.is_(False),
+                ),
+            ),
+        )
+    )
+
+    if allowed_dcs is not None:
+        data_connectors_restricted = data_connectors_restricted.where(
+            DataConnectorToProjectLinkORM.data_connector_id.in_(allowed_dcs)
+        )
+
+    data_connectors_restricted = data_connectors_restricted.exists()
+
+    return or_(secret_restricted, data_connectors_restricted)
 
 
 class SessionEnvironmentRepositoryProtocol(Protocol):
@@ -411,70 +471,23 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             )
 
         async with self.session_maker() as session:
-            secret_restricted = (
-                select(1)
-                .select_from(schemas.SessionLauncherSecretORM)
-                .where(
-                    schemas.SessionLauncherSecretORM.launcher_id == schemas.SessionLauncherORM.id,
-                    schemas.SessionLauncherSecretORM.project_id == schemas.SessionLauncherORM.project_id,
-                    schemas.SessionLauncherSecretORM.policy == models.SessionLauncherSecretPolicyName.excluded,
-                )
-                .exists()
-            )
-
             allowed_dcs = await self.project_authz.resources_with_permission(
                 user, user.id, ResourceType.data_connector, Scope.READ
             )
 
-            data_connectors_restricted = (
-                select(1)
-                .select_from(DataConnectorToProjectLinkORM)
-                .join(
-                    DataConnectorORM,
-                    DataConnectorORM.id == DataConnectorToProjectLinkORM.data_connector_id,
-                )
-                .join(
-                    schemas.SessionLauncherDataConnectorORM,
-                    and_(
-                        schemas.SessionLauncherDataConnectorORM.data_connector_to_project_link_id
-                        == DataConnectorToProjectLinkORM.id,
-                        schemas.SessionLauncherDataConnectorORM.launcher_id == schemas.SessionLauncherORM.id,
-                        schemas.SessionLauncherDataConnectorORM.project_id == schemas.SessionLauncherORM.project_id,
-                    ),
-                )
-                .where(
-                    DataConnectorToProjectLinkORM.project_id == project_id,
-                    DataConnectorToProjectLinkORM.data_connector_id.in_(allowed_dcs),
-                    or_(
-                        schemas.SessionLauncherDataConnectorORM.policy
-                        == models.SessionLauncherDataConnectorPolicyName.excluded,
-                        and_(
-                            schemas.SessionLauncherDataConnectorORM.policy
-                            == models.SessionLauncherDataConnectorPolicyName.read_only,
-                            DataConnectorORM.readonly.is_(False),
-                        ),
-                    ),
-                )
-                .exists()
-            )
+            restricted = _build_launcher_restriction_expression(project_id, allowed_dcs)
 
             res = await session.execute(
                 select(
                     schemas.SessionLauncherORM,
-                    or_(
-                        secret_restricted,
-                        data_connectors_restricted,
-                    ).label("is_restricted"),
+                    restricted.label("is_restricted"),
                 )
-                .where(
-                    schemas.SessionLauncherORM.project_id == project_id,
-                )
-                .order_by(
-                    schemas.SessionLauncherORM.creation_date.desc(),
-                )
+                .where(schemas.SessionLauncherORM.project_id == project_id)
+                .order_by(schemas.SessionLauncherORM.creation_date.desc())
             )
 
-            return [item.dump(is_restricted=restricted) for item, restricted in res.all()]
+            launcher = res.all()
+            return [item.dump(is_restricted=is_restricted) for item, is_restricted in launcher]
 
     async def get_launcher(self, user: base_models.APIUser, launcher_id: ULID) -> models.SessionLauncher:
         """Get one session launcher from the database."""
@@ -494,58 +507,22 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     message=f"Session launcher with id '{launcher_id}' does not exist or you do not have access to it."
                 )
 
-            secret_restricted = (
-                select(1)
-                .select_from(schemas.SessionLauncherSecretORM)
+            allowed_dcs = await self.project_authz.resources_with_permission(
+                user, user.id, ResourceType.data_connector, Scope.READ
+            )
+
+            restricted = _build_launcher_restriction_expression(launcher.project_id, allowed_dcs)
+
+            is_restricted = await session.scalar(
+                select(restricted)
+                .select_from(schemas.SessionLauncherORM)
                 .where(
-                    schemas.SessionLauncherSecretORM.launcher_id == launcher.id,
-                    schemas.SessionLauncherSecretORM.project_id == launcher.project_id,
-                    schemas.SessionLauncherSecretORM.policy == models.SessionLauncherSecretPolicyName.excluded,
-                )
-                .exists()
-            )
-
-            data_connectors_restricted = (
-                select(1)
-                .select_from(DataConnectorToProjectLinkORM)
-                .join(
-                    DataConnectorORM,
-                    DataConnectorORM.id == DataConnectorToProjectLinkORM.data_connector_id,
-                )
-                .join(
-                    schemas.SessionLauncherDataConnectorORM,
-                    and_(
-                        schemas.SessionLauncherDataConnectorORM.data_connector_to_project_link_id
-                        == DataConnectorToProjectLinkORM.id,
-                        schemas.SessionLauncherDataConnectorORM.launcher_id == launcher.id,
-                        schemas.SessionLauncherDataConnectorORM.project_id == launcher.project_id,
-                    ),
-                )
-                .where(
-                    DataConnectorToProjectLinkORM.project_id == launcher.project_id,
-                    or_(
-                        schemas.SessionLauncherDataConnectorORM.policy
-                        == models.SessionLauncherDataConnectorPolicyName.excluded,
-                        and_(
-                            schemas.SessionLauncherDataConnectorORM.policy
-                            == models.SessionLauncherDataConnectorPolicyName.read_only,
-                            DataConnectorORM.readonly.is_(False),
-                        ),
-                    ),
-                )
-                .exists()
-            )
-
-            restricted = await session.scalar(
-                select(
-                    or_(
-                        secret_restricted,
-                        data_connectors_restricted,
-                    )
+                    schemas.SessionLauncherORM.id == launcher.id,
+                    schemas.SessionLauncherORM.project_id == launcher.project_id,
                 )
             )
 
-            return launcher.dump(is_restricted=restricted)
+            return launcher.dump(is_restricted=is_restricted)
 
     async def insert_launcher(
         self, user: base_models.APIUser, launcher: models.UnsavedSessionLauncher

@@ -446,6 +446,30 @@ class SessionLauncherDataConnectorORM(BaseORM):
 
         return policy
 
+    @classmethod
+    def create(
+        cls,
+        *,
+        launcher: SessionLauncherORM,
+        link: DataConnectorToProjectLinkORM,
+        policy: models.SessionLauncherDataConnectorPolicyName,
+    ) -> "SessionLauncherDataConnectorORM":
+        """Create a SessionLauncherDataConnectorORM from a launcher and a data connector to project link."""
+        if link.project_id != launcher.project_id:
+            raise errors.ValidationError(
+                message="The data connector link and launcher must belong to the same project."
+            )
+
+        instance = cls(
+            launcher_id=launcher.id,
+            data_connector_to_project_link_id=link.id,
+            project_id=launcher.project_id,
+            policy=policy,
+        )
+        instance.data_connector_to_project_link = link
+
+        return instance
+
 
 class SessionLauncherSecretORM(BaseORM):
     """The secret parameters of a launcher."""

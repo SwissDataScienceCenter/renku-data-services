@@ -267,6 +267,17 @@ async def test_launcher_restrictions_basic(
         else:
             assert not launcher_saved["is_restricted"]
 
+    _, res = await sanic_client.get(f"/api/data/projects/{project["id"]}/session_launchers", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    launchers = res.json
+
+    for launcher in launchers:
+        if secret_slot_policy_name == sc_EX or data_connector_policy_name in [dc_EX, dc_RO]:
+            assert launcher["is_restricted"]
+        else:
+            assert not launcher["is_restricted"]
+
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
