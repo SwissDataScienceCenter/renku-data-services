@@ -237,7 +237,7 @@ class ResourceUsageService:
     async def get_usage_with_limits(
         self,
         resource_pool_id: int,
-        user_id: str,
+        user_id: str | None,
     ) -> ResourcePoolUsageLimits | None:
         """Get current resource pool usage and its limits."""
         if self._metering_client is None:
@@ -260,7 +260,7 @@ class ResourceUsageService:
     async def get_usage_timeframe_with_limits(
         self,
         resource_pool_id: int,
-        user_id: str,
+        user_id: str | None,
         start_date: str | None = None,
         end_date: str | None = None,
     ) -> ResourcePoolUsageLimits | None:
@@ -287,15 +287,19 @@ class ResourceUsageService:
 
         user_limit = usage.pool_limits.user_limit
         total_limit = usage.pool_limits.total_limit
-        if user_limit.is_unlimited() and total_limit.is_unlimited():
+
+        if user_limit.is_unlimited() or usage.user_usage is None:
+            remaining_user_quota = float("inf")
+        else:
+            remaining_user_quota = user_limit.value - usage.user_usage.value
+        if total_limit.is_unlimited():
+            remaining_total_quota = float("inf")
+        else:
+            remaining_total_quota = total_limit.value - usage.total_usage.value
+
+        if remaining_user_quota == float("inf") and remaining_total_quota == float("inf"):
             return None, None
 
-        remaining_user_quota = (
-            user_limit.value - usage.user_usage.value if not user_limit.is_unlimited() else float("inf")
-        )
-        remaining_total_quota = (
-            total_limit.value - usage.total_usage.value if not total_limit.is_unlimited() else float("inf")
-        )
         remaining_quota = min(remaining_user_quota, remaining_total_quota)
 
         if remaining_quota == remaining_user_quota:

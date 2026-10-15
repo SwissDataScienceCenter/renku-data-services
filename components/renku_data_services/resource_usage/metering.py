@@ -46,7 +46,7 @@ class ResourceUsageMetering(Protocol):
     async def get_usage_timeframe(
         self,
         resource_pool_id: int,
-        user_id: str,
+        user_id: str | None,
         start_date: str | None = None,
         end_date: str | None = None,
         feature_key: str = COMPUTE_USAGE_KEY,
@@ -55,7 +55,7 @@ class ResourceUsageMetering(Protocol):
         ...
 
     async def get_current_usage(
-        self, resource_pool_id: int, user_id: str, feature_key: str = COMPUTE_USAGE_KEY
+        self, resource_pool_id: int, user_id: str | None, feature_key: str = COMPUTE_USAGE_KEY
     ) -> ResourcePoolUsage:
         """Get total usage and user usage for the current period from the metering service."""
         ...
@@ -289,14 +289,16 @@ class OpenMeterClient:
     async def get_usage_timeframe(
         self,
         resource_pool_id: int,
-        user_id: str,
+        user_id: str | None,
         start_date: str | None = None,
         end_date: str | None = None,
         feature_key: str = COMPUTE_USAGE_KEY,
     ) -> ResourcePoolUsage:
         """Get total usage and user usage for a specific timeframe from OpenMeter."""
-        user_usage = await self.query_compute_usage(
-            resource_pool_id, user_id, start_date, end_date, meter_key=feature_key
+        user_usage = (
+            await self.query_compute_usage(resource_pool_id, user_id, start_date, end_date, meter_key=feature_key)
+            if user_id is not None
+            else None
         )
         total_usage = await self.query_compute_usage(
             resource_pool_id, None, start_date, end_date, meter_key=feature_key
@@ -304,7 +306,7 @@ class OpenMeterClient:
         return ResourcePoolUsage(total_usage, user_usage, start_date=start_date, end_date=end_date)
 
     async def get_current_usage(
-        self, resource_pool_id: int, user_id: str, feature_key: str = COMPUTE_USAGE_KEY
+        self, resource_pool_id: int, user_id: str | None, feature_key: str = COMPUTE_USAGE_KEY
     ) -> ResourcePoolUsage:
         """Get total usage and user usage for the current period from OpenMeter.
 
