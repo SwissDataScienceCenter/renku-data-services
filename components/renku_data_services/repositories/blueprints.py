@@ -8,7 +8,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.base_api.auth import authenticate
+from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match
 from renku_data_services.base_api.misc import validate_query
@@ -81,12 +81,12 @@ class RepositoriesBP(CustomBlueprint):
             if r.metadata and r.metadata != "Unmodified"
             else None
         )
-        error_code: apispec.ErrorCode | None
+        error_code: apispec.RepositoryErrorCode | None
         match r.error:
             case GitUrlError() as e:
-                error_code = apispec.ErrorCode[e.value]
+                error_code = apispec.RepositoryErrorCode[e.value]
             case models.RepositoryMetadataError() as e:
-                error_code = apispec.ErrorCode[e.value]
+                error_code = apispec.RepositoryErrorCode[e.value]
             case None:
                 error_code = None
 
@@ -97,22 +97,12 @@ class RepositoriesBP(CustomBlueprint):
     def get_repository_permissions(self) -> BlueprintFactoryResponse:
         """Get detailed permissions from a repository hosted on GitHub."""
 
-        # @authenticate(self.authenticator)
-        # @validate_query(query=apispec.ResourceClassParams)
-        # @validate_db_ids
-        # async def _get_all(
-        #     request: Request, user: base_models.APIUser, resource_pool_id: int, query: apispec.ResourceClassParams
-        # ) -> HTTPResponse:
-        #     res = await self.repo.get_classes(api_user=user, resource_pool_id=resource_pool_id, name=query.name)
-        #     return validated_json(apispec.ResourceClassesWithIdResponse, res)
-
-        # return "/resource_pools/<resource_pool_id>/classes", ["GET"], _get_all
-
         @authenticate(self.authenticator)
+        @only_authenticated
         @validate_query(query=apispec.RepositoryPermissionsParams)
         @extract_if_none_match
         async def _get_repository_permissions(
-            req: Request,
+            _: Request,
             user: base_models.APIUser,
             query: apispec.RepositoryPermissionsParams,
             etag: str | None,
@@ -130,9 +120,23 @@ class RepositoriesBP(CustomBlueprint):
             if result.permissions == "Unmodified":
                 return HTTPResponse(status=304)
 
-            # TODO
-            # headers = {"ETag": result.metadata.etag} if result.metadata and result.metadata.etag else None
+            response: apispec.RepositoryPermissions
+            if result.permissions is None or result.error is not None:
+                error_code: apispec.RepositoryErrorCode | None
+                match result.error:
+                    case GitUrlError() as e1:
+                        error_code = apispec.RepositoryErrorCode[e1.value]
+                    case models.RepositoryMetadataError() as e1:
+                        error_code = apispec.RepositoryErrorCode[e1.value]
+                    case _:
+                        error_code = apispec.RepositoryErrorCode.metadata_unknown
+                response = apispec.RepositoryPermissions(error_code=error_code)
+            else:
+                response = apispec.RepositoryPermissions(
+                    permissions=apispec.Permissions(integration_access=result.permissions.integration_access)
+                )
 
-            raise NotImplementedError()
+            headers = {"ETag": result.permissions.etag} if result.permissions and result.permissions.etag else None
+            return validated_json(apispec.RepositoryPermissions, response, headers=headers)
 
         return "/repository/permissions", ["GET"], _get_repository_permissions

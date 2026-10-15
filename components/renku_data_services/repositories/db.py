@@ -127,6 +127,11 @@ class GitRepositoriesRepository:
             case url:
                 valid_url = url
 
+        provider = await self._find_client(valid_url)
+        connection = await self._find_connection(user, provider) if provider else None
+        if connection is None or connection.id != connection_id:
+            return models.RepositoryPermissionsResult(error=models.RepositoryMetadataError.metadata_oauth)
+
         oauth_client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
         adapter = get_provider_adapter(oauth_client.client)
 
@@ -136,7 +141,6 @@ class GitRepositoriesRepository:
                 permissions=models.RepositoryIntegrationPermissions(integration_access=True)
             )
 
-        # TODO: lift this logic into GitProviderAdapter?
         logger.warning("[GITHUB] Need to check integration permissions")
         account = await oauth_client.get_connected_account()
         if not isinstance(account, ConnectedAccount):
@@ -149,9 +153,15 @@ class GitRepositoriesRepository:
             headers["If-None-Match"] = etag
         permission_response = await oauth_client.get(permission_url, headers=headers)
         logger.info(f"[GITHUB] Got permission response: {permission_response.status_code}")
-        # TODO
+        if permission_response.status_code == 304:
+            return models.RepositoryPermissionsResult(permissions="Unmodified")
+        new_etag = permission_response.headers.get("ETag")
+        if 200 <= permission_response.status_code < 300:
+            return models.RepositoryPermissionsResult(
+                permissions=models.RepositoryIntegrationPermissions(integration_access=True, etag=new_etag)
+            )
         return models.RepositoryPermissionsResult(
-            permissions=models.RepositoryIntegrationPermissions(integration_access=False)
+            permissions=models.RepositoryIntegrationPermissions(integration_access=False, etag=new_etag)
         )
 
     async def _check_arbitrary_git_repo(self, url: GitUrl) -> models.RepositoryError | None:

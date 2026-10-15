@@ -191,6 +191,7 @@ class RepositoryIntegrationPermissions:
     """Permission of the integration wrt. the repository."""
 
     integration_access: bool
+    etag: str | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

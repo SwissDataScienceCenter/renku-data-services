@@ -69,14 +69,12 @@ paths:
               - url
               - connection_id
       responses:
-        # "200":
-        #   description: The repository metadata.
-        #   content:
-        #     application/json:
-        #       schema:
-        #         $ref: "#/components/schemas/RepositoryProviderData"
-        # "404":
-        #   description: There is no available provider for this repository.
+        "200":
+          description: The repository permissions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryPermissions"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -118,18 +116,7 @@ components:
         metadata:
           $ref: "#/components/schemas/Metadata"
         error_code:
-          type: string
-          enum:
-            - no_url_scheme
-            - no_url_host
-            - no_git_repo
-            - no_url_path
-            - invalid_url_scheme
-            - invalid_git_url
-            - metadata_unauthorized
-            - metadata_oauth
-            - metadata_unknown
-            - metadata_validation
+          $ref: '#/components/schemas/RepositoryErrorCode'
       required:
         - status
     ProviderConnection:
@@ -158,6 +145,18 @@ components:
         - id
         - name
         - url
+    RepositoryPermissions:
+      type: object
+      additionalProperties: false
+      properties:
+        error_code:
+          $ref: '#/components/schemas/RepositoryErrorCode'
+        permissions:
+          type: object
+          additionalProperties: false
+          properties:
+            integration_access:
+              type: boolean
     Ulid:
       description: ULID identifier
       type: string
@@ -177,6 +176,19 @@ components:
       enum:
         - public
         - private
+    RepositoryErrorCode:
+      type: string
+      enum:
+        - no_url_scheme
+        - no_url_host
+        - no_git_repo
+        - no_url_path
+        - invalid_url_scheme
+        - invalid_git_url
+        - metadata_unauthorized
+        - metadata_oauth
+        - metadata_unknown
+        - metadata_validation
     ErrorResponse:
       type: object
       properties:
