@@ -1,5 +1,6 @@
 """OpenMeter event emission for session resource usage metering."""
 
+import asyncio
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Optional, Protocol
@@ -299,14 +300,14 @@ class OpenMeterClient:
         feature_key: str = COMPUTE_USAGE_KEY,
     ) -> ResourcePoolUsage:
         """Get total usage and user usage for a specific timeframe from OpenMeter."""
-        user_usage = (
-            await self.query_compute_usage(resource_pool_id, user_id, start_date, end_date, meter_key=feature_key)
-            if user_id is not None
-            else None
-        )
-        total_usage = await self.query_compute_usage(
-            resource_pool_id, None, start_date, end_date, meter_key=feature_key
-        )
+        total_query = self.query_compute_usage(resource_pool_id, None, start_date, end_date, meter_key=feature_key)
+        if user_id is None:
+            total_usage, user_usage = await total_query, None
+        else:
+            total_usage, user_usage = await asyncio.gather(
+                total_query,
+                self.query_compute_usage(resource_pool_id, user_id, start_date, end_date, meter_key=feature_key),
+            )
         return ResourcePoolUsage(total_usage, user_usage, start_date=start_date, end_date=end_date)
 
     async def get_current_usage(
