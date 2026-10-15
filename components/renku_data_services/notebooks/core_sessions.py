@@ -1303,6 +1303,8 @@ async def start_session(
     if user.is_anonymous:
         labels["renku.io/anonymous-session"] = "true"
 
+    labels["renku.io/preemptible"] = str(resource_class.preemptible).lower()
+
     if session_type.is_non_interactive:
         session_extras = session_extras.extra_container_as_sidecars()
 
@@ -1518,6 +1520,8 @@ async def patch_session(
         labels["renku.io/anonymous-session"] = "true"
     if not labels.get("renku.io/session-type"):
         labels["renku.io/session-type"] = SessionType.interactive.value
+    if rc is not None:
+        labels["renku.io/preemptible"] = str(rc.preemptible).lower()
 
     launcher = await session_repo.get_launcher(user, session.launcher_id)
     if launcher.environment.build_parameters:
@@ -1537,6 +1541,8 @@ async def patch_session(
         labels["renku.io/anonymous-session"] = "true"
     if not labels.get("renku.io/session-type"):
         labels["renku.io/session-type"] = SessionType.interactive.value
+    if rc is not None:
+        labels["renku.io/preemptible"] = str(rc.preemptible).lower()
     if not isinstance(patch.spec.template, TemplatePatch):
         patch.spec.template = TemplatePatch(metadata=TemplateMetadataPatch())
     if not isinstance(patch.spec.template.metadata, TemplateMetadataPatch):

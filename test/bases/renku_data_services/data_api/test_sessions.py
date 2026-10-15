@@ -1820,6 +1820,50 @@ async def test_starting_session(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+@pytest.mark.parametrize("preemptible", [True, False])
+async def test_starting_session_labels_preemptible_pods(
+    app_manager: DependencyManager,
+    sanic_client: SanicASGITestClient,
+    create_project,
+    create_resource_pool,
+    create_session_launcher,
+    amalthea_installation,
+    user_headers,
+    regular_user_api_user,
+    valid_resource_pool_payload,
+    preemptible: bool,
+) -> None:
+    project = await create_project(sanic_client, "Some project", visibility="public")
+    classes = [dict(rc, preemptible=preemptible) for rc in valid_resource_pool_payload["classes"]]
+    resource_pool = await create_resource_pool(admin=True, classes=classes)
+    launcher = await create_session_launcher(
+        "launcher",
+        project["id"],
+        resource_class_id=resource_pool["classes"][0]["id"],
+        environment={
+            "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
+            "environment_kind": "CUSTOM",
+            "name": "test",
+            "port": 8888,
+            "environment_image_source": "image",
+        },
+    )
+
+    _, res = await sanic_client.post(
+        "/api/data/sessions",
+        headers=user_headers,
+        json={"project_id": project["id"], "launcher_id": launcher["id"]},
+        cookies={"_renku_session": "some content"},
+    )
+    assert res.status_code == 201, res.text
+
+    session = await app_manager.config.nb_config.k8s_v2_client.get_session(res.json["name"], regular_user_api_user.id)
+    assert session is not None
+    assert session.metadata.labels["renku.io/preemptible"] == str(preemptible).lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 @pytest.mark.parametrize(
     "actual_user_headers",
     ["anonymous", "user"],
