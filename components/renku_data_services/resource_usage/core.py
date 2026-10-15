@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Protocol
@@ -240,8 +241,10 @@ class ResourceUsageService:
             return None
 
         try:
-            usage = await self._metering_client.get_current_usage(resource_pool_id, user_id)
-            limits = await self.get_limits(resource_pool_id)
+            usage, limits = await asyncio.gather(
+                self._metering_client.get_current_usage(resource_pool_id, user_id),
+                self.get_limits(resource_pool_id),
+            )
             return ResourcePoolUsageLimits(
                 total_usage=usage.total_usage,
                 user_usage=usage.user_usage,
@@ -265,12 +268,16 @@ class ResourceUsageService:
             return None
 
         try:
-            usage = await self._metering_client.get_usage_timeframe(resource_pool_id, user_id, start_date, end_date)
-            limits = await self.get_limits(resource_pool_id)
+            usage, limits = await asyncio.gather(
+                self._metering_client.get_usage_timeframe(resource_pool_id, user_id, start_date, end_date),
+                self.get_limits(resource_pool_id),
+            )
             return ResourcePoolUsageLimits(
                 total_usage=usage.total_usage,
                 user_usage=usage.user_usage,
                 pool_limits=limits,
+                start_date=usage.start_date,
+                end_date=usage.end_date,
             )
         except errors.ThirdPartyAPIError as e:
             logger.error(f"Error querying compute usage with limits: {e}")
