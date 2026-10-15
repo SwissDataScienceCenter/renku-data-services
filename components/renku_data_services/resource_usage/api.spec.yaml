@@ -26,13 +26,13 @@ paths:
           required: false
           schema:
             type: string
-            format: date
+            format: date-time
         - in: query
           name: end_date
           required: false
           schema:
             type: string
-            format: date
+            format: date-time
         - in: query
           name: user_id
           required: false

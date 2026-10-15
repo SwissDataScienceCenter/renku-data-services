@@ -2,6 +2,7 @@
 
 import json
 import re
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -20,8 +21,8 @@ NON_EXISTING_CUSTOMER_KEY = "non-existing-customer"
 EXISTING_FEATURE_KEY = "compute_units"
 NON_EXISTING_FEATURE_KEY = "non_existing_feature"
 
-PERIOD_FROM = "2026-10-01T00:00:00Z"
-PERIOD_TO = "2026-11-01T00:00:00Z"
+PERIOD_FROM = datetime.fromisoformat("2026-10-01T00:00:00Z")
+PERIOD_TO = datetime.fromisoformat("2026-11-01T00:00:00Z")
 
 # Usage per (subject, user_id) for the `compute_units` meter
 METER_USAGE: dict[tuple[str, str], float] = {
@@ -33,7 +34,7 @@ METER_USAGE: dict[tuple[str, str], float] = {
 ENTITLEMENTS: dict[tuple[str, str], dict[str, Any]] = {
     (EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY): {
         "activeFrom": "2026-01-01T00:00:00Z",
-        "currentUsagePeriod": {"from": PERIOD_FROM, "to": PERIOD_TO},
+        "currentUsagePeriod": {"from": PERIOD_FROM.isoformat(), "to": PERIOD_TO.isoformat()},
         "customerId": "01J0000000000000000000000",
         "customerKey": EXISTING_CUSTOMER_KEY,
         "featureId": "01J0000000000000000000001",
@@ -152,8 +153,8 @@ async def test_query_compute_usage_with_dates(client: OpenMeterClient, fake_open
     """Test that the date range is forwarded to OpenMeter."""
     await client.query_compute_usage(resource_pool_id=1, user_id=None, start_date=PERIOD_FROM, end_date=PERIOD_TO)
     body = fake_openmeter.meter_query_bodies()[-1]
-    assert body["from"] == PERIOD_FROM
-    assert body["to"] == PERIOD_TO
+    assert body["from"] == PERIOD_FROM.isoformat()
+    assert body["to"] == PERIOD_TO.isoformat()
 
 
 async def test_query_compute_usage_error(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
@@ -227,7 +228,7 @@ async def test_get_usage_timeframe(client: OpenMeterClient, fake_openmeter: Fake
     assert result.end_date == PERIOD_TO
     bodies = fake_openmeter.meter_query_bodies()
     assert len(bodies) == 2
-    assert all(body["from"] == PERIOD_FROM and body["to"] == PERIOD_TO for body in bodies)
+    assert all(body["from"] == PERIOD_FROM.isoformat() and body["to"] == PERIOD_TO.isoformat() for body in bodies)
 
 
 async def test_get_current_usage_no_entitlement(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
@@ -251,7 +252,7 @@ async def test_get_current_usage_existing_entitlement(client: OpenMeterClient, f
     # Usage is restricted to the current usage period of the entitlement
     bodies = fake_openmeter.meter_query_bodies()
     assert len(bodies) == 2
-    assert all(body["from"] == PERIOD_FROM and body["to"] == PERIOD_TO for body in bodies)
+    assert all(body["from"] == PERIOD_FROM.isoformat() and body["to"] == PERIOD_TO.isoformat() for body in bodies)
 
 
 async def test_get_current_usage_nonexisting_user(client: OpenMeterClient) -> None:
