@@ -894,7 +894,6 @@ async def test_launcher_restrictions_delete_repositories(
     create_project,
     create_session_launcher,
 ) -> None:
-    rp_RW = SessionLauncherRepositoryPolicyName.read_write
     rp_RO = SessionLauncherRepositoryPolicyName.read_only
 
     repositories = [
