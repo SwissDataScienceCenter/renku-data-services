@@ -63,11 +63,8 @@ paths:
               url:
                 description: Repository URL
                 type: string
-              connection_id:
-                $ref: "#/components/schemas/Ulid"
             required:
               - url
-              - connection_id
       responses:
         "200":
           description: The repository permissions.

@@ -4,10 +4,8 @@ from dataclasses import dataclass
 
 from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
-from ulid import ULID
 
 import renku_data_services.base_models as base_models
-from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match
@@ -108,14 +106,8 @@ class RepositoriesBP(CustomBlueprint):
             etag: str | None,
         ) -> JSONResponse | HTTPResponse:
             repository_url = query.url
-            connection_id_str = query.connection_id
-            try:
-                connection_id = ULID.from_str(connection_id_str)
-            except ValueError as e:
-                raise errors.ValidationError(message=f"Connection ID {connection_id_str} must be a valid ULID.") from e
-
             result = await self.git_repositories_repo.get_repository_permissions(
-                repository_url=repository_url, connection_id=connection_id, user=user, etag=etag
+                repository_url=repository_url, user=user, etag=etag
             )
             if result.permissions == "Unmodified":
                 return HTTPResponse(status=304)
@@ -124,10 +116,10 @@ class RepositoriesBP(CustomBlueprint):
             if result.permissions is None or result.error is not None:
                 error_code: apispec.RepositoryErrorCode | None
                 match result.error:
-                    case GitUrlError() as e1:
-                        error_code = apispec.RepositoryErrorCode[e1.value]
-                    case models.RepositoryMetadataError() as e1:
-                        error_code = apispec.RepositoryErrorCode[e1.value]
+                    case GitUrlError() as e:
+                        error_code = apispec.RepositoryErrorCode[e.value]
+                    case models.RepositoryMetadataError() as e:
+                        error_code = apispec.RepositoryErrorCode[e.value]
                     case _:
                         error_code = apispec.RepositoryErrorCode.metadata_unknown
                 response = apispec.RepositoryPermissions(error_code=error_code)

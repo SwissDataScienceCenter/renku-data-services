@@ -116,7 +116,6 @@ class GitRepositoriesRepository:
     async def get_repository_permissions(
         self,
         repository_url: str,
-        connection_id: ULID,
         user: base_models.APIUser,
         etag: str | None,
     ) -> models.RepositoryPermissionsResult:
@@ -129,10 +128,10 @@ class GitRepositoriesRepository:
 
         provider = await self._find_client(valid_url)
         connection = await self._find_connection(user, provider) if provider else None
-        if connection is None or connection.id != connection_id:
+        if connection is None:
             return models.RepositoryPermissionsResult(error=models.RepositoryMetadataError.metadata_oauth)
 
-        oauth_client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
+        oauth_client = await self.oauth_client_factory.for_user_connection_raise(user, connection.id)
         adapter = get_provider_adapter(oauth_client.client)
 
         if not isinstance(adapter, GitHubAdapter):
