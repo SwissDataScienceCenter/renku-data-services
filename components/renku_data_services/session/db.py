@@ -56,6 +56,7 @@ def _build_launcher_restriction_expression(
     SL_P = models.SessionLauncherSecretPolicyName
     RP_P = models.SessionLauncherRepositoryPolicyName
     DC = DataConnectorORM
+    RPLink = ProjectRepositoryORM
     DCLink = DataConnectorToProjectLinkORM
     Launcher = schemas.SessionLauncherORM
     LauncherDC = schemas.SessionLauncherDataConnectorORM
@@ -104,11 +105,17 @@ def _build_launcher_restriction_expression(
 
     data_connectors_restricted = data_connectors_restricted.exists()
 
+    # TODO: ProjectRepositoryORM instances are currently orphaned when updating the repository list
+    # by setting their project_id to NULL instead of being deleted. This prevents
+    # the expected cascading deletion of the associated launcher repository policies.
+    # Launcher policies linked to orpaned repository links must be filtered with a join.
     repositories_restricted = (
         select(1)
         .select_from(LauncherRP)
+        .join(RPLink, RPLink.id == LauncherRP.repository_id)
         .where(
             LauncherRP.launcher_id == Launcher.id,
+            RPLink.project_id == project_id,
             or_(
                 LauncherRP.policy["policy"] != RP_P.read_write,
                 LauncherRP.policy["writable_references"].is_not(None),
@@ -1825,7 +1832,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 launcher_repo = launcher_repositories.get(patch.repository_id)
                 project_repo = project_repositories.get(patch.repository_id)
                 if project_repo is None:
-                    raise errors.ValidationError("")
+                    raise errors.ValidationError(
+                        message=f"Repository link {patch.repository_id} does not belong to project {project_id}."
+                    )
                 policy = patch.policy or models.SessionLauncherRepositoryPolicyName.excluded
 
                 policy_data = {

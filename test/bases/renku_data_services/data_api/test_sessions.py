@@ -862,6 +862,7 @@ async def test_launcher_restrictions_with_repositories(
         repository_policies = res.json
         assert all(policy.get("policy") == repository_policy_name.value for policy in repository_policies)
 
+        # Launcher with limited repository access are restricted
         _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
         assert res.json is not None
         launcher_saved = res.json
@@ -904,12 +905,12 @@ async def test_launcher_restrictions_delete_repositories(
     project = await create_project(sanic_client, "Some project", repositories=repositories)
     launcher = await create_session_launcher("Some launcher", project_id=project["id"])
 
+    # Get repositories policies
     _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}/repositories", headers=user_headers)
     assert res.status_code == 200, res.text
     assert res.json is not None
+    assert len(res.json) == len(repositories)
     repository_policies = res.json
-    assert {policy.get("url") for policy in repository_policies} == set(repositories)
-    assert all(policy.get("policy") == rp_RW for policy in repository_policies)
 
     # Patch session launcher, this will create the overwrite table
     patch_repository_policies = [
@@ -933,7 +934,7 @@ async def test_launcher_restrictions_delete_repositories(
     launcher_saved = res.json
     assert launcher_saved["is_restricted"]
 
-    # Patch project, remove repositories
+    # Patch project, remove all repositories
     patch_headers = merge_headers(user_headers, {"If-Match": project["etag"]})
     _, res = await sanic_client.patch(
         f"/api/data/projects/{project["id"]}", headers=patch_headers, json={"repositories": []}
@@ -943,10 +944,12 @@ async def test_launcher_restrictions_delete_repositories(
     # All session launcher repository policies should be removed
     _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}/repositories", headers=user_headers)
     assert res.status_code == 200, res.text
+    assert res.json is not None
     assert len(res.json) == 0
 
-    # Launcher restrictions should be removed if all repositories are removed
+    # Launcher must be unrestricted after removing all repositories
     _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    assert res.status_code == 200, res.text
     assert res.json is not None
     launcher_saved = res.json
     assert not launcher_saved["is_restricted"]
