@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnExpressionArgument, Select, and_, case, delete, func, or_, select
+from sqlalchemy import ColumnElement, ColumnExpressionArgument, Select, and_, case, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from ulid import ULID
@@ -52,6 +52,58 @@ from renku_data_services.session.orm import SessionLauncherDataConnectorORM, Ses
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
+
+
+def _build_launcher_data_connector_select(
+    launcher_id: ULID,
+) -> Select[tuple[schemas.DataConnectorToProjectLinkORM, str]]:
+    """Build a SELECT statement for a launcher's data connectors and their effective access policies."""
+
+    launcher_policy = SessionLauncherDataConnectorORM.policy
+    ro = schemas.DataConnectorORM.readonly.is_(True)
+    rw = schemas.DataConnectorORM.readonly.is_(False)
+
+    P = SessionLauncherDataConnectorPolicyName
+    DC = schemas.DataConnectorORM
+    DCLink = schemas.DataConnectorToProjectLinkORM
+    LauncherDC = SessionLauncherDataConnectorORM
+
+    policy: ColumnElement[str] = case(
+        # Read-only connector
+        (and_(ro, launcher_policy == P.excluded), P.excluded.value),
+        (and_(ro, launcher_policy == P.read_only), P.read_only.value),
+        (and_(ro, launcher_policy == P.read_write), P.read_only.value),
+        (and_(ro, launcher_policy.is_(None)), P.read_only.value),
+        # Writable connector
+        (and_(rw, launcher_policy == P.excluded), P.excluded.value),
+        (and_(rw, launcher_policy == P.read_only), P.read_only.value),
+        (and_(rw, launcher_policy == P.read_write), P.read_write.value),
+        (and_(rw, launcher_policy.is_(None)), P.read_write.value),
+        else_=func.coalesce(launcher_policy, P.read_write.value),
+    ).label("policy")
+
+    stmt = (
+        select(DCLink, policy)
+        .select_from(SessionLauncherORM)
+        .join(
+            DCLink,
+            DCLink.project_id == SessionLauncherORM.project_id,
+        )
+        .join(
+            DC,
+            DC.id == DCLink.data_connector_id,
+        )
+        .outerjoin(
+            LauncherDC,
+            and_(
+                LauncherDC.launcher_id == launcher_id,
+                LauncherDC.data_connector_to_project_link_id == DCLink.id,
+            ),
+        )
+        .where(SessionLauncherORM.id == launcher_id)
+    )
+
+    return stmt
 
 
 class DataConnectorRepository:
@@ -1067,51 +1119,9 @@ class DataConnectorRepository:
         # A launcher policy cannot be more permissive than the data connector's
         # project-level policy. The project level's policy is used if a launcher
         # policy is not specified.
-        connector_readonly = schemas.DataConnectorORM.readonly.is_(True)
-
-        launcher_policy = SessionLauncherDataConnectorORM.policy
-
-        effective_policy = case(
-            (
-                connector_readonly,
-                case(
-                    (
-                        launcher_policy == SessionLauncherDataConnectorPolicyName.excluded,
-                        SessionLauncherDataConnectorPolicyName.excluded,
-                    ),
-                    else_=SessionLauncherDataConnectorPolicyName.read_only,
-                ),
-            ),
-            else_=func.coalesce(
-                launcher_policy,
-                SessionLauncherDataConnectorPolicyName.read_write,
-            ),
-        ).label("policy")
-
         result = await session.stream(
-            select(
-                schemas.DataConnectorToProjectLinkORM,
-                effective_policy,
-            )
-            .join(
-                schemas.DataConnectorORM,
-                schemas.DataConnectorORM.id == schemas.DataConnectorToProjectLinkORM.data_connector_id,
-            )
-            .outerjoin(
-                SessionLauncherDataConnectorORM,
-                and_(
-                    SessionLauncherDataConnectorORM.data_connector_to_project_link_id
-                    == schemas.DataConnectorToProjectLinkORM.id,
-                    SessionLauncherDataConnectorORM.launcher_id == launcher.id,
-                    SessionLauncherDataConnectorORM.project_id == project_id,
-                ),
-            )
-            .where(
-                and_(
-                    schemas.DataConnectorToProjectLinkORM.project_id == project_id,
-                    schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(allowed_dcs),
-                )
-            )
+            _build_launcher_data_connector_select(launcher_id=launcher.id)
+            .where(schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(allowed_dcs))
             .order_by(schemas.DataConnectorToProjectLinkORM.id.desc())
         )
 
@@ -1207,28 +1217,32 @@ class DataConnectorRepository:
         updated = []
 
         for patch in patches:
-            dc_link = launcher_dc_links.get(patch.data_connector_link_id)
-            data_connector = project_dc_links[patch.data_connector_link_id].data_connector
+            patch_dc_link_id = patch.data_connector_link_id
+            launcher_dc_link = launcher_dc_links.get(patch_dc_link_id)
+            project_dc_link = project_dc_links.get(patch_dc_link_id)
+            if not project_dc_link:
+                raise errors.ValidationError(
+                    message=f"The data connector with link ID {patch_dc_link_id} cannot be found in the project."
+                )
+            data_connector = project_dc_link.data_connector
             policy = patch.policy or SessionLauncherDataConnectorPolicyName.excluded
 
             if policy.requires_write_access and data_connector.readonly:
                 raise errors.ValidationError(
-                    message=f"Data connector {patch.data_connector_link_id}/{data_connector.id} is read only."
+                    message=f"Data connector {patch_dc_link_id}/{data_connector.id} is read only."
                 )
 
-            if dc_link is None:
-                dc_link = SessionLauncherDataConnectorORM(
-                    launcher_id=launcher_id,
-                    data_connector_to_project_link_id=patch.data_connector_link_id,
-                    project_id=project_id,
+            if launcher_dc_link is None:
+                launcher_dc_link = SessionLauncherDataConnectorORM.create(
+                    launcher=launcher,
+                    link=project_dc_link,
                     policy=policy,
                 )
-                dc_link.data_connector_to_project_link = project_dc_links[patch.data_connector_link_id]
-                session.add(dc_link)
+                session.add(launcher_dc_link)
             else:
-                dc_link.policy = policy
+                launcher_dc_link.policy = policy
 
-            updated.append(dc_link)
+            updated.append(launcher_dc_link)
 
         await session.flush()
 
@@ -1292,39 +1306,24 @@ class DataConnectorSecretRepository:
                     )
                 )
             else:
+                stmt_dcs = _build_launcher_data_connector_select(launcher_id=launcher_id)
+
+                policy = stmt_dcs.selected_columns.policy
+
+                computed_readonly = (policy == SessionLauncherDataConnectorPolicyName.read_only.value).label(
+                    "computed_readonly"
+                )
+
                 stmt = (
-                    select(
-                        schemas.DataConnectorORM,
-                        # If readOnly -> True, otherwise inherit DataConnectorORM.readonly
-                        or_(
-                            schemas.DataConnectorORM.readonly.is_(True),
-                            SessionLauncherDataConnectorORM.policy == SessionLauncherDataConnectorPolicyName.read_only,
-                        ).label("computed_readonly"),
-                    )
-                    .join(
-                        schemas.DataConnectorToProjectLinkORM,
-                        schemas.DataConnectorToProjectLinkORM.data_connector_id == schemas.DataConnectorORM.id,
-                    )
-                    .outerjoin(
-                        SessionLauncherDataConnectorORM,
-                        and_(
-                            SessionLauncherDataConnectorORM.data_connector_to_project_link_id
-                            == schemas.DataConnectorToProjectLinkORM.id,
-                            SessionLauncherDataConnectorORM.launcher_id == launcher_id,
-                            SessionLauncherDataConnectorORM.project_id == project_id,
-                        ),
-                    )
+                    stmt_dcs.add_columns(computed_readonly)
                     .where(
                         schemas.DataConnectorToProjectLinkORM.project_id == project_id,
                         schemas.DataConnectorORM.id.in_(data_connector_ids),
-                        # Exclude 'excluded' policies, but keep NULL rows from the outer join
-                        or_(
-                            SessionLauncherDataConnectorORM.launcher_id.is_(None),
-                            SessionLauncherDataConnectorORM.policy != SessionLauncherDataConnectorPolicyName.excluded,
-                        ),
+                        policy != SessionLauncherDataConnectorPolicyName.excluded,
                     )
                     .options(
-                        joinedload(schemas.DataConnectorORM.slug)
+                        joinedload(schemas.DataConnectorToProjectLinkORM.data_connector)
+                        .joinedload(schemas.DataConnectorORM.slug)
                         .joinedload(ns_schemas.EntitySlugORM.project)
                         .joinedload(ProjectORM.slug)
                     )

@@ -398,7 +398,7 @@ class SessionLauncherDataConnectorORM(BaseORM):
         PrimaryKeyConstraint("launcher_id", "data_connector_to_project_link_id"),
         ForeignKeyConstraint(
             ["launcher_id", "project_id"],
-            ["sessions.launchers.id", "sessions.launchers.project_id"],
+            [SessionLauncherORM.id, SessionLauncherORM.project_id],
             name="_fk_launcher_data_connectors_launcher",
             ondelete="CASCADE",
         ),
@@ -445,6 +445,30 @@ class SessionLauncherDataConnectorORM(BaseORM):
             return models.SessionLauncherDataConnectorPolicyName.read_only
 
         return policy
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        launcher: SessionLauncherORM,
+        link: DataConnectorToProjectLinkORM,
+        policy: models.SessionLauncherDataConnectorPolicyName,
+    ) -> "SessionLauncherDataConnectorORM":
+        """Create a SessionLauncherDataConnectorORM from a launcher and a data connector to project link."""
+        if link.project_id != launcher.project_id:
+            raise errors.ValidationError(
+                message="The data connector link and launcher must belong to the same project."
+            )
+
+        instance = cls(
+            launcher_id=launcher.id,
+            data_connector_to_project_link_id=link.id,
+            project_id=launcher.project_id,
+            policy=policy,
+        )
+        instance.data_connector_to_project_link = link
+
+        return instance
 
 
 class SessionLauncherSecretORM(BaseORM):

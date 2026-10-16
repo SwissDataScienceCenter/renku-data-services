@@ -940,7 +940,7 @@ class DataConnectorsBP(CustomBlueprint):
         return "/session_launchers/<launcher_id:ulid>/data_connectors", ["GET"], _get_dc_links
 
     def update_dc_link_policies(self) -> BlueprintFactoryResponse:
-        """Update the secret access policies for the launcher."""
+        """Update the data connector access policies for the launcher."""
 
         @authenticate(self.authenticator)
         @only_authenticated
