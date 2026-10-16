@@ -9,6 +9,7 @@ from typing import Literal
 
 from ulid import ULID
 
+from renku_data_services.connected_services.models import ProviderKind
 from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2ConnectionORM
 from renku_data_services.repositories.git_url import GitUrlError
 
@@ -76,11 +77,12 @@ class ProviderData:
     id: str
     name: str
     url: str
+    kind: ProviderKind
 
     @classmethod
     def fromORM(cls, e: OAuth2ClientORM) -> ProviderData:
         """Create ProviderData from an ORM class."""
-        return ProviderData(id=e.id, name=e.display_name, url=e.url)
+        return ProviderData(id=e.id, name=e.display_name, url=e.url, kind=e.kind)
 
 
 class RepositoryVisibility(StrEnum):

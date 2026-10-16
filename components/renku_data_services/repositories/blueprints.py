@@ -67,7 +67,13 @@ class RepositoriesBP(CustomBlueprint):
             if r.connection
             else None
         )
-        prov = apispec.ProviderData(id=r.provider.id, name=r.provider.name, url=r.provider.url) if r.provider else None
+        prov = (
+            apispec.ProviderData(
+                id=r.provider.id, name=r.provider.name, url=r.provider.url, kind=apispec.ProviderKind(r.provider.kind)
+            )
+            if r.provider
+            else None
+        )
         meta = (
             apispec.Metadata(
                 git_url=r.metadata.git_url,
