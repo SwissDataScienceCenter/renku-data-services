@@ -86,6 +86,7 @@ async def test_flavor_rejects_values_longer_than_the_db_allows(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_class_created_from_a_link_only(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -111,6 +112,7 @@ async def test_class_created_from_a_link_only(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_pool_created_with_a_linked_class(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -154,6 +156,7 @@ async def test_pool_created_with_a_linked_class(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_pool_creation_rejects_an_unknown_flavor(
     sanic_client: SanicASGITestClient,
     valid_resource_pool_payload: dict[str, Any],
@@ -170,6 +173,7 @@ async def test_pool_creation_rejects_an_unknown_flavor(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_class_rejects_shape_beside_a_link(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -188,6 +192,7 @@ async def test_class_rejects_shape_beside_a_link(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_class_without_a_link_still_needs_its_shape(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -204,6 +209,7 @@ async def test_class_without_a_link_still_needs_its_shape(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_a_flavor_edit_propagates_to_every_linked_class(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -240,6 +246,7 @@ async def test_a_flavor_edit_propagates_to_every_linked_class(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_renaming_a_flavor_leaves_the_class_name_alone(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -276,6 +283,7 @@ async def test_renaming_a_flavor_leaves_the_class_name_alone(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_unlink_keeps_the_current_values(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -323,6 +331,7 @@ async def test_unlink_keeps_the_current_values(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_new_values_on_a_linked_class_need_an_unlink(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -350,6 +359,7 @@ async def test_new_values_on_a_linked_class_need_an_unlink(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_a_flavor_edit_cannot_break_the_quota_of_a_linked_pool(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -390,6 +400,7 @@ async def test_a_flavor_edit_cannot_break_the_quota_of_a_linked_pool(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_a_linked_flavor_cannot_be_deleted(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
