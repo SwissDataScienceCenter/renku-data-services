@@ -103,6 +103,22 @@ class FirecrestClassRemote:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class ResourceShape:
+    """The resource values of a resource class."""
+
+    cpu: float
+    """Number of cores."""
+    memory: int
+    """RAM in gigabytes."""
+    gpu: int
+    """Number of gpus."""
+    max_storage: int
+    """Maximum allowed disk storage in gigabytes."""
+    default_storage: int
+    """The default disk storage used when launching a session (in gigabytes)."""
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedResourceFlavor(ResourcesCompareMixin):
     """A named shape that resource classes can link to instead of setting their own values."""
 

@@ -18,10 +18,16 @@ def _flavor_orm(name: str = "small", **kwargs: float | int | str | None) -> orm.
     return flavor
 
 
-def _class_orm(name: str = "own-name", **kwargs: float | int) -> orm.ResourceClassORM:
+def _class_orm(name: str = "own-name", **kwargs: float | int | None) -> orm.ResourceClassORM:
     values: dict = dict(name=name, cpu=1.0, memory=4, max_storage=100, default_storage=10, gpu=0)
     values.update(kwargs)
     return orm.ResourceClassORM(**values)
+
+
+def _linked_class_orm(flavor: orm.ResourceFlavorORM, name: str = "own-name") -> orm.ResourceClassORM:
+    cls = _class_orm(name, cpu=None, memory=None, max_storage=None, default_storage=None, gpu=None)
+    cls.resource_flavor, cls.resource_flavor_id = flavor, flavor.id
+    return cls
 
 
 def test_dump_uses_own_values_when_unlinked() -> None:
@@ -32,13 +38,10 @@ def test_dump_uses_own_values_when_unlinked() -> None:
     assert dumped.resource_flavor_id is None
 
 
-def test_dump_prefers_the_flavor_over_the_class() -> None:
-    cls = _class_orm()
+def test_dump_takes_the_values_from_the_flavor() -> None:
     flavor = _flavor_orm()
-    cls.resource_flavor = flavor
-    cls.resource_flavor_id = flavor.id
 
-    dumped = cls.dump()
+    dumped = _linked_class_orm(flavor).dump()
 
     assert dumped.name == "own-name", "the class keeps its own name, the flavor supplies only the resource values"
     assert dumped.cpu == 2.0
@@ -48,32 +51,28 @@ def test_dump_prefers_the_flavor_over_the_class() -> None:
     assert dumped.resource_flavor_id == flavor.id
 
 
-def test_dump_matching_reads_the_resolved_values() -> None:
-    """A stale snapshot must not decide whether a class matches a request."""
-    cls = _class_orm(cpu=1.0, memory=4)
-    flavor = _flavor_orm(cpu=16.0, memory=64)
-    cls.resource_flavor = flavor
-    cls.resource_flavor_id = flavor.id
+def test_dump_of_a_class_without_flavor_or_values_fails() -> None:
+    with pytest.raises(errors.ProgrammingError):
+        _class_orm(cpu=None).dump()
+
+
+def test_dump_matching_reads_the_flavor_values() -> None:
+    cls = _linked_class_orm(_flavor_orm(cpu=16.0, memory=64))
     criteria = models.UnsavedResourceClass(name="wanted", cpu=8.0, memory=32, max_storage=50, gpu=0)
 
     assert cls.dump(matching_criteria=criteria).matching is True
     assert _class_orm(cpu=1.0, memory=4).dump(matching_criteria=criteria).matching is False
 
 
-def test_pool_dump_sorts_by_the_resolved_size() -> None:
-    """A pool lists its classes by their flavor size, not by the values saved on the class."""
-    resolves_large = _class_orm("resolves-large", cpu=1.0, memory=2)
-    resolves_small = _class_orm("resolves-small", cpu=32.0, memory=128)
-    resolves_large.id, resolves_small.id = 1, 2
-    huge = _flavor_orm("huge", cpu=32.0, memory=128)
-    tiny = _flavor_orm("tiny", cpu=1.0, memory=2)
-    resolves_large.resource_flavor, resolves_large.resource_flavor_id = huge, huge.id
-    resolves_small.resource_flavor, resolves_small.resource_flavor_id = tiny, tiny.id
+def test_pool_dump_sorts_by_the_flavor_size() -> None:
+    large = _linked_class_orm(_flavor_orm("huge", cpu=32.0, memory=128), "large")
+    small = _linked_class_orm(_flavor_orm("tiny", cpu=1.0, memory=2), "small")
+    large.id, small.id = 1, 2
 
-    pool = orm.ResourcePoolORM(name="pool", classes=[resolves_large, resolves_small])
+    pool = orm.ResourcePoolORM(name="pool", classes=[large, small])
     pool.id = 1
 
-    assert [c.name for c in pool.dump(quota=None).classes] == ["resolves-small", "resolves-large"]
+    assert [c.name for c in pool.dump(quota=None).classes] == ["small", "large"]
 
 
 def test_validate_resource_class_fills_the_shape_from_the_flavor() -> None:

@@ -142,18 +142,26 @@ async def _get_linked_classes(session: AsyncSession, flavor_id: ULID) -> list[sc
     return list(res)
 
 
-async def _apply_flavor_snapshots(session: AsyncSession, classes: Sequence[schemas.ResourceClassORM]) -> None:
-    """Copy the linked flavor's values onto every class that carries a link."""
+async def _attach_flavors(session: AsyncSession, classes: Sequence[schemas.ResourceClassORM]) -> None:
+    """Link every class that carries a flavor id to its flavor."""
     for cls in classes:
         if cls.resource_flavor_id is None:
             continue
-        flavor = await _get_flavor_orm(session, cls.resource_flavor_id)
-        cls.resource_flavor = flavor
-        _snapshot_flavor(cls, flavor)
+        _link_flavor(cls, await _get_flavor_orm(session, cls.resource_flavor_id))
+
+
+def _link_flavor(cls: schemas.ResourceClassORM, flavor: schemas.ResourceFlavorORM) -> None:
+    """Link a resource class to a flavor, which then supplies all of its resource values."""
+    cls.resource_flavor = flavor
+    cls.cpu = None
+    cls.memory = None
+    cls.max_storage = None
+    cls.default_storage = None
+    cls.gpu = None
 
 
 def _snapshot_flavor(cls: schemas.ResourceClassORM, flavor: schemas.ResourceFlavorORM) -> None:
-    """Copy a flavor's resource values onto a resource class, on both link and unlink."""
+    """Copy a flavor's resource values onto a resource class that is unlinked from it."""
     cls.cpu = flavor.cpu
     cls.memory = flavor.memory
     cls.max_storage = flavor.max_storage
@@ -570,7 +578,7 @@ class ResourcePoolRepository(_Base):
         resource_pool = schemas.ResourcePoolORM.from_unsaved_model(
             new_resource_pool=new_resource_pool, quota=quota, cluster=cluster
         )
-        await _apply_flavor_snapshots(session, resource_pool.classes)
+        await _attach_flavors(session, resource_pool.classes)
         if resource_pool.default:
             stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
             res = await session.execute(stmt)
@@ -613,14 +621,15 @@ class ResourcePoolRepository(_Base):
             resource_class = schemas.ResourceClassORM.from_unsaved_model(
                 new_resource_class=new_resource_class, resource_pool_id=resource_pool_id
             )
-            await _apply_flavor_snapshots(session, [resource_class])
+            await _attach_flavors(session, [resource_class])
+            shape = resource_class.shape
             new_resource_class = replace(
                 new_resource_class,
-                cpu=resource_class.cpu,
-                memory=resource_class.memory,
-                max_storage=resource_class.max_storage,
-                default_storage=resource_class.default_storage,
-                gpu=resource_class.gpu,
+                cpu=shape.cpu,
+                memory=shape.memory,
+                max_storage=shape.max_storage,
+                default_storage=shape.default_storage,
+                gpu=shape.gpu,
             )
 
             if resource_pool_id is not None:
@@ -961,10 +970,8 @@ class ResourcePoolRepository(_Base):
                 cls.resource_flavor_id = None
                 cls.resource_flavor = None
             elif new_flavor_id is not None:
-                flavor = await _get_flavor_orm(session, new_flavor_id)
                 cls.resource_flavor_id = new_flavor_id
-                cls.resource_flavor = flavor
-                _snapshot_flavor(cls, flavor)
+                _link_flavor(cls, await _get_flavor_orm(session, new_flavor_id))
 
             # NOTE: updating the 'default' field is not supported, so it is skipped below
             if update.name is not None:

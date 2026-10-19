@@ -132,13 +132,22 @@ class ResourceClassORM(BaseORM):
     """Resource class specifies a set of resources that can be used in a session."""
 
     __tablename__ = "resource_classes"
+    __table_args__ = (
+        CheckConstraint(
+            "(resource_flavor_id IS NULL AND cpu IS NOT NULL AND memory IS NOT NULL AND max_storage IS NOT NULL "
+            "AND default_storage IS NOT NULL AND gpu IS NOT NULL) "
+            "OR (resource_flavor_id IS NOT NULL AND cpu IS NULL AND memory IS NULL AND max_storage IS NULL "
+            "AND default_storage IS NULL AND gpu IS NULL)",
+            name="chk_resource_flavor_or_values",
+        ),
+    )
     name: Mapped[str] = mapped_column("name", String(40), index=True)
-    cpu: Mapped[float] = mapped_column()
-    memory: Mapped[int] = mapped_column(BigInteger)
-    max_storage: Mapped[int] = mapped_column(BigInteger)
-    default_storage: Mapped[int] = mapped_column(BigInteger)
+    cpu: Mapped[float | None] = mapped_column()
+    memory: Mapped[int | None] = mapped_column(BigInteger)
+    max_storage: Mapped[int | None] = mapped_column(BigInteger)
+    default_storage: Mapped[int | None] = mapped_column(BigInteger)
     default: Mapped[bool] = mapped_column(default=False)
-    gpu: Mapped[int] = mapped_column(BigInteger, default=0)
+    gpu: Mapped[int | None] = mapped_column(BigInteger, default=None)
     quota_enforced: Mapped[bool] = mapped_column(default=False, server_default=false())
     resource_pool_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
@@ -198,9 +207,34 @@ class ResourceClassORM(BaseORM):
         )
 
     @property
-    def shape(self) -> ResourceFlavorORM | ResourceClassORM:
-        """The source of truth for this class's resource values."""
-        return self.resource_flavor if self.resource_flavor is not None else self
+    def shape(self) -> models.ResourceShape:
+        """The resource values of the class, from its flavor when linked."""
+        flavor = self.resource_flavor
+        if flavor is not None:
+            return models.ResourceShape(
+                cpu=flavor.cpu,
+                memory=flavor.memory,
+                gpu=flavor.gpu,
+                max_storage=flavor.max_storage,
+                default_storage=flavor.default_storage,
+            )
+        if (
+            self.cpu is None
+            or self.memory is None
+            or self.gpu is None
+            or self.max_storage is None
+            or self.default_storage is None
+        ):
+            raise errors.ProgrammingError(
+                message=f"The resource class {self.id} has neither a resource flavor nor resource values."
+            )
+        return models.ResourceShape(
+            cpu=self.cpu,
+            memory=self.memory,
+            gpu=self.gpu,
+            max_storage=self.max_storage,
+            default_storage=self.default_storage,
+        )
 
     def dump(
         self, matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None
