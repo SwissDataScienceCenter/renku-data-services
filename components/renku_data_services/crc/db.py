@@ -970,8 +970,9 @@ class ResourcePoolRepository(_Base):
                 cls.resource_flavor_id = None
                 cls.resource_flavor = None
             elif new_flavor_id is not None:
+                flavor = await _get_flavor_orm(session, new_flavor_id)
                 cls.resource_flavor_id = new_flavor_id
-                _link_flavor(cls, await _get_flavor_orm(session, new_flavor_id))
+                _link_flavor(cls, flavor)
 
             # NOTE: updating the 'default' field is not supported, so it is skipped below
             if update.name is not None:

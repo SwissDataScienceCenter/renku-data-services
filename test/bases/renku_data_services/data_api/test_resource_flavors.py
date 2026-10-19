@@ -332,6 +332,43 @@ async def test_unlink_keeps_the_current_values(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
+async def test_an_existing_class_with_own_values_can_be_linked(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    flavor = await _create_flavor(sanic_client, admin_headers)
+    pool = await _create_pool(sanic_client, valid_resource_pool_payload)
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{pool['id']}/classes",
+        headers=admin_headers,
+        json={
+            "name": "own-values",
+            "default": False,
+            "cpu": 0.5,
+            "memory": 1,
+            "gpu": 0,
+            "max_storage": 10,
+            "default_storage": 1,
+        },
+    )
+    assert res.status_code == 201, res.text
+    class_id = res.json["id"]
+
+    _, res = await sanic_client.patch(
+        f"/api/data/resource_pools/{pool['id']}/classes/{class_id}",
+        headers=admin_headers,
+        json={"resource_flavor_id": flavor["id"]},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json["resource_flavor_id"] == flavor["id"]
+    assert res.json["cpu"] == flavor["cpu"]
+    assert res.json["memory"] == flavor["memory"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_new_values_on_a_linked_class_need_an_unlink(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
