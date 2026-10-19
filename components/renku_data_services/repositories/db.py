@@ -16,12 +16,13 @@ import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services import orm as connected_services_schemas
-from renku_data_services.connected_services.models import ConnectionStatus
+from renku_data_services.connected_services.models import ConnectedAccount, ConnectionStatus
 from renku_data_services.connected_services.oauth_http import OAuthHttpClientFactory
 from renku_data_services.connected_services.utils import GitHubProviderType, get_github_provider_type
 from renku_data_services.repositories import models
 from renku_data_services.repositories.git_url import GitUrl, GitUrlError
 from renku_data_services.repositories.provider_adapters import (
+    GitHubAdapter,
     GitProviderAdapter,
     get_internal_gitlab_adapter,
     get_provider_adapter,
@@ -111,6 +112,56 @@ class GitRepositoriesRepository:
                 )
 
         return result
+
+    async def get_repository_permissions(
+        self,
+        repository_url: str,
+        user: base_models.APIUser,
+        etag: str | None,
+    ) -> models.RepositoryPermissionsResult:
+        """Get detailed permissions from a repository hosted on GitHub."""
+        match GitUrl.parse(repository_url):
+            case GitUrlError() as err:
+                return models.RepositoryPermissionsResult(error=err)
+            case url:
+                valid_url = url
+
+        provider = await self._find_client(valid_url)
+        connection = await self._find_connection(user, provider) if provider else None
+        if connection is None:
+            return models.RepositoryPermissionsResult(error=models.RepositoryMetadataError.metadata_oauth)
+
+        oauth_client = await self.oauth_client_factory.for_user_connection_raise(user, connection.id)
+        adapter = get_provider_adapter(oauth_client.client)
+
+        if not isinstance(adapter, GitHubAdapter):
+            # Not GitHub, we assume the integration can access the repository like the user can.
+            return models.RepositoryPermissionsResult(
+                permissions=models.RepositoryIntegrationPermissions(integration_access=True)
+            )
+
+        logger.warning("[GITHUB] Need to check integration permissions")
+        account = await oauth_client.get_connected_account()
+        if not isinstance(account, ConnectedAccount):
+            return models.RepositoryPermissionsResult(error=models.RepositoryMetadataError.metadata_oauth)
+
+        permission_url = adapter.get_repository_permission_api_url(valid_url.render(), username=account.username)
+        logger.info(f"[GITHUB] Checking: {permission_url}")
+        headers = adapter.api_common_headers or dict()
+        if etag:
+            headers["If-None-Match"] = etag
+        permission_response = await oauth_client.get(permission_url, headers=headers)
+        logger.info(f"[GITHUB] Got permission response: {permission_response.status_code}")
+        if permission_response.status_code == 304:
+            return models.RepositoryPermissionsResult(permissions="Unmodified")
+        new_etag = permission_response.headers.get("ETag")
+        if 200 <= permission_response.status_code < 300:
+            return models.RepositoryPermissionsResult(
+                permissions=models.RepositoryIntegrationPermissions(integration_access=True, etag=new_etag)
+            )
+        return models.RepositoryPermissionsResult(
+            permissions=models.RepositoryIntegrationPermissions(integration_access=False, etag=new_etag)
+        )
 
     async def _check_arbitrary_git_repo(self, url: GitUrl) -> models.RepositoryError | None:
         if url.parsed_url.netloc == "localhost":
