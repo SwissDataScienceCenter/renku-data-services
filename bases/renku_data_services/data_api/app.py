@@ -6,7 +6,7 @@ from ulid import ULID
 from renku_data_services import errors
 from renku_data_services.authn.api.blueprints import InternalAuthenticationBP
 from renku_data_services.base_api.error_handler import CustomErrorHandler
-from renku_data_services.base_api.misc import MiscBP
+from renku_data_services.base_api.misc import MiscBP, RootInternalBP
 from renku_data_services.base_models.core import Slug
 from renku_data_services.capacity_reservation.blueprints import CapacityReservationBP
 from renku_data_services.connected_services.blueprints import OAuth2ClientsBP, OAuth2ConnectionsBP
@@ -116,6 +116,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
     )
     misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=dm.spec, version=dm.config.version)
+    root = RootInternalBP(name="root", url_prefix="/")
     project = ProjectsBP(
         name="projects",
         url_prefix=url_prefix,
@@ -328,6 +329,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     )
     app.blueprint(
         [
+            root.blueprint(),
             resource_pools.blueprint(),
             classes.blueprint(),
             quota.blueprint(),
