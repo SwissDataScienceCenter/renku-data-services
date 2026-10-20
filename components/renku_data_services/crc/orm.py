@@ -92,6 +92,7 @@ class ResourceFlavorORM(BaseORM):
     """A named shape that resource classes can link to instead of setting their own values."""
 
     __tablename__ = "resource_flavors"
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     cpu: Mapped[float] = mapped_column()
     memory: Mapped[int] = mapped_column(BigInteger)
@@ -99,7 +100,6 @@ class ResourceFlavorORM(BaseORM):
     default_storage: Mapped[int] = mapped_column(BigInteger)
     gpu: Mapped[int] = mapped_column(BigInteger, default=0)
     description: Mapped[str | None] = mapped_column(String(500), default=None, nullable=True)
-    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
 
     @classmethod
     def from_unsaved_model(cls, new_flavor: models.UnsavedResourceFlavor) -> ResourceFlavorORM:
@@ -112,6 +112,17 @@ class ResourceFlavorORM(BaseORM):
             default_storage=new_flavor.default_storage,
             gpu=new_flavor.gpu,
             description=new_flavor.description,
+        )
+
+    @property
+    def shape(self) -> models.ResourceShape:
+        """The resource values of the flavor."""
+        return models.ResourceShape(
+            cpu=self.cpu,
+            memory=self.memory,
+            gpu=self.gpu,
+            max_storage=self.max_storage,
+            default_storage=self.default_storage,
         )
 
     def dump(self) -> models.ResourceFlavor:
@@ -211,13 +222,7 @@ class ResourceClassORM(BaseORM):
         """The resource values of the class, from its flavor when linked."""
         flavor = self.resource_flavor
         if flavor is not None:
-            return models.ResourceShape(
-                cpu=flavor.cpu,
-                memory=flavor.memory,
-                gpu=flavor.gpu,
-                max_storage=flavor.max_storage,
-                default_storage=flavor.default_storage,
-            )
+            return flavor.shape
         if (
             self.cpu is None
             or self.memory is None
