@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Final
 
-from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, func, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import DateTime, ForeignKey, MetaData, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from ulid import ULID
 
@@ -16,8 +14,6 @@ from renku_data_services.crc.orm import ResourcePoolORM
 from renku_data_services.session_runners import models
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
-
-JSONVariant: Final[JSON] = JSON().with_variant(JSONB(), "postgresql")
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
