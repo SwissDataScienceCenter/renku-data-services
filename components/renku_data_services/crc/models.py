@@ -103,6 +103,75 @@ class FirecrestClassRemote:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class ResourceShape:
+    """The resource values of a resource class."""
+
+    cpu: float
+    """Number of cores."""
+    memory: int
+    """RAM in gigabytes."""
+    gpu: int
+    """Number of gpus."""
+    max_storage: int
+    """Maximum allowed disk storage in gigabytes."""
+    default_storage: int
+    """The default disk storage used when launching a session (in gigabytes)."""
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedResourceFlavor(ResourcesCompareMixin):
+    """A named shape that resource classes can link to instead of setting their own values."""
+
+    name: str
+    cpu: float
+    """Number of cores."""
+    memory: int
+    """RAM in gigabytes."""
+    max_storage: int
+    """Maximum allowed disk storage in gigabytes."""
+    gpu: int = 0
+    """Number of gpus."""
+    default_storage: int = 1
+    """The default disk storage used when launching a session (in gigabytes)."""
+    description: str | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourceFlavor(UnsavedResourceFlavor):
+    """Resource flavor model."""
+
+    id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourceFlavorPatch:
+    """Model for changes requested on a resource flavor."""
+
+    name: str | None = None
+    cpu: float | None = None
+    """Number of cores."""
+    memory: int | None = None
+    """RAM in gigabytes."""
+    max_storage: int | None = None
+    """Maximum allowed disk storage in gigabytes."""
+    gpu: int | None = None
+    """Number of gpus."""
+    default_storage: int | None = None
+    """The default disk storage used when launching a session (in gigabytes)."""
+    description: str | None | ResetType = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class LinkedResourceClass:
+    """A resource class linked to a resource flavor, with the pool it belongs to."""
+
+    id: int
+    name: str
+    resource_pool_id: int | None = None
+    resource_pool_name: str | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedResourceClass(ResourcesCompareMixin):
     """Model for a resource class yet to be saved."""
 
@@ -117,6 +186,7 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     tolerations: list[str] = field(default_factory=list)
     quota_enforced: bool = False
     remote: FirecrestClassRemote | None = None
+    resource_flavor_id: ULID | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -139,6 +209,7 @@ class ResourceClass(ResourcesCompareMixin):
     usage_hours_total: float | None = None
     quota_enforced: bool = False
     remote: FirecrestClassRemote | None = None
+    resource_flavor_id: ULID | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -156,6 +227,7 @@ class ResourceClassPatch:
     tolerations: list[str] | None = None
     quota_enforced: bool | None = None
     remote: FirecrestClassRemote | None = None
+    resource_flavor_id: ULID | ResetType | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

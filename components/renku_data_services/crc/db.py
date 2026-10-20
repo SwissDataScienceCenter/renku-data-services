@@ -124,6 +124,76 @@ def _only_admins(
     return decorated_function
 
 
+async def _get_flavor_orm(session: AsyncSession, flavor_id: ULID) -> schemas.ResourceFlavorORM:
+    """Load a resource flavor or raise if it does not exist."""
+    flavor = await session.scalar(select(schemas.ResourceFlavorORM).where(schemas.ResourceFlavorORM.id == flavor_id))
+    if flavor is None:
+        raise errors.MissingResourceError(message=f"Resource flavor with id {flavor_id} does not exist.")
+    return flavor
+
+
+async def _get_linked_classes(session: AsyncSession, flavor_id: ULID) -> list[schemas.ResourceClassORM]:
+    """Load every resource class linked to a resource flavor."""
+    res = await session.scalars(
+        select(schemas.ResourceClassORM)
+        .where(schemas.ResourceClassORM.resource_flavor_id == flavor_id)
+        .order_by(schemas.ResourceClassORM.id)
+    )
+    return list(res)
+
+
+async def _attach_flavors(session: AsyncSession, classes: Sequence[schemas.ResourceClassORM]) -> None:
+    """Link every class that carries a flavor id to its flavor."""
+    for cls in classes:
+        if cls.resource_flavor_id is None:
+            continue
+        _link_flavor(cls, await _get_flavor_orm(session, cls.resource_flavor_id))
+
+
+def _link_flavor(cls: schemas.ResourceClassORM, flavor: schemas.ResourceFlavorORM) -> None:
+    """Link a resource class to a flavor, which then supplies all of its resource values."""
+    cls.resource_flavor = flavor
+    cls.cpu = None
+    cls.memory = None
+    cls.max_storage = None
+    cls.default_storage = None
+    cls.gpu = None
+
+
+def _snapshot_flavor(cls: schemas.ResourceClassORM, flavor: schemas.ResourceFlavorORM) -> None:
+    """Copy a flavor's resource values onto a resource class that is unlinked from it."""
+    cls.cpu = flavor.cpu
+    cls.memory = flavor.memory
+    cls.max_storage = flavor.max_storage
+    cls.default_storage = flavor.default_storage
+    cls.gpu = flavor.gpu
+
+
+async def _reject_classes_over_quota(
+    session: AsyncSession, quotas_repo: QuotaRepository, flavor: schemas.ResourceFlavorORM
+) -> None:
+    """Refuse a flavor change that makes a linked resource class larger than the quota of its pool."""
+    quotas: dict[tuple[str, ClusterId], models.Quota | None] = {}
+    blockers: list[str] = []
+    for cls in await _get_linked_classes(session, flavor.id):
+        pool = cls.resource_pool
+        if pool is None or pool.quota is None:
+            continue
+        key = (pool.quota, pool.get_cluster_id())
+        if key not in quotas:
+            quotas[key] = await quotas_repo.get_quota(key[0], key[1])
+        quota = quotas[key]
+        if quota is not None and not quota.is_resource_class_compatible(cls.dump()):
+            blockers.append(f"{cls.name} (in {pool.name})")
+    if blockers:
+        raise errors.ConflictError(
+            message=(
+                f"The resource flavor {flavor.name} cannot be changed because the new values are larger than the "
+                f"quota of the resource pools of these resource classes: {', '.join(blockers)}."
+            )
+        )
+
+
 class ResourcePoolQueryRepository:
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
@@ -508,6 +578,7 @@ class ResourcePoolRepository(_Base):
         resource_pool = schemas.ResourcePoolORM.from_unsaved_model(
             new_resource_pool=new_resource_pool, quota=quota, cluster=cluster
         )
+        await _attach_flavors(session, resource_pool.classes)
         if resource_pool.default:
             stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
             res = await session.execute(stmt)
@@ -549,6 +620,16 @@ class ResourcePoolRepository(_Base):
         async with self.session_maker() as session, session.begin():
             resource_class = schemas.ResourceClassORM.from_unsaved_model(
                 new_resource_class=new_resource_class, resource_pool_id=resource_pool_id
+            )
+            await _attach_flavors(session, [resource_class])
+            shape = resource_class.shape
+            new_resource_class = replace(
+                new_resource_class,
+                cpu=shape.cpu,
+                memory=shape.memory,
+                max_storage=shape.max_storage,
+                default_storage=shape.default_storage,
+                gpu=shape.gpu,
             )
 
             if resource_pool_id is not None:
@@ -866,6 +947,32 @@ class ResourcePoolRepository(_Base):
                     pool_kind = models.RemoteConfigurationKind(remote_kind)
 
             validate_resource_class_update(existing=cls.dump(), update=update)
+
+            new_flavor_id = update.resource_flavor_id
+            linked_after = cls.resource_flavor_id if new_flavor_id is None else new_flavor_id
+            explicit_shape = [
+                name
+                for name in ("cpu", "memory", "max_storage", "default_storage", "gpu")
+                if getattr(update, name) is not None
+            ]
+            if isinstance(linked_after, ULID) and explicit_shape:
+                raise errors.ValidationError(
+                    message=(
+                        f"The fields {', '.join(explicit_shape)} cannot be set on a resource class that is linked to "
+                        'a resource flavor. Change the flavor, or send "resource_flavor_id": "" in a PATCH to unlink '
+                        "the class."
+                    )
+                )
+
+            if new_flavor_id is RESET:
+                if cls.resource_flavor_id is not None:
+                    _snapshot_flavor(cls, await _get_flavor_orm(session, cls.resource_flavor_id))
+                cls.resource_flavor_id = None
+                cls.resource_flavor = None
+            elif new_flavor_id is not None:
+                flavor = await _get_flavor_orm(session, new_flavor_id)
+                cls.resource_flavor_id = new_flavor_id
+                _link_flavor(cls, flavor)
 
             # NOTE: updating the 'default' field is not supported, so it is skipped below
             if update.name is not None:
@@ -1879,6 +1986,121 @@ class ClusterRepository:
             cluster = r.one_or_none()
             if cluster is not None:
                 await session.delete(cluster)
+
+
+@dataclass
+class ResourceFlavorRepository:
+    """Repository for resource flavors."""
+
+    session_maker: Callable[..., AsyncSession]
+    quotas_repo: QuotaRepository
+
+    async def get_flavors(self, name: str | None = None) -> list[models.ResourceFlavor]:
+        """Get all resource flavors from the database."""
+        async with self.session_maker() as session:
+            stmt = select(schemas.ResourceFlavorORM).order_by(schemas.ResourceFlavorORM.name)
+            if name is not None:
+                stmt = stmt.where(schemas.ResourceFlavorORM.name == name)
+            res = await session.scalars(stmt)
+            return [flavor.dump() for flavor in res]
+
+    async def get_flavor(self, flavor_id: ULID) -> models.ResourceFlavor:
+        """Get a specific resource flavor from the database."""
+        async with self.session_maker() as session:
+            flavor = await _get_flavor_orm(session, flavor_id)
+            return flavor.dump()
+
+    async def get_flavor_resource_classes(self, flavor_id: ULID) -> list[models.LinkedResourceClass]:
+        """Get every resource class linked to a resource flavor, with the pool it belongs to."""
+        async with self.session_maker() as session:
+            await _get_flavor_orm(session, flavor_id)
+            return [
+                models.LinkedResourceClass(
+                    id=cls.id,
+                    name=cls.name,
+                    resource_pool_id=cls.resource_pool_id,
+                    resource_pool_name=cls.resource_pool.name if cls.resource_pool is not None else None,
+                )
+                for cls in await _get_linked_classes(session, flavor_id)
+            ]
+
+    @_only_admins
+    async def insert_flavor(
+        self, api_user: base_models.APIUser, new_flavor: models.UnsavedResourceFlavor
+    ) -> models.ResourceFlavor:
+        """Insert a new resource flavor in the database."""
+        async with self.session_maker() as session, session.begin():
+            existing = await session.scalar(
+                select(schemas.ResourceFlavorORM).where(schemas.ResourceFlavorORM.name == new_flavor.name)
+            )
+            if existing is not None:
+                raise errors.ConflictError(
+                    message=f"A resource flavor with the name {new_flavor.name} already exists.", quiet=True
+                )
+            flavor = schemas.ResourceFlavorORM.from_unsaved_model(new_flavor)
+            session.add(flavor)
+            await session.flush()
+            await session.refresh(flavor)
+            return flavor.dump()
+
+    @_only_admins
+    async def update_flavor(
+        self, api_user: base_models.APIUser, flavor_id: ULID, update: models.ResourceFlavorPatch
+    ) -> models.ResourceFlavor:
+        """Update a resource flavor in the database."""
+        async with self.session_maker() as session, session.begin():
+            flavor = await _get_flavor_orm(session, flavor_id)
+            if update.name is not None and update.name != flavor.name:
+                existing = await session.scalar(
+                    select(schemas.ResourceFlavorORM).where(schemas.ResourceFlavorORM.name == update.name)
+                )
+                if existing is not None:
+                    raise errors.ConflictError(
+                        message=f"A resource flavor with the name {update.name} already exists.", quiet=True
+                    )
+                flavor.name = update.name
+            if update.cpu is not None:
+                flavor.cpu = update.cpu
+            if update.memory is not None:
+                flavor.memory = update.memory
+            if update.max_storage is not None:
+                flavor.max_storage = update.max_storage
+            if update.default_storage is not None:
+                flavor.default_storage = update.default_storage
+            if update.gpu is not None:
+                flavor.gpu = update.gpu
+            if update.description is RESET:
+                flavor.description = None
+            elif isinstance(update.description, str):
+                flavor.description = update.description
+            if flavor.default_storage > flavor.max_storage:
+                raise errors.ValidationError(
+                    message="The default storage cannot be larger than the max allowable storage."
+                )
+            if any(value is not None for value in (update.cpu, update.memory, update.gpu)):
+                await _reject_classes_over_quota(session, self.quotas_repo, flavor)
+            await session.flush()
+            await session.refresh(flavor)
+            return flavor.dump()
+
+    @_only_admins
+    async def delete_flavor(self, api_user: base_models.APIUser, flavor_id: ULID) -> None:
+        """Delete a resource flavor, unless a resource class is still linked to it."""
+        async with self.session_maker() as session, session.begin():
+            flavor = await session.scalar(
+                select(schemas.ResourceFlavorORM).where(schemas.ResourceFlavorORM.id == flavor_id)
+            )
+            if flavor is None:
+                return
+            names = [cls.name for cls in await _get_linked_classes(session, flavor_id)]
+            if names:
+                raise errors.ConflictError(
+                    message=(
+                        f"The resource flavor {flavor.name} cannot be deleted because it is still linked to the "
+                        f"resource classes: {', '.join(names)}."
+                    )
+                )
+            await session.delete(flavor)
 
 
 @dataclass
