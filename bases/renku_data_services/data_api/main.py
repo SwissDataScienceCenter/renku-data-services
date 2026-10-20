@@ -102,17 +102,11 @@ def create_app() -> Sanic:
         def filter_tx(
             event: "sentry_sdk._types.Event", hint: "sentry_sdk._types.Hint"
         ) -> "sentry_sdk._types.Event | None":
-            # logger.warning(f"tx event = {event}, hint = {hint}")
-
-            # request = event.get('request')
             headers = cast(dict[str, Any], event.get("request", {}).get("headers", {}))
             renku_service_header_value = headers.get("renku-service")
             if renku_service_header_value == "renku-ui-server":
                 # This request is coming from renku-ui-server, reduce sample rate
-                logger.warning("Re-sample event from renku-ui-server")
-                # contexts = event.get("contexts", {})
-                # trace = contexts.get("trace", {})
-                # logger.warning(f"tx contexts = {contexts}, trace = {trace}")
+                # logger.warning("Re-sample event from renku-ui-server")
                 dynamic_sampling_context = cast(
                     dict[str, Any], event.get("contexts", {}).get("trace", {}).get("dynamic_sampling_context")
                 )
@@ -122,7 +116,8 @@ def create_app() -> Sanic:
                         sample_rate = old_sample_rate / 1_000
                         sample_rand = float(cast(str, dynamic_sampling_context.get("sample_rand")))
                         sampled = sample_rand < sample_rate
-                        dynamic_sampling_context["sample_rand"] = sampled
+                        dynamic_sampling_context["sample_rate"] = sample_rate
+                        dynamic_sampling_context["sampled"] = sampled
                         logger.warning(
                             f"Re-sample event from renku-ui-server, {old_sample_rate} -> {sample_rate} = {sampled}, "
                             f"{event}"
@@ -132,7 +127,7 @@ def create_app() -> Sanic:
                     except ValueError:
                         pass
 
-            return None
+            return event
 
         @app.before_server_start
         async def setup_sentry(_: Sanic) -> None:
