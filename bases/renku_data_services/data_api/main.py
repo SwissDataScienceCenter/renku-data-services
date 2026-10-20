@@ -99,6 +99,15 @@ def create_app() -> Sanic:
                     return None
             return event
 
+        def traces_sampler(ctx: "sentry_sdk._types.SamplingContext") -> float | int | bool:
+            parent_sampling_decision = ctx["parent_sampled"]
+            if parent_sampling_decision is not None:
+                return float(parent_sampling_decision)
+
+            logger.warning(f"ctx = {ctx}")
+
+            return dependency_manager.config.sentry.sample_rate
+
         @app.before_server_start
         async def setup_sentry(_: Sanic) -> None:
             sentry_sdk.init(
@@ -111,7 +120,8 @@ def create_app() -> Sanic:
                     GRPCIntegration(),
                 ],
                 enable_tracing=dependency_manager.config.sentry.sample_rate > 0,
-                traces_sample_rate=dependency_manager.config.sentry.sample_rate,
+                # traces_sample_rate=dependency_manager.config.sentry.sample_rate,
+                traces_sampler=traces_sampler,
                 before_send=filter_error,
                 in_app_include=["renku_data_services"],
             )
