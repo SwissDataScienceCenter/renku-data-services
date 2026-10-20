@@ -5,7 +5,8 @@ from typing import Any
 from box import Box
 
 from renku_data_services.crc import models
-from renku_data_services.crc.db import PREEMPTIBLE_PRIORITY_VALUE, SESSION_PRIORITY_VALUE, QuotaRepository
+from renku_data_services.crc.constants import PREEMPTIBLE_PRIORITY_VALUE, SESSION_PRIORITY_VALUE
+from renku_data_services.crc.db import QuotaRepository
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sObjectMeta, K8sPriorityClass, K8sResourceQuota
 

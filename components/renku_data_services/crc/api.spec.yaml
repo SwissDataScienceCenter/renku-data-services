@@ -2195,7 +2195,7 @@ components:
       example: true
     Preemptible:
       type: boolean
-      description: Whether sessions and jobs in this resource class can be preempted by resources in non-preemptible resource classes
+      description: Whether sessions and jobs in this resource class can be preempted by other workloads
       example: false
     PublicFlag:
       type: boolean

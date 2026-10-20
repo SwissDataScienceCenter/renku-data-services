@@ -32,6 +32,7 @@ from renku_data_services.connected_services.models import ConnectionStatus
 from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2ConnectionORM
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
+from renku_data_services.crc.constants import PREEMPTIBLE_PRIORITY_VALUE, SESSION_PRIORITY_VALUE
 from renku_data_services.crc.core import (
     calculate_usage_hours,
     validate_resource_class_update,
@@ -1909,10 +1910,6 @@ class ClusterRepository:
             cluster = r.one_or_none()
             if cluster is not None:
                 await session.delete(cluster)
-
-
-SESSION_PRIORITY_VALUE = 100
-PREEMPTIBLE_PRIORITY_VALUE = -5
 
 
 @dataclass

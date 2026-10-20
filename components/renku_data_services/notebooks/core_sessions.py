@@ -1292,6 +1292,7 @@ async def start_session(
     labels: dict[str, str] = {
         "renku.io/safe-username": user.id,
         "renku.io/session-type": str(session_type),
+        "renku.io/preemptible": str(resource_class.preemptible).lower(),
     }
 
     if launcher.environment.build_parameters:
@@ -1302,8 +1303,6 @@ async def start_session(
 
     if user.is_anonymous:
         labels["renku.io/anonymous-session"] = "true"
-
-    labels["renku.io/preemptible"] = str(resource_class.preemptible).lower()
 
     if session_type.is_non_interactive:
         session_extras = session_extras.extra_container_as_sidecars()
