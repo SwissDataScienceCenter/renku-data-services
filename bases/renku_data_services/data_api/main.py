@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import os
 from os import environ
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import sentry_sdk
 from sanic import Request, Sanic
@@ -102,7 +102,18 @@ def create_app() -> Sanic:
         def filter_tx(
             event: "sentry_sdk._types.Event", hint: "sentry_sdk._types.Hint"
         ) -> "sentry_sdk._types.Event | None":
-            logger.warning(f"tx event = {event}, hint = {hint}")
+            # logger.warning(f"tx event = {event}, hint = {hint}")
+
+            # request = event.get('request')
+            headers = cast(dict[str, Any], event.get("request", {}).get("headers", {}))
+            renku_service_header_value = headers.get("renku-service")
+            if renku_service_header_value == "renku-ui-server":
+                # This request is coming from renku-ui-server, reduce sample rate
+                logger.warning("Re-sample event from renku-ui-server")
+                contexts = event.get("contexts", {})
+                trace = contexts.get("trace", {})
+                logger.warning(f"tx contexts = {contexts}, trace = {trace}")
+
             return None
 
         @app.before_server_start
