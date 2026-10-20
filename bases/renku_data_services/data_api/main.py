@@ -110,9 +110,27 @@ def create_app() -> Sanic:
             if renku_service_header_value == "renku-ui-server":
                 # This request is coming from renku-ui-server, reduce sample rate
                 logger.warning("Re-sample event from renku-ui-server")
-                contexts = event.get("contexts", {})
-                trace = contexts.get("trace", {})
-                logger.warning(f"tx contexts = {contexts}, trace = {trace}")
+                # contexts = event.get("contexts", {})
+                # trace = contexts.get("trace", {})
+                # logger.warning(f"tx contexts = {contexts}, trace = {trace}")
+                dynamic_sampling_context = cast(
+                    dict[str, Any], event.get("contexts", {}).get("trace", {}).get("dynamic_sampling_context")
+                )
+                if dynamic_sampling_context:
+                    try:
+                        old_sample_rate = float(cast(str, dynamic_sampling_context.get("sample_rate")))
+                        sample_rate = old_sample_rate / 1_000
+                        sample_rand = float(cast(str, dynamic_sampling_context.get("sample_rand")))
+                        sampled = sample_rand < sample_rate
+                        dynamic_sampling_context["sample_rand"] = sampled
+                        logger.warning(
+                            f"Re-sample event from renku-ui-server, {old_sample_rate} -> {sample_rate} = {sampled}, "
+                            f"{event}"
+                        )
+                        if not sampled:
+                            return None
+                    except ValueError:
+                        pass
 
             return None
 
