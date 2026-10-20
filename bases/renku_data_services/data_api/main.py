@@ -106,7 +106,6 @@ def create_app() -> Sanic:
             renku_service_header_value = headers.get("renku-service")
             if renku_service_header_value == "renku-ui-server":
                 # This request is coming from renku-ui-server, reduce sample rate
-                # logger.warning("Re-sample event from renku-ui-server")
                 dynamic_sampling_context = cast(
                     dict[str, Any], event.get("contexts", {}).get("trace", {}).get("dynamic_sampling_context")
                 )
@@ -118,10 +117,6 @@ def create_app() -> Sanic:
                         sampled = sample_rand < sample_rate
                         dynamic_sampling_context["sample_rate"] = sample_rate
                         dynamic_sampling_context["sampled"] = sampled
-                        logger.warning(
-                            f"Re-sample event from renku-ui-server, {old_sample_rate} -> {sample_rate} = {sampled}, "
-                            f"{event}"
-                        )
                         if not sampled:
                             return None
                     except ValueError:
@@ -141,9 +136,7 @@ def create_app() -> Sanic:
                     GRPCIntegration(),
                 ],
                 enable_tracing=dependency_manager.config.sentry.sample_rate > 0,
-                # traces_sample_rate=dependency_manager.config.sentry.sample_rate,
-                traces_sample_rate=1,
-                # traces_sampler=traces_sampler,
+                traces_sample_rate=dependency_manager.config.sentry.sample_rate,
                 before_send_transaction=filter_tx,
                 before_send=filter_error,
                 in_app_include=["renku_data_services"],
