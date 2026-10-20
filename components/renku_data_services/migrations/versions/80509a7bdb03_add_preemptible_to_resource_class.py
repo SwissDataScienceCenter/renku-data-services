@@ -1,7 +1,7 @@
 """add preemptible flag to resource_classes
 
 Revision ID: 80509a7bdb03
-Revises: 3016b9c4de5e
+Revises: 181e715f787b
 Create Date: 2026-09-30 10:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "80509a7bdb03"
-down_revision = "3016b9c4de5e"
+down_revision = "181e715f787b"
 branch_labels: Sequence[str] | None = None
 depends_on: Sequence[str] | str | None = None
 
