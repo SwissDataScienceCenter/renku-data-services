@@ -1083,10 +1083,6 @@ async def start_session(
         if not resource_class or not resource_class.id:
             raise errors.MissingResourceError(message=f"The resource class with ID {resource_class_id} does not exist.")
     await nb_config.crc_validator.validate_class_storage(user, resource_class.id, launch_request.disk_storage)
-    if resource_class.preemptible:
-        await rp_repo.quotas_repo.ensure_preemptible_priority_class(
-            resource_pool.id, resource_class.quota, resource_pool.get_cluster_id()
-        )
     disk_storage = launch_request.disk_storage or resource_class.default_storage
 
     # NOTE: Refuse to start if the user is over quota and the resource class enforces it
@@ -1502,8 +1498,6 @@ async def patch_session(
         # Affinities
         patch.spec.affinity = node_affinity_patch_from_resource_class(rc, nb_config.sessions.affinity_model)
         # Priority class
-        if rc.preemptible:
-            await rp_repo.quotas_repo.ensure_preemptible_priority_class(rp.id, rc.quota, rp.get_cluster_id())
         patch.spec.priorityClassName = rp_repo.quotas_repo.priority_class_name(rp.id, rc) or RESET
         # Service account name
         if rp.cluster is not None:
