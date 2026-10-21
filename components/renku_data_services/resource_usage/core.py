@@ -283,14 +283,14 @@ class ResourceUsageService:
             logger.error(f"Error querying compute usage with limits: {e}")
             return None
 
-    def get_remaining_quota(self, usage: ResourcePoolUsageLimits | None) -> tuple[float | None, float | None]:
-        """Compute the remaining quota and its percentage based on the usage and limits."""
+    async def get_remaining_quota(self, resource_pool_id: int, user_id: str | None) -> float | None:
+        """Compute the remaining quota based on the usage and limits."""
+        usage = await self.get_usage_with_limits(resource_pool_id, user_id)
         if usage is None:
-            return None, None
+            return None
 
         user_limit = usage.pool_limits.user_limit
         total_limit = usage.pool_limits.total_limit
-
         if user_limit.is_unlimited() or usage.user_usage is None:
             remaining_user_quota = float("inf")
         else:
@@ -301,13 +301,6 @@ class ResourceUsageService:
             remaining_total_quota = total_limit.value - usage.total_usage.value
 
         if remaining_user_quota == float("inf") and remaining_total_quota == float("inf"):
-            return None, None
+            return None
 
-        remaining_quota = min(remaining_user_quota, remaining_total_quota)
-
-        if remaining_quota == remaining_user_quota:
-            remaining_quota_p = (remaining_user_quota / user_limit.value) * 100
-        else:
-            remaining_quota_p = (remaining_total_quota / total_limit.value) * 100
-
-        return remaining_quota, remaining_quota_p
+        return min(remaining_user_quota, remaining_total_quota)
