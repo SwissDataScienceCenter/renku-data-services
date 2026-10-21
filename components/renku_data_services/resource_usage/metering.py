@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import Any, Optional, Protocol
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError
 
 from renku_data_services.app_config import logging
 from renku_data_services.crc.models import ResourceClass
@@ -38,7 +38,7 @@ class ResourceUsageMetering(Protocol):
         """Emit resource usage events. Never raises."""
         ...
 
-    async def query_compute_usage(
+    async def get_usage(
         self,
         resource_pool_id: int,
         user_id: str | None,
@@ -117,11 +117,18 @@ class MeterQueryResponse(BaseModel):
     data: list[dict[str, Any]]
 
 
+class UsagePeriod(BaseModel):
+    """Usage period for OpenMeter entitlement."""
+
+    from_: datetime = Field(alias="from")
+    to: datetime
+
+
 class EntitlementQueryResponse(BaseModel):
     """Response from OpenMeter entitlement query."""
 
     activeFrom: str
-    currentUsagePeriod: dict[str, str]
+    currentUsagePeriod: UsagePeriod
     customerId: str
     customerKey: str
     featureId: str
@@ -144,6 +151,13 @@ class EntitlementValueQueryResponse(BaseModel):
     grantBalances: Optional[dict[str, float]] = None
 
 
+def _validate[T: BaseModel](model: type[T], body: Any) -> T:
+    try:
+        return model.model_validate(body)
+    except ValidationError as ex:
+        raise errors.ThirdPartyAPIError(message=f"Unexpected OpenMeter response for {model.__name__}.") from ex
+
+
 class OpenMeterClient:
     """Client for interacting with the OpenMeter API.
 
@@ -156,6 +170,30 @@ class OpenMeterClient:
         self._endpoint_url = endpoint_url
         self._headers = {"Authorization": f"Bearer {token}"} if token else {}
         self._client = httpx.AsyncClient(timeout=30)
+
+    async def _request(self, method: str, path: str, *, allow_404: bool = False, **kwargs: Any) -> Any | None:
+        """Call OpenMeter and return the decoded JSON body.
+
+        Every failure (transport, timeout, bad status, bad JSON) is raised as ThirdPartyAPIError.
+        """
+        try:
+            resp = await self._client.request(method, f"{self._endpoint_url}{path}", headers=self._headers, **kwargs)
+        except httpx.HTTPError as ex:
+            logger.warning(f"OpenMeter request {method} {path} failed: {ex}")
+            raise errors.ThirdPartyAPIError(message=f"Could not reach OpenMeter: {type(ex).__name__}") from ex
+        if allow_404 and resp.status_code == 404:
+            return None
+        if resp.status_code >= 300 or resp.status_code < 200:
+            logger.warning(f"OpenMeter endpoint returned unexpected status {resp.status_code}: {resp.text[:200]}")
+            raise errors.ThirdPartyAPIError(
+                message=f"Received unexpected status code {resp.status_code} from OpenMeter.",
+                detail=f"Message from OpenMeter: {resp.text[:200]}",
+            )
+        try:
+            return resp.json()
+        except ValueError as ex:
+            logger.warning("OpenMeter returned an invalid JSON body")
+            raise errors.ThirdPartyAPIError(message="OpenMeter returned an invalid JSON body.") from ex
 
     async def emit(
         self,
@@ -184,24 +222,59 @@ class OpenMeterClient:
         except Exception as ex:
             logger.warning(f"Unexpected error emitting metering events to OpenMeter: {ex}", exc_info=ex)
 
+    async def query_meter(self, meter_id_or_slug: str, body: dict[str, Any]) -> MeterQueryResponse:
+        """Query a meter in OpenMeter."""
+        res = await self._request("POST", f"/api/v1/meters/{meter_id_or_slug}/query", json=body)
+        return _validate(MeterQueryResponse, res)
+
+    async def query_customer_entitlement(
+        self, customer_id_or_key: str, feature_key: str
+    ) -> EntitlementQueryResponse | None:
+        """Query a customer entitlement in OpenMeter."""
+        res = await self._request(
+            "GET",
+            f"/api/v2/customers/{customer_id_or_key}/entitlements/{feature_key}",
+            allow_404=True,
+        )
+        if not res:
+            logger.warning(
+                f"No customer entitlement found for customer={customer_id_or_key}, feature_key={feature_key}"
+            )
+            return None
+        return _validate(EntitlementQueryResponse, res)
+
+    async def query_customer_entitlement_value(
+        self, customer_id_or_key: str, feature_key: str
+    ) -> EntitlementValueQueryResponse | None:
+        """Query a customer entitlement value in OpenMeter."""
+        res = await self._request(
+            "GET",
+            f"/api/v2/customers/{customer_id_or_key}/entitlements/{feature_key}/value",
+            allow_404=True,
+        )
+        if not res:
+            logger.warning(
+                f"No customer entitlement value found for customer={customer_id_or_key}, feature_key={feature_key}"
+            )
+            return None
+        return _validate(EntitlementValueQueryResponse, res)
+
     def get_resource_pool_key(self, resource_pool_id: int) -> str:
         """Get the OpenMeter customer / subject key for a resource pool."""
         return f"renku-pool-{resource_pool_id}"
 
-    async def query_meter(self, meter_id_or_slug: str, body: dict[str, Any]) -> MeterQueryResponse:
-        """Query a meter in OpenMeter."""
-        resp = await self._client.post(
-            f"{self._endpoint_url}/api/v1/meters/{meter_id_or_slug}/query", headers=self._headers, json=body
-        )
-        if resp.status_code >= 300 or resp.status_code < 200:
-            logger.warning(f"OpenMeter endpoint returned unexpected status {resp.status_code}: {resp.text[:200]}")
-            raise errors.ThirdPartyAPIError(
-                message=f"Received unexpected status code {resp.status_code} when querying OpenMeter meter.",
-                detail=f"Message from OpenMeter: {resp.text}",
-            )
-        return MeterQueryResponse.model_validate(resp.json())
+    async def get_resource_pool_total_limit(
+        self, resource_pool_id: int, feature_key: str = COMPUTE_USAGE_KEY
+    ) -> Credit:
+        """Query compute limits from OpenMeter."""
+        customer_key = self.get_resource_pool_key(resource_pool_id)
+        entitlement_value = await self.query_customer_entitlement_value(customer_key, feature_key)
+        if entitlement_value is None:
+            return Credit.unlimited()
 
-    async def query_compute_usage(
+        return Credit.from_float(entitlement_value.totalAvailableGrantAmount)
+
+    async def get_usage(
         self,
         resource_pool_id: int,
         user_id: str | None,
@@ -226,71 +299,6 @@ class OpenMeterClient:
         res = await self.query_meter(meter_key, body)
         return Credit.from_float(res.data[0].get("value", 0)) if res.data else Credit.zero()
 
-    async def query_customer_entitlement(
-        self, customer_id_or_key: str, feature_key: str
-    ) -> EntitlementQueryResponse | None:
-        """Query a customer entitlement in OpenMeter."""
-        resp = await self._client.get(
-            f"{self._endpoint_url}/api/v2/customers/{customer_id_or_key}/entitlements/{feature_key}",
-            headers=self._headers,
-        )
-        if resp.status_code == 404:
-            logger.warning(
-                f"No customer or feature found for customer={customer_id_or_key} and feature_key={feature_key}"
-            )
-            return None
-
-        if resp.status_code >= 300 or resp.status_code < 200:
-            logger.warning(f"OpenMeter endpoint returned unexpected status {resp.status_code}: {resp.text[:200]}")
-            raise errors.ThirdPartyAPIError(
-                message=f"Received unexpected status code {resp.status_code} when querying OpenMeter entitlement.",
-                detail=f"Message from OpenMeter: {resp.text}",
-            )
-        if resp.json() == {}:
-            logger.warning(
-                f"No customer entitlement found for customer={customer_id_or_key}, feature_key={feature_key}"
-            )
-            return None
-
-        return EntitlementQueryResponse.model_validate(resp.json())
-
-    async def query_customer_entitlement_value(
-        self, customer_id_or_key: str, feature_key: str
-    ) -> EntitlementValueQueryResponse | None:
-        """Query a customer entitlement value in OpenMeter."""
-        resp = await self._client.get(
-            f"{self._endpoint_url}/api/v2/customers/{customer_id_or_key}/entitlements/{feature_key}/value",
-            headers=self._headers,
-        )
-        if resp.status_code == 404:
-            logger.warning(f"No customer found for customer={customer_id_or_key}")
-            return None
-
-        if resp.status_code >= 300 or resp.status_code < 200:
-            logger.warning(f"OpenMeter endpoint returned unexpected status {resp.status_code}: {resp.text[:200]}")
-            raise errors.ThirdPartyAPIError(
-                message=f"Received unexpected status code {resp.status_code} when querying OpenMeter entitlement.",
-                detail=f"Message from OpenMeter: {resp.text}",
-            )
-        if resp.json() == {}:
-            logger.warning(
-                f"No customer entitlement found for customer={customer_id_or_key}, feature_key={feature_key}"
-            )
-            return None
-
-        return EntitlementValueQueryResponse.model_validate(resp.json())
-
-    async def get_resource_pool_total_limit(
-        self, resource_pool_id: int, feature_key: str = COMPUTE_USAGE_KEY
-    ) -> Credit:
-        """Query compute limits from OpenMeter."""
-        customer_key = self.get_resource_pool_key(resource_pool_id)
-        entitlement_value = await self.query_customer_entitlement_value(customer_key, feature_key)
-        if entitlement_value is None:
-            return Credit.unlimited()
-
-        return Credit.from_float(entitlement_value.totalAvailableGrantAmount)
-
     async def get_usage_timeframe(
         self,
         resource_pool_id: int,
@@ -300,13 +308,13 @@ class OpenMeterClient:
         feature_key: str = COMPUTE_USAGE_KEY,
     ) -> ResourcePoolUsage:
         """Get total usage and user usage for a specific timeframe from OpenMeter."""
-        total_query = self.query_compute_usage(resource_pool_id, None, start_date, end_date, meter_key=feature_key)
+        total_query = self.get_usage(resource_pool_id, None, start_date, end_date, meter_key=feature_key)
         if user_id is None:
             total_usage, user_usage = await total_query, None
         else:
             total_usage, user_usage = await asyncio.gather(
                 total_query,
-                self.query_compute_usage(resource_pool_id, user_id, start_date, end_date, meter_key=feature_key),
+                self.get_usage(resource_pool_id, user_id, start_date, end_date, meter_key=feature_key),
             )
         return ResourcePoolUsage(total_usage, user_usage, start_date=start_date, end_date=end_date)
 
@@ -324,7 +332,7 @@ class OpenMeterClient:
             start_date = None
             end_date = None
         else:
-            start_date = datetime.fromisoformat(entitlement.currentUsagePeriod["from"])
-            end_date = datetime.fromisoformat(entitlement.currentUsagePeriod["to"])
+            start_date = entitlement.currentUsagePeriod.from_
+            end_date = entitlement.currentUsagePeriod.to
 
         return await self.get_usage_timeframe(resource_pool_id, user_id, start_date, end_date, feature_key)

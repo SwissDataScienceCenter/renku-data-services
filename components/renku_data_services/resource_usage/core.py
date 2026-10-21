@@ -204,16 +204,6 @@ class ResourceUsageService:
 
         self._metering_client = metering_client
 
-    async def get_usage(
-        self, resource_pool_id: int, user_id: str | None, start_date: datetime | None, end_date: datetime | None
-    ) -> Credit | None:
-        """Return the resource usage for the given pool of the given timespan."""
-        if self._metering_client is None:
-            return None
-
-        result = await self._metering_client.query_compute_usage(resource_pool_id, user_id, start_date, end_date)
-        return result
-
     async def get_limits(self, resource_pool_id: int) -> ResourcePoolLimits:
         """Get resource pool limits."""
         # TODO: retrieve user limit from db, for the moment user limit is unlimited
@@ -267,21 +257,17 @@ class ResourceUsageService:
         if self._metering_client is None:
             return None
 
-        try:
-            usage, limits = await asyncio.gather(
-                self._metering_client.get_usage_timeframe(resource_pool_id, user_id, start_date, end_date),
-                self.get_limits(resource_pool_id),
-            )
-            return ResourcePoolUsageLimits(
-                total_usage=usage.total_usage,
-                user_usage=usage.user_usage,
-                pool_limits=limits,
-                start_date=usage.start_date,
-                end_date=usage.end_date,
-            )
-        except errors.ThirdPartyAPIError as e:
-            logger.error(f"Error querying compute usage with limits: {e}")
-            return None
+        usage, limits = await asyncio.gather(
+            self._metering_client.get_usage_timeframe(resource_pool_id, user_id, start_date, end_date),
+            self.get_limits(resource_pool_id),
+        )
+        return ResourcePoolUsageLimits(
+            total_usage=usage.total_usage,
+            user_usage=usage.user_usage,
+            pool_limits=limits,
+            start_date=usage.start_date,
+            end_date=usage.end_date,
+        )
 
     async def get_remaining_quota(self, resource_pool_id: int, user_id: str | None) -> float | None:
         """Compute the remaining quota based on the usage and limits."""
