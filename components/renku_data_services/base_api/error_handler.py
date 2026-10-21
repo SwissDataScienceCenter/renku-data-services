@@ -4,7 +4,7 @@ import os
 import sys
 import traceback
 from asyncio import CancelledError
-from collections.abc import Mapping, Set
+from collections.abc import Callable, Mapping, Set
 from sqlite3 import Error as SqliteError
 from typing import Any, Optional, Protocol, TypeVar, Union
 
@@ -17,6 +17,7 @@ from sanic import HTTPResponse, Request, SanicException, json
 from sanic.errorpages import BaseRenderer, TextRenderer
 from sanic.handlers import ErrorHandler
 from sanic_ext.exceptions import ValidationError
+from sanic_ext.extras.validation.validators import VALIDATION_ERROR
 from sqlalchemy.exc import SQLAlchemyError
 
 from renku_data_services import errors
@@ -63,11 +64,35 @@ class ApiSpec(Protocol[BErrorResponse, BError]):
     Error: BError
 
 
+def _patched_validate_body(
+    validator: Callable[[type[Any], dict[str, Any]], Any],
+    model: type[Any],
+    body: dict[str, Any],
+) -> Any:
+    """Keep the contained exception on a validation error.
+
+    sanic_ext (since 24.12) puts only a string representation of the error in
+    the exception, which the error handler cannot map to a 422. Restore the original exception.
+    """
+    try:
+        return validator(model, body)
+    except VALIDATION_ERROR as e:
+        raise ValidationError(
+            f"Invalid request body: {model.__name__}. Error: {e}",
+            extra={"exception": e},
+        ) from e
+
+
 class CustomErrorHandler(ErrorHandler):
     """Central error handling."""
 
     def __init__(self, api_spec: ApiSpec, base: type[BaseRenderer] = TextRenderer) -> None:
         self.api_spec = api_spec
+        # NOTE: sanic_ext sends a string instead of the exception on validation errors; route back
+        # through the patched validate_body so this handler can map them to 422.
+        import sanic_ext.extras.validation.setup
+
+        sanic_ext.extras.validation.setup.validate_body = _patched_validate_body
         super().__init__(base)
 
     @classmethod
