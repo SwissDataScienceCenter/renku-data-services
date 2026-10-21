@@ -9,13 +9,12 @@ from typing import TYPE_CHECKING, Protocol
 
 from renku_data_services import errors
 from renku_data_services.app_config import logging
-from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.resource_usage import apispec
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
-from renku_data_services.resource_usage.metering import MetricCode, ResourceUsageMetering
+from renku_data_services.resource_usage.metering import ResourceUsageMetering
 from renku_data_services.resource_usage.model import (
     Credit,
     ResourceClassCost,
@@ -182,13 +181,6 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
         else:
             logger.info(f"Inserting {size} resource request records.")
         await self._requests_repo.insert_many(result)
-        if self._metering is not None:
-            class_ids = {r.resource_class_id for r in result if r.resource_class_id is not None}
-            costs = await self._requests_repo.get_costs_by_class_ids(class_ids)
-            admin_user = InternalServiceAdmin(id=ServiceAdminId.capacity_reservation)
-            classes = await self._pool_repo.get_classes_by_class_ids(admin_user, list(class_ids))
-            classes_dict = {c.id: c for c in classes}
-            await self._metering.emit(result, costs, classes_dict, MetricCode.session_resource_usage)
 
 
 class ResourceUsageService:
