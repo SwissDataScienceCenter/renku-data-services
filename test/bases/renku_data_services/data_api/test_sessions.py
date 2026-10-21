@@ -733,6 +733,7 @@ async def test_launcher_restrictions_private_data_connector(
     )
     assert res.json is not None
     assert len(res.json) == 1
+    assert res.json[0].get("data_connector_link_id") == link_1["id"]
 
     # launcher should be unrestricted to both users
     for headers in [user_headers, member_1_headers]:
