@@ -194,31 +194,40 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
 
 
 class ResourceUsageService:
-    """Queries for resource usages."""
+    """Queries for resource usage and limits."""
 
-    def __init__(self, repo: ResourceRequestsRepo, metering_client: ResourceUsageMetering | None = None) -> None:
+    def __init__(self, repo: ResourceRequestsRepo | None, metering_client: ResourceUsageMetering | None = None) -> None:
+        self._repo = repo
+        self._metering_client = metering_client
         if metering_client is None:
             logger.warning(
                 "No metering client configured, resource usage will not be queried from the metering service."
             )
 
-        self._metering_client = metering_client
+    async def get_default_limits(self, resource_pool_id: int) -> ResourcePoolLimits:
+        """Get default resource pool limits."""
+        if self._repo is not None:
+            db_limits = await self._repo.find_resource_pool_limits(resource_pool_id)
+            if db_limits is not None:
+                return db_limits
+
+        return ResourcePoolLimits(
+            pool_id=resource_pool_id,
+            total_limit=Credit.unlimited(),
+            user_limit=Credit.unlimited(),
+        )
 
     async def get_limits(self, resource_pool_id: int) -> ResourcePoolLimits:
         """Get resource pool limits."""
-        # TODO: retrieve user limit from db, for the moment user limit is unlimited
+        default_limits = await self.get_default_limits(resource_pool_id)
         if self._metering_client is None:
-            return ResourcePoolLimits(
-                pool_id=resource_pool_id,
-                total_limit=Credit.unlimited(),
-                user_limit=Credit.unlimited(),
-            )
+            return default_limits
 
         total_limit = await self._metering_client.get_resource_pool_total_limit(resource_pool_id)
         return ResourcePoolLimits(
             pool_id=resource_pool_id,
             total_limit=total_limit,
-            user_limit=Credit.unlimited(),
+            user_limit=default_limits.user_limit,  # NOTE: The metering service does not provide user limits
         )
 
     async def get_usage_with_limits(
