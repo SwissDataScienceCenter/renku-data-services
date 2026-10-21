@@ -93,8 +93,8 @@ class SessionLauncherRepositoryPolicyName(SafeStrEnum):
     """The access mode of a resource within a session launcher."""
 
     excluded = "excluded"
-    read_only = "readOnly"
-    read_write = "readWrite"
+    read_only = "read_only"
+    read_write = "read_write"
 
     @property
     def requires_write_access(self) -> bool:
@@ -106,8 +106,8 @@ class SessionLauncherDataConnectorPolicyName(SafeStrEnum):
     """The access mode of a data connector within a session launcher."""
 
     excluded = "excluded"
-    read_only = "readOnly"
-    read_write = "readWrite"
+    read_only = "read_only"
+    read_write = "read_write"
 
     @property
     def requires_write_access(self) -> bool:
