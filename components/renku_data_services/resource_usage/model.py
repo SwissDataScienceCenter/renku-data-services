@@ -400,10 +400,6 @@ class Credit:
     def __str__(self) -> str:
         return str(self.value)
 
-    def is_unlimited(self) -> bool:
-        """Return true if this is an unlimited value."""
-        return self.value < 0
-
     @classmethod
     def from_int(cls, n: int) -> Credit:
         """Create new credit from the given number."""
@@ -422,7 +418,11 @@ class Credit:
     @classmethod
     def unlimited(cls) -> Credit:
         """Return unlimited credit."""
-        return cls.from_int(-1)
+        return cls.from_int(0)
+
+    def is_unlimited(self) -> bool:
+        """Return true if this is an unlimited value."""
+        return self.value <= 0
 
 
 @dataclass(frozen=True)
