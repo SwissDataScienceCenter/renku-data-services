@@ -383,11 +383,8 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
         )
         metering_client: ResourceUsageMetering | None = None
-        if config.openmeter.enabled and config.openmeter.endpoint_url:
-            metering_client = OpenMeterClient(
-                endpoint_url=config.openmeter.endpoint_url,
-                token=config.openmeter.token,
-            )
+        if config.openmeter.enabled:
+            metering_client = OpenMeterClient(config.openmeter)
         resource_usage_service = ResourceUsageService(repo=resource_requests_repo, metering_client=metering_client)
         rp_repo = ResourcePoolRepository(
             session_maker=config.db.async_session_maker,

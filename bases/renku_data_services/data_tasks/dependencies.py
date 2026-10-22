@@ -132,11 +132,8 @@ class DependencyManager:
         resource_pool_repo = ResourcePoolQueryRepository(cfg.db.async_session_maker, quota_repo, authz)
 
         metering_client: ResourceUsageMetering | None = None
-        if cfg.openmeter.enabled and cfg.openmeter.endpoint_url:
-            metering_client = OpenMeterClient(
-                endpoint_url=cfg.openmeter.endpoint_url,
-                token=cfg.openmeter.token,
-            )
+        if cfg.openmeter.enabled:
+            metering_client = OpenMeterClient(cfg.openmeter)
         resource_usage_service = ResourceUsageService(repo=resource_requests_repo, metering_client=metering_client)
 
         resource_requests_recorder: ResourcesRequestRecorder

@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from renku_data_services.errors import errors
+from renku_data_services.resource_usage.config import OpenMeterConfig
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.metering import EntitlementValueQueryResponse, OpenMeterClient
 from renku_data_services.resource_usage.model import Credit
@@ -119,7 +120,15 @@ def fake_openmeter() -> FakeOpenMeter:
 
 @pytest.fixture
 def client(fake_openmeter: FakeOpenMeter) -> OpenMeterClient:
-    client = OpenMeterClient(endpoint_url=ENDPOINT_URL, token="test-token")
+    config = OpenMeterConfig(
+        enabled=True,
+        endpoint_url=ENDPOINT_URL,
+        token="test-token",
+        meter_key=EXISTING_FEATURE_KEY,
+        feature_key=EXISTING_FEATURE_KEY,
+        customer_key_prefix="renku-pool-",
+    )
+    client = OpenMeterClient(config)
     client._client = httpx.AsyncClient(transport=httpx.MockTransport(fake_openmeter.handler))
     return client
 
@@ -199,13 +208,13 @@ async def test_query_customer_entitlement_value_error(client: OpenMeterClient, f
 
 async def test_get_resource_pool_total_limit(client: OpenMeterClient) -> None:
     """Test getting the total limit of a resource pool with an entitlement."""
-    result = await client.get_resource_pool_total_limit(resource_pool_id=1, feature_key=EXISTING_FEATURE_KEY)
+    result = await client.get_resource_pool_total_limit(resource_pool_id=1)
     assert result == Credit.from_int(100)
 
 
 async def test_get_resource_pool_total_limit_no_entitlement(client: OpenMeterClient) -> None:
     """Test getting the total limit of a resource pool without an entitlement."""
-    result = await client.get_resource_pool_total_limit(resource_pool_id=2, feature_key=EXISTING_FEATURE_KEY)
+    result = await client.get_resource_pool_total_limit(resource_pool_id=2)
     assert result.is_unlimited() is True
 
 
@@ -223,9 +232,8 @@ async def test_get_usage_timeframe(client: OpenMeterClient, fake_openmeter: Fake
         user_id=EXISTING_USER_ID,
         start_date=PERIOD_FROM,
         end_date=PERIOD_TO,
-        feature_key=EXISTING_FEATURE_KEY,
     )
-    assert result.user_usage.value == 12
+    assert result.user_usage is not None and result.user_usage.value == 12
     assert result.total_usage.value == 20
     assert result.start_date == PERIOD_FROM
     assert result.end_date == PERIOD_TO
@@ -237,7 +245,7 @@ async def test_get_usage_timeframe(client: OpenMeterClient, fake_openmeter: Fake
 async def test_get_current_usage_no_entitlement(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
     """Test getting the current usage when no entitlement is found."""
     result = await client.get_current_usage(resource_pool_id=2, user_id=EXISTING_USER_ID)
-    assert result.user_usage.value == 3
+    assert result.user_usage is not None and result.user_usage.value == 3
     assert result.total_usage.value == 3
     assert result.start_date is None
     assert result.end_date is None
@@ -248,7 +256,7 @@ async def test_get_current_usage_no_entitlement(client: OpenMeterClient, fake_op
 async def test_get_current_usage_existing_entitlement(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
     """Test getting the current usage when an entitlement is found."""
     result = await client.get_current_usage(resource_pool_id=1, user_id=EXISTING_USER_ID)
-    assert result.user_usage.value == 12
+    assert result.user_usage is not None and result.user_usage.value == 12
     assert result.total_usage.value == 20
     assert result.start_date == PERIOD_FROM
     assert result.end_date == PERIOD_TO
