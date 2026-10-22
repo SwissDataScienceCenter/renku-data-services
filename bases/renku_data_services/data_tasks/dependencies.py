@@ -130,17 +130,14 @@ class DependencyManager:
         # at all so we use the dummy client for quotas here as we don't actually access k8s, just the db.
         quota_repo = QuotaRepository(DummyResourceQuotaClient(), DummyPriorityClassClient())
         resource_pool_repo = ResourcePoolQueryRepository(cfg.db.async_session_maker, quota_repo, authz)
-        resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
+
+        metering_client: ResourceUsageMetering | None = None
+        if cfg.openmeter.enabled:
+            metering_client = OpenMeterClient(cfg.openmeter)
+        resource_usage_service = ResourceUsageService(repo=resource_requests_repo, metering_client=metering_client)
 
         resource_requests_recorder: ResourcesRequestRecorder
         if cfg.enable_resource_request_tracking:
-            metering_client: ResourceUsageMetering | None = None
-            if cfg.openmeter.enabled and cfg.openmeter.endpoint_url:
-                metering_client = OpenMeterClient(
-                    endpoint_url=cfg.openmeter.endpoint_url,
-                    token=cfg.openmeter.token,
-                )
-
             resource_requests_recorder = DefaultResourcesRequestRecorder(
                 requests_repo=resource_requests_repo,
                 pool_repo=resource_pool_repo,

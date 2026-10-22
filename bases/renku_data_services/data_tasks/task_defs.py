@@ -34,7 +34,6 @@ from renku_data_services.notifications.models import UnsavedAlert
 from renku_data_services.solr.entity_schema import all_migrations
 from renku_data_services.solr.solr_client import DefaultSolrClient
 from renku_data_services.solr.solr_migrate import SchemaMigrator
-from renku_data_services.utils.core import get_effective_quota
 
 logger = logging.getLogger(__name__)
 
@@ -489,30 +488,20 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
 
             session_name, user_id, resource_pool_id, resource_class_id = metadata
 
-            usage = await dm.resource_usage_service.get_running_week(resource_pool_id=resource_pool_id, user_id=user_id)
-            if not usage:
+            remaining_quota = await dm.resource_usage_service.get_remaining_quota(resource_pool_id, user_id)
+            if remaining_quota is None:
                 continue
 
-            total_quota = get_effective_quota(usage.pool_limits.user_limit.value, usage.pool_limits.total_limit.value)
-            if total_quota <= 0:
-                continue
+            if remaining_quota <= 0:
+                message = f"Your session {session_name} in resource pool {resource_pool_id} has exhausted its quota"
+                log_message = (
+                    f"Session {session_name} for user {user_id} has exhausted its quota in resource pool "
+                    f"{resource_pool_id}"
+                )
+                title = "Quota exhausted"
 
-            usage_p = (usage.user_usage.cost.value / total_quota) * 100
-            usage_threshold_p = 100 - dm.config.session_quota_alert_remaining_threshold_p
-            if usage_p <= usage_threshold_p:
-                continue
-
-            # NOTE: Without the resource_class_id, we cannot calculate the remaining time or know if quota is enforced
-            # on the resource class
-            if resource_class_id:
-                if usage.user_usage.cost.value >= total_quota:
-                    message = f"Your session {session_name} in resource pool {resource_pool_id} has exhausted its quota"
-                    log_message = (
-                        f"Session {session_name} for user {user_id} has exhausted its quota in resource pool "
-                        f"{resource_pool_id}"
-                    )
-                    title = "Quota exhausted"
-
+                # NOTE: Without the resource_class_id, we cannot know if quota is enforced on the resource class
+                if resource_class_id:
                     # NOTE: Only hibernate the session if quota_enforced is set on the resource class
                     quota_enforced = await dm.resource_requests_repo.get_quota_enforced(resource_class_id)
                     if quota_enforced:
@@ -521,46 +510,26 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
                         title = "Session paused due to quota exhaustion"
                         await dm.k8s_client.patch(session, {"spec": {"hibernated": True}})
 
-                    hibernation_alert = UnsavedAlert(
-                        user_id=user_id,
-                        event_type="session_quota_exhausted",
-                        session_name=session_name,
-                        title=title,
-                        message=message,
-                    )
-                    await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=hibernation_alert)
-                    logger.info(log_message)
-                    continue
-
-                resource_class_cost = await dm.resource_requests_repo.find_resource_class_costs(
-                    resource_pool_id, resource_class_id
+                hibernation_alert = UnsavedAlert(
+                    user_id=user_id,
+                    event_type="session_quota_exhausted",
+                    session_name=session_name,
+                    title=title,
+                    message=message,
                 )
+                await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=hibernation_alert)
+                logger.info(log_message)
 
-                if resource_class_cost and resource_class_cost.cost.value > 0:
-                    remaining_credits = total_quota - usage.user_usage.cost.value
-                    remaining_minutes = (remaining_credits / resource_class_cost.cost.value) * 60
-                    if remaining_minutes < dm.config.session_quota_alert_critical_m:
-                        critical_alert = UnsavedAlert(
-                            user_id=user_id,
-                            event_type="session_quota_critically_low",
-                            session_name=session_name,
-                            title="Session quota expiring soon",
-                            message=f"Your session in resource pool {resource_pool_id} will run out of quota in "
-                            + f"approximately {remaining_minutes:.0f} minutes.",
-                        )
-                        await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=critical_alert)
-                        logger.info(f"Created critical quota alert for user {user_id}, session {session_name}")
-                        continue
-
-            alert = UnsavedAlert(
-                user_id=user_id,
-                event_type="session_quota_low",
-                session_name=session_name,
-                title="Session quota running low",
-                message=f"You have used {usage_p:.1f}% of your quota in resource pool {resource_pool_id}.",
-            )
-            await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=alert)
-            logger.info(f"Created quota alert for user {user_id}, session {session_name}")
+            elif remaining_quota <= dm.config.session_quota_alert_remaining_threshold:
+                alert = UnsavedAlert(
+                    user_id=user_id,
+                    event_type="session_quota_low",
+                    session_name=session_name,
+                    title="Session quota running low",
+                    message=f"Only {remaining_quota} units of your quota remain in resource pool {resource_pool_id}.",
+                )
+                await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=alert)
+                logger.info(f"Created quota alert for user {user_id}, session {session_name}")
         except Exception as e:
             logger.warning(f"Failed to check quota for pod: {e}", exc_info=True)
             continue

@@ -9,6 +9,7 @@ from renku_data_services.app_config.config import KeycloakConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.persisted_logs.config import PersistedLogsConfig
+from renku_data_services.resource_usage.config import OpenMeterConfig
 from renku_data_services.solr.solr_client import SolrClientConfig
 
 
@@ -35,24 +36,6 @@ class PosthogConfig:
 
 
 @dataclass
-class OpenMeterConfig:
-    """Configuration for the OpenMeter metering endpoint."""
-
-    enabled: bool
-    endpoint_url: str
-    token: str
-
-    @classmethod
-    def from_env(cls) -> OpenMeterConfig:
-        """Create OpenMeter config from environment variables."""
-        return cls(
-            enabled=os.environ.get("OPENMETER_ENABLED", "false").lower() == "true",
-            endpoint_url=os.environ.get("OPENMETER_ENDPOINT_URL", ""),
-            token=os.environ.get("OPENMETER_API_TOKEN", ""),
-        )
-
-
-@dataclass
 class Config:
     """Configuration for data tasks."""
 
@@ -74,8 +57,7 @@ class Config:
     long_task_period_s: int
     enable_resource_request_tracking: bool
     session_quota_alert_check_interval_s: int
-    session_quota_alert_remaining_threshold_p: int
-    session_quota_alert_critical_m: int
+    session_quota_alert_remaining_threshold: int
     alertmanager_webhook_role: str
 
     @classmethod
@@ -88,7 +70,6 @@ class Config:
         main_tick = int(os.environ.get("MAIN_LOG_INTERVAL_SECONDS", "300"))
         solr_config = SolrClientConfig.from_env()
         posthog_config = PosthogConfig.from_env()
-        openmeter_config = OpenMeterConfig.from_env()
         tcp_host = os.environ.get("TCP_HOST", "127.0.0.1")
         tcp_port = int(os.environ.get("TCP_PORT", "8001"))
 
@@ -96,8 +77,7 @@ class Config:
         short_task_period = int(os.environ.get("SHORT_TASK_PERIOD_S", 2 * 60))
         long_task_period = int(os.environ.get("LONG_TASK_PERIOD_S", 3 * 60 * 60))
         session_quota_alert_check_interval = int(os.environ.get("SESSION_QUOTA_ALERT_CHECK_INTERVAL_S", 5 * 60))
-        session_quota_alert_remaining_threshold = int(os.environ.get("SESSION_QUOTA_ALERT_REMAINING_THRESHOLD_P", 20))
-        session_quota_alert_critical = int(os.environ.get("SESSION_QUOTA_ALERT_CRITICAL_M", 10))
+        session_quota_alert_remaining_threshold = int(os.environ.get("SESSION_QUOTA_ALERT_REMAINING_THRESHOLD", 100))
 
         k8s_namespace = os.environ.get("KUBERNETES_NAMESPACE", os.environ.get("K8S_NAMESPACE", "default"))
         k8s_config_root = os.environ.get("K8S_CONFIG_ROOT", "/secrets/kube_configs")
@@ -112,7 +92,7 @@ class Config:
             main_log_interval_seconds=main_tick,
             solr=solr_config,
             posthog=posthog_config,
-            openmeter=openmeter_config,
+            openmeter=OpenMeterConfig.from_env(),
             authz=authz,
             keycloak=keycloak,
             persisted_logs=PersistedLogsConfig.from_env(namespace=k8s_namespace),
@@ -125,7 +105,6 @@ class Config:
             dummy_stores=dummy_stores,
             enable_resource_request_tracking=enable_resource_request_tracking,
             session_quota_alert_check_interval_s=session_quota_alert_check_interval,
-            session_quota_alert_remaining_threshold_p=session_quota_alert_remaining_threshold,
-            session_quota_alert_critical_m=session_quota_alert_critical,
+            session_quota_alert_remaining_threshold=session_quota_alert_remaining_threshold,
             alertmanager_webhook_role=os.environ.get("ALERTMANAGER_WEBHOOK_ROLE", "alertmanager-webhook"),
         )

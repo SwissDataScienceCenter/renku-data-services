@@ -79,6 +79,10 @@ from renku_data_services.renku_apps.repository import RenkuAppsRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.resource_usage.metering import (
+    OpenMeterClient,
+    ResourceUsageMetering,
+)
 from renku_data_services.search import query_manual
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.reprovision import SearchReprovision
@@ -378,7 +382,10 @@ class DependencyManager:
         resource_requests_repo = ResourceRequestsRepo(
             session_maker=config.db.async_session_maker,
         )
-        resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
+        metering_client: ResourceUsageMetering | None = None
+        if config.openmeter.enabled:
+            metering_client = OpenMeterClient(config.openmeter)
+        resource_usage_service = ResourceUsageService(repo=resource_requests_repo, metering_client=metering_client)
         rp_repo = ResourcePoolRepository(
             session_maker=config.db.async_session_maker,
             quotas_repo=quota_repo,
