@@ -2195,7 +2195,7 @@ components:
       example: true
     Preemptible:
       type: boolean
-      description: Whether sessions and jobs in this resource class can be preempted by other workloads
+      description: Whether sessions and jobs in this resource class can be preempted by other workloads. The resource pool must have a quota
       example: false
     PublicFlag:
       type: boolean

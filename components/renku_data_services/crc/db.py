@@ -529,10 +529,8 @@ class ResourcePoolRepository(_Base):
         session.add(resource_pool)
         await session.flush()
         await session.refresh(resource_pool)
-        if any(rc.preemptible for rc in new_resource_pool.classes):
-            await self.quotas_repo.ensure_preemptible_priority_class(
-                resource_pool.id, quota.id if quota else None, cluster_id
-            )
+        if quota and any(rc.preemptible for rc in new_resource_pool.classes):
+            await self.quotas_repo.ensure_preemptible_priority_class(quota.id, cluster_id)
         result = resource_pool.dump(quota=quota)
         return result
 
@@ -583,7 +581,11 @@ class ResourcePoolRepository(_Base):
                         message="The resource class {resource_class} is not compatible with the quota {quota}."
                     )
                 if new_resource_class.preemptible:
-                    await self.quotas_repo.ensure_preemptible_priority_class(rp.id, rp.quota, rp.get_cluster_id())
+                    if not rp.quota:
+                        raise errors.ValidationError(
+                            message="A resource pool without a quota cannot have preemptible resource classes."
+                        )
+                    await self.quotas_repo.ensure_preemptible_priority_class(rp.quota, rp.get_cluster_id())
 
             session.add(resource_class)
             await session.flush()
@@ -736,8 +738,8 @@ class ResourcePoolRepository(_Base):
                     preemptible_class_ids.add(rc.id)
                 elif rc.preemptible is False:
                     preemptible_class_ids.discard(rc.id)
-            if preemptible_class_ids:
-                await self.quotas_repo.ensure_preemptible_priority_class(rp.id, rp.quota, cluster_id)
+            if rp.quota and preemptible_class_ids:
+                await self.quotas_repo.ensure_preemptible_priority_class(rp.quota, cluster_id)
 
             # Clear stale class remote_json when the pool is not FirecREST
             if effective_pool_kind != models.RemoteConfigurationKind.firecrest:
@@ -833,7 +835,6 @@ class ResourcePoolRepository(_Base):
             await session.delete(rp)
             if rp.quota:
                 await self.quotas_repo.delete_quota(rp.quota, rp.get_cluster_id())
-            await self.quotas_repo.delete_pool_priority_class(rp.id, rp.get_cluster_id())
             return models.DeletedResourcePool(id=id)
         return None
 
@@ -972,8 +973,12 @@ class ResourcePoolRepository(_Base):
                     message=f"The resource class {cls_model} is not compatible with the quota {quota}"
                 )
             if cls_model.preemptible:
+                if not cls_model.quota:
+                    raise errors.ValidationError(
+                        message="A resource pool without a quota cannot have preemptible resource classes."
+                    )
                 await self.quotas_repo.ensure_preemptible_priority_class(
-                    resource_pool_id, cls_model.quota, cls.resource_pool.get_cluster_id()
+                    cls_model.quota, cls.resource_pool.get_cluster_id()
                 )
 
             return cls_model
@@ -1918,7 +1923,6 @@ class QuotaRepository:
 
     rq_client: ResourceQuotaClient
     pc_client: PriorityClassClient
-    namespace: str = "default"
     _label_name: str = field(init=False, default="app")
     _label_value: str = field(init=False, default="renku")
 
@@ -1962,45 +1966,26 @@ class QuotaRepository:
         if res_quota.manifest.to_dict().get("spec", {}).get("scopeSelector") != scope_selector:
             await self.rq_client.patch_resource_quota(quota_id, {"spec": {"scopeSelector": scope_selector}}, cluster_id)
 
-    def priority_class_name(self, resource_pool_id: int, resource_class: models.ResourceClass) -> str | None:
+    def priority_class_name(self, resource_class: models.ResourceClass) -> str | None:
         """Return the priority class for a session or a job in the resource class."""
-        if resource_class.quota:
-            if resource_class.preemptible:
-                return models.preemptible_priority_class_name(resource_class.quota)
-            return resource_class.quota
+        if not resource_class.quota:
+            return None
         if resource_class.preemptible:
-            return models.pool_preemptible_priority_class_name(self.namespace, resource_pool_id)
-        return None
+            return models.preemptible_priority_class_name(resource_class.quota)
+        return resource_class.quota
 
-    async def ensure_preemptible_priority_class(
-        self, resource_pool_id: int, quota_id: str | None, cluster_id: ClusterId
-    ) -> None:
-        """Create the preemptible priority class of a quota, or of a pool without a quota, if it is missing."""
-        if quota_id:
-            name = models.preemptible_priority_class_name(quota_id)
-            description = "Renku resource quota priority class for preemptible resource classes"
-        else:
-            name = models.pool_preemptible_priority_class_name(self.namespace, resource_pool_id)
-            description = "Renku resource pool priority class for preemptible resource classes"
+    async def ensure_preemptible_priority_class(self, quota_id: str, cluster_id: ClusterId) -> None:
+        """Create the preemptible priority class of a quota if it is missing."""
         await self._ensure_priority_class(
             K8sPriorityClass.new(
-                name=name,
+                name=models.preemptible_priority_class_name(quota_id),
                 cluster=cluster_id,
                 global_default=False,
                 value=PREEMPTIBLE_PRIORITY_VALUE,
                 preemption_policy="Never",
-                description=description,
+                description="Renku resource quota priority class for preemptible resource classes",
                 labels={self._label_name: self._label_value},
             )
-        )
-
-    async def delete_pool_priority_class(self, resource_pool_id: int, cluster_id: ClusterId) -> None:
-        """Delete the preemptible priority class of a pool without a quota."""
-        await self.pc_client.delete_priority_class(
-            meta=K8sPriorityClass.meta(
-                models.pool_preemptible_priority_class_name(self.namespace, resource_pool_id), cluster_id
-            ),
-            propagation_policy=DeletePropagationPolicy.foreground,
         )
 
     def _quota_priority_class(self, quota_id: str, cluster_id: ClusterId) -> K8sPriorityClass:

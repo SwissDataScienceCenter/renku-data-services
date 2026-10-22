@@ -771,7 +771,7 @@ class ResourceClassProperties(BaseAPISpec):
     )
     preemptible: bool | None = Field(
         None,
-        description="Whether sessions and jobs in this resource class can be preempted by other workloads",
+        description="Whether sessions and jobs in this resource class can be preempted by other workloads. The resource pool must have a quota",
         examples=[False],
     )
     remote: RemoteClassConfigurationFirecrest | None = None
@@ -836,7 +836,7 @@ class ResourceClass(BaseAPISpec):
     )
     preemptible: bool = Field(
         False,
-        description="Whether sessions and jobs in this resource class can be preempted by other workloads",
+        description="Whether sessions and jobs in this resource class can be preempted by other workloads. The resource pool must have a quota",
         examples=[False],
     )
     remote: RemoteClassConfigurationFirecrest | None = None
@@ -920,7 +920,7 @@ class ResourceClassWithId(BaseAPISpec):
     )
     preemptible: bool = Field(
         False,
-        description="Whether sessions and jobs in this resource class can be preempted by other workloads",
+        description="Whether sessions and jobs in this resource class can be preempted by other workloads. The resource pool must have a quota",
         examples=[False],
     )
     remote: RemoteClassConfigurationFirecrest | None = None

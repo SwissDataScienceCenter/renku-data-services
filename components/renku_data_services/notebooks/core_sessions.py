@@ -1325,7 +1325,7 @@ async def start_session(
             codeRepositories=[],
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
-            priorityClassName=rp_repo.quotas_repo.priority_class_name(resource_pool.id, resource_class),
+            priorityClassName=rp_repo.quotas_repo.priority_class_name(resource_class),
             sessionType=session_type.to_amalthea(),
             session=Session(
                 image=image,
@@ -1498,7 +1498,7 @@ async def patch_session(
         # Affinities
         patch.spec.affinity = node_affinity_patch_from_resource_class(rc, nb_config.sessions.affinity_model)
         # Priority class
-        patch.spec.priorityClassName = rp_repo.quotas_repo.priority_class_name(rp.id, rc) or RESET
+        patch.spec.priorityClassName = rp_repo.quotas_repo.priority_class_name(rc) or RESET
         # Service account name
         if rp.cluster is not None:
             patch.spec.service_account_name = (
