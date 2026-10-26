@@ -12,7 +12,7 @@ from renku_data_services.errors import errors
 from renku_data_services.resource_usage.config import OpenMeterConfig
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.metering import EntitlementValueQueryResponse, OpenMeterClient
-from renku_data_services.resource_usage.model import Credit
+from renku_data_services.resource_usage.model import Credit, ResourceClassCostWithPool
 
 ENDPOINT_URL = "http://openmeter.test"
 EXISTING_USER_ID = "test-user"
@@ -311,3 +311,88 @@ async def test_service_get_usage_with_limits_error(
         await service.get_usage_with_limits(
             resource_pool_id=1, user_id=EXISTING_USER_ID, start_date=PERIOD_FROM, end_date=PERIOD_TO
         )
+
+
+async def test_service_calculate_usage_hours_with_no_cost(service: ResourceUsageService) -> None:
+    """Test that calculate_usage_hours returns (None, None) when resource_class_cost is None."""
+    usage = await service.get_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID)
+    remaining_quota = service.get_remaining_quota(usage)
+    remaining_hours, total_hours = service.calculate_usage_hours(
+        resource_class_cost=None,
+        usage=usage,
+        remaining_quota=remaining_quota,
+    )
+    assert remaining_hours is None
+    assert total_hours is None
+
+
+async def test_service_calculate_usage_hours_with_zero_cost(service: ResourceUsageService) -> None:
+    """Test that calculate_usage_hours returns (None, None) when resource_class_cost.cost.value is 0."""
+    usage = await service.get_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID)
+    remaining_quota = service.get_remaining_quota(usage)
+    resource_class_cost = ResourceClassCostWithPool(
+        resource_pool_id=1,
+        resource_class_id=1,
+        cost=Credit.from_int(0),
+    )
+    remaining_hours, total_hours = service.calculate_usage_hours(
+        resource_class_cost=resource_class_cost,
+        usage=usage,
+        remaining_quota=remaining_quota,
+    )
+    assert remaining_hours is None
+    assert total_hours is None
+
+
+async def test_service_calculate_usage_hours_with_usage(service: ResourceUsageService) -> None:
+    """Test that calculate_usage_hours returns correct values when resource_class_cost is valid."""
+    usage = await service.get_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID)
+    remaining_quota = service.get_remaining_quota(usage)
+    resource_class_cost = ResourceClassCostWithPool(
+        resource_pool_id=1,
+        resource_class_id=1,
+        cost=Credit.from_int(10),
+    )
+    remaining_hours, total_hours = service.calculate_usage_hours(
+        resource_class_cost=resource_class_cost,
+        usage=usage,
+        remaining_quota=remaining_quota,
+    )
+    assert remaining_hours == 8.0  # (100 - 20) / 10
+    assert total_hours == 10.0  # 100 / 10
+
+
+async def test_service_calculate_usage_hours_with_negative_remaining_quota(service: ResourceUsageService) -> None:
+    """Test that calculate_usage_hours returns 0 remaining hours when remaining_quota is negative."""
+    usage = await service.get_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID)
+    remaining_quota = -10.0  # Simulate negative remaining quota
+    resource_class_cost = ResourceClassCostWithPool(
+        resource_pool_id=1,
+        resource_class_id=1,
+        cost=Credit.from_int(10),
+    )
+    remaining_hours, total_hours = service.calculate_usage_hours(
+        resource_class_cost=resource_class_cost,
+        usage=usage,
+        remaining_quota=remaining_quota,
+    )
+    assert remaining_hours == 0.0
+    assert total_hours == 10.0  # 100 / 10
+
+
+async def test_service_calculate_usage_hours_with_unlimited_total_quota(service: ResourceUsageService) -> None:
+    """Test that calculate_usage_hours returns None for total_hours when total quota is unlimited."""
+    usage = await service.get_usage_with_limits(resource_pool_id=2, user_id=EXISTING_USER_ID)
+    remaining_quota = service.get_remaining_quota(usage)
+    resource_class_cost = ResourceClassCostWithPool(
+        resource_pool_id=1,
+        resource_class_id=1,
+        cost=Credit.from_int(10),
+    )
+    remaining_hours, total_hours = service.calculate_usage_hours(
+        resource_class_cost=resource_class_cost,
+        usage=usage,
+        remaining_quota=remaining_quota,
+    )
+    assert remaining_hours is None
+    assert total_hours is None
