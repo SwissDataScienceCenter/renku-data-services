@@ -98,7 +98,7 @@ def _build_restricted_launcher_ids(
         select(LauncherRP.launcher_id)
         .join(RPLink, RPLink.id == LauncherRP.repository_id)
         .where(
-            LauncherRP.project_id == project_id,
+            # LauncherRP.project_id == project_id,
             RPLink.project_id == project_id,
             or_(
                 LauncherRP.policy["policy"] != RP_P.read_write,
