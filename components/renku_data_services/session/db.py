@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.selectable import CompoundSelect
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -46,63 +46,48 @@ def _validate_app_launcher_project_visibility(
         raise errors.ValidationError(message="An app launcher can only be created in a public project.")
 
 
-def _build_launcher_restriction_expression(
+def _build_restricted_launcher_ids(
     project_id: ULID,
     allowed_dcs: list[str] | None = None,
-) -> ColumnElement[bool]:
-    """Build the SQL expression that determines whether a launcher is restricted."""
+) -> CompoundSelect:
+    """Build a query returning IDs of restricted session launchers."""
 
     DC_P = models.SessionLauncherDataConnectorPolicyName
     SL_P = models.SessionLauncherSecretPolicyName
     DC = DataConnectorORM
     DCLink = DataConnectorToProjectLinkORM
-    Launcher = schemas.SessionLauncherORM
     LauncherDC = schemas.SessionLauncherDataConnectorORM
     LauncherSL = schemas.SessionLauncherSecretORM
 
-    secret_restricted = (
-        select(1)
-        .select_from(LauncherSL)
-        .where(
-            LauncherSL.launcher_id == Launcher.id,
-            LauncherSL.project_id == Launcher.project_id,
-            LauncherSL.policy == SL_P.excluded,
-        )
-        .exists()
+    restricted_secrets = select(LauncherSL.launcher_id).where(
+        LauncherSL.project_id == project_id,
+        LauncherSL.policy == SL_P.excluded,
     )
 
-    data_connectors_restricted = (
-        select(1)
-        .select_from(DCLink)
-        .join(DC, DC.id == DCLink.data_connector_id)
+    restricted_dcs = (
+        select(LauncherDC.launcher_id)
         .join(
-            LauncherDC,
-            and_(
-                LauncherDC.data_connector_to_project_link_id == DCLink.id,
-                LauncherDC.launcher_id == Launcher.id,
-                LauncherDC.project_id == Launcher.project_id,
-            ),
+            DCLink,
+            DCLink.id == LauncherDC.data_connector_to_project_link_id,
         )
+        .join(DC, DC.id == DCLink.data_connector_id)
         .where(
+            LauncherDC.project_id == project_id,
             DCLink.project_id == project_id,
             or_(
                 LauncherDC.policy == DC_P.excluded,
                 and_(
                     LauncherDC.policy == DC_P.read_only,
-                    DataConnectorORM.readonly.is_(False),
+                    DC.readonly.is_(False),
                 ),
             ),
         )
     )
 
     if allowed_dcs is not None:
-        data_connectors_restricted = data_connectors_restricted.where(
-            DataConnectorToProjectLinkORM.data_connector_id.in_(allowed_dcs)
-        )
+        restricted_dcs = restricted_dcs.where(DCLink.data_connector_id.in_(allowed_dcs))
 
-    data_connectors_restricted = data_connectors_restricted.exists()
-
-    return or_(secret_restricted, data_connectors_restricted)
+    return restricted_dcs.union_all(restricted_secrets)
 
 
 class SessionEnvironmentRepositoryProtocol(Protocol):
@@ -475,12 +460,12 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 user, user.id, ResourceType.data_connector, Scope.READ
             )
 
-            restricted = _build_launcher_restriction_expression(project_id, allowed_dcs)
+            restricted_launcher_ids = _build_restricted_launcher_ids(project_id, allowed_dcs)
 
             res = await session.execute(
                 select(
                     schemas.SessionLauncherORM,
-                    restricted.label("is_restricted"),
+                    schemas.SessionLauncherORM.id.in_(restricted_launcher_ids).label("is_restricted"),
                 )
                 .where(schemas.SessionLauncherORM.project_id == project_id)
                 .order_by(schemas.SessionLauncherORM.creation_date.desc())
@@ -511,12 +496,12 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 user, user.id, ResourceType.data_connector, Scope.READ
             )
 
-            restricted = _build_launcher_restriction_expression(launcher.project_id, allowed_dcs)
+            restricted_launcher_ids = _build_restricted_launcher_ids(launcher.project_id, allowed_dcs)
 
             is_restricted = await session.scalar(
-                select(restricted)
-                .select_from(schemas.SessionLauncherORM)
-                .where(
+                select(
+                    schemas.SessionLauncherORM.id.in_(restricted_launcher_ids).label("is_restricted"),
+                ).where(
                     schemas.SessionLauncherORM.id == launcher.id,
                     schemas.SessionLauncherORM.project_id == launcher.project_id,
                 )
