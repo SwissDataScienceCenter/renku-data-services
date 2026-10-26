@@ -18,6 +18,7 @@ from mcp.server.fastmcp.server import Context
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
+from renku_data_services.mcp_api.auth import TokenNotFoundError
 from renku_data_services.mcp_api.client import RenkuApiClient
 
 # Current request token — set by ASGI auth middleware (HTTP) or resolved lazily in stdio mode.
@@ -41,14 +42,9 @@ def _token(ctx: Context) -> str:
             if t:
                 set_current_token(t)  # cache for this session once found
                 return t
-        except Exception as exc:
-            from renku_data_services.mcp_api.main import TokenNotFoundError
-
-            if isinstance(exc, TokenNotFoundError):
-                # No token available — return empty and let the API return 401.
-                pass
-            else:
-                raise
+        except TokenNotFoundError:
+            # Nothing configured — return empty and let the data API answer 401.
+            pass
     return ""
 
 

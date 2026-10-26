@@ -33,6 +33,14 @@ DEFAULT_AUDIENCE = "renku-mcp"
 _DISCOVERY_PATH = "/.well-known/openid-configuration"
 
 
+class TokenNotFoundError(Exception):
+    """No Renku token is set in the environment (stdio mode).
+
+    Lives here rather than beside the resolver in main.py so that server.py can catch it
+    by name: main.py imports server.py, so the reverse import would be a cycle.
+    """
+
+
 class TokenVerifier:
     """Verifies access tokens against the Keycloak realm that issued them.
 

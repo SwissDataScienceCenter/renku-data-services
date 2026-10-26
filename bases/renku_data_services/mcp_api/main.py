@@ -29,7 +29,7 @@ from typing import Any
 import jwt
 from jwt import PyJWKClientError
 
-from renku_data_services.mcp_api.auth import TokenVerifier
+from renku_data_services.mcp_api.auth import TokenNotFoundError, TokenVerifier
 from renku_data_services.mcp_api.client import RenkuApiClient
 from renku_data_services.mcp_api.server import create_server, set_current_token
 
@@ -45,10 +45,6 @@ _TOKEN_ENV_VARS = ("RENKU_ACCESS_TOKEN", "RENKU_TOKEN", "RENKU_CLI_ACCESS_TOKEN"
 
 def _base_url() -> str:
     return os.environ.get("RENKU_BASE_URL", "https://renkulab.io").rstrip("/")
-
-
-class TokenNotFoundError(Exception):
-    """Raised when no Renku token is set in the environment."""
 
 
 def _resolve_token() -> str:
