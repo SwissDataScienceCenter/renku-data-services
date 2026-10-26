@@ -19,6 +19,7 @@ from renku_data_services.resource_usage.metering import MetricCode, ResourceUsag
 from renku_data_services.resource_usage.model import (
     Credit,
     ResourceClassCost,
+    ResourceClassCostWithPool,
     ResourceDataFacade,
     ResourcePoolLimits,
     ResourcePoolUsageLimits,
@@ -277,7 +278,8 @@ class ResourceUsageService:
             end_date=end_date,
         )
 
-    def get_remaining_quota(self, usage: ResourcePoolUsageLimits | None) -> float | None:
+    @staticmethod
+    def get_remaining_quota(usage: ResourcePoolUsageLimits | None) -> float | None:
         """Compute the remaining quota based on the usage and limits."""
         if usage is None:
             return None
@@ -297,3 +299,27 @@ class ResourceUsageService:
             return None
 
         return min(remaining_user_quota, remaining_total_quota)
+
+    @staticmethod
+    def calculate_usage_hours(
+        resource_class_cost: ResourceClassCostWithPool | None,
+        usage: ResourcePoolUsageLimits | None,
+        remaining_quota: float | None,
+    ) -> tuple[float | None, float | None]:
+        """Return remaining and total hours for a resource class, or (None, None) if no limits are set."""
+        if not resource_class_cost or resource_class_cost.cost.value == 0 or usage is None or remaining_quota is None:
+            return None, None
+
+        limits = usage.pool_limits
+        # NOTE: Calculate quota based on the minimum of user and total limits.
+        total_quota = limits.user_limit.__min__(limits.total_limit)
+        if total_quota.is_unlimited():
+            return None, None
+
+        total_hours = total_quota.value / resource_class_cost.cost.value
+
+        if remaining_quota <= 0:
+            return 0.0, total_hours
+
+        remaining_hours = remaining_quota / resource_class_cost.cost.value
+        return remaining_hours, total_hours

@@ -8,8 +8,6 @@ from ulid import ULID
 from renku_data_services.base_models import RESET, ResetType
 from renku_data_services.crc import apispec, models
 from renku_data_services.errors import errors
-from renku_data_services.resource_usage.db import ResourceRequestsRepo
-from renku_data_services.resource_usage.model import ResourcePoolUsageLimits
 
 
 def validate_quota(body: apispec.QuotaWithOptionalId) -> models.UnsavedQuota:
@@ -753,42 +751,3 @@ def __validate_runtime_platform(body: apispec.RuntimePlatform | None) -> models.
             )
         )
     return models.RuntimePlatform(platform_str)
-
-
-def get_effective_quota(a: int, b: int) -> int:
-    """Return the minimum nonzero value; return zero only if both values are zero."""
-    return a if b == 0 else b if a == 0 else min(a, b)
-
-
-async def calculate_usage_hours(
-    resource_requests_repo: ResourceRequestsRepo,
-    resource_pool_id: int,
-    resource_class_id: int,
-    usage: ResourcePoolUsageLimits | None,
-    remaining_quota: float | None,
-) -> tuple[float | None, float | None]:
-    """Return remaining and total hours for a resource class, or (None, None) if no limits are set."""
-    if usage is None or remaining_quota is None:
-        return None, None
-
-    limits = usage.pool_limits
-    # NOTE: Calculate quota based on the minimum of user and total limits that is set. User and total limits can be set
-    # independent of each other.
-    total_quota = get_effective_quota(limits.user_limit.value, limits.total_limit.value)
-    # NOTE: A value of 0 for the limit means that there is no limit, so we return None (instead of 0) to inform the
-    # caller that there is no limit.
-    if total_quota <= 0:
-        return None, None
-
-    resource_class_cost = await resource_requests_repo.find_resource_class_costs(resource_pool_id, resource_class_id)
-    if not resource_class_cost or resource_class_cost.cost.value == 0:
-        # NOTE: No cost is defined, so we cannot calculate remaining hours
-        return None, None
-
-    total_hours = total_quota / resource_class_cost.cost.value
-
-    if remaining_quota <= 0:
-        return 0.0, total_hours
-
-    remaining_hours = remaining_quota / resource_class_cost.cost.value
-    return remaining_hours, total_hours

@@ -33,7 +33,6 @@ from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2Co
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import (
-    calculate_usage_hours,
     validate_resource_class_update,
     validate_resource_pool_update,
 )
@@ -291,13 +290,14 @@ class ResourcePoolQueryRepository:
 
                 rp_model = rp.dump(quota, criteria, credits_used)
 
-                if self.resource_requests_repo:
+                if self.resource_requests_repo and self.resource_usage_service:
                     updated_classes = []
                     for resource_class in rp_model.classes:
-                        usage_hours_remaining, usage_hours_total = await calculate_usage_hours(
-                            self.resource_requests_repo,
-                            rp.id,
-                            resource_class.id,
+                        resource_class_cost = await self.resource_requests_repo.find_resource_class_costs(
+                            rp.id, resource_class.id
+                        )
+                        usage_hours_remaining, usage_hours_total = self.resource_usage_service.calculate_usage_hours(
+                            resource_class_cost,
                             usage,
                             remaining_quota,
                         )
