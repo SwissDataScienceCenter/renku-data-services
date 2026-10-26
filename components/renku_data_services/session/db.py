@@ -1598,8 +1598,6 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     message=f"Secret slots {invalid_secret_slot_ids} do not belong to project {project_id}."
                 )
 
-            updated = []
-
             for patch in patches:
                 secret = launcher_secrets.get(patch.secret_slot_id)
                 policy = patch.policy or models.SessionLauncherSecretPolicyName.excluded
@@ -1615,11 +1613,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 else:
                     secret.policy = policy
 
-                updated.append(secret)
-
             await session.flush()
 
-        return [secret.dump() for secret in updated]
+        return await self.get_all_session_secret_slots_from_launcher(user=user, launcher=launcher)
 
     async def get_all_session_secrets_from_launcher(
         self,
