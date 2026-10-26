@@ -258,12 +258,9 @@ components:
       type: object
       additionalProperties: false
       properties:
-        total_limit:
-          type: integer
         user_limit:
           type: integer
       required:
-        - total_limit
         - user_limit
     ResourceClassCostPut:
       type: object

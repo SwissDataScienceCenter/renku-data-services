@@ -12,7 +12,6 @@ class ResourcePoolLimitPut(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
     )
-    total_limit: int
     user_limit: int
 
 
