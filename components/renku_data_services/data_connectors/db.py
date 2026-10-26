@@ -1214,8 +1214,6 @@ class DataConnectorRepository:
 
         launcher_dc_links = {link.data_connector_to_project_link_id: link async for link in result}
 
-        updated = []
-
         for patch in patches:
             patch_dc_link_id = patch.data_connector_link_id
             launcher_dc_link = launcher_dc_links.get(patch_dc_link_id)
@@ -1242,11 +1240,13 @@ class DataConnectorRepository:
             else:
                 launcher_dc_link.policy = policy
 
-            updated.append(launcher_dc_link)
-
         await session.flush()
 
-        return [link.dump() for link in updated]
+        return await self.get_dc_link_policies_for_launcher(
+            user=user,
+            launcher_id=launcher_id,
+            session=session,
+        )
 
 
 class DataConnectorSecretRepository:
