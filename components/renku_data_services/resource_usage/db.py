@@ -17,6 +17,7 @@ from renku_data_services.resource_usage.constants import ACTIVE_PHASES
 from renku_data_services.resource_usage.model import (
     Credit,
     ResourceClassCostWithPool,
+    ResourcePoolLimitPut,
     ResourcePoolLimits,
     ResourcesRequest,
     ResourceUsage,
@@ -160,18 +161,17 @@ class ResourceRequestsRepo:
             else:
                 return None
 
-    async def set_resource_pool_limits(self, limits: ResourcePoolLimits) -> bool:
+    async def set_resource_pool_limits(self, limits: ResourcePoolLimitPut) -> bool:
         """Updates (insert or update) the limits of the given pool. Return false if the resource pool doesn't exist."""
         stmt = sa.text("""
         insert into resource_pools.resource_requests_limits
-          (resource_pool_id, total_limit, user_limit)
+          (resource_pool_id, user_limit)
         values
-          (:pool_id, :total_limit, :user_limit)
+          (:pool_id, :user_limit)
         on conflict (resource_pool_id) do update
         set
-          total_limit = EXCLUDED.total_limit,
           user_limit = EXCLUDED.user_limit
-        """).bindparams(bindparam("total_limit", type_=CreditType()), bindparam("user_limit", type_=CreditType()))
+        """).bindparams(bindparam("user_limit", type_=CreditType()))
         async with self.session_maker() as session, session.begin():
             try:
                 await session.execute(stmt, limits.__dict__)
@@ -195,10 +195,10 @@ class ResourceRequestsRepo:
         """Finds the limits of the given resource pool.
 
         If the resource pool doesn't exist, None is returned. If the pool exists, but has no
-        limits defined, the limits returned are set to 0.
+        limits defined, the limits returned are set to -1.
         """
         stmt = sa.text("""
-        select rp.id as pool_id, coalesce(l.total_limit, 0) as total_limit, coalesce(l.user_limit, 0) as user_limit
+        select rp.id as pool_id, coalesce(l.user_limit, -1) as user_limit
         from "resource_pools"."resource_pools" rp
         left join "resource_pools"."resource_requests_limits" l on l.resource_pool_id = rp.id
         where rp.id = :pool_id
@@ -209,7 +209,7 @@ class ResourceRequestsRepo:
             return (
                 ResourcePoolLimits(
                     pool_id=data.pool_id,
-                    total_limit=Credit.from_int(data.total_limit),
+                    total_limit=Credit.unlimited(),
                     user_limit=Credit.from_int(data.user_limit),
                 )
                 if data is not None
