@@ -264,9 +264,3 @@ async def get_openbis_pat(
                 "from creating a personal access token."
             )
         return json2["result"][0]["permId"], valid_to
-
-
-def get_effective_quota(a: int, b: int) -> int:
-    """Return the minimum nonzero value; return zero only if both values are zero."""
-    # TODO: remove this function
-    return a if b == 0 else b if a == 0 else min(a, b)

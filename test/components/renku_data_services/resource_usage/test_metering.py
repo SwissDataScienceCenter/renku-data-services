@@ -348,7 +348,6 @@ async def test_service_get_usage_with_limits_error(
     for attr, value in failure.items():
         setattr(fake_openmeter, attr, value)
     assert await service.get_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID) is None
-    assert await service.get_remaining_quota(1, EXISTING_USER_ID) is None
 
 
 async def test_service_get_usage_timeframe_with_limits_error(
