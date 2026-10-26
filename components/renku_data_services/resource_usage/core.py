@@ -21,6 +21,7 @@ from renku_data_services.resource_usage.model import (
     ResourceClassCost,
     ResourceClassCostWithPool,
     ResourceDataFacade,
+    ResourcePoolLimitPut,
     ResourcePoolLimits,
     ResourcePoolUsageLimits,
     ResourcesRequest,
@@ -32,13 +33,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__file__)
 
 
-def validate_resource_pool_limit_put(id: int, body: apispec.ResourcePoolLimitPut) -> ResourcePoolLimits:
+def validate_resource_pool_limit_put(id: int, body: apispec.ResourcePoolLimitPut) -> ResourcePoolLimitPut:
     """Validate resource pool limit."""
-    if body.user_limit > body.total_limit:
-        raise errors.ValidationError(
-            message=f"The user_limit '{body.user_limit}' must be lower than total_limit '{body.total_limit}'.",
-        )
-    return ResourcePoolLimits(id, Credit.from_int(body.total_limit), Credit.from_int(body.user_limit))
+    return ResourcePoolLimitPut(id, Credit.from_int(body.user_limit))
 
 
 def validate_resource_class_costs_put(class_id: int, body: apispec.ResourceClassCostPut) -> ResourceClassCost:
