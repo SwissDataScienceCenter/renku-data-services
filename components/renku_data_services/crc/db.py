@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from asyncio import gather
 from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from functools import wraps
 from typing import TYPE_CHECKING, Any, Concatenate, Optional, ParamSpec, TypeVar
 from uuid import uuid4
@@ -33,6 +33,7 @@ from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2Co
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import (
+    calculate_usage_hours,
     validate_resource_class_update,
     validate_resource_pool_update,
 )
@@ -277,34 +278,37 @@ class ResourcePoolQueryRepository:
             for rp in res.scalars().all():
                 quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id())
                 credits_used = None
+                usage = None
+                remaining_quota = None
                 enforcement_enabled = any([c.quota_enforced for c in rp.classes])
                 # TODO: Enable resource usage reporting broadly when the resource usage
                 # tracking / queries are more performant.
                 if self.resource_usage_service and api_user.is_authenticated and enforcement_enabled:
                     usage = await self.resource_usage_service.get_usage_with_limits(rp.id, api_user.id)
+                    remaining_quota = self.resource_usage_service.get_remaining_quota(usage)
                     if usage:
                         credits_used = usage.user_usage  # NOTE: maybe remaining credits is more relevant
 
                 rp_model = rp.dump(quota, criteria, credits_used)
 
-                # TODO: Remove this or update `calculate_usage_hours`
-                # if self.resource_requests_repo:
-                #     updated_classes = []
-                #     for resource_class in rp_model.classes:
-                #         usage_hours_remaining, usage_hours_total = await calculate_usage_hours(
-                #             self.resource_requests_repo,
-                #             rp.id,
-                #             resource_class.id,
-                #             credits_used.value if credits_used else 0,
-                #         )
-                #         updated_class = replace(
-                #             resource_class,
-                #             usage_hours_remaining=usage_hours_remaining,
-                #             usage_hours_total=usage_hours_total,
-                #         )
-                #         updated_classes.append(updated_class)
+                if self.resource_requests_repo:
+                    updated_classes = []
+                    for resource_class in rp_model.classes:
+                        usage_hours_remaining, usage_hours_total = await calculate_usage_hours(
+                            self.resource_requests_repo,
+                            rp.id,
+                            resource_class.id,
+                            usage,
+                            remaining_quota,
+                        )
+                        updated_class = replace(
+                            resource_class,
+                            usage_hours_remaining=usage_hours_remaining,
+                            usage_hours_total=usage_hours_total,
+                        )
+                        updated_classes.append(updated_class)
 
-                #     rp_model = replace(rp_model, classes=updated_classes)
+                    rp_model = replace(rp_model, classes=updated_classes)
 
                 output.append(rp_model)
             return output

@@ -896,7 +896,8 @@ def get_remote_env(
 
 async def _check_quota(resource_usage_service: ResourceUsageService, resource_pool_id: int, user_id: str) -> None:
     """Raise a ValidationError if the user has exhausted their quota, do nothing otherwise."""
-    remaining_quota = await resource_usage_service.get_remaining_quota(resource_pool_id, user_id)
+    usage = await resource_usage_service.get_usage_with_limits(resource_pool_id, user_id)
+    remaining_quota = resource_usage_service.get_remaining_quota(usage)
     if remaining_quota is None:
         return
 

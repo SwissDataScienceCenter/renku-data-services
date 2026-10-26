@@ -278,9 +278,8 @@ class ResourceUsageService:
             end_date=usage.end_date,
         )
 
-    async def get_remaining_quota(self, resource_pool_id: int, user_id: str | None) -> float | None:
+    def get_remaining_quota(self, usage: ResourcePoolUsageLimits | None) -> float | None:
         """Compute the remaining quota based on the usage and limits."""
-        usage = await self.get_usage_with_limits(resource_pool_id, user_id)
         if usage is None:
             return None
 
