@@ -259,7 +259,7 @@ paths:
         - $ref: "#/components/parameters/PaginationRequestPage"
         - $ref: "#/components/parameters/PaginationRequestPerPage"
         - $ref: "#/components/parameters/MinimumRole"
-        - $ref: "#/components/parameters/NamespaceKind"
+        - $ref: "#/components/parameters/NamespaceKinds"
       responses:
         "200":
           description: List of namespaces
@@ -661,7 +661,7 @@ components:
       explode: true
       schema:
         $ref: "#/components/schemas/GroupRole"
-    NamespaceKind:
+    NamespaceKinds:
       in: query
       description: environment kinds query parameter
       name: kinds
