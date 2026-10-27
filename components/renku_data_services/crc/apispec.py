@@ -955,6 +955,11 @@ class ResourceClassProperties(BaseAPISpec):
         description="Whether sessions in this resource class should be hibernated when quota is exhausted",
         examples=[True],
     )
+    preemptible: bool | None = Field(
+        None,
+        description="Whether sessions and jobs in this resource class can be preempted by other workloads. The resource pool must have a quota",
+        examples=[False],
+    )
     remote: RemoteClassConfigurationFirecrest | None = None
     resource_flavor_id: str | None = Field(
         None,
@@ -1023,6 +1028,11 @@ class ResourceClass(BaseAPISpec):
         False,
         description="Whether sessions in this resource class should be hibernated when quota is exhausted",
         examples=[True],
+    )
+    preemptible: bool = Field(
+        False,
+        description="Whether sessions and jobs in this resource class can be preempted by other workloads. The resource pool must have a quota",
+        examples=[False],
     )
     remote: RemoteClassConfigurationFirecrest | None = None
     resource_flavor_id: str | None = Field(
@@ -1109,6 +1119,11 @@ class ResourceClassWithId(BaseAPISpec):
         False,
         description="Whether sessions in this resource class should be hibernated when quota is exhausted",
         examples=[True],
+    )
+    preemptible: bool = Field(
+        False,
+        description="Whether sessions and jobs in this resource class can be preempted by other workloads. The resource pool must have a quota",
+        examples=[False],
     )
     remote: RemoteClassConfigurationFirecrest | None = None
     resource_flavor_id: str | None = Field(

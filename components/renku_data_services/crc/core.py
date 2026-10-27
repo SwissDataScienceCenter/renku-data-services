@@ -112,6 +112,7 @@ def validate_resource_class(
         node_affinities=node_affinities,
         tolerations=tolerations,
         quota_enforced=body.quota_enforced,
+        preemptible=body.preemptible,
         remote=remote,
         resource_flavor_id=flavor.id if flavor is not None else None,
     )
@@ -196,6 +197,7 @@ def validate_resource_class_patch_or_put(
             node_affinities=node_affinities,
             tolerations=tolerations,
             quota_enforced=body.quota_enforced,
+            preemptible=body.preemptible,
             remote=remote,
             resource_flavor_id=flavor_id,
         )
@@ -210,6 +212,7 @@ def validate_resource_class_patch_or_put(
         node_affinities=node_affinities,
         tolerations=tolerations,
         quota_enforced=body.quota_enforced,
+        preemptible=body.preemptible,
         remote=remote,
         resource_flavor_id=flavor_id,
     )
@@ -316,6 +319,10 @@ def validate_resource_pool_post(
         validate_resource_class(body=new_cls, pool_kind=pool_kind, flavor=_flavor_for(new_cls, flavors))
         for new_cls in body.classes
     ]
+    if quota is None and any(cls.preemptible for cls in classes):
+        raise errors.ValidationError(
+            message="A resource pool without a quota cannot have preemptible resource classes."
+        )
 
     default_classes: list[models.UnsavedResourceClass] = []
     for cls in classes:
@@ -504,6 +511,7 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             default_storage=rc.default_storage if rc.default_storage is not None else existing_rc.default_storage,
             node_affinities=rc.node_affinities if rc.node_affinities is not None else existing_rc.node_affinities,
             tolerations=rc.tolerations if rc.tolerations is not None else existing_rc.tolerations,
+            preemptible=rc.preemptible if rc.preemptible is not None else existing_rc.preemptible,
             remote=class_remote,
         )
     quota: models.Quota | models.UnsavedQuota | ResetType = existing.quota if existing.quota else RESET
@@ -614,6 +622,10 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
         raise errors.ValidationError(message="The default resource pool has to be public.")
     if default and quota is not RESET:
         raise errors.ValidationError(message="A default resource pool cannot have a quota.")
+    if quota is RESET and any(cls.preemptible for cls in classes):
+        raise errors.ValidationError(
+            message="A resource pool without a quota cannot have preemptible resource classes."
+        )
     if isinstance(remote, models.RemoteConfigurationFirecrest) and default:
         raise errors.ValidationError(message="The default resource pool cannot start remote sessions.")
     if isinstance(remote, models.RemoteConfigurationFirecrest) and public:

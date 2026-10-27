@@ -1,7 +1,7 @@
 """add resource flavors
 
 Revision ID: 20076b29e3b8
-Revises: 181e715f787b
+Revises: 80509a7bdb03
 Create Date: 2026-10-19 08:57:20.221573
 
 """
@@ -13,7 +13,7 @@ from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.
 revision = "20076b29e3b8"
-down_revision = "181e715f787b"
+down_revision = "80509a7bdb03"
 branch_labels = None
 depends_on = None
 

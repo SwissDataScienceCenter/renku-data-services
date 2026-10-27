@@ -619,8 +619,9 @@ async def test_resource_class_filtering(
     matching_class = matching_classes[0]
     matching_class.pop("id")
     matching_class.pop("matching")
-    # NOTE: `quota_enforced` is `False` by default
+    # NOTE: `quota_enforced` and `preemptible` are `False` by default
     new_classes[2]["quota_enforced"] = False
+    new_classes[2]["preemptible"] = False
     assert matching_class == new_classes[2]
     # Test without any filtering
     _, res = await sanic_client.get(
@@ -1614,6 +1615,8 @@ async def _resource_pools_request(
                 c["id"] = rp["classes"][i]["id"]
             if "quota_enforced" not in c:
                 c["quota_enforced"] = False
+            if "preemptible" not in c:
+                c["preemptible"] = False
 
         if "platform" not in input_payload:
             input_payload["platform"] = "linux/amd64"
@@ -3521,3 +3524,44 @@ async def test_get_group_resource_pools(
     # Test route with a non-existent group slug
     _, response = await sanic_client.get("/api/data/groups/nonexistent-group/resource_pools", headers=member_1_headers)
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_preemptible_classes_require_a_quota(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+) -> None:
+    del valid_resource_pool_payload["quota"]
+    valid_resource_pool_payload["classes"][1]["preemptible"] = True
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 422, res.text
+
+    valid_resource_pool_payload["classes"][1]["preemptible"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201, res.text
+    rp = res.json
+    rc = next(c for c in rp["classes"] if not c["default"])
+
+    new_class = dict(valid_resource_pool_payload["classes"][1], name="new-class", preemptible=True)
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/classes", headers=admin_headers, json=new_class
+    )
+    assert res.status_code == 422, res.text
+
+    _, res = await sanic_client.patch(
+        f"/api/data/resource_pools/{rp['id']}/classes/{rc['id']}", headers=admin_headers, json={"preemptible": True}
+    )
+    assert res.status_code == 422, res.text
+
+    _, res = await sanic_client.patch(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=admin_headers,
+        json={"classes": [{"id": rc["id"], "preemptible": True}]},
+    )
+    assert res.status_code == 422, res.text
+
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers)
+    assert res.status_code == 200, res.text
+    assert len(res.json["classes"]) == len(rp["classes"])
+    assert not any(c["preemptible"] for c in res.json["classes"])
