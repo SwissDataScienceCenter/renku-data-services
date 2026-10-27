@@ -1,4 +1,4 @@
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku Data Services API
   description: |
@@ -844,8 +844,7 @@ components:
       additionalProperties:
         oneOf:
           - type: integer
-          - type: string
-            nullable: true
+          - type: [string, "null"]
           - type: boolean
           - type: object
     CloudStorageUrlV2:
@@ -937,10 +936,9 @@ components:
       example: "secret_key"
     SecretValueNullable:
       description: Secret value that can be any text
-      type: string
+      type: [string, "null"]
       minLength: 1
       maxLength: 5000
-      nullable: true
       example: My secret value
     RCloneOption:
       type: object
@@ -1183,8 +1181,7 @@ components:
           properties:
             code:
               type: integer
-              minimum: 0
-              exclusiveMinimum: true
+              exclusiveMinimum: 0
               example: 1404
             detail:
               type: string

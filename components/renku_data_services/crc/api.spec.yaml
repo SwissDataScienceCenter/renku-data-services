@@ -1,5 +1,5 @@
 ---
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku Data Services API
   description: |
@@ -2357,8 +2357,7 @@ components:
       format: float
       description: Number of cpu cores
       example: 10
-      exclusiveMinimum: true
-      minimum: 0
+      exclusiveMinimum: 0
     CpuFilter:
       type: number
       format: float
@@ -2369,8 +2368,7 @@ components:
       type: integer
       description: Number of gigabytes of memory
       example: 4
-      exclusiveMinimum: true
-      minimum: 0
+      exclusiveMinimum: 0
       # Max value for int64 in postgres
       maximum: 9223372036854775807
     MemoryFilter:
@@ -2394,7 +2392,7 @@ components:
       example: 3.141
       minimum: 0
     UsageHoursTotal:
-      type: number
+      type: [number, "null"]
       format: double
       description: Total number of resource hours available to the user
       example: 10
@@ -2409,8 +2407,7 @@ components:
       type: integer
       description: Number of gigabytes of storage
       example: 100
-      exclusiveMinimum: true
-      minimum: 0
+      exclusiveMinimum: 0
       # Max value for int64 in postgres
       maximum: 9223372036854775807
     StorageFilter:
@@ -2728,8 +2725,7 @@ components:
           properties:
             code:
               type: integer
-              minimum: 0
-              exclusiveMinimum: true
+              exclusiveMinimum: 0
               example: 1404
             detail:
               type: string

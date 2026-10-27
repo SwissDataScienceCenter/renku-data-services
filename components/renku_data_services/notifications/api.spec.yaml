@@ -1,4 +1,4 @@
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku Data Services API
   description: |
@@ -256,9 +256,8 @@ components:
           format: date-time
           description: The date and time when the alert was created.
         resolved_date:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
           description: The date and time when the alert was resolved, or null if it is still active.
       required:
         - id
@@ -321,8 +320,7 @@ components:
           properties:
             code:
               type: integer
-              minimum: 0
-              exclusiveMinimum: true
+              exclusiveMinimum: 0
               example: 1404
             detail:
               type: string

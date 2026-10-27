@@ -12,6 +12,9 @@ from schemathesis.checks import ALL_CHECKS
 from schemathesis.hooks import HookContext
 from schemathesis.specs.openapi.schemas import BaseOpenAPISchema
 
+# NOTE: OpenAPI 3.1 support is experimental in schemathesis 3.x, loading a 3.1 schema fails unless this is enabled.
+schemathesis.experimental.OPEN_API_3_1.enable()
+
 
 class _RequestsStatistics(list):
     """Subclass of list to avoid polluting schemathesis logs with data points."""

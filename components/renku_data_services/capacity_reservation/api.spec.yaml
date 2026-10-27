@@ -1,4 +1,4 @@
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku Data Services API
   description: |
@@ -184,8 +184,7 @@ components:
           type: integer
           example: 42
         project_template_id:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
         recurrence:
           $ref: "#/components/schemas/RecurrenceConfig"
@@ -211,8 +210,7 @@ components:
           properties:
             code:
               type: integer
-              minimum: 0
-              exclusiveMinimum: true
+              exclusiveMinimum: 0
               example: 1404
             detail:
               type: string
