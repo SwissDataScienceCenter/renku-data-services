@@ -133,7 +133,7 @@ async def test_pool_created_with_a_linked_class(
                 "max_storage": 100,
                 "default_storage": 1,
             },
-            {"name": "linked-class", "default": False, "resource_flavor_id": flavor["id"]},
+            {"name": "linked-class", "default": False, "resource_flavor_id": flavor["id"], "preemptible": True},
         ],
     }
     pool = await _create_pool(sanic_client, payload)
@@ -147,12 +147,15 @@ async def test_pool_created_with_a_linked_class(
     assert linked["max_storage"] == 200
     assert linked["default_storage"] == 20
     assert linked["resource_flavor_id"] == flavor["id"]
+    assert linked["preemptible"] is True
+    assert plain["preemptible"] is False
 
     _, res = await sanic_client.get(
         f"/api/data/resource_pools/{pool['id']}/classes/{linked['id']}", headers=admin_headers
     )
     assert res.status_code == 200, res.text
     assert res.json["cpu"] == 2.0
+    assert res.json["preemptible"] is True
 
 
 @pytest.mark.asyncio
