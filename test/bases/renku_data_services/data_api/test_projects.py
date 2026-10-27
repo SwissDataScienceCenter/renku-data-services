@@ -12,6 +12,11 @@ from syrupy.filters import props
 from ulid import ULID
 
 from renku_data_services.data_api.dependencies import DependencyManager
+from renku_data_services.session.models import (
+    SessionLauncherDataConnectorPolicyName,
+    SessionLauncherRepositoryPolicyName,
+    SessionLauncherSecretPolicyName,
+)
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import merge_headers
 
@@ -1284,33 +1289,72 @@ async def test_project_copy_includes_session_launchers_with_permissions(
     create_project_copy,
     create_data_connector_and_link_project,
     create_session_secret_slot,
+    cluster,
 ) -> None:
-    project = await create_project(sanic_client, "Project")
+    repositories = [f"https://renkulab.io/repo-{p}" for p in range(0, 3)]
+    project = await create_project(sanic_client, "Project", repositories=repositories)
     project_id = project["id"]
     environment = await create_session_environment("Some environment")
-    _, link = await create_data_connector_and_link_project("Data connector", project_id=project_id)
-    secret_slot = await create_session_secret_slot("secret-slot", project_id=project_id)
+
+    dc_EX = SessionLauncherDataConnectorPolicyName.excluded
+    dc_RO = SessionLauncherDataConnectorPolicyName.read_only
+    sc_EX = SessionLauncherSecretPolicyName.excluded
+    sc_IN = SessionLauncherSecretPolicyName.included
+    rp_EX = SessionLauncherRepositoryPolicyName.excluded
+    rp_RO = SessionLauncherRepositoryPolicyName.read_only
+    rp_RW = SessionLauncherRepositoryPolicyName.read_write
+
+    data_connector_links = []
+    for p in range(0, 2):
+        _, link = await create_data_connector_and_link_project(f"Data connector {p}", project_id=project_id)
+        data_connector_links.append(link)
+
+    secret_slots = []
+    for p in range(0, 2):
+        secret_slot = await create_session_secret_slot(f"secret-slot-{p}", project_id=project_id)
+        secret_slots.append(secret_slot)
+
     launcher = await create_session_launcher("Launcher", project_id, environment={"id": environment["id"]})
 
-    patch_dc_policy = {
-        "data_connector_link_id": link["id"],
-        "policy": "excluded",
-    }
+    patch_dc_policy = [
+        {
+            "data_connector_link_id": link["id"],
+            "policy": policy,
+        }
+        for link, policy in zip(data_connector_links, [dc_EX, dc_RO], strict=True)
+    ]
     _, res = await sanic_client.patch(
         f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
         headers=user_headers,
-        json=[patch_dc_policy],
+        json=patch_dc_policy,
     )
     assert res.status_code == 200, res.text
 
-    patch_sc_policy = {
-        "secret_slot_id": secret_slot["id"],
-        "policy": "excluded",
-    }
+    patch_sc_policy = [
+        {
+            "secret_slot_id": secret_slot["id"],
+            "policy": policy,
+        }
+        for secret_slot, policy in zip(secret_slots, [sc_EX, sc_IN], strict=True)
+    ]
     _, res = await sanic_client.patch(
         f"/api/data/session_launchers/{launcher["id"]}/secrets",
         headers=user_headers,
-        json=[patch_sc_policy],
+        json=patch_sc_policy,
+    )
+    assert res.status_code == 200, res.text
+
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}/repositories", headers=user_headers)
+    assert res.status_code == 200, res.text
+    repository_policies = res.json
+    patch_repo_policy = [
+        {"repository_id": repo["repository_id"], "policy": policy}
+        for repo, policy in zip(repository_policies, [rp_EX, rp_RO, rp_RW], strict=True)
+    ]
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher["id"]}/repositories",
+        headers=user_headers,
+        json=patch_repo_policy,
     )
     assert res.status_code == 200, res.text
 
@@ -1318,6 +1362,11 @@ async def test_project_copy_includes_session_launchers_with_permissions(
         sanic_client, project_id, regular_user.namespace.path.serialize(), "Copy Project"
     )
 
+    # Delete copied project
+    _, res = await sanic_client.delete(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert res.status_code == 204, res.text
+
+    # Check permissions of new project copy
     project_id = copy_project["id"]
     _, res = await sanic_client.get(f"/api/data/projects/{project_id}/session_launchers", headers=user_headers)
     assert res.status_code == 200, res.text
@@ -1332,18 +1381,21 @@ async def test_project_copy_includes_session_launchers_with_permissions(
         _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}/secrets", headers=user_headers)
         assert res.status_code == 200, res.text
         secret_slot_policies = res.json
-        assert len(secret_slot_policies) > 0
-        for secret_slot_policy in secret_slot_policies:
-            assert secret_slot_policy["policy"] == "excluded"
+        assert {p["policy"] for p in secret_slot_policies} == {sc_EX, sc_IN}
 
         _, res = await sanic_client.get(
             f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=user_headers
         )
         assert res.status_code == 200, res.text
         dc_policies = res.json
-        assert len(dc_policies) > 0
-        for dc_policy in dc_policies:
-            assert dc_policy["policy"] == "excluded"
+        assert {p["policy"] for p in dc_policies} == {dc_EX, dc_RO}
+
+        _, res = await sanic_client.get(
+            f"/api/data/session_launchers/{launcher["id"]}/repositories", headers=user_headers
+        )
+        assert res.status_code == 200, res.text
+        repo_policies = res.json
+        assert {p["policy"] for p in repo_policies} == {rp_EX, rp_RO, rp_RW}
 
 
 @pytest.mark.asyncio

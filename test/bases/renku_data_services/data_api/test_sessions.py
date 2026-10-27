@@ -18,6 +18,7 @@ from renku_data_services.session.constants import BUILD_DEFAULT_OUTPUT_PRIVATE_I
 from renku_data_services.session.models import (
     EnvVar,
     SessionLauncherDataConnectorPolicyName,
+    SessionLauncherRepositoryPolicyName,
     SessionLauncherSecretPolicyName,
 )
 from renku_data_services.users.models import UserInfo
@@ -418,7 +419,7 @@ async def test_launcher_data_connector_post_unauthorized(
     )
     payload = {
         "launcher_id": launcher["id"],
-        "data_connector_link_id": 0,
+        "data_connector_link_id": data_connector_link["id"],
         "policy": SessionLauncherDataConnectorPolicyName.excluded,
     }
 
@@ -726,12 +727,13 @@ async def test_launcher_restrictions_private_data_connector(
     assert res.json is not None
     assert len(res.json) == 2
 
-    # viwer member should see one data connector
+    # viewer member should see one data connector
     _, res = await sanic_client.get(
         f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=member_1_headers
     )
     assert res.json is not None
     assert len(res.json) == 1
+    assert res.json[0].get("data_connector_link_id") == link_1["id"]
 
     # launcher should be unrestricted to both users
     for headers in [user_headers, member_1_headers]:
@@ -758,12 +760,195 @@ async def test_launcher_restrictions_private_data_connector(
     # Launcher should be restricted for user
     _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
     assert res.status_code == 200, res.text
+
+    # Launcher should be unrestricted for member
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=member_1_headers)
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    launcher_saved = res.json
+    assert not launcher_saved["is_restricted"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("repository_policy_name"),
+    [SessionLauncherRepositoryPolicyName.read_only, SessionLauncherRepositoryPolicyName.excluded],
+)
+@pytest.mark.xdist_group("sessions")
+async def test_launcher_restrictions_with_repositories(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_session_launcher,
+    repository_policy_name: SessionLauncherRepositoryPolicyName,
+) -> None:
+    rp_RW = SessionLauncherRepositoryPolicyName.read_write
+
+    repositories = [
+        "https://github.com/SwissDataScienceCenter/renku-data-services.git",
+    ]
+
+    project = await create_project(sanic_client, "Some project", repositories=repositories)
+
+    # Test repository policies on two launchers individually
+    launchers = []
+    for i in range(0, 2):
+        launcher = await create_session_launcher(f"Some launcher {i}", project_id=project["id"])
+        launchers.append(launcher)
+
+    for launcher in launchers:
+        # Repository policies are all read-write by default
+        _, res = await sanic_client.get(
+            f"/api/data/session_launchers/{launcher["id"]}/repositories", headers=user_headers
+        )
+        assert res.status_code == 200, res.text
+        assert res.json is not None
+        repository_policies = res.json
+        assert {policy.get("url") for policy in repository_policies} == set(repositories)
+        assert all(policy.get("policy") == rp_RW for policy in repository_policies)
+
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+        assert res.json is not None
+        launcher_saved = res.json
+        assert not launcher_saved["is_restricted"]
+
+        # Make repository writable, with writable references list.
+        patch_repository_policies = [
+            {
+                "repository_id": policy["repository_id"],
+                "policy": rp_RW,
+                "writable_references": [f"dev_{policy["repository_id"]}", f"feat_{policy["repository_id"]}"],
+            }
+            for policy in repository_policies
+        ]
+
+        _, res = await sanic_client.patch(
+            f"/api/data/session_launchers/{launcher["id"]}/repositories",
+            headers=user_headers,
+            json=patch_repository_policies,
+        )
+        assert res.status_code == 200, res.text
+        assert res.json is not None
+        repository_policies = res.json
+        assert all(policy.get("policy") == rp_RW for policy in repository_policies)
+        assert all(
+            set(policy.get("writable_references"))
+            == set([f"dev_{policy["repository_id"]}", f"feat_{policy["repository_id"]}"])
+            for policy in repository_policies
+        )
+
+        # Launcher is restricted if repository policy has a non-empty writable reference list
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+        assert res.json is not None
+        launcher_saved = res.json
+        assert launcher_saved["is_restricted"]
+
+        # Restrict repository access to readonly or excluded for individual launchers
+        patch_repository_policies = [
+            {
+                "repository_id": policy["repository_id"],
+                "policy": repository_policy_name.value,
+            }
+            for policy in repository_policies
+        ]
+
+        _, res = await sanic_client.patch(
+            f"/api/data/session_launchers/{launcher["id"]}/repositories",
+            headers=user_headers,
+            json=patch_repository_policies,
+        )
+
+        assert res.status_code == 200, res.text
+        assert res.json is not None
+        repository_policies = res.json
+        assert all(policy.get("policy") == repository_policy_name.value for policy in repository_policies)
+
+        # Launcher with limited repository access are restricted
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+        assert res.json is not None
+        launcher_saved = res.json
+        assert launcher_saved["is_restricted"]
+
+        # Read-only or excluded repository cannot be patched with a writable references list.
+        patch_repository_policies = [
+            {
+                "repository_id": policy["repository_id"],
+                "policy": repository_policy_name.value,
+                "writable_references": ["dev", "feat"],
+            }
+            for policy in repository_policies
+        ]
+
+        _, res = await sanic_client.patch(
+            f"/api/data/session_launchers/{launcher["id"]}/repositories",
+            headers=user_headers,
+            json=patch_repository_policies,
+        )
+        assert res.status_code == 422, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_launcher_restrictions_delete_repositories(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_session_launcher,
+) -> None:
+    rp_RO = SessionLauncherRepositoryPolicyName.read_only
+
+    repositories = [
+        "https://github.com/SwissDataScienceCenter/renku-data-services.git",
+        "https://github.com/SwissDataScienceCenter/renku-ui.git",
+    ]
+
+    project = await create_project(sanic_client, "Some project", repositories=repositories)
+    launcher = await create_session_launcher("Some launcher", project_id=project["id"])
+
+    # Get repositories policies
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}/repositories", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert len(res.json) == len(repositories)
+    repository_policies = res.json
+
+    # Patch session launcher, this will create the overwrite table
+    patch_repository_policies = [
+        {
+            "repository_id": policy["repository_id"],
+            "policy": rp_RO,
+        }
+        for policy in repository_policies
+    ]
+
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher["id"]}/repositories",
+        headers=user_headers,
+        json=patch_repository_policies,
+    )
+    assert res.status_code == 200, res.text
+
+    # Launcher is restricted if at least one repository policy is read-only
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
     assert res.json is not None
     launcher_saved = res.json
     assert launcher_saved["is_restricted"]
 
-    # Launcher should be unrestricted for member
-    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=member_1_headers)
+    # Patch project, remove all repositories
+    patch_headers = merge_headers(user_headers, {"If-Match": project["etag"]})
+    _, res = await sanic_client.patch(
+        f"/api/data/projects/{project["id"]}", headers=patch_headers, json={"repositories": []}
+    )
+    assert res.status_code == 200, res.text
+
+    # All session launcher repository policies should be removed
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}/repositories", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert len(res.json) == 0
+
+    # Launcher must be unrestricted after removing all repositories
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
     assert res.status_code == 200, res.text
     assert res.json is not None
     launcher_saved = res.json

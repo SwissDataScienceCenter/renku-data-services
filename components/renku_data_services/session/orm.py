@@ -356,6 +356,9 @@ class SessionLauncherRepositoryORM(BaseORM):
         primary_key=True,
     )
 
+    # TODO: ProjectRepositoryORM instances are currently orphaned when updating the repository list
+    # by setting their project_id to NULL instead of being deleted. This prevents
+    # the expected cascading deletion of the associated launcher repository policies.
     repository_id: Mapped[int] = mapped_column(
         ForeignKey(ProjectRepositoryORM.id, ondelete="CASCADE"),
         primary_key=True,
@@ -377,16 +380,37 @@ class SessionLauncherRepositoryORM(BaseORM):
             launcher_id=self.launcher_id,
             repository_id=self.repository_id,
             policy=self._policy,
+            url=self.repository.url,
             writable_references=self.policy.get("writable_references"),
         )
 
     @property
     def _policy(self) -> models.SessionLauncherRepositoryPolicyName | None:
         try:
-            return models.SessionLauncherRepositoryPolicyName(str(self.policy.get("policy")))
+            return models.SessionLauncherRepositoryPolicyName.safe_parse(self.policy["policy"])
         except ValueError:
             return None
-        # TODO: Return models.SessionLauncherRepositoryPolicyName.read_only if repository is read only
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        launcher: models.SessionLauncher,
+        link: ProjectRepositoryORM,
+        policy: dict[str, Any],
+    ) -> "SessionLauncherRepositoryORM":
+        """Create a SessionLauncherRepositoryORM from a launcher and a repository to project link."""
+        if link.project_id != launcher.project_id:
+            raise errors.ValidationError(message="The repository link and launcher must belong to the same project.")
+
+        instance = cls(
+            launcher_id=launcher.id,
+            repository_id=link.id,
+            policy=policy,
+        )
+        instance.repository = link
+
+        return instance
 
 
 class SessionLauncherDataConnectorORM(BaseORM):
