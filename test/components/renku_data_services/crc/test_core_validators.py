@@ -4,6 +4,7 @@ import pytest
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
+from renku_data_services.base_models import RESET
 from renku_data_services.crc import apispec, models
 from renku_data_services.crc.core import (
     validate_resource_class,
@@ -378,6 +379,58 @@ def test_validate_resource_pool_update_allows_kind_change_via_pool_remote():
         classes=[models.ResourceClassPatchWithId(id=1, cpu=2)],
     )
     validate_resource_pool_update(existing=existing_pool, update=update)
+
+
+def _pool_with_one_class(preemptible: bool, quota: models.Quota | None) -> models.ResourcePool:
+    return models.ResourcePool(
+        id=1,
+        name="pool",
+        classes=[
+            models.ResourceClass(
+                id=1,
+                name="c",
+                cpu=2,
+                memory=4,
+                max_storage=10,
+                gpu=0,
+                default=True,
+                default_storage=1,
+                preemptible=preemptible,
+            )
+        ],
+        quota=quota,
+        platform=models.RuntimePlatform.linux_amd64,
+    )
+
+
+@pytest.mark.parametrize(
+    "existing,update",
+    [
+        (
+            _pool_with_one_class(preemptible=True, quota=models.Quota(cpu=10, memory=10, gpu=0, id="q1")),
+            models.ResourcePoolPatch(quota=RESET),
+        ),
+        (
+            _pool_with_one_class(preemptible=False, quota=None),
+            models.ResourcePoolPatch(classes=[models.ResourceClassPatchWithId(id=1, preemptible=True)]),
+        ),
+    ],
+)
+def test_validate_resource_pool_update_rejects_preemptible_classes_without_quota(
+    existing: models.ResourcePool, update: models.ResourcePoolPatch
+) -> None:
+    """Pool update rejects preemptible classes when the pool has no quota after the update."""
+    with pytest.raises(errors.ValidationError, match="preemptible"):
+        validate_resource_pool_update(existing=existing, update=update)
+
+
+def test_validate_resource_pool_update_allows_preemptible_classes_with_new_quota() -> None:
+    """Pool update accepts preemptible classes when the same update adds a quota."""
+    update = models.ResourcePoolPatch(
+        quota=models.QuotaPatch(cpu=10, memory=10, gpu=0),
+        classes=[models.ResourceClassPatchWithId(id=1, preemptible=True)],
+    )
+    validate_resource_pool_update(existing=_pool_with_one_class(preemptible=False, quota=None), update=update)
 
 
 def test_validate_resource_pool_patch_allows_class_remote_on_local_to_firecrest_transition() -> None:
