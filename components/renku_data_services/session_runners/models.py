@@ -74,4 +74,4 @@ class RemoteUserSessionSecret:
     """Represents a secret used in a remote Renku session."""
 
     name: str
-    value: str
+    value: str = field(repr=False)
