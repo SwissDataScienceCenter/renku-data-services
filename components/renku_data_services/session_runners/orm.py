@@ -130,7 +130,10 @@ class RemoteUserSessionORM(BaseORM):
     secrets: Mapped[dict[str, str] | None] = mapped_column(
         "secrets", JSONVariant, nullable=True, default=None, server_default=null()
     )
-    """The session secrets needed by the runner."""
+    """The session secrets needed by the runner.
+
+    Secrets are stored as key-value pairs.
+    """
 
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
