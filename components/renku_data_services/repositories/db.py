@@ -140,18 +140,15 @@ class GitRepositoriesRepository:
                 permissions=models.RepositoryIntegrationPermissions(integration_access=True)
             )
 
-        logger.warning("[GITHUB] Need to check integration permissions")
         account = await oauth_client.get_connected_account()
         if not isinstance(account, ConnectedAccount):
             return models.RepositoryPermissionsResult(error=models.RepositoryMetadataError.metadata_oauth)
 
         permission_url = adapter.get_repository_permission_api_url(valid_url.render(), username=account.username)
-        logger.info(f"[GITHUB] Checking: {permission_url}")
         headers = adapter.api_common_headers or dict()
         if etag:
             headers["If-None-Match"] = etag
         permission_response = await oauth_client.get(permission_url, headers=headers)
-        logger.info(f"[GITHUB] Got permission response: {permission_response.status_code}")
         if permission_response.status_code == 304:
             return models.RepositoryPermissionsResult(permissions="Unmodified")
         new_etag = permission_response.headers.get("ETag")
