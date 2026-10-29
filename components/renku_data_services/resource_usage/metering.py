@@ -1,6 +1,5 @@
 """OpenMeter event emission for session resource usage metering."""
 
-import asyncio
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Optional, Protocol
@@ -12,7 +11,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.errors import errors
 from renku_data_services.resource_usage.config import OpenMeterConfig
-from renku_data_services.resource_usage.model import Credit, ResourcePoolUsage, ResourcesRequest
+from renku_data_services.resource_usage.model import Credit, ResourcesRequest
 
 logger = logging.getLogger(__file__)
 
@@ -43,25 +42,15 @@ class ResourceUsageMetering(Protocol):
         start_date: datetime | None = None,
         end_date: datetime | None = None,
     ) -> Credit:
-        """Query compute usage from the metering service."""
+        """Get compute usage for a resource pool or a specific user from the metering service."""
         ...
 
-    async def get_usage_timeframe(
-        self,
-        resource_pool_id: int,
-        user_id: str | None,
-        start_date: datetime | None = None,
-        end_date: datetime | None = None,
-    ) -> ResourcePoolUsage:
-        """Get total usage and user usage for a specific timeframe from the metering service."""
-        ...
-
-    async def get_current_usage(self, resource_pool_id: int, user_id: str | None) -> ResourcePoolUsage:
-        """Get total usage and user usage for the current period from the metering service."""
+    async def get_current_period(self, resource_pool_id: int) -> tuple[datetime | None, datetime | None]:
+        """Get the start and end dates of the current usage period defined in the metering service."""
         ...
 
     async def get_resource_pool_total_limit(self, resource_pool_id: int) -> Credit:
-        """Query compute limits from the metering service."""
+        """Get the total usage limit for a resource pool from the metering service."""
         ...
 
 
@@ -160,7 +149,7 @@ class OpenMeterClient:
     """
 
     def __init__(self, config: OpenMeterConfig) -> None:
-        self._endpoint_url = config.endpoint_url
+        self._endpoint_url = config.endpoint_url.rstrip("/")
         self._headers = {"Authorization": f"Bearer {config.token}"} if config.token else {}
         self._client = httpx.AsyncClient(timeout=30)
         self._meter_key = config.meter_key
@@ -260,7 +249,7 @@ class OpenMeterClient:
         return f"{self._customer_key_prefix}{resource_pool_id}"
 
     async def get_resource_pool_total_limit(self, resource_pool_id: int) -> Credit:
-        """Query compute limits from OpenMeter."""
+        """Get the total usage limit for a resource pool from OpenMeter."""
         customer_key = self.get_resource_pool_key(resource_pool_id)
         entitlement_value = await self.query_customer_entitlement_value(customer_key, self._feature_key)
         if entitlement_value is None:
@@ -275,7 +264,7 @@ class OpenMeterClient:
         start_date: datetime | None = None,
         end_date: datetime | None = None,
     ) -> Credit:
-        """Query compute usage from OpenMeter.
+        """Get compute usage for a resource pool or a specific user from OpenMeter.
 
         If user_id is None, the total usage for the resource pool is returned.
         Otherwise, the usage for the specified user within the resource pool is returned.
@@ -292,37 +281,15 @@ class OpenMeterClient:
         res = await self.query_meter(self._meter_key, body)
         return Credit.from_float(res.data[0].get("value", 0)) if res.data else Credit.zero()
 
-    async def get_usage_timeframe(
-        self,
-        resource_pool_id: int,
-        user_id: str | None,
-        start_date: datetime | None = None,
-        end_date: datetime | None = None,
-    ) -> ResourcePoolUsage:
-        """Get total usage and user usage for a specific timeframe from OpenMeter."""
-        total_query = self.get_usage(resource_pool_id, None, start_date, end_date)
-        if user_id is None:
-            total_usage, user_usage = await total_query, None
-        else:
-            total_usage, user_usage = await asyncio.gather(
-                total_query,
-                self.get_usage(resource_pool_id, user_id, start_date, end_date),
-            )
-        return ResourcePoolUsage(total_usage, user_usage, start_date=start_date, end_date=end_date)
-
-    async def get_current_usage(self, resource_pool_id: int, user_id: str | None) -> ResourcePoolUsage:
-        """Get total usage and user usage for the current period from OpenMeter.
+    async def get_current_period(self, resource_pool_id: int) -> tuple[datetime | None, datetime | None]:
+        """Get the start and end dates of the current usage period defined in OpenMeter's entitlement.
 
         Current period is defined by the entitlement's currentUsagePeriod.
-        If no entitlement is found, usage is computed over the entire history.
+        If no entitlement is found, None is returned for both dates.
         """
         customer_key = self.get_resource_pool_key(resource_pool_id)
         entitlement = await self.query_customer_entitlement(customer_key, self._feature_key)
         if entitlement is None:
-            start_date = None
-            end_date = None
+            return None, None
         else:
-            start_date = entitlement.currentUsagePeriod.from_
-            end_date = entitlement.currentUsagePeriod.to
-
-        return await self.get_usage_timeframe(resource_pool_id, user_id, start_date, end_date)
+            return entitlement.currentUsagePeriod.from_, entitlement.currentUsagePeriod.to

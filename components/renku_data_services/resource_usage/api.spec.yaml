@@ -237,8 +237,10 @@ components:
       properties:
         total_usage:
           type: integer
+          description: "The total compute usage of the resource pool in the specified period, in credits."
         user_usage:
           type: integer
+          description: "The compute usage of a specific user within the resource pool in the specified period, in credits."
         pool_limits:
           $ref: "#/components/schemas/ResourcePoolLimits"
         start_date:
