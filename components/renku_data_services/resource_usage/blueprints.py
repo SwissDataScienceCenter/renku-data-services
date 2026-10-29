@@ -56,7 +56,7 @@ class ResourceUsageBP(CustomBlueprint):
         @only_admins
         @validate_db_ids
         async def _get(_: Request, user: base_models.APIUser, resource_pool_id: int) -> JSONResponse:
-            result = await self.rr_repo.find_resource_pool_limits(resource_pool_id)
+            result = await self.rr_svc.get_limits(resource_pool_id)
             if result:
                 return validated_json(
                     apispec.ResourcePoolLimits,

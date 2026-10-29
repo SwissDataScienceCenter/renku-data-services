@@ -26,7 +26,6 @@ from renku_data_services.resource_usage.model import (
     Credit,
     DataSize,
     ResourceClassCost,
-    ResourcePoolLimits,
     ResourcesRequest,
 )
 from renku_data_services.utils.sqlalchemy import ComputeCapacityType, CreditType, DataSizeType, ULIDType
@@ -160,17 +159,8 @@ class ResourceRequestsLimitsORM(BaseORM):
     )
     """Resource pool id."""
 
-    total_limit: Mapped[Credit] = mapped_column("total_limit", CreditType(), nullable=False)
-    """Usage limit per week."""
-
     user_limit: Mapped[Credit] = mapped_column("user_limit", CreditType(), nullable=False)
-    """Usage limit per week, per user."""
-
-    __table_args__ = (CheckConstraint((total_limit > user_limit), name="resource_request_limits_total_user_limit_chk"),)
-
-    def dump(self) -> ResourcePoolLimits:
-        """Convert to model type."""
-        return ResourcePoolLimits(self.id, self.total_limit, self.user_limit)
+    """Usage limit per user."""
 
 
 class ResourceClassCostORM(BaseORM):
