@@ -284,7 +284,7 @@ class ResourcePoolQueryRepository:
                 # TODO: Enable resource usage reporting broadly when the resource usage
                 # tracking / queries are more performant.
                 if self.resource_usage_service and api_user.is_authenticated and enforcement_enabled:
-                    usage = await self.resource_usage_service.get_usage_with_limits(rp.id, api_user.id)
+                    usage = await self.resource_usage_service.get_current_usage_with_limits(rp.id, api_user.id)
                     remaining_quota = self.resource_usage_service.get_remaining_quota(usage)
                     if usage:
                         credits_used = usage.user_usage  # NOTE: maybe remaining credits is more relevant

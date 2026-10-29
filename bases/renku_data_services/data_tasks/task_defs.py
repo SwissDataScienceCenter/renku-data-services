@@ -488,7 +488,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
 
             session_name, user_id, resource_pool_id, resource_class_id = metadata
 
-            usage = await dm.resource_usage_service.get_usage_with_limits(resource_pool_id, user_id)
+            usage = await dm.resource_usage_service.get_current_usage_with_limits(resource_pool_id, user_id)
             remaining_quota = dm.resource_usage_service.get_remaining_quota(usage)
             if remaining_quota is None:
                 continue
