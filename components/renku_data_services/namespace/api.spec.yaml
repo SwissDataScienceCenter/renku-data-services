@@ -668,7 +668,7 @@ components:
       style: form
       explode: true
       schema:
-        $ref: "#/components/schemas/NamespaceGetQueryKind"
+        $ref: "#/components/schemas/NamespaceGetQueryKinds"
     OnlyDirectMember:
       in: query
       description: A flag to filter for where the user is a direct member.
