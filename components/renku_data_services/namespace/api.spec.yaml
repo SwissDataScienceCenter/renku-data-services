@@ -414,7 +414,7 @@ components:
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
     NamespaceName:
       description: Renku group or namespace name
       type: string
@@ -577,7 +577,7 @@ components:
       example: John
       minLength: 1
       maxLength: 256
-    NamespaceGetQueryKind:
+    NamespaceGetQueryKinds:
       type: array
       description: Which namespace kinds to include in the response
       items:
