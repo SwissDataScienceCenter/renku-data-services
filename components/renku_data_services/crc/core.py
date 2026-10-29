@@ -1,5 +1,6 @@
 """crc modules converters and validators."""
 
+from collections.abc import Mapping
 from typing import Literal, overload
 from urllib.parse import urlparse
 
@@ -38,15 +39,42 @@ def validate_quota_put_patch(body: apispec.QuotaWithId | apispec.QuotaPatch) -> 
     )
 
 
+def _link_or_values(body: apispec.ResourceClass) -> tuple[float, int, int, int, int] | None:
+    """Return the resource values of a class body, or None when the body links to a resource flavor."""
+    values = (body.cpu, body.memory, body.gpu, body.max_storage, body.default_storage)
+    if body.resource_flavor_id is not None:
+        if any(value is not None for value in values):
+            raise errors.ValidationError(
+                message="cpu, memory, gpu, max_storage and default_storage cannot be set together with "
+                "resource_flavor_id."
+            )
+        return None
+    cpu, memory, gpu, max_storage, default_storage = values
+    if cpu is None or memory is None or gpu is None or max_storage is None or default_storage is None:
+        raise errors.ValidationError(
+            message="A resource class needs either resource_flavor_id or all of cpu, memory, gpu, max_storage "
+            "and default_storage."
+        )
+    return cpu, memory, gpu, max_storage, default_storage
+
+
 def validate_resource_class(
     body: apispec.ResourceClass,
     pool_kind: models.RemoteConfigurationKind | None = None,
+    flavor: models.ResourceFlavor | None = None,
 ) -> models.UnsavedResourceClass:
     """Validate a resource class object."""
+    values = _link_or_values(body)
+    if values is None:
+        if flavor is None:
+            raise errors.ProgrammingError(message="A resource class linked to a flavor needs the flavor resolved.")
+        values = (flavor.cpu, flavor.memory, flavor.gpu, flavor.max_storage, flavor.default_storage)
+    cpu, memory, gpu, max_storage, default_storage = values
+
     if len(body.name) > 40:
         # TODO: Should this be added to the API spec instead?
         raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
-    if body.default_storage > body.max_storage:
+    if default_storage > max_storage:
         raise errors.ValidationError(message="The default storage cannot be larger than the max allowable storage.")
     # We need to sort node affinities and tolerations to make '__eq__' reliable
     node_affinities = sorted(
@@ -70,21 +98,23 @@ def validate_resource_class(
             forward_resource_values=body.remote.forward_resource_values,
         )
 
-    if pool_kind == models.RemoteConfigurationKind.firecrest and not body.cpu.is_integer():
+    if pool_kind == models.RemoteConfigurationKind.firecrest and not cpu.is_integer():
         raise errors.ValidationError(message="FirecREST resource classes require an integer value for cpu.")
 
     return models.UnsavedResourceClass(
         name=body.name,
-        cpu=body.cpu,
-        memory=body.memory,
-        max_storage=body.max_storage,
-        gpu=body.gpu,
+        cpu=cpu,
+        memory=memory,
+        max_storage=max_storage,
+        gpu=gpu,
         default=body.default,
-        default_storage=body.default_storage,
+        default_storage=default_storage,
         node_affinities=node_affinities,
         tolerations=tolerations,
         quota_enforced=body.quota_enforced,
+        preemptible=body.preemptible,
         remote=remote,
+        resource_flavor_id=flavor.id if flavor is not None else None,
     )
 
 
@@ -145,6 +175,13 @@ def validate_resource_class_patch_or_put(
             partition=body.remote.partition,
             forward_resource_values=body.remote.forward_resource_values,
         )
+    if isinstance(body, apispec.ResourceClass):
+        _link_or_values(body)
+    flavor_id: ULID | ResetType | None = None
+    if body.resource_flavor_id == "":
+        flavor_id = RESET
+    elif body.resource_flavor_id is not None:
+        flavor_id = ULID.from_str(body.resource_flavor_id)
     if kind == models.RemoteConfigurationKind.firecrest and body.cpu is not None and not body.cpu.is_integer():
         raise errors.ValidationError(message="FirecREST resource classes require an integer value for cpu.")
     if rc_id:
@@ -160,7 +197,9 @@ def validate_resource_class_patch_or_put(
             node_affinities=node_affinities,
             tolerations=tolerations,
             quota_enforced=body.quota_enforced,
+            preemptible=body.preemptible,
             remote=remote,
+            resource_flavor_id=flavor_id,
         )
     return models.ResourceClassPatch(
         name=body.name,
@@ -173,7 +212,37 @@ def validate_resource_class_patch_or_put(
         node_affinities=node_affinities,
         tolerations=tolerations,
         quota_enforced=body.quota_enforced,
+        preemptible=body.preemptible,
         remote=remote,
+        resource_flavor_id=flavor_id,
+    )
+
+
+def validate_resource_flavor(body: apispec.ResourceFlavorPost) -> models.UnsavedResourceFlavor:
+    """Validate a resource flavor object."""
+    if body.default_storage > body.max_storage:
+        raise errors.ValidationError(message="The default storage cannot be larger than the max allowable storage.")
+    return models.UnsavedResourceFlavor(
+        name=body.name,
+        cpu=body.cpu,
+        memory=body.memory,
+        max_storage=body.max_storage,
+        default_storage=body.default_storage,
+        gpu=body.gpu,
+        description=body.description,
+    )
+
+
+def validate_resource_flavor_patch(body: apispec.ResourceFlavorPatch) -> models.ResourceFlavorPatch:
+    """Validate the patch of a resource flavor."""
+    return models.ResourceFlavorPatch(
+        name=body.name,
+        cpu=body.cpu,
+        memory=body.memory,
+        max_storage=body.max_storage,
+        default_storage=body.default_storage,
+        gpu=body.gpu,
+        description=RESET if body.description == "" else body.description,
     )
 
 
@@ -196,8 +265,25 @@ def validate_resource_class_update(
         raise errors.ValidationError(message="The default storage cannot be larger than the max allowable storage.")
 
 
-def validate_resource_pool_post(body: apispec.ResourcePool) -> models.UnsavedResourcePool:
-    """Validate a resource pool object."""
+def _flavor_for(
+    body: apispec.ResourceClass, flavors: Mapping[str, models.ResourceFlavor] | None
+) -> models.ResourceFlavor | None:
+    """Find the resource flavor that a resource class body links to."""
+    if body.resource_flavor_id is None:
+        return None
+    flavor = (flavors or {}).get(body.resource_flavor_id)
+    if flavor is None:
+        raise errors.MissingResourceError(message=f"Resource flavor with id {body.resource_flavor_id} does not exist.")
+    return flavor
+
+
+def validate_resource_pool_post(
+    body: apispec.ResourcePool, flavors: Mapping[str, models.ResourceFlavor] | None = None
+) -> models.UnsavedResourcePool:
+    """Validate a resource pool object.
+
+    Classes that link to a resource flavor need that flavor in ``flavors``, keyed on its id.
+    """
     if len(body.name) > 40:
         # TODO: Should this be added to the API spec instead?
         raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
@@ -229,7 +315,14 @@ def validate_resource_pool_post(body: apispec.ResourcePool) -> models.UnsavedRes
     quota = validate_quota(body=body.quota) if body.quota else None
     remote = validate_remote(body=body.remote) if body.remote else None
     pool_kind = remote.kind if remote is not None else None
-    classes = [validate_resource_class(body=new_cls, pool_kind=pool_kind) for new_cls in body.classes]
+    classes = [
+        validate_resource_class(body=new_cls, pool_kind=pool_kind, flavor=_flavor_for(new_cls, flavors))
+        for new_cls in body.classes
+    ]
+    if quota is None and any(cls.preemptible for cls in classes):
+        raise errors.ValidationError(
+            message="A resource pool without a quota cannot have preemptible resource classes."
+        )
 
     default_classes: list[models.UnsavedResourceClass] = []
     for cls in classes:
@@ -418,6 +511,7 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             default_storage=rc.default_storage if rc.default_storage is not None else existing_rc.default_storage,
             node_affinities=rc.node_affinities if rc.node_affinities is not None else existing_rc.node_affinities,
             tolerations=rc.tolerations if rc.tolerations is not None else existing_rc.tolerations,
+            preemptible=rc.preemptible if rc.preemptible is not None else existing_rc.preemptible,
             remote=class_remote,
         )
     quota: models.Quota | models.UnsavedQuota | ResetType = existing.quota if existing.quota else RESET
@@ -528,6 +622,10 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
         raise errors.ValidationError(message="The default resource pool has to be public.")
     if default and quota is not RESET:
         raise errors.ValidationError(message="A default resource pool cannot have a quota.")
+    if quota is RESET and any(cls.preemptible for cls in classes):
+        raise errors.ValidationError(
+            message="A resource pool without a quota cannot have preemptible resource classes."
+        )
     if isinstance(remote, models.RemoteConfigurationFirecrest) and default:
         raise errors.ValidationError(message="The default resource pool cannot start remote sessions.")
     if isinstance(remote, models.RemoteConfigurationFirecrest) and public:
