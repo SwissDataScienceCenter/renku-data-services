@@ -38,7 +38,7 @@ def validate_unsaved_environment(
 
 def validate_unsaved_build_parameters(
     environment: apispec.BuildParameters | apispec.BuildParametersPatch,
-    cmd_args: apispec.CommandAndArgs,
+    cmd_args: apispec.CommandAndArgs | apispec.CommandAndArgsPatch,
     builds_config: "BuildsConfig",
 ) -> models.UnsavedBuildParameters:
     """Validate an unsaved build parameters object."""

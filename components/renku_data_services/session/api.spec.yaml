@@ -521,7 +521,7 @@ components:
               $ref: "#/components/schemas/BuildParametersPatch"
     EnvironmentPatch:
       allOf:
-        - $ref: "#/components/schemas/CommandAndArgs"
+        - $ref: "#/components/schemas/CommandAndArgsPatch"
         - type: object
           description: Update a session environment
           additionalProperties: false
@@ -796,6 +796,14 @@ components:
           $ref: "#/components/schemas/EnvironmentCommand"
         args:
           $ref: "#/components/schemas/EnvironmentArgs"
+    CommandAndArgsPatch:
+      description: The command and arguments.
+      type: object
+      properties:
+        command:
+          $ref: "#/components/schemas/EnvironmentPatchCommand"
+        args:
+          $ref: "#/components/schemas/EnvironmentPatchArgs"
     ContainerImage:
       description: A container image
       type: string
