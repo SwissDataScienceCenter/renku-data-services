@@ -204,7 +204,7 @@ class ResourceUsageService:
                 "No metering client configured, resource usage will not be queried from the metering service."
             )
 
-    async def get_default_limits(self, resource_pool_id: int) -> ResourcePoolLimits:
+    async def __get_default_limits(self, resource_pool_id: int) -> ResourcePoolLimits:
         """Get default resource pool limits."""
         if self._repo is not None:
             db_limits = await self._repo.find_resource_pool_limits(resource_pool_id)
@@ -219,7 +219,7 @@ class ResourceUsageService:
 
     async def get_limits(self, resource_pool_id: int) -> ResourcePoolLimits:
         """Get resource pool limits."""
-        default_limits = await self.get_default_limits(resource_pool_id)
+        default_limits = await self.__get_default_limits(resource_pool_id)
         if self._metering_client is None:
             return default_limits
 
@@ -230,7 +230,7 @@ class ResourceUsageService:
             user_limit=default_limits.user_limit,  # NOTE: The metering service does not provide user limits
         )
 
-    async def get_usage_with_limits(
+    async def get_current_usage_with_limits(
         self,
         resource_pool_id: int,
         user_id: str | None,
@@ -240,22 +240,13 @@ class ResourceUsageService:
             return None
 
         try:
-            usage, limits = await asyncio.gather(
-                self._metering_client.get_current_usage(resource_pool_id, user_id),
-                self.get_limits(resource_pool_id),
-            )
-            return ResourcePoolUsageLimits(
-                total_usage=usage.total_usage,
-                user_usage=usage.user_usage,
-                pool_limits=limits,
-                start_date=usage.start_date,
-                end_date=usage.end_date,
-            )
+            start_date, end_date = await self._metering_client.get_current_period(resource_pool_id)
+            return await self.get_usage_with_limits(resource_pool_id, user_id, start_date, end_date)
         except errors.ThirdPartyAPIError as e:
-            logger.error(f"Error querying compute usage with limits: {e}")
+            logger.error(f"Error querying current compute usage with limits: {e}")
             return None
 
-    async def get_usage_timeframe_with_limits(
+    async def get_usage_with_limits(
         self,
         resource_pool_id: int,
         user_id: str | None,
@@ -266,16 +257,24 @@ class ResourceUsageService:
         if self._metering_client is None:
             return None
 
-        usage, limits = await asyncio.gather(
-            self._metering_client.get_usage_timeframe(resource_pool_id, user_id, start_date, end_date),
-            self.get_limits(resource_pool_id),
-        )
+        if user_id is None:
+            user_usage = None
+            total_usage, limits = await asyncio.gather(
+                self._metering_client.get_usage(resource_pool_id, None, start_date, end_date),
+                self.get_limits(resource_pool_id),
+            )
+        else:
+            total_usage, user_usage, limits = await asyncio.gather(
+                self._metering_client.get_usage(resource_pool_id, None, start_date, end_date),
+                self._metering_client.get_usage(resource_pool_id, user_id, start_date, end_date),
+                self.get_limits(resource_pool_id),
+            )
         return ResourcePoolUsageLimits(
-            total_usage=usage.total_usage,
-            user_usage=usage.user_usage,
+            total_usage=total_usage,
+            user_usage=user_usage,
             pool_limits=limits,
-            start_date=usage.start_date,
-            end_date=usage.end_date,
+            start_date=start_date,
+            end_date=end_date,
         )
 
     def get_remaining_quota(self, usage: ResourcePoolUsageLimits | None) -> float | None:

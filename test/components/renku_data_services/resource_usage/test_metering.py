@@ -225,54 +225,6 @@ async def test_get_resource_pool_total_limit_error(client: OpenMeterClient, fake
         await client.get_resource_pool_total_limit(resource_pool_id=1)
 
 
-async def test_get_usage_timeframe(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
-    """Test getting the total and user usage for a given timeframe."""
-    result = await client.get_usage_timeframe(
-        resource_pool_id=1,
-        user_id=EXISTING_USER_ID,
-        start_date=PERIOD_FROM,
-        end_date=PERIOD_TO,
-    )
-    assert result.user_usage is not None and result.user_usage.value == 12
-    assert result.total_usage.value == 20
-    assert result.start_date == PERIOD_FROM
-    assert result.end_date == PERIOD_TO
-    bodies = fake_openmeter.meter_query_bodies()
-    assert len(bodies) == 2
-    assert all(body["from"] == PERIOD_FROM.isoformat() and body["to"] == PERIOD_TO.isoformat() for body in bodies)
-
-
-async def test_get_current_usage_no_entitlement(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
-    """Test getting the current usage when no entitlement is found."""
-    result = await client.get_current_usage(resource_pool_id=2, user_id=EXISTING_USER_ID)
-    assert result.user_usage is not None and result.user_usage.value == 3
-    assert result.total_usage.value == 3
-    assert result.start_date is None
-    assert result.end_date is None
-    # Usage is computed over the entire history
-    assert all("from" not in body and "to" not in body for body in fake_openmeter.meter_query_bodies())
-
-
-async def test_get_current_usage_existing_entitlement(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
-    """Test getting the current usage when an entitlement is found."""
-    result = await client.get_current_usage(resource_pool_id=1, user_id=EXISTING_USER_ID)
-    assert result.user_usage is not None and result.user_usage.value == 12
-    assert result.total_usage.value == 20
-    assert result.start_date == PERIOD_FROM
-    assert result.end_date == PERIOD_TO
-    # Usage is restricted to the current usage period of the entitlement
-    bodies = fake_openmeter.meter_query_bodies()
-    assert len(bodies) == 2
-    assert all(body["from"] == PERIOD_FROM.isoformat() and body["to"] == PERIOD_TO.isoformat() for body in bodies)
-
-
-async def test_get_current_usage_nonexisting_user(client: OpenMeterClient) -> None:
-    """Test getting the current usage for a user without usage in the pool."""
-    result = await client.get_current_usage(resource_pool_id=1, user_id=NON_EXISTING_USER_ID)
-    assert result.user_usage == Credit.zero()
-    assert result.total_usage.value == 20
-
-
 @pytest.mark.parametrize("exception", [httpx.ConnectError("boom"), httpx.ReadTimeout("boom")])
 async def test_query_compute_usage_transport_error(
     client: OpenMeterClient, fake_openmeter: FakeOpenMeter, exception: Exception
@@ -298,13 +250,13 @@ async def test_query_compute_usage_invalid_response(client: OpenMeterClient, fak
         await client.get_usage(resource_pool_id=1, user_id=None)
 
 
-async def test_get_current_usage_invalid_entitlement(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
+async def test_get_current_period_invalid_entitlement(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
     """Test that an entitlement without a current usage period raises an error."""
     entitlement = dict(ENTITLEMENTS[(EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY)])
     del entitlement["currentUsagePeriod"]
     fake_openmeter.override_response = httpx.Response(200, json=entitlement)
     with pytest.raises(errors.ThirdPartyAPIError):
-        await client.get_current_usage(resource_pool_id=1, user_id=EXISTING_USER_ID)
+        await client.get_current_period(resource_pool_id=1)
     assert fake_openmeter.meter_query_bodies() == []
 
 
@@ -323,9 +275,9 @@ def service(client: OpenMeterClient) -> ResourceUsageService:
     return ResourceUsageService(repo=None, metering_client=client)  # type: ignore[arg-type]
 
 
-async def test_service_get_usage_with_limits(service: ResourceUsageService) -> None:
+async def test_service_get_current_usage_with_limits(service: ResourceUsageService) -> None:
     """Test getting the current usage and limits of a resource pool."""
-    result = await service.get_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID)
+    result = await service.get_current_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID)
     assert result is not None
     assert result.total_usage.value == 20
     assert result.user_usage is not None
@@ -341,21 +293,21 @@ async def test_service_get_usage_with_limits(service: ResourceUsageService) -> N
     [{"fail_with_status": 500}, {"fail_with_exception": httpx.ConnectError("boom")}],
     ids=["status", "transport"],
 )
-async def test_service_get_usage_with_limits_error(
+async def test_service_get_current_usage_with_limits_error(
     service: ResourceUsageService, fake_openmeter: FakeOpenMeter, failure: dict[str, Any]
 ) -> None:
     """Test that OpenMeter failures disable the quota check instead of raising."""
     for attr, value in failure.items():
         setattr(fake_openmeter, attr, value)
-    assert await service.get_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID) is None
+    assert await service.get_current_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID) is None
 
 
-async def test_service_get_usage_timeframe_with_limits_error(
+async def test_service_get_usage_with_limits_error(
     service: ResourceUsageService, fake_openmeter: FakeOpenMeter
 ) -> None:
     """Test that OpenMeter failures are raised when querying usage for a timeframe."""
     fake_openmeter.fail_with_exception = httpx.ConnectError("boom")
     with pytest.raises(errors.ThirdPartyAPIError):
-        await service.get_usage_timeframe_with_limits(
+        await service.get_usage_with_limits(
             resource_pool_id=1, user_id=EXISTING_USER_ID, start_date=PERIOD_FROM, end_date=PERIOD_TO
         )

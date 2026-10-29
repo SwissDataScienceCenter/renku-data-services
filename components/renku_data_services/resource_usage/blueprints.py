@@ -152,7 +152,7 @@ class ResourceUsageBP(CustomBlueprint):
             # Validate that the resource pool exists and the user has access to it
             await self.rp_repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
 
-            result = await self.rr_svc.get_usage_timeframe_with_limits(
+            result = await self.rr_svc.get_usage_with_limits(
                 resource_pool_id, query.user_id, query.start_date, query.end_date
             )
             if result:
