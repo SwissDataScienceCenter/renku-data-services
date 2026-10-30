@@ -27,3 +27,7 @@ charts:
         contextPath: .
         dockerfilePath: projects/k8s_watcher/Dockerfile
         valuesPath: dataService.k8sWatcher.image
+      renku-mcp-server:
+        contextPath: .
+        dockerfilePath: projects/renku_mcp_server/Dockerfile
+        valuesPath: mcpServer.image
