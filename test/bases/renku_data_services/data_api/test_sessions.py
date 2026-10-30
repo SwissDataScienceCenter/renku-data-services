@@ -1844,7 +1844,7 @@ async def test_patch_session_launcher_from_code_update_command(
     # create initial session launcher as a build-from-code
     payload = {
         "project_id": project["id"],
-        "resource_class_id": resource_pool["id"],
+        "resource_class_id": resource_pool["classes"][0]["id"],
         "name": "Test name from code",
         "launcher_type": "non-interactive",
         "environment": {
@@ -2482,6 +2482,50 @@ async def test_starting_session(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+@pytest.mark.parametrize("preemptible", [True, False])
+async def test_starting_session_labels_preemptible_pods(
+    app_manager: DependencyManager,
+    sanic_client: SanicASGITestClient,
+    create_project,
+    create_resource_pool,
+    create_session_launcher,
+    amalthea_installation,
+    user_headers,
+    regular_user_api_user,
+    valid_resource_pool_payload,
+    preemptible: bool,
+) -> None:
+    project = await create_project(sanic_client, "Some project", visibility="public")
+    classes = [dict(rc, preemptible=preemptible) for rc in valid_resource_pool_payload["classes"]]
+    resource_pool = await create_resource_pool(admin=True, classes=classes)
+    launcher = await create_session_launcher(
+        "launcher",
+        project["id"],
+        resource_class_id=resource_pool["classes"][0]["id"],
+        environment={
+            "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
+            "environment_kind": "CUSTOM",
+            "name": "test",
+            "port": 8888,
+            "environment_image_source": "image",
+        },
+    )
+
+    _, res = await sanic_client.post(
+        "/api/data/sessions",
+        headers=user_headers,
+        json={"project_id": project["id"], "launcher_id": launcher["id"]},
+        cookies={"_renku_session": "some content"},
+    )
+    assert res.status_code == 201, res.text
+
+    session = await app_manager.config.nb_config.k8s_v2_client.get_session(res.json["name"], regular_user_api_user.id)
+    assert session is not None
+    assert session.metadata.labels["renku.io/preemptible"] == str(preemptible).lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 @pytest.mark.parametrize(
     "actual_user_headers",
     ["anonymous", "user"],
@@ -2992,3 +3036,61 @@ async def test_patch_strip_prefix(
     assert "environment" in res.json
     env = res.json["environment"]
     assert env.get("strip_path_prefix")
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+async def test_starting_session_with_ssh_build_environment(
+    sanic_client: SanicASGITestClient,
+    create_project,
+    create_resource_pool,
+    create_session_launcher,
+    user_headers,
+    app_manager: DependencyManager,
+    admin_headers,
+    launch_session,
+    builds_enabled,
+    amalthea_installation,
+) -> None:
+    project: dict[str, Any] = await create_project(
+        sanic_client,
+        "Some project",
+        visibility="public",
+        repositories=["https://github.com/SwissDataScienceCenter/renku"],
+    )
+    resource_pool = await create_resource_pool(admin=True)
+    launcher: dict[str, Any] = await create_session_launcher(
+        name="Launcher 2",
+        project_id=project["id"],
+        description="A session launcher",
+        resource_class_id=resource_pool["classes"][0]["id"],
+        environment={
+            "repository": "https://github.com/SwissDataScienceCenter/renku",
+            "builder_variant": "python",
+            "frontend_variant": "ssh",
+            "environment_image_source": "build",
+        },
+        env_variables=[
+            {"name": "TEST_ENV_VAR", "value": "some-random-value-1234"},
+        ],
+    )
+
+    launcher_id = launcher["id"]
+    project_id = project["id"]
+    payload = {"project_id": project_id, "launcher_id": launcher_id}
+
+    _, session_res = await sanic_client.post("/api/data/sessions", headers=user_headers, json=payload)
+    assert session_res.status_code == 201
+
+    _, res = await sanic_client.get(f"/api/data/sessions/{session_res.json['name']}", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert res.json["name"] == session_res.json["name"]
+    _, res = await sanic_client.get("/api/data/sessions", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert len(res.json) > 0
+    assert session_res.json["name"] in [i["name"] for i in res.json]
+
+    session = await app_manager.config.nb_config.k8s_v2_client.get_session(session_res.json["name"], "user")
+    assert session is not None
+    assert session.spec.authentication is None
+    assert session.spec.ingress is None

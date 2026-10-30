@@ -1,0 +1,6 @@
+{
+  "id": "iptables-nft",
+  "version": "1.0.0",
+  "name": "Select the nftables iptables backend so docker-in-docker can start",
+  "options": {}
+}

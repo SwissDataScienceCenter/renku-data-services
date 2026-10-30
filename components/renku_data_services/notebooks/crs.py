@@ -361,6 +361,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         ):
             command_args = list(self.spec.session.args) if self.spec.session.args else []
 
+        frontend_variant = self.metadata.labels.get("renku.io/frontend-variant")
         return apispec.SessionResponse(
             image=self.spec.session.image,
             name=self.metadata.name,
@@ -383,16 +384,21 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 message=self.status.error,
             ),
             url=url,
+            external_url=self.external_url(),
             project_id=str(self.project_id),
             launcher_id=str(self.launcher_id),
             resource_class_id=self.resource_class_id(),
             session_type=session_type,
             submission_id=submission_id,
             command_args=command_args,
+            frontend_variant=frontend_variant,
         )
 
     def base_url(self) -> str | None:
         """Get the URL of the session, excluding the default URL from the session launcher."""
+        if self.spec.session.urlPath.startswith("ssh://"):
+            return self.spec.session.urlPath
+
         if self.status.url and len(self.status.url) > 0:
             return self.status.url
         if self.spec.ingress is None:
@@ -407,6 +413,27 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         query = None
         fragment = None
         url = str(urlunparse((scheme, host, path, params, query, fragment)))
+        return url
+
+    def external_url(self) -> str | None:
+        """Get the URL of the session for external access.
+
+        This is usually the stable session url as used in the UI.
+        The main use-case for this is to let third parties know where to redirect users
+        to access a session.
+        """
+        if self.spec.ingress is None:
+            return None
+
+        scheme = self.spec.ingress.scheme()
+        host = self.spec.ingress.host
+        params = None
+        query = None
+        fragment = None
+        path = f"/s/{self.metadata.name}?projectId={self.project_id}"
+
+        url = str(urlunparse((scheme, host, path, params, query, fragment)))
+
         return url
 
 
@@ -508,6 +535,8 @@ class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     culling: CullingPatch | ResetType | None = None
     service_account_name: str | ResetType | None = None
     template: TemplatePatch | ResetType | None = None
+    ingress: Ingress | ResetType | None = None
+    authentication: Authentication | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):

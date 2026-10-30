@@ -33,11 +33,18 @@ from renku_data_services.capacity_reservation.db import CapacityReservationRepos
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory
 from renku_data_services.crc import models as rp_models
-from renku_data_services.crc.db import ClusterRepository, MemberRepository, QuotaRepository, ResourcePoolRepository
+from renku_data_services.crc.db import (
+    ClusterRepository,
+    MemberRepository,
+    QuotaRepository,
+    ResourceFlavorRepository,
+    ResourcePoolRepository,
+)
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
 from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
+from renku_data_services.data_connectors.deposits.scicat import ScicatAPIClient
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
@@ -88,7 +95,7 @@ from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users import models as user_preferences_models
-from renku_data_services.users.db import UserPreferencesRepository
+from renku_data_services.users.db import SSHKeyRepository, UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI
@@ -284,6 +291,9 @@ class TestDependencyManager(DependencyManager):
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
+        resource_flavor_repo = ResourceFlavorRepository(
+            session_maker=config.db.async_session_maker, quotas_repo=quota_repo
+        )
         reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
 
         git_repositories_repo = gitrepositoriesrepository_class(
@@ -321,6 +331,7 @@ class TestDependencyManager(DependencyManager):
             session_maker=config.db.async_session_maker,
             user_preferences_config=config.user_preferences,
         )
+        ssh_key_repo = SSHKeyRepository(session_maker=config.db.async_session_maker)
         low_level_user_secrets_repo = LowLevelUserSecretsRepo(
             session_maker=config.db.async_session_maker,
         )
@@ -436,6 +447,7 @@ class TestDependencyManager(DependencyManager):
             kc_api=kc_api,
             member_repo=member_repo,
             rp_repo=rp_repo,
+            resource_flavor_repo=resource_flavor_repo,
             reprovisioning_repo=reprovisioning_repo,
             search_updates_repo=search_updates_repo,
             search_reprovisioning=search_reprovisioning,
@@ -446,6 +458,7 @@ class TestDependencyManager(DependencyManager):
             group_repo=group_repo,
             session_repo=session_repo,
             user_preferences_repo=user_preferences_repo,
+            ssh_key_repo=ssh_key_repo,
             kc_user_repo=kc_user_repo,
             user_secrets_repo=user_secrets_repo,
             connected_services_repo=connected_services_repo,
@@ -473,6 +486,7 @@ class TestDependencyManager(DependencyManager):
             build_logs_repo=build_logs_repo,
             zenodo_client=ZenodoAPIClient(),
             envidat_client=EnvidatClient(),
+            scicat_client=ScicatAPIClient(config.deposit_config.scicat.api_url),
             job_client=job_client,
             secret_client=secret_client,
             internal_token_mint=internal_token_mint,

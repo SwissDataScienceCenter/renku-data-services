@@ -259,7 +259,7 @@ paths:
         - $ref: "#/components/parameters/PaginationRequestPage"
         - $ref: "#/components/parameters/PaginationRequestPerPage"
         - $ref: "#/components/parameters/MinimumRole"
-        - $ref: "#/components/parameters/NamespaceKind"
+        - $ref: "#/components/parameters/NamespaceKinds"
       responses:
         "200":
           description: List of namespaces
@@ -414,7 +414,7 @@ components:
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
     NamespaceName:
       description: Renku group or namespace name
       type: string
@@ -577,7 +577,7 @@ components:
       example: John
       minLength: 1
       maxLength: 256
-    NamespaceGetQueryKind:
+    NamespaceGetQueryKinds:
       type: array
       description: Which namespace kinds to include in the response
       items:
@@ -661,14 +661,14 @@ components:
       explode: true
       schema:
         $ref: "#/components/schemas/GroupRole"
-    NamespaceKind:
+    NamespaceKinds:
       in: query
       description: environment kinds query parameter
       name: kinds
       style: form
       explode: true
       schema:
-        $ref: "#/components/schemas/NamespaceGetQueryKind"
+        $ref: "#/components/schemas/NamespaceGetQueryKinds"
     OnlyDirectMember:
       in: query
       description: A flag to filter for where the user is a direct member.
