@@ -1,4 +1,4 @@
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku Data Services API
   description: |
@@ -810,9 +810,8 @@ components:
       example: "/lab"
     ResourceClassId:
       description: The identifier of a resource class
-      type: integer
+      type: [integer, "null"]
       default: null
-      nullable: true
     DiskStorage:
       description: The size of disk storage for the session, in gigabytes
       type: integer
@@ -1151,10 +1150,9 @@ components:
       example: api_token
     SecretValueNullable:
       description: Secret value that can be any text
-      type: string
+      type: [string, "null"]
       minLength: 1
       maxLength: 5000
-      nullable: true
       example: My secret value
     PaginationRequest:
       type: object
@@ -1179,8 +1177,7 @@ components:
           properties:
             code:
               type: integer
-              minimum: 0
-              exclusiveMinimum: true
+              exclusiveMinimum: 0
               example: 1404
             detail:
               type: string

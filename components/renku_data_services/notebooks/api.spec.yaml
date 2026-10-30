@@ -1,4 +1,4 @@
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku Data Services API
   description: |
@@ -41,7 +41,6 @@ paths:
           in: query
           name: session_type
           required: false
-          default: interactive
           schema:
             $ref: "#/components/schemas/SessionType"
       responses:
@@ -203,8 +202,7 @@ components:
           properties:
             code:
               type: integer
-              minimum: 0
-              exclusiveMinimum: true
+              exclusiveMinimum: 0
               example: 1404
             detail:
               type: string
@@ -231,8 +229,7 @@ components:
           type: integer
           description: The size of disk storage for the session, in gigabytes
         resource_class_id:
-          nullable: true
-          type: integer
+          type: [integer, "null"]
         submission_id:
           $ref: "#/components/schemas/SubmissionId"
         data_connectors_overrides:
@@ -240,13 +237,11 @@ components:
         env_variable_overrides:
           $ref: "#/components/schemas/EnvVariableOverrides"
         job_command_override:
-          nullable: true
-          type: array
+          type: [array, "null"]
           items:
             type: string
         job_args_override:
-          nullable: true
-          type: array
+          type: [array, "null"]
           items:
             type: string
       required:
@@ -262,24 +257,20 @@ components:
           "$ref": "#/components/schemas/SessionResources"
         started:
           format: date-time
-          nullable: true
-          type: string
+          type: [string, "null"]
         job_completed_at:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
         lastInteraction:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
         status:
           "$ref": "#/components/schemas/SessionStatus"
         url:
           type: string
           description: The direct URL of a session
         external_url:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: The URL to use for external access to a session (usually the UI page)
         project_id:
           $ref: "#/components/schemas/Ulid"
@@ -293,12 +284,10 @@ components:
           $ref: "#/components/schemas/FrontendVariant"
         submission_id:
           $ref: "#/components/schemas/SubmissionId"
-          nullable: true
         command_args:
-          type: array
+          type: [array, "null"]
           items:
             type: string
-          nullable: true
       required:
         - image
         - name
@@ -347,12 +336,10 @@ components:
           type: string
         will_hibernate_at:
           format: date-time
-          nullable: true
-          type: string
+          type: [string, "null"]
         will_delete_at:
           format: date-time
-          nullable: true
-          type: string
+          type: [string, "null"]
         ready_containers:
           type: integer
           minimum: 0
@@ -434,8 +421,7 @@ components:
       additionalProperties:
         oneOf:
           - type: integer
-          - type: string
-            nullable: true
+          - type: [string, "null"]
           - type: boolean
           - type: object
     SourcePath:

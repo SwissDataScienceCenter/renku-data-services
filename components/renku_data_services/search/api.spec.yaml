@@ -1,4 +1,4 @@
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku Data Services API
   description: |
@@ -113,7 +113,7 @@ components:
     SearchQuery:
       description: Query params for the search request
       allOf:
-      - $ref: "#/components/schemas/PaginationRequest"
+      - $ref: "#/components/schemas/SearchPaginationRequest"
       - properties:
           q:
             description: The search query.
@@ -123,7 +123,9 @@ components:
             description: Include counts (project_count, data_connector_count) in the results.
             type: boolean
             default: false
-    PaginationRequest:
+    # NOTE: This is not named PaginationRequest because the specs of all services are merged, and that would
+    # add the maximum below to the PaginationRequest of the other services which do not have that limit.
+    SearchPaginationRequest:
       type: object
       additionalProperties: false
       properties:
@@ -131,6 +133,8 @@ components:
           description: Result's page number starting from 1
           type: integer
           minimum: 1
+          # The offset sent to Solr is a 32 bit integer: (21474837 - 1) * 100 <= 2^31 - 1
+          maximum: 21474837
           default: 1
         per_page:
           description: The number of results per page
@@ -583,8 +587,7 @@ components:
           properties:
             code:
               type: integer
-              minimum: 0
-              exclusiveMinimum: true
+              exclusiveMinimum: 0
               example: 1404
             detail:
               type: string

@@ -2,8 +2,10 @@
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator, model_validator
 from ulid import ULID
+
+from renku_data_services.base_models.validation import validate_request_data
 
 
 class BaseAPISpec(BaseModel):
@@ -21,3 +23,9 @@ class BaseAPISpec(BaseModel):
         if isinstance(value, ULID):
             return str(value)
         return value
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_request(cls, data: Any, info: ValidationInfo) -> Any:
+        """Stricter validation of request data, see validate_request_data."""
+        return validate_request_data(cls, data, info)

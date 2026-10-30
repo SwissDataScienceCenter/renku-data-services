@@ -1484,7 +1484,7 @@ async def patch_session(
         annotations["renku.io/resource_pool_id"] = str(rp.id)
         patch.metadata.annotations = annotations
         # Patch the resource pool and class ID in the template annotations
-        annotations: dict[str, str | ResetType] = dict()
+        annotations = dict()
         if session.spec.template and session.spec.template.metadata and session.spec.template.metadata.annotations:
             annotations.update(session.spec.template.metadata.annotations)
         annotations["renku.io/resource_class_id"] = str(rc.id)
@@ -1526,7 +1526,7 @@ async def patch_session(
         patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
     patch.metadata.labels = labels
     # Patch the template labels
-    labels: dict[str, str | ResetType] = dict()
+    labels = dict()
     if session.spec.template and session.spec.template.metadata and session.spec.template.metadata.labels:
         labels.update(session.spec.template.metadata.labels)
     labels["renku.io/safe-username"] = user.id

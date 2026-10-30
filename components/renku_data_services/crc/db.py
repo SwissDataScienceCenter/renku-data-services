@@ -413,7 +413,7 @@ class ResourcePoolQueryRepository:
             if id is not None:
                 stmt = stmt.where(schemas.ResourceClassORM.id == id)
             if name is not None:
-                stmt = stmt.where(schemas.ResourceClassORM.name == name)
+                stmt = stmt.where(schemas.ResourceClassORM.name.startswith(name, autoescape=True))
 
             # Apply user access control if api_user is provided
             if api_user is not None:
@@ -1332,7 +1332,7 @@ class MemberRepository(_Base):
                 )
             )
             if resource_pool_name is not None:
-                stmt = stmt.where(schemas.ResourcePoolORM.name == resource_pool_name)
+                stmt = stmt.where(schemas.ResourcePoolORM.name.startswith(resource_pool_name, autoescape=True))
             if resource_pool_id is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.id == resource_pool_id)
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
@@ -2036,7 +2036,7 @@ class ResourceFlavorRepository:
         async with self.session_maker() as session:
             stmt = select(schemas.ResourceFlavorORM).order_by(schemas.ResourceFlavorORM.name)
             if name is not None:
-                stmt = stmt.where(schemas.ResourceFlavorORM.name == name)
+                stmt = stmt.where(schemas.ResourceFlavorORM.name.startswith(name, autoescape=True))
             res = await session.scalars(stmt)
             return [flavor.dump() for flavor in res]
 

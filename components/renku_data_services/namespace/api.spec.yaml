@@ -1,4 +1,4 @@
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku Data Services API
   description: |
@@ -394,6 +394,7 @@ components:
         slug:
           $ref: "#/components/schemas/Slug"
         description:
+          x-not-nullable: true
           $ref: "#/components/schemas/Description"
       required:
         - "name"
@@ -404,10 +405,13 @@ components:
       additionalProperties: false
       properties:
         name:
+          x-not-nullable: true
           $ref: "#/components/schemas/NamespaceName"
         slug:
+          x-not-nullable: true
           $ref: "#/components/schemas/Slug"
         description:
+          x-not-nullable: true
           $ref: "#/components/schemas/Description"
     Ulid:
       description: ULID identifier
@@ -618,8 +622,7 @@ components:
           properties:
             code:
               type: integer
-              minimum: 0
-              exclusiveMinimum: true
+              exclusiveMinimum: 0
               example: 1404
             detail:
               type: string

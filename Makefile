@@ -7,9 +7,15 @@ COMMON_CODEGEN_PARAMS := \
 	--target-python-version 3.13 \
 	--field-constraints \
 	--strict-nullable
+# Optional fields are generated as `X | None = None` which accepts an explicit null. Fields marked with
+# `x-not-nullable: true` in the spec get the marker in `json_schema_extra`, the BaseAPISpec validator then
+# rejects null for them. See renku_data_services.base_models.validation.reject_null_if_not_nullable
+APISPEC_EXTRA_KEYS_PARAMS := \
+	--field-extra-keys x-not-nullable
 API_CODEGEN_PARAMS := \
 	--input-file-type openapi \
 	${COMMON_CODEGEN_PARAMS} \
+	${APISPEC_EXTRA_KEYS_PARAMS} \
 	--collapse-root-models \
 	--set-default-enum-member \
 	--openapi-scopes schemas paths parameters \
@@ -29,6 +35,7 @@ CR_CODEGEN_PARAMS := \
 SEARCH_CODEGEN_PARAMS := \
 	--input-file-type openapi \
 	${COMMON_CODEGEN_PARAMS} \
+	${APISPEC_EXTRA_KEYS_PARAMS} \
 	--set-default-enum-member \
 	--openapi-scopes schemas paths parameters \
 	--use-one-literal-as-default \
@@ -189,8 +196,10 @@ help:  ## Display this help.
 # Pattern rules
 
 API_SPEC_CODEGEN_PARAMS := ${API_CODEGEN_PARAMS}
+# NOTE: This has to be a target-specific variable, an $(eval ...) in the recipe would change the
+# parameters for all the specs generated after the search one.
+components/renku_data_services/search/apispec.py: API_SPEC_CODEGEN_PARAMS = ${SEARCH_CODEGEN_PARAMS}
 %/apispec.py: %/api.spec.yaml
-	$(if $(findstring /search/, $(<)), $(eval API_SPEC_CODEGEN_PARAMS=${SEARCH_CODEGEN_PARAMS}))
 	poetry run datamodel-codegen --input $< --output $@ --base-class $(subst /,.,$(subst .py,_base.BaseAPISpec,$(subst components/,,$@))) ${API_SPEC_CODEGEN_PARAMS}
 # If the only difference is the timestamp comment line, ignore it by
 # reverting to the checked in version. As the file timestamps is now

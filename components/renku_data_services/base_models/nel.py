@@ -39,9 +39,9 @@ class Nel[A](Sequence[A]):
     @overload
     def __getitem__(self, key: int) -> A: ...
     @overload
-    def __getitem__(self, key: slice[int]) -> Never: ...
+    def __getitem__(self, key: slice) -> Never: ...
 
-    def __getitem__(self, key: int | slice[int]) -> A | Sequence[A]:
+    def __getitem__(self, key: int | slice) -> A | Sequence[A]:
         if isinstance(key, slice):
             raise NotImplementedError("slicing non-empty lists is not supported")
         if key == 0:

@@ -1,4 +1,4 @@
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku Data Services API
   description: |
@@ -150,17 +150,14 @@ components:
         status:
           $ref: "#/components/schemas/AppStatus"
         url:
-          type: string
-          nullable: true
+          type: [string, "null"]
         project_id:
           $ref: "#/components/schemas/Ulid"
         started:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
         image:
-          type: string
-          nullable: true
+          type: [string, "null"]
       required:
         - name
         - launcher_id
@@ -201,8 +198,7 @@ components:
           properties:
             code:
               type: integer
-              minimum: 0
-              exclusiveMinimum: true
+              exclusiveMinimum: 0
               example: 1404
             detail:
               type: string

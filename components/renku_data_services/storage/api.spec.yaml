@@ -1,4 +1,4 @@
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku Data Services API
   description: |
@@ -336,8 +336,7 @@ components:
     MaxStorageSize:
       type: integer
       format: int64
-      minimum: 0
-      exclusiveMinimum: true
+      exclusiveMinimum: 0
       description: Maximum size in GB
     RCloneConfig:
       type: object
@@ -345,8 +344,7 @@ components:
       additionalProperties:
         oneOf:
           - type: integer
-          - type: string
-            nullable: true
+          - type: [string, "null"]
           - type: boolean
           - type: object
     RCloneConfigValidate: #this is the same as RCloneConfig but duplicated so a class gets generated
@@ -355,8 +353,7 @@ components:
       additionalProperties:
         oneOf:
           - type: integer
-          - type: string
-            nullable: true
+          - type: [string, "null"]
           - type: boolean
           - type: object
     RCloneSchema:
@@ -472,8 +469,7 @@ components:
           properties:
             code:
               type: integer
-              minimum: 0
-              exclusiveMinimum: true
+              exclusiveMinimum: 0
               example: 1404
             detail:
               type: string

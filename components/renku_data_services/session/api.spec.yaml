@@ -1,4 +1,4 @@
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku Data Services API
   description: |
@@ -471,36 +471,45 @@ components:
             name:
               $ref: "#/components/schemas/SessionName"
             description:
+              x-not-nullable: true
               $ref: "#/components/schemas/Description"
             container_image:
               $ref: "#/components/schemas/ContainerImage"
             default_url:
+              x-not-nullable: true
               allOf:
                 - $ref: "#/components/schemas/DefaultUrl"
               default: /lab
             uid:
+              x-not-nullable: true
               allOf:
                 - $ref: "#/components/schemas/EnvironmentUid"
               default: 1000
             gid:
+              x-not-nullable: true
               allOf:
                 - $ref: "#/components/schemas/EnvironmentGid"
               default: 1000
             working_directory:
+              x-not-nullable: true
               $ref: "#/components/schemas/EnvironmentWorkingDirectory"
             mount_directory:
+              x-not-nullable: true
               $ref: "#/components/schemas/EnvironmentMountDirectory"
             port:
+              x-not-nullable: true
               allOf:
                 - $ref: "#/components/schemas/EnvironmentPort"
               default: 8080
             is_archived:
+              x-not-nullable: true
               allOf:
                 - $ref: "#/components/schemas/IsArchived"
               default: false
             environment_image_source:
               $ref: "#/components/schemas/EnvironmentImageSourceImage"
             strip_path_prefix:
+              x-not-nullable: true
               allOf:
                 - $ref: "#/components/schemas/StripPathPrefix"
               default: false
@@ -521,7 +530,7 @@ components:
               $ref: "#/components/schemas/BuildParametersPatch"
     EnvironmentPatch:
       allOf:
-        - $ref: "#/components/schemas/CommandAndArgs"
+        - $ref: "#/components/schemas/CommandAndArgsPatch"
         - type: object
           description: Update a session environment
           additionalProperties: false
@@ -742,7 +751,7 @@ components:
     BuildParameters:
       description: Build parameters
       allOf:
-        - ref: "#/components/schemas/CommandAndArgs"
+        - $ref: "#/components/schemas/CommandAndArgs"
         - type: object
           additionalProperties: false
           properties:
@@ -793,9 +802,19 @@ components:
       type: object
       properties:
         command:
+          x-not-nullable: true
           $ref: "#/components/schemas/EnvironmentCommand"
         args:
+          x-not-nullable: true
           $ref: "#/components/schemas/EnvironmentArgs"
+    CommandAndArgsPatch:
+      description: The command and arguments.
+      type: object
+      properties:
+        command:
+          $ref: "#/components/schemas/EnvironmentPatchCommand"
+        args:
+          $ref: "#/components/schemas/EnvironmentPatchArgs"
     ContainerImage:
       description: A container image
       type: string
@@ -812,36 +831,30 @@ components:
       example: "/lab"
     ResourceClassId:
       description: The identifier of a resource class
-      type: integer
+      type: [integer, "null"]
       default: null
-      nullable: true
     DiskStorage:
       description: The size of disk storage for the session, in gigabytes
       type: integer
       minimum: 1
       example: 8
     DiskStoragePatch:
-      type: integer
+      type: [integer, "null"]
       minimum: 1
-      nullable: true
     EnvironmentPort:
       type: integer
-      minimum: 0
-      exclusiveMinimum: true
-      exclusiveMaximum: true
+      exclusiveMinimum: 0
       # NOTE: we reserve 65400 - 65535 for usage of Renku sidecars and services
-      maximum: 65400
+      exclusiveMaximum: 65400
       description: The TCP port (on any container in the session) where user requests will be routed to from the ingress
     EnvironmentUid:
       type: integer
-      minimum: 0
-      exclusiveMinimum: true
+      exclusiveMinimum: 0
       maximum: 65535
       description: The user ID used to run the session
     EnvironmentGid:
       type: integer
-      minimum: 0
-      exclusiveMinimum: true
+      exclusiveMinimum: 0
       maximum: 65535
       description: The group ID used to run the session
     EnvironmentWorkingDirectory:
@@ -869,11 +882,10 @@ components:
       description: The command that will be run i.e. will overwrite the image Dockerfile ENTRYPOINT, equivalent to command in Kubernetes
       minItems: 1
     EnvironmentPatchCommand:
-      type: array
+      type: [array, "null"]
       description: The command that will be run i.e. will overwrite the image Dockerfile ENTRYPOINT, equivalent to command in Kubernetes
       items:
         type: string
-      nullable: true
       minItems: 1
     EnvironmentArgs:
       type: array
@@ -882,11 +894,10 @@ components:
       description: The arguments that will follow the command, i.e. will overwrite the image Dockerfile CMD, equivalent to args in Kubernetes
       minItems: 1
     EnvironmentPatchArgs:
-      type: array
+      type: [array, "null"]
       description: The arguments that will follow the command, i.e. will overwrite the image Dockerfile CMD, equivalent to args in Kubernetes
       items:
         type: string
-      nullable: true
       minItems: 1
     IsArchived:
       type: boolean
@@ -1061,8 +1072,7 @@ components:
           properties:
             code:
               type: integer
-              minimum: 0
-              exclusiveMinimum: true
+              exclusiveMinimum: 0
               example: 1404
             detail:
               type: string

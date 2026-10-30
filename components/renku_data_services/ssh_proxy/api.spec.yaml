@@ -1,4 +1,4 @@
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku SSH Proxy Internal API
   description: Internal endpoint used by the Renku SSH proxy to authorize a connection from a public key and a session.
@@ -50,8 +50,7 @@ components:
           properties:
             code:
               type: integer
-              minimum: 0
-              exclusiveMinimum: true
+              exclusiveMinimum: 0
               example: 1404
             detail:
               type: string

@@ -1,8 +1,12 @@
 """Base models for API specifications."""
 
+from typing import Any
+
 import pydantic
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator, model_validator
 from ulid import ULID
+
+from renku_data_services.base_models.validation import validate_request_data
 
 # NOTE: We are monkeypatching the regex engine for the root model because
 # the datamodel code generator that makes classes from the API spec does not
@@ -28,3 +32,9 @@ class BaseAPISpec(BaseModel):
     def serialize_id(cls, id: str | ULID) -> str:
         """Custom serializer that can handle ULIDs."""
         return str(id)
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_request(cls, data: Any, info: ValidationInfo) -> Any:
+        """Stricter validation of request data, see validate_request_data."""
+        return validate_request_data(cls, data, info)

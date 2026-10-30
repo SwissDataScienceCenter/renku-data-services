@@ -8,7 +8,7 @@ from typing import Any, Concatenate, NoReturn, ParamSpec, TypeVar, cast
 from pydantic import BaseModel
 from sanic import Request, json
 from sanic.response import JSONResponse
-from sanic_ext import validate
+from sanic_ext.extras.validation.clean import clean_data
 
 from renku_data_services import errors
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -89,10 +89,11 @@ def validate_query(
     ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
         @wraps(f)
         async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
-            try:
-                return await validate(query=query)(f)(request, *args, **kwargs)
-            except KeyError as err:
-                raise errors.ValidationError(message="Failed to validate the query parameters") from err
+            # NOTE: The sanic validation uses request.args which drops parameters with blank values, so
+            # `?page=` or an unknown `?foo=` would be accepted.
+            data = clean_data(query, request.get_args(keep_blank_values=True))
+            kwargs["query"] = query.model_validate(data)
+            return await f(request, *args, **kwargs)
 
         return decorated_function
 
