@@ -8,6 +8,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -411,6 +412,10 @@ class SessionLauncherDataConnectorORM(BaseORM):
             name="_fk_launcher_data_connectors_project_link",
             ondelete="CASCADE",
         ),
+        CheckConstraint(
+            "policy IN ('excluded', 'readOnly', 'readWrite')",
+            name="_ck_launcher_data_connectors_policy",
+        ),
     )
 
     launcher_id: Mapped[ULID] = mapped_column(ULIDType, primary_key=True)
@@ -492,6 +497,10 @@ class SessionLauncherSecretORM(BaseORM):
             # ["projects.session_secret_slots.id", "projects.session_secret_slots.project_id"],
             name="_fk_launcher_secrets_secret_slot",
             ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "policy IN ('excluded', 'included')",
+            name="_ck_launcher_secrets_policy",
         ),
     )
 

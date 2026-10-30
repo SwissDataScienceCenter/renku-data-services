@@ -31,6 +31,10 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["launcher_id"], ["sessions.launchers.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("launcher_id", "data_connector_to_project_link_id"),
+        sa.CheckConstraint(
+            "policy IN ('excluded', 'readOnly', 'readWrite')",
+            name="_ck_launcher_data_connectors_policy",
+        ),
         schema="sessions",
     )
     op.create_table(
@@ -68,6 +72,10 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("launcher_id", "secret_slot_id"),
+        sa.CheckConstraint(
+            "policy IN ('excluded', 'included')",
+            name="_ck_launcher_secrets_policy",
+        ),
         schema="sessions",
     )
     op.create_index(
