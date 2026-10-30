@@ -99,7 +99,7 @@ pre-commit = "^4.1.0"
 sanic-testing = "^24.6.0"
 aiosqlite = "^0.20.0"
 types-pyyaml = "^6.0.12.20241230"
-schemathesis = "==3.39.7"
+schemathesis = "^4.32.0"
 pytest-asyncio = "^0.21.2"
 pytest-postgresql = "^6.1.1"
 types-urllib3 = "^1.26.25.14"
@@ -203,10 +203,7 @@ exclude_dirs = [
 addopts = "--cov components/ --cov bases/ --cov-report=term-missing -v"
 doctest_optionflags = "ALLOW_UNICODE"
 testpaths = ["bases", "components", "test"]
-markers = [
-  "integration: mark a test as a integration.",
-  "sessions",
-]
+markers = ["integration: mark a test as a integration.", "sessions"]
 filterwarnings = [
   "ignore:<class 'pytest_black.BlackItem'> is not using a cooperative constructor:pytest.PytestDeprecationWarning",
   "ignore:distutils Version classes are deprecated. Use packaging.version instead:DeprecationWarning",
