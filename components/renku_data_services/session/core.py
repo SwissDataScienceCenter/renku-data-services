@@ -1,7 +1,7 @@
 """Business logic for sessions."""
 
 from pathlib import PurePosixPath
-from typing import Union, cast
+from typing import Any, Union, cast
 
 from ulid import ULID
 
@@ -9,6 +9,14 @@ from renku_data_services import errors
 from renku_data_services.base_models.core import RESET, ResetType
 from renku_data_services.session import apispec, models
 from renku_data_services.session.config import BuildsConfig
+
+
+def _without_none(data: dict[str, Any]) -> dict[str, Any]:
+    """Drop the null values from patch data before validating it as a post.
+
+    Optional fields in a post are not nullable, a null in the patch means the default should be used.
+    """
+    return {k: v for k, v in data.items() if v is not None}
 
 
 def validate_unsaved_environment(
@@ -245,7 +253,9 @@ def validate_session_launcher_patch(
                     or patch.environment.environment_image_source is None
                 ):
                     # NOTE: The custom environment is being created from an image.
-                    validated_env = apispec.EnvironmentPostInLauncherHelper.model_validate(data_dict["environment"])
+                    validated_env = apispec.EnvironmentPostInLauncherHelper.model_validate(
+                        _without_none(data_dict["environment"])
+                    )
                     environment = models.UnsavedEnvironment(
                         name=validated_env.name,
                         description=validated_env.description,
@@ -270,7 +280,7 @@ def validate_session_launcher_patch(
                     # NOTE: The environment type is changed to be built, so, all required fields should be passed (as in
                     # a POST request).
                     validated_build_parameters = apispec.BuildParameters.model_validate(
-                        data_dict.get("environment", {}).get("build_parameters", {})
+                        _without_none(data_dict.get("environment", {}).get("build_parameters", {}))
                     )
                     environment = validate_unsaved_build_parameters(
                         validated_build_parameters,
@@ -329,7 +339,7 @@ def validate_session_launcher_patch(
                     assert isinstance(environment, dict)
                     if environment.get("name") is None:
                         environment["name"] = current_launcher.environment.name
-                    validated_env = apispec.EnvironmentPostInLauncherHelper.model_validate(environment)
+                    validated_env = apispec.EnvironmentPostInLauncherHelper.model_validate(_without_none(environment))
                     environment = models.UnsavedEnvironment(
                         name=validated_env.name,
                         description=validated_env.description,

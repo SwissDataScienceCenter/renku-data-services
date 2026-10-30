@@ -555,12 +555,14 @@ components:
         value:
           $ref: "#/components/schemas/SecretValue"
         kind:
+          x-not-nullable: true
           allOf:
             - $ref: "#/components/schemas/SecretKind"
           default: general
         expiration_timestamp:
           $ref: "#/components/schemas/ExpirationTimestamp"
         default_filename:
+          x-not-nullable: true
           $ref: "#/components/schemas/SecretDefaultFilename"
       required:
         - "name"

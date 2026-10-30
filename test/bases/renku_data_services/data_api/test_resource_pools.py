@@ -1145,6 +1145,48 @@ async def test_user_resource_pools(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+async def test_user_resource_pools_filter_by_name_prefix(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = True
+    valid_resource_pool_payload["name"] = "alpha-pool"
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp_alpha = res.json
+    valid_resource_pool_payload["name"] = "beta-pool"
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    _, res = await sanic_client.get("/api/data/users", headers=admin_headers)
+    assert res.status_code == 200
+    user_id = res.json[1]["id"]
+
+    _, res = await sanic_client.get(f"/api/data/users/{user_id}/resource_pools", headers=admin_headers)
+    assert res.status_code == 200
+    assert {rp["name"] for rp in res.json} == {"alpha-pool", "beta-pool"}
+    _, res = await sanic_client.get(
+        f"/api/data/users/{user_id}/resource_pools", params={"name": "alpha"}, headers=admin_headers
+    )
+    assert res.status_code == 200
+    assert res.json == [rp_alpha]
+    # LIKE wildcards in the name are matched literally
+    _, res = await sanic_client.get(
+        f"/api/data/users/{user_id}/resource_pools", params={"name": "%pool"}, headers=admin_headers
+    )
+    assert res.status_code == 200
+    assert res.json == []
+    # The name has a minimum length
+    _, res = await sanic_client.get(
+        f"/api/data/users/{user_id}/resource_pools", params={"name": "alp"}, headers=admin_headers
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_adding_existing_user_does_not_fail(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],

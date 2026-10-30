@@ -1377,16 +1377,21 @@ components:
         session_path:
           type: string
         session_ingress_class_name:
+          x-not-nullable: true
           $ref: "#/components/schemas/IngressClassName"
         session_ingress_annotations:
           $ref: "#/components/schemas/IngressAnnotations"
         session_tls_secret_name:
+          x-not-nullable: true
           $ref: "#/components/schemas/TlsSecretName"
         session_storage_class:
+          x-not-nullable: true
           $ref: "#/components/schemas/StorageClassName"
         service_account_name:
+          x-not-nullable: true
           $ref: "#/components/schemas/K8sResourceName"
         session_ingress_use_default_cluster_tls_cert:
+          x-not-nullable: true
           type: boolean
           default: false
       required:
@@ -1482,6 +1487,7 @@ components:
         name:
           $ref: "#/components/schemas/ResourceFlavorName"
         description:
+          x-not-nullable: true
           $ref: "#/components/schemas/ResourceFlavorDescription"
         cpu:
           $ref: "#/components/schemas/Cpu"

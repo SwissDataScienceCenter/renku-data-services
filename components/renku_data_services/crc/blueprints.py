@@ -812,8 +812,13 @@ class UserResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _get(_: Request, user: base_models.APIUser, user_id: str) -> HTTPResponse:
-            rps = await self.repo.get_user_resource_pools(keycloak_id=user_id, api_user=user)
+        @validate_query(query=apispec.UserResourceParams)
+        async def _get(
+            _: Request, user: base_models.APIUser, user_id: str, query: apispec.UserResourceParams
+        ) -> HTTPResponse:
+            rps = await self.repo.get_user_resource_pools(
+                keycloak_id=user_id, api_user=user, resource_pool_name=query.name
+            )
             return validated_json(apispec.ResourcePoolsWithId, rps)
 
         return "/users/<user_id>/resource_pools", ["GET"], _get

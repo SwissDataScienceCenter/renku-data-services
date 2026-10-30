@@ -394,6 +394,7 @@ components:
         slug:
           $ref: "#/components/schemas/Slug"
         description:
+          x-not-nullable: true
           $ref: "#/components/schemas/Description"
       required:
         - "name"
@@ -404,10 +405,13 @@ components:
       additionalProperties: false
       properties:
         name:
+          x-not-nullable: true
           $ref: "#/components/schemas/NamespaceName"
         slug:
+          x-not-nullable: true
           $ref: "#/components/schemas/Slug"
         description:
+          x-not-nullable: true
           $ref: "#/components/schemas/Description"
     Ulid:
       description: ULID identifier

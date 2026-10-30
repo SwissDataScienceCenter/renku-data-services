@@ -229,7 +229,6 @@ components:
       additionalProperties: false
       properties:
         session_name:
-          x-not-nullable: true
           $ref: "#/components/schemas/SessionName"
     AlertPatch:
       description: Data to update an alert.

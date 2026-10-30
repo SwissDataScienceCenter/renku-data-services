@@ -998,10 +998,10 @@ class ProjectMigrationRepository:
                 description=None,
                 resource_class_id=session_launcher.resource_class_id,
                 disk_storage=session_launcher.disk_storage,
-                environment=session_apispec.EnvironmentPostInLauncherHelper(
+                # NOTE: mypy sees the optional fields as required, but description is not nullable and cannot be None
+                environment=session_apispec.EnvironmentPostInLauncherHelper(  # type: ignore[call-arg]
                     environment_kind=session_apispec.EnvironmentKind.CUSTOM,
                     name=session_launcher.name,
-                    description=None,
                     container_image=session_launcher.container_image,
                     default_url=session_launcher.default_url,
                     uid=constants.MIGRATION_UID,

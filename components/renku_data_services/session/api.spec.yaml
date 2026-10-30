@@ -471,36 +471,45 @@ components:
             name:
               $ref: "#/components/schemas/SessionName"
             description:
+              x-not-nullable: true
               $ref: "#/components/schemas/Description"
             container_image:
               $ref: "#/components/schemas/ContainerImage"
             default_url:
+              x-not-nullable: true
               allOf:
                 - $ref: "#/components/schemas/DefaultUrl"
               default: /lab
             uid:
+              x-not-nullable: true
               allOf:
                 - $ref: "#/components/schemas/EnvironmentUid"
               default: 1000
             gid:
+              x-not-nullable: true
               allOf:
                 - $ref: "#/components/schemas/EnvironmentGid"
               default: 1000
             working_directory:
+              x-not-nullable: true
               $ref: "#/components/schemas/EnvironmentWorkingDirectory"
             mount_directory:
+              x-not-nullable: true
               $ref: "#/components/schemas/EnvironmentMountDirectory"
             port:
+              x-not-nullable: true
               allOf:
                 - $ref: "#/components/schemas/EnvironmentPort"
               default: 8080
             is_archived:
+              x-not-nullable: true
               allOf:
                 - $ref: "#/components/schemas/IsArchived"
               default: false
             environment_image_source:
               $ref: "#/components/schemas/EnvironmentImageSourceImage"
             strip_path_prefix:
+              x-not-nullable: true
               allOf:
                 - $ref: "#/components/schemas/StripPathPrefix"
               default: false
@@ -793,8 +802,10 @@ components:
       type: object
       properties:
         command:
+          x-not-nullable: true
           $ref: "#/components/schemas/EnvironmentCommand"
         args:
+          x-not-nullable: true
           $ref: "#/components/schemas/EnvironmentArgs"
     CommandAndArgsPatch:
       description: The command and arguments.

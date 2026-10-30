@@ -287,6 +287,47 @@ async def test_renaming_a_flavor_leaves_the_class_name_alone(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
+async def test_name_filters_match_a_prefix(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    small = await _create_flavor(sanic_client, admin_headers)
+    large = await _create_flavor(sanic_client, admin_headers, name="shared-large")
+    await _create_flavor(sanic_client, admin_headers, name="other-flavor")
+
+    _, res = await sanic_client.get("/api/data/resource_flavors?name=shared", headers=admin_headers)
+    assert res.status_code == 200, res.text
+    assert {f["id"] for f in res.json} == {small["id"], large["id"]}
+    # LIKE wildcards in the name are matched literally
+    _, res = await sanic_client.get("/api/data/resource_flavors?name=%25small", headers=admin_headers)
+    assert res.status_code == 200, res.text
+    assert res.json == []
+
+    pool = await _create_pool(sanic_client, valid_resource_pool_payload)
+    class_ids = []
+    for name in ["linked-class-a", "linked-class-b"]:
+        _, res = await sanic_client.post(
+            f"/api/data/resource_pools/{pool['id']}/classes",
+            headers=admin_headers,
+            json={"name": name, "default": False, "resource_flavor_id": small["id"]},
+        )
+        assert res.status_code == 201, res.text
+        class_ids.append(res.json["id"])
+
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{pool['id']}/classes?name=linked", headers=admin_headers)
+    assert res.status_code == 200, res.text
+    assert sorted(c["id"] for c in res.json) == sorted(class_ids)
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{pool['id']}/classes?name=linked-class-b", headers=admin_headers
+    )
+    assert res.status_code == 200, res.text
+    assert [c["id"] for c in res.json] == [class_ids[1]]
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_unlink_keeps_the_current_values(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
