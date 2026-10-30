@@ -1111,7 +1111,7 @@ class DataConnectorRepository:
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+                message=f"Launcher with id '{launcher_id}' does not exist or you do not have access to it."
             )
 
         allowed_dcs = await self.authz.resources_with_permission(user, user.id, ResourceType.data_connector, Scope.READ)
