@@ -106,6 +106,12 @@ paths:
                   message:
                     type: string
                     example: Webhook processed successfully
+        "400":
+          description: Bad Request - Request body is not valid JSON
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Unauthorized - Missing or invalid Bearer token
           content:
