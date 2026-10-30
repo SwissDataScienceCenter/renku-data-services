@@ -61,7 +61,7 @@ class ProjectORM(BaseORM):
     repositories: Mapped[list["ProjectRepositoryORM"]] = relationship(
         back_populates="project",
         default_factory=list,
-        cascade="save-update, merge, delete",
+        cascade="save-update, merge, delete, delete-orphan",
         lazy="selectin",
         repr=False,
     )
@@ -129,10 +129,8 @@ class ProjectRepositoryORM(BaseORM):
 
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
     url: Mapped[str] = mapped_column("url", String(2000))
-    project_id: Mapped[Optional[ULID]] = mapped_column(
-        ForeignKey("projects.id", ondelete="CASCADE"), default=None, index=True
-    )
-    project: Mapped[Optional[ProjectORM]] = relationship(back_populates="repositories", default=None, repr=False)
+    project_id: Mapped[ULID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), default=None, index=True)
+    project: Mapped[ProjectORM] = relationship(back_populates="repositories", default=None, repr=False)
 
 
 class SessionSecretSlotORM(BaseORM):
