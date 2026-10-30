@@ -1,6 +1,6 @@
 """Models for session runners."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Literal
@@ -67,3 +67,11 @@ class RemoteUserSession(UnsavedRemoteUserSession):
 
     runner_id: ULID | None
     """The ID of the user-scoped runner assigned to run this session."""
+
+
+@dataclass(eq=True, frozen=True, kw_only=True)
+class RemoteUserSessionSecret:
+    """Represents a secret used in a remote Renku session."""
+
+    name: str
+    value: str = field(repr=False)
