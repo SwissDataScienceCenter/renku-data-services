@@ -327,7 +327,7 @@ def validate_session_launcher_patch(
                 elif current == "build" and new == "image":
                     environment = data_dict["environment"]
                     assert isinstance(environment, dict)
-                    if environment.get("name") is None:  # type: ignore
+                    if environment.get("name") is None:
                         environment["name"] = current_launcher.environment.name
                     validated_env = apispec.EnvironmentPostInLauncherHelper.model_validate(environment)
                     environment = models.UnsavedEnvironment(

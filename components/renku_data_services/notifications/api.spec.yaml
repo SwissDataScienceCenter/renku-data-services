@@ -149,26 +149,32 @@ components:
             - resolved
           description: The status of the alerts in this webhook
         receiver:
+          x-not-nullable: true
           type: string
           description: The name of the receiver that got the alert
         groupLabels:
+          x-not-nullable: true
           type: object
           description: Labels that are common to all alerts in the group
           additionalProperties:
             type: string
         commonLabels:
+          x-not-nullable: true
           type: object
           additionalProperties:
             type: string
           description: Labels that are common to all alerts
         commonAnnotations:
+          x-not-nullable: true
           type: object
           additionalProperties:
             type: string
         externalURL:
+          x-not-nullable: true
           type: string
           description: The external URL of the Alertmanager
         truncatedAlerts:
+          x-not-nullable: true
           type: integer
           description: The number of alerts that have been truncated
         alerts:
@@ -205,13 +211,16 @@ components:
           format: date-time
           description: The time when the alert started
         endsAt:
+          x-not-nullable: true
           type: string
           format: date-time
           description: The time when the alert ended
         generatorURL:
+          x-not-nullable: true
           type: string
           description: The URL of the generator that created the alert
         fingerprint:
+          x-not-nullable: true
           type: string
           description: A unique fingerprint identifying this alert
     AlertsGetQuery:
@@ -220,6 +229,7 @@ components:
       additionalProperties: false
       properties:
         session_name:
+          x-not-nullable: true
           $ref: "#/components/schemas/SessionName"
     AlertPatch:
       description: Data to update an alert.
@@ -227,6 +237,7 @@ components:
       additionalProperties: false
       properties:
         resolved:
+          x-not-nullable: true
           type: boolean
           description: Set to true to mark the alert as resolved. The resolved_date timestamp will be set automatically.
     Ulid:
@@ -280,6 +291,7 @@ components:
         user_id:
           $ref: "#/components/schemas/UserId"
         session_name:
+          x-not-nullable: true
           $ref: "#/components/schemas/SessionName"
       required:
         - title

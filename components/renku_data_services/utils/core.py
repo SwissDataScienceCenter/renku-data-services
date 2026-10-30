@@ -29,7 +29,7 @@ def get_ssl_context() -> ssl.SSLContext:
     return context
 
 
-def merge_api_specs(*args: list[dict[str, Any]]) -> dict[str, Any]:
+def merge_api_specs(*args: dict[str, Any]) -> dict[str, Any]:
     """Merges API spec files into a single one."""
     if any(not isinstance(arg, dict) for arg in args):
         raise errors.ConfigurationError(message="API Spec isn't of type 'dict'")
@@ -44,11 +44,11 @@ def merge_api_specs(*args: list[dict[str, Any]]) -> dict[str, Any]:
         return merged_spec
     merged_spec = args[0]
     if len(args) == 1:
-        return cast(dict[str, Any], merged_spec)
+        return merged_spec
     for to_merge in args[1:]:
         merger.merge(merged_spec, to_merge)
 
-    return cast(dict[str, Any], merged_spec)
+    return merged_spec
 
 
 class WithSessionMaker(Protocol):

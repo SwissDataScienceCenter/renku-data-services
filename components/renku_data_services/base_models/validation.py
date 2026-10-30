@@ -3,12 +3,32 @@
 from collections.abc import Callable
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationInfo
 from pydantic import ValidationError as PydanticValidationError
 from sanic import json
 from sanic.response import JSONResponse
 
 from renku_data_services import errors
+
+RESPONSE_VALIDATION_CONTEXT = {"response": True}
+NOT_NULLABLE_KEY = "x-not-nullable"
+
+
+def reject_null_if_not_nullable(model: type[BaseModel], value: Any, info: ValidationInfo) -> Any:
+    """Reject an explicit null for optional fields marked with `x-not-nullable: true` in the api spec.
+
+    The code generator makes optional fields `X | None = None`, which accepts null even when the spec does not.
+    The marker is passed through by the code generator with `--field-extra-keys` as `json_schema_extra`.
+    Responses are not checked, a None value from the domain model there just means that the field is omitted.
+    """
+    if value is not None or info.field_name is None:
+        return value
+    if info.context is not None and info.context.get("response"):
+        return value
+    extra = model.model_fields[info.field_name].json_schema_extra
+    if isinstance(extra, dict) and extra.get(NOT_NULLABLE_KEY):
+        raise ValueError("null is not allowed")
+    return value
 
 
 def validate_and_dump(
@@ -22,7 +42,9 @@ def validate_and_dump(
     kwargs are passed on to the pydantic model `model_dump` method.
     """
     try:
-        body = model.model_validate(data).model_dump(exclude_none=exclude_none, mode="json", **kwargs)
+        body = model.model_validate(data, context=RESPONSE_VALIDATION_CONTEXT).model_dump(
+            exclude_none=exclude_none, mode="json", **kwargs
+        )
     except PydanticValidationError as err:
         parts = [".".join(str(i) for i in field["loc"]) + ": " + field["msg"] for field in err.errors()]
         message = (

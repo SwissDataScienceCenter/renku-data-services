@@ -1124,7 +1124,7 @@ class Authz:
                 subject_type=ResourceType.project.value, optional_subject_id=str(deleted_project.id)
             )
         )
-        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+        responses = self.client.ReadRelationships(
             ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
         )
         async for response in responses:

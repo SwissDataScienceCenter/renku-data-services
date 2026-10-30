@@ -92,7 +92,7 @@ markdown-code-runner = "^2.2.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.8.3"
-mypy = "~1.15.0"
+mypy = "~2.4.1"
 pytest = "^8.3.4"
 pytest-cov = "^6.0.0"
 pre-commit = "^4.1.0"
