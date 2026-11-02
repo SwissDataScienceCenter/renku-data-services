@@ -11,7 +11,7 @@ from ulid import ULID
 
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
-from renku_data_services.resource_usage.model import Credit, ResourceClassCost, ResourcePoolLimits
+from renku_data_services.resource_usage.model import Credit, ResourceClassCost, ResourcePoolLimitPut
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_client, create_rp
 from test.components.renku_data_services.resource_usage.helper import make_resources_request
@@ -2041,10 +2041,9 @@ async def test_resource_pools_quota_with_partial_usage(
     cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(50))
     await repo.set_resource_class_costs(cost)
 
-    # Set limits total=1000 credits and user=200 credits
-    limits = ResourcePoolLimits(
+    # Set limits
+    limits = ResourcePoolLimitPut(
         pool_id=resource_pool_id,
-        total_limit=Credit.from_int(total_limit),
         user_limit=Credit.from_int(user_limit),
     )
     await repo.set_resource_pool_limits(limits)
@@ -2125,10 +2124,9 @@ async def test_resource_pools_quota_with_no_usage(
     cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(50))
     await repo.set_resource_class_costs(cost)
 
-    # Set limits total=1000 credits and user=200 credits
-    limits = ResourcePoolLimits(
+    # Set limits
+    limits = ResourcePoolLimitPut(
         pool_id=resource_pool_id,
-        total_limit=Credit.from_int(1000),
         user_limit=Credit.from_int(200),
     )
     await repo.set_resource_pool_limits(limits)
@@ -2256,10 +2254,9 @@ async def test_resource_pools_quota_exceeded(
     cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(50))
     await repo.set_resource_class_costs(cost)
 
-    # Set limits total=1000 credits and user=100 credits
-    limits = ResourcePoolLimits(
+    # Set limits
+    limits = ResourcePoolLimitPut(
         pool_id=resource_pool_id,
-        total_limit=Credit.from_int(1000),
         user_limit=Credit.from_int(100),
     )
     await repo.set_resource_pool_limits(limits)
@@ -2523,9 +2520,8 @@ async def test_resource_pools_quota_with_no_costs(
     repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
 
     # Set limits but NO costs
-    limits = ResourcePoolLimits(
+    limits = ResourcePoolLimitPut(
         pool_id=resource_pool_id,
-        total_limit=Credit.from_int(1000),
         user_limit=Credit.from_int(200),
     )
     await repo.set_resource_pool_limits(limits)
