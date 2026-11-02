@@ -1,7 +1,7 @@
 """Protect launcher associations
 
 Revision ID: 807a50890bf8
-Revises: fc1a97661d0c
+Revises: 20076b29e3b8
 Create Date: 2026-10-01 15:35:13.648727
 
 """
@@ -13,7 +13,7 @@ import renku_data_services.utils.sqlalchemy
 
 # revision identifiers, used by Alembic.
 revision = "807a50890bf8"
-down_revision = "fc1a97661d0c"
+down_revision = "20076b29e3b8"
 branch_labels = None
 depends_on = None
 
