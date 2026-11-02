@@ -12,9 +12,10 @@ from renku_data_services.resource_usage.model import (
     Credit,
     DataSize,
     ResourceClassCost,
+    ResourcePoolLimitPut,
+    ResourcePoolLimits,
     ResourceUsageQuery,
 )
-from renku_data_services.resource_usage.orm import ResourcePoolLimits
 from test.components.renku_data_services.resource_usage.helper import assert_view_records, make_resources_request
 
 
@@ -68,19 +69,17 @@ async def test_resource_requests_limits(app_manager_instance: DependencyManager)
 
     (pool_id, _) = await create_resource_class(app_manager_instance)
 
-    limits = ResourcePoolLimits(pool_id, Credit.from_int(102), Credit.from_int(25))
+    limits = ResourcePoolLimitPut(pool_id, Credit.from_int(25))
     await repo.set_resource_pool_limits(limits)
     limits2 = await repo.find_resource_pool_limits(pool_id)
-    assert limits2 == limits
-
-    limits = ResourcePoolLimits(pool_id, Credit.from_int(500), Credit.from_int(250))
-    await repo.set_resource_pool_limits(limits)
-    limits2 = await repo.find_resource_pool_limits(pool_id)
-    assert limits2 == limits
+    assert limits2 is not None
+    assert limits2.pool_id == pool_id
+    assert limits2.user_limit == Credit.from_int(25)
+    assert limits2.total_limit.is_unlimited()
 
     await repo.delete_resource_pool_limits(pool_id)
     limits3 = await repo.find_resource_pool_limits(pool_id)
-    assert limits3 == ResourcePoolLimits(pool_id, Credit.zero(), Credit.zero())
+    assert limits3 == ResourcePoolLimits(pool_id, Credit.unlimited(), Credit.unlimited())
 
     limits4 = await repo.find_resource_pool_limits(-1)
     assert limits4 is None
