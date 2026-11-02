@@ -21,6 +21,7 @@ from renku_data_services.resource_usage.model import (
     ResourceClassCost,
     ResourceClassCostWithPool,
     ResourceDataFacade,
+    ResourcePoolLimitPut,
     ResourcePoolLimits,
     ResourcePoolUsageLimits,
     ResourcesRequest,
@@ -32,13 +33,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__file__)
 
 
-def validate_resource_pool_limit_put(id: int, body: apispec.ResourcePoolLimitPut) -> ResourcePoolLimits:
+def validate_resource_pool_limit_put(id: int, body: apispec.ResourcePoolLimitPut) -> ResourcePoolLimitPut:
     """Validate resource pool limit."""
-    if body.user_limit > body.total_limit:
-        raise errors.ValidationError(
-            message=f"The user_limit '{body.user_limit}' must be lower than total_limit '{body.total_limit}'.",
-        )
-    return ResourcePoolLimits(id, Credit.from_int(body.total_limit), Credit.from_int(body.user_limit))
+    return ResourcePoolLimitPut(id, Credit.from_int(body.user_limit))
 
 
 def validate_resource_class_costs_put(class_id: int, body: apispec.ResourceClassCostPut) -> ResourceClassCost:
@@ -197,7 +194,7 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
 class ResourceUsageService:
     """Queries for resource usage and limits."""
 
-    def __init__(self, repo: ResourceRequestsRepo | None, metering_client: ResourceUsageMetering | None = None) -> None:
+    def __init__(self, repo: ResourceRequestsRepo, metering_client: ResourceUsageMetering | None = None) -> None:
         self._repo = repo
         self._metering_client = metering_client
         if metering_client is None:
@@ -205,30 +202,21 @@ class ResourceUsageService:
                 "No metering client configured, resource usage will not be queried from the metering service."
             )
 
-    async def __get_default_limits(self, resource_pool_id: int) -> ResourcePoolLimits:
-        """Get default resource pool limits."""
-        if self._repo is not None:
-            db_limits = await self._repo.find_resource_pool_limits(resource_pool_id)
-            if db_limits is not None:
-                return db_limits
+    async def get_limits(self, resource_pool_id: int) -> ResourcePoolLimits | None:
+        """Get resource pool limits.
 
-        return ResourcePoolLimits(
-            pool_id=resource_pool_id,
-            total_limit=Credit.unlimited(),
-            user_limit=Credit.unlimited(),
-        )
-
-    async def get_limits(self, resource_pool_id: int) -> ResourcePoolLimits:
-        """Get resource pool limits."""
-        default_limits = await self.__get_default_limits(resource_pool_id)
-        if self._metering_client is None:
+        NOTE: Total limits are retrieved from the metering service, while user limits are retrieved from the database.
+        If the resource pool does not exist, None is returned.
+        """
+        default_limits = await self._repo.find_resource_pool_limits(resource_pool_id)
+        if default_limits is None or self._metering_client is None:
             return default_limits
 
         total_limit = await self._metering_client.get_resource_pool_total_limit(resource_pool_id)
         return ResourcePoolLimits(
             pool_id=resource_pool_id,
             total_limit=total_limit,
-            user_limit=default_limits.user_limit,  # NOTE: The metering service does not provide user limits
+            user_limit=default_limits.user_limit,
         )
 
     async def get_current_usage_with_limits(
@@ -270,6 +258,9 @@ class ResourceUsageService:
                 self._metering_client.get_usage(resource_pool_id, user_id, start_date, end_date),
                 self.get_limits(resource_pool_id),
             )
+        if limits is None:
+            return None
+
         return ResourcePoolUsageLimits(
             total_usage=total_usage,
             user_usage=user_usage,

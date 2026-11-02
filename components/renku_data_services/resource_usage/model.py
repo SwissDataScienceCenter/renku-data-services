@@ -475,6 +475,14 @@ class ResourcePoolLimits:
 
 
 @dataclass(frozen=True)
+class ResourcePoolLimitPut:
+    """Limits for a resource pool."""
+
+    pool_id: int
+    user_limit: Credit
+
+
+@dataclass(frozen=True)
 class ResourceClassCost:
     """The costs associated to a resource class."""
 
