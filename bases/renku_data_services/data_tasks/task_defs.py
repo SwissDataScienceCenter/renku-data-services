@@ -461,7 +461,7 @@ async def migrate_quota_priority_classes(dm: DependencyManager) -> None:
 
 async def record_resource_requests(dm: DependencyManager) -> None:
     """Periodically record all resource requests."""
-    interval_seconds = 30  # increase before merging
+    interval_seconds = 600
     while True:
         await dm.resource_requests_recorder.record_resource_requests(timedelta(seconds=interval_seconds))
         await asyncio.sleep(interval_seconds)
