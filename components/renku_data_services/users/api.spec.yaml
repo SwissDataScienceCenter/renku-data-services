@@ -557,7 +557,6 @@ components:
         kind:
           allOf:
             - $ref: "#/components/schemas/SecretKind"
-            - default: "general"
           default: general
         expiration_timestamp:
           $ref: "#/components/schemas/ExpirationTimestamp"
