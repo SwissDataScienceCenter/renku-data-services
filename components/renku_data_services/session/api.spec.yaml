@@ -752,8 +752,8 @@ components:
       type: string
       enum:
         - excluded
-        - readOnly
-        - readWrite
+        - read_only
+        - read_write
     DataConnectorKey:
       description: Key identifying a data connector to a project relationship
       type: object
@@ -793,8 +793,8 @@ components:
       type: string
       enum:
         - excluded
-        - readOnly
-        - readWrite
+        - read_only
+        - read_write
     ProjectRepositoryId:
       description: |
         The ID of the git repository

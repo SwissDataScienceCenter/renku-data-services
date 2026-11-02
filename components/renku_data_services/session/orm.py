@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import Any
 
 from sqlalchemy import (
     JSON,
@@ -35,7 +34,7 @@ from ulid import ULID
 from renku_data_services import errors
 from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.data_connectors.orm import DataConnectorToProjectLinkORM
-from renku_data_services.project.orm import ProjectORM, ProjectRepositoryORM, SessionSecretSlotORM
+from renku_data_services.project.orm import ProjectORM, SessionSecretSlotORM
 from renku_data_services.session import models
 from renku_data_services.utils.sqlalchemy import PurePosixPathType, ULIDType
 
@@ -347,47 +346,47 @@ class BuildORM(BaseORM):
         )
 
 
-class SessionLauncherRepositoryORM(BaseORM):
-    """The repository parameters of a launcher."""
-
-    __tablename__ = "launcher_repositories"
-
-    launcher_id: Mapped[ULID] = mapped_column(
-        ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"),
-        primary_key=True,
-    )
-
-    repository_id: Mapped[int] = mapped_column(
-        ForeignKey(ProjectRepositoryORM.id, ondelete="CASCADE"),
-        primary_key=True,
-    )
-
-    repository: Mapped[ProjectRepositoryORM] = relationship(
-        init=False,
-        repr=False,
-        viewonly=True,
-        lazy="selectin",
-    )
-
-    policy: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
-
-    def dump(self) -> models.SessionLauncherRepository:
-        """Create a SessionLauncherRepository object from an ORM object."""
-
-        return models.SessionLauncherRepository(
-            launcher_id=self.launcher_id,
-            repository_id=self.repository_id,
-            policy=self._policy,
-            writable_references=self.policy.get("writable_references"),
-        )
-
-    @property
-    def _policy(self) -> models.SessionLauncherRepositoryPolicyName | None:
-        try:
-            return models.SessionLauncherRepositoryPolicyName(str(self.policy.get("policy")))
-        except ValueError:
-            return None
-        # TODO: Return models.SessionLauncherRepositoryPolicyName.read_only if repository is read only
+# class SessionLauncherRepositoryORM(BaseORM):
+#     """The repository parameters of a launcher."""
+#
+#     __tablename__ = "launcher_repositories"
+#
+#     launcher_id: Mapped[ULID] = mapped_column(
+#         ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"),
+#         primary_key=True,
+#     )
+#
+#     repository_id: Mapped[int] = mapped_column(
+#         ForeignKey(ProjectRepositoryORM.id, ondelete="CASCADE"),
+#         primary_key=True,
+#     )
+#
+#     repository: Mapped[ProjectRepositoryORM] = relationship(
+#         init=False,
+#         repr=False,
+#         viewonly=True,
+#         lazy="selectin",
+#     )
+#
+#     policy: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
+#
+#     def dump(self) -> models.SessionLauncherRepository:
+#         """Create a SessionLauncherRepository object from an ORM object."""
+#
+#         return models.SessionLauncherRepository(
+#             launcher_id=self.launcher_id,
+#             repository_id=self.repository_id,
+#             policy=self._policy,
+#             writable_references=self.policy.get("writable_references"),
+#         )
+#
+#     @property
+#     def _policy(self) -> models.SessionLauncherRepositoryPolicyName | None:
+#         try:
+#             return models.SessionLauncherRepositoryPolicyName(str(self.policy.get("policy")))
+#         except ValueError:
+#             return None
+#         # TODO: Return models.SessionLauncherRepositoryPolicyName.read_only if repository is read only
 
 
 class SessionLauncherDataConnectorORM(BaseORM):
@@ -413,7 +412,7 @@ class SessionLauncherDataConnectorORM(BaseORM):
             ondelete="CASCADE",
         ),
         CheckConstraint(
-            "policy IN ('excluded', 'readOnly', 'readWrite')",
+            "policy IN ('excluded', 'read_only', 'read_write')",
             name="_ck_launcher_data_connectors_policy",
         ),
     )

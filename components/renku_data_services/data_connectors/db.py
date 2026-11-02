@@ -1163,7 +1163,7 @@ class DataConnectorRepository:
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+                message=f"Launcher with id '{launcher_id}' does not exist or you do not have access to it."
             )
 
         patch_dc_link_ids_list = [patch.data_connector_link_id for patch in patches]
@@ -1192,7 +1192,8 @@ class DataConnectorRepository:
 
         if invalid_dc_link_ids:
             raise errors.ValidationError(
-                message=f"Data connector links do not belong to project {project_id}: {invalid_dc_link_ids}."
+                message="Some of the data connectors you are trying to update are not part of this project "
+                f"or you do not have access to them. The invalid data connector link IDs are: {invalid_dc_link_ids}."
             )
 
         result = await session.stream_scalars(
@@ -1214,6 +1215,11 @@ class DataConnectorRepository:
         launcher_dc_links = {link.data_connector_to_project_link_id: link async for link in result}
 
         for patch in patches:
+            if not patch.policy:
+                # When the policy is None - it means do not change it.
+                # And the policy is currently the only thing that can be patches for data connectors.
+                continue
+
             patch_dc_link_id = patch.data_connector_link_id
             launcher_dc_link = launcher_dc_links.get(patch_dc_link_id)
             project_dc_link = project_dc_links.get(patch_dc_link_id)
@@ -1222,9 +1228,8 @@ class DataConnectorRepository:
                     message=f"The data connector with link ID {patch_dc_link_id} cannot be found in the project."
                 )
             data_connector = project_dc_link.data_connector
-            policy = patch.policy or SessionLauncherDataConnectorPolicyName.excluded
 
-            if policy.requires_write_access and data_connector.readonly:
+            if patch.policy.requires_write_access and data_connector.readonly:
                 raise errors.ValidationError(
                     message=f"Data connector {patch_dc_link_id}/{data_connector.id} is read only."
                 )
@@ -1233,11 +1238,11 @@ class DataConnectorRepository:
                 launcher_dc_link = SessionLauncherDataConnectorORM.create(
                     launcher=launcher,
                     link=project_dc_link,
-                    policy=policy,
+                    policy=patch.policy,
                 )
                 session.add(launcher_dc_link)
             else:
-                launcher_dc_link.policy = policy
+                launcher_dc_link.policy = patch.policy.value
 
         await session.flush()
 
