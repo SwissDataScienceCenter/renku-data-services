@@ -1,11 +1,9 @@
 """Core functions for resource usage."""
 
-from __future__ import annotations
-
 import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from renku_data_services import errors
 from renku_data_services.app_config import logging
@@ -25,9 +23,6 @@ from renku_data_services.resource_usage.model import (
     ResourcePoolUsageLimits,
     ResourcesRequest,
 )
-
-if TYPE_CHECKING:
-    from renku_data_services.crc.db import ResourcePoolQueryRepository
 
 logger = logging.getLogger(__file__)
 
@@ -158,17 +153,9 @@ class NoopResourcesRequestRecorder(ResourcesRequestRecorder):
 class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
     """Methods for recording resource requests."""
 
-    def __init__(
-        self,
-        requests_repo: ResourceRequestsRepo,
-        pool_repo: ResourcePoolQueryRepository,
-        fetch: ResourceRequestsFetchProto,
-        metering: ResourceUsageMetering | None = None,
-    ) -> None:
-        self._requests_repo = requests_repo
-        self._pool_repo = pool_repo
+    def __init__(self, repo: ResourceRequestsRepo, fetch: ResourceRequestsFetchProto) -> None:
+        self._repo = repo
         self._fetch = fetch
-        self._metering = metering
 
     async def record_resource_requests(self, interval: timedelta) -> None:
         """Fetches all resource requests in the given namespace and stores them."""
@@ -180,7 +167,7 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
             logger.warning("No pod or pvc was found!")
         else:
             logger.info(f"Inserting {size} resource request records.")
-        await self._requests_repo.insert_many(result)
+        await self._repo.insert_many(result)
 
 
 class ResourceUsageService:
