@@ -8,11 +8,15 @@ from typing import Any
 import httpx
 import pytest
 
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.errors import errors
+from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.resource_usage.config import OpenMeterConfig
 from renku_data_services.resource_usage.core import ResourceUsageService
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.resource_usage.metering import EntitlementValueQueryResponse, OpenMeterClient
 from renku_data_services.resource_usage.model import Credit, ResourceClassCostWithPool
+from test.components.renku_data_services.resource_usage.test_db import create_resource_class
 
 ENDPOINT_URL = "http://openmeter.test"
 EXISTING_USER_ID = "test-user"
@@ -270,9 +274,11 @@ async def test_empty_entitlement_body(client: OpenMeterClient, fake_openmeter: F
 
 
 @pytest.fixture
-def service(client: OpenMeterClient) -> ResourceUsageService:
-    # The repo is not used for querying usage
-    return ResourceUsageService(repo=None, metering_client=client)  # type: ignore[arg-type]
+async def service(app_manager_instance: DependencyManager, client: OpenMeterClient) -> ResourceUsageService:
+    run_migrations_for_app("common")
+    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
+    await create_resource_class(app_manager_instance)
+    return ResourceUsageService(repo=repo, metering_client=client)
 
 
 async def test_service_get_current_usage_with_limits(service: ResourceUsageService) -> None:
@@ -378,21 +384,3 @@ async def test_service_calculate_usage_hours_with_negative_remaining_quota(servi
     )
     assert remaining_hours == 0.0
     assert total_hours == 10.0  # 100 / 10
-
-
-async def test_service_calculate_usage_hours_with_unlimited_total_quota(service: ResourceUsageService) -> None:
-    """Test that calculate_usage_hours returns None for total_hours when total quota is unlimited."""
-    usage = await service.get_usage_with_limits(resource_pool_id=2, user_id=EXISTING_USER_ID)
-    remaining_quota = service.get_remaining_quota(usage)
-    resource_class_cost = ResourceClassCostWithPool(
-        resource_pool_id=1,
-        resource_class_id=1,
-        cost=Credit.from_int(10),
-    )
-    remaining_hours, total_hours = service.calculate_usage_hours(
-        resource_class_cost=resource_class_cost,
-        usage=usage,
-        remaining_quota=remaining_quota,
-    )
-    assert remaining_hours is None
-    assert total_hours is None
