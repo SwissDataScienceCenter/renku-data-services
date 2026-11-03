@@ -20,8 +20,7 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.k8s.models import GVK, APIObjectInCluster, K8sObject, K8sObjectFilter
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
-from renku_data_services.notebooks.cr_amalthea_session import SessionType as AmaltheaSessionType
-from renku_data_services.notebooks.crs import State
+from renku_data_services.notebooks.crs import State, session_type_from_str
 from renku_data_services.notebooks.models import SessionType
 
 logger = logging.getLogger(__name__)
@@ -225,7 +224,7 @@ async def __collect_session_metrics(
 
     session_type_raw: str | None = new_obj.obj.spec.get("sessionType")
     session_type = (
-        SessionType.from_amalthea(AmaltheaSessionType.from_str(session_type_raw))
+        SessionType.from_amalthea(session_type_from_str(session_type_raw))
         if session_type_raw
         else SessionType.interactive
     )
@@ -263,9 +262,7 @@ async def __collect_session_metrics(
             await metrics.session_job_terminated(
                 user=user, metadata={"session_id": new_obj.meta.name, "status": State.Succeeded.value.lower()}
             )
-        case State.Failed.value if (
-            previous_state != State.Failed.value and session_type == SessionType.non_interactive
-        ):
+        case State.Failed.value if previous_state != State.Failed.value and session_type == SessionType.non_interactive:
             # job may have failed, we need to check that the failure is from the job itself
             error_msg = new_obj.obj.raw.get("status", {}).get("error")
             # NOTE: we only get a text message as a way to match for job failures
