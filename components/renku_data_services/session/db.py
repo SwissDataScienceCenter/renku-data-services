@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.selectable import CompoundSelect
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -18,9 +19,13 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.data_connectors.orm import DataConnectorORM, DataConnectorToProjectLinkORM
 from renku_data_services.project.apispec import Visibility as ProjectVisibility
+from renku_data_services.project.models import SessionSecret
+from renku_data_services.project.orm import SessionSecretORM, SessionSecretSlotORM
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.models import Metadata, RepositoryVisibility
+from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.k8s_client import ShipwrightClient
@@ -39,6 +44,50 @@ def _validate_app_launcher_project_visibility(
         launcher_type, project_is_public=project_visibility == ProjectVisibility.public
     ):
         raise errors.ValidationError(message="An app launcher can only be created in a public project.")
+
+
+def _build_restricted_launcher_ids(
+    project_id: ULID,
+    allowed_dcs: list[str] | None = None,
+) -> CompoundSelect:
+    """Build a query returning IDs of restricted session launchers."""
+
+    DC_P = models.SessionLauncherDataConnectorPolicyName
+    SL_P = models.SessionLauncherSecretPolicyName
+    DC = DataConnectorORM
+    DCLink = DataConnectorToProjectLinkORM
+    LauncherDC = schemas.SessionLauncherDataConnectorORM
+    LauncherSL = schemas.SessionLauncherSecretORM
+
+    restricted_secrets = select(LauncherSL.launcher_id).where(
+        LauncherSL.project_id == project_id,
+        LauncherSL.policy == SL_P.excluded,
+    )
+
+    restricted_dcs = (
+        select(LauncherDC.launcher_id)
+        .join(
+            DCLink,
+            DCLink.id == LauncherDC.data_connector_to_project_link_id,
+        )
+        .join(DC, DC.id == DCLink.data_connector_id)
+        .where(
+            LauncherDC.project_id == project_id,
+            DCLink.project_id == project_id,
+            or_(
+                LauncherDC.policy == DC_P.excluded,
+                and_(
+                    LauncherDC.policy == DC_P.read_only,
+                    DC.readonly.is_(False),
+                ),
+            ),
+        )
+    )
+
+    if allowed_dcs is not None:
+        restricted_dcs = restricted_dcs.where(DCLink.data_connector_id.in_(allowed_dcs))
+
+    return restricted_dcs.union_all(restricted_secrets)
 
 
 class SessionEnvironmentRepositoryProtocol(Protocol):
@@ -407,13 +456,23 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             )
 
         async with self.session_maker() as session:
-            res = await session.scalars(
-                select(schemas.SessionLauncherORM)
+            allowed_dcs = await self.project_authz.resources_with_permission(
+                user, user.id, ResourceType.data_connector, Scope.READ
+            )
+
+            restricted_launcher_ids = _build_restricted_launcher_ids(project_id, allowed_dcs)
+
+            res = await session.execute(
+                select(
+                    schemas.SessionLauncherORM,
+                    schemas.SessionLauncherORM.id.in_(restricted_launcher_ids).label("is_restricted"),
+                )
                 .where(schemas.SessionLauncherORM.project_id == project_id)
                 .order_by(schemas.SessionLauncherORM.creation_date.desc())
             )
+
             launcher = res.all()
-            return [item.dump() for item in launcher]
+            return [item.dump(is_restricted=is_restricted) for item, is_restricted in launcher]
 
     async def get_launcher(self, user: base_models.APIUser, launcher_id: ULID) -> models.SessionLauncher:
         """Get one session launcher from the database."""
@@ -433,7 +492,22 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     message=f"Session launcher with id '{launcher_id}' does not exist or you do not have access to it."
                 )
 
-            return launcher.dump()
+            allowed_dcs = await self.project_authz.resources_with_permission(
+                user, user.id, ResourceType.data_connector, Scope.READ
+            )
+
+            restricted_launcher_ids = _build_restricted_launcher_ids(launcher.project_id, allowed_dcs)
+
+            is_restricted = await session.scalar(
+                select(
+                    schemas.SessionLauncherORM.id.in_(restricted_launcher_ids).label("is_restricted"),
+                ).where(
+                    schemas.SessionLauncherORM.id == launcher.id,
+                    schemas.SessionLauncherORM.project_id == launcher.project_id,
+                )
+            )
+
+            return launcher.dump(is_restricted=is_restricted)
 
     async def insert_launcher(
         self, user: base_models.APIUser, launcher: models.UnsavedSessionLauncher
@@ -633,6 +707,75 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             )
             session.add(launcher_orm)
             await session.flush()
+
+            # NOTE: copy session launchers secret permissions
+            source_secret_policies = await session.scalars(
+                select(schemas.SessionLauncherSecretORM).where(
+                    schemas.SessionLauncherSecretORM.launcher_id == launcher.id
+                )
+            )
+
+            destination_secret_slots = await session.scalars(
+                select(SessionSecretSlotORM).where(SessionSecretSlotORM.project_id == project_id)
+            )
+
+            destination_secret_slot_by_filename = {link.filename: link for link in destination_secret_slots}
+
+            for secret_slot_policy in source_secret_policies:
+                secret_slot_filename = secret_slot_policy.secret_slot.filename
+                destination_secret_slot = destination_secret_slot_by_filename.get(secret_slot_filename)
+
+                # destination_secret_slots should be a superset of source_secret_policies, if it is not, e.g. due to
+                # a race condition (the secret slot was deleted before completing the copy), we ignore it.
+                if destination_secret_slot is None:
+                    continue
+
+                new_secret_slot_policy = schemas.SessionLauncherSecretORM(
+                    project_id=project_id,
+                    launcher_id=launcher_orm.id,
+                    secret_slot_id=destination_secret_slot.id,
+                    policy=secret_slot_policy.policy,
+                )
+                session.add(new_secret_slot_policy)
+            await session.flush()
+
+            # NOTE: copy session launcher data connector permissions
+            # this will also copy permissions for data connectors that are invisible to the user
+            # This is intentional, otherwise users who have access to the data connectors will be
+            # given default permissions.
+            source_dc_policies = await session.scalars(
+                select(schemas.SessionLauncherDataConnectorORM).where(
+                    schemas.SessionLauncherDataConnectorORM.launcher_id == launcher.id
+                )
+            )
+
+            destination_dc_links = await session.scalars(
+                select(DataConnectorToProjectLinkORM).where(DataConnectorToProjectLinkORM.project_id == project_id)
+            )
+
+            destination_dc_links_by_dc_id = {link.data_connector_id: link for link in destination_dc_links}
+
+            for dc_policy in source_dc_policies:
+                source_dc_id = dc_policy.data_connector_to_project_link.data_connector.id
+                dc_link = destination_dc_links_by_dc_id.get(source_dc_id)
+
+                # destination_dc_links should be a superset of source_dc_policies, if it is not, e.g. due to
+                # a race condition (the data connector was deleted before completing the copy), we ignore it.
+                if dc_link is None:
+                    continue
+
+                new_dc_policy = schemas.SessionLauncherDataConnectorORM(
+                    project_id=project_id,
+                    launcher_id=launcher_orm.id,
+                    data_connector_to_project_link_id=dc_link.id,
+                    policy=dc_policy.policy,
+                )
+                session.add(new_dc_policy)
+            await session.flush()
+
+            # NOTE: copy session launcher repository permissions
+            # TODO...
+
             await session.refresh(launcher_orm)
             return launcher_orm.dump()
 
@@ -1341,3 +1484,170 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             git_repositories_repo=None,  # type: ignore
         )
         return instance
+
+    async def get_all_session_secret_slots_from_launcher(
+        self, user: base_models.APIUser, launcher: models.SessionLauncher
+    ) -> list[models.SessionLauncherSecret]:
+        """Get the secret parameters of a launcher entry."""
+
+        project_id = launcher.project_id
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            result = await session.execute(
+                select(
+                    SessionSecretSlotORM,
+                    func.coalesce(
+                        schemas.SessionLauncherSecretORM.policy,
+                        models.SessionLauncherSecretPolicyName.included.value,
+                    ).label("policy"),
+                )
+                .outerjoin(
+                    schemas.SessionLauncherSecretORM,
+                    and_(
+                        schemas.SessionLauncherSecretORM.secret_slot_id == SessionSecretSlotORM.id,
+                        schemas.SessionLauncherSecretORM.launcher_id == launcher.id,
+                    ),
+                )
+                .where(
+                    SessionSecretSlotORM.project_id == launcher.project_id,
+                )
+                .order_by(SessionSecretSlotORM.id.desc())
+            )
+
+            return [
+                models.SessionLauncherSecret(
+                    launcher_id=launcher.id,
+                    secret_slot_id=slot.id,
+                    policy=models.SessionLauncherSecretPolicyName.safe_parse(
+                        policy,
+                        models.SessionLauncherSecretPolicyName.excluded,
+                    ),
+                )
+                for slot, policy in result.all()
+            ]
+
+    async def update_launcher_secret_slots(
+        self,
+        user: base_models.APIUser,
+        launcher: models.SessionLauncher,
+        patches: list[models.SessionLauncherSecretPatch],
+    ) -> list[models.SessionLauncherSecret]:
+        """Patch the secret parameters of the session launcher."""
+
+        project_id = launcher.project_id
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        secret_slot_ids = [patch.secret_slot_id for patch in patches]
+
+        if len(secret_slot_ids) != len(set(secret_slot_ids)):
+            raise errors.ValidationError(message="A secret slot may only appear once in the list.")
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.SessionLauncherSecretORM).where(
+                    schemas.SessionLauncherSecretORM.launcher_id == launcher.id
+                )
+            )
+
+            launcher_secrets = {secret.secret_slot_id: secret for secret in result.all()}
+
+            result = await session.scalars(
+                select(SessionSecretSlotORM).where(SessionSecretSlotORM.project_id == project_id)
+            )
+
+            project_secret_slot_ids = {slot.id for slot in result}
+
+            patch_secret_slot_ids = {patch.secret_slot_id for patch in patches}
+
+            invalid_secret_slot_ids = patch_secret_slot_ids - project_secret_slot_ids
+
+            if invalid_secret_slot_ids:
+                raise errors.ValidationError(
+                    message=f"Secret slots {invalid_secret_slot_ids} do not belong to project {project_id}."
+                )
+
+            for patch in patches:
+                secret = launcher_secrets.get(patch.secret_slot_id)
+                policy = patch.policy or models.SessionLauncherSecretPolicyName.excluded
+
+                if secret is None:
+                    secret = schemas.SessionLauncherSecretORM(
+                        project_id=launcher.project_id,
+                        launcher_id=launcher.id,
+                        secret_slot_id=patch.secret_slot_id,
+                        policy=policy,
+                    )
+                    session.add(secret)
+                else:
+                    secret.policy = policy
+
+            await session.flush()
+
+        return await self.get_all_session_secret_slots_from_launcher(user=user, launcher=launcher)
+
+    async def get_all_session_secrets_from_launcher(
+        self,
+        user: base_models.APIUser,
+        launcher: models.SessionLauncher,
+    ) -> list[SessionSecret]:
+        """Get all session secrets included in a launcher."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # Get project, get project id, check if the project id is authorized
+        # Check that the user is allowed to access the project
+        authorized = await self.project_authz.has_permission(
+            user, ResourceType.project, launcher.project_id, Scope.READ
+        )
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{launcher.project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(SessionSecretORM)
+                .join(SessionSecretORM.secret)
+                .join(SessionSecretORM.secret_slot)
+                .outerjoin(
+                    schemas.SessionLauncherSecretORM,
+                    and_(
+                        schemas.SessionLauncherSecretORM.secret_slot_id == SessionSecretORM.secret_slot_id,
+                        schemas.SessionLauncherSecretORM.launcher_id == launcher.id,
+                    ),
+                )
+                .where(
+                    or_(
+                        SecretORM.expiration_timestamp.is_(None),
+                        SecretORM.expiration_timestamp > datetime.now(UTC) + timedelta(seconds=120),
+                    ),
+                    SessionSecretORM.user_id == user.id,
+                    SessionSecretSlotORM.project_id == launcher.project_id,
+                    or_(
+                        schemas.SessionLauncherSecretORM.secret_slot_id.is_(None),
+                        schemas.SessionLauncherSecretORM.policy == models.SessionLauncherSecretPolicyName.included,
+                    ),
+                )
+                .order_by(SessionSecretORM.id.desc())
+            )
+
+            secrets = result.all()
+
+            return [s.dump() for s in secrets]

@@ -145,6 +145,7 @@ class SessionSecretSlotORM(BaseORM):
             "filename",
             name="_unique_project_id_filename",
         ),
+        UniqueConstraint("id", "project_id", name="_unique_session_secret_slot_id_project_id"),
     )
 
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)

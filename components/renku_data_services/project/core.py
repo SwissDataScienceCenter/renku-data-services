@@ -109,13 +109,6 @@ async def copy_project(
             user=user, project_id=project.id, session_secret_slot=secret_slot
         )
 
-    # NOTE: Copy session launchers
-    launchers = await session_repo.get_project_launchers(user=user, project_id=source_project_id)
-    for launcher in launchers:
-        if launcher.launcher_type == LauncherType.app and project.visibility != Visibility.PUBLIC:
-            continue
-        await session_repo.copy_launcher(user=user, project_id=project.id, launcher=launcher)
-
     # NOTE: Copy data connector links. If this operation fails due to lack of permission, still proceed to create the
     # copy but return an error code that reflects this
     uncopied_dc_ids: list[ULID] = []
@@ -142,6 +135,13 @@ async def copy_project(
                 "connectors, ask their owners to make them public."
             )
         raise errors.CopyDataConnectorsError(message=message)
+
+    # NOTE: Copy session launchers
+    launchers = await session_repo.get_project_launchers(user=user, project_id=source_project_id)
+    for launcher in launchers:
+        if launcher.launcher_type == LauncherType.app and project.visibility != Visibility.PUBLIC:
+            continue
+        await session_repo.copy_launcher(user=user, project_id=project.id, launcher=launcher)
 
     return project
 
