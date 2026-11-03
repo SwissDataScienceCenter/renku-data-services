@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass
 
-from sanic import HTTPResponse, Request
+from sanic import Request
+from sanic.response import JSONResponse
 from sanic_ext import validate
 
 from renku_data_services import errors
@@ -26,7 +27,7 @@ class SSHProxyBP(CustomBlueprint):
         """Authorize a connection from an SSH public key and a session id."""
 
         @validate(json=apispec.SessionAuthorizeRequest)
-        async def _authorize(_: Request, body: apispec.SessionAuthorizeRequest, session_id: str) -> HTTPResponse:
+        async def _authorize(_: Request, body: apispec.SessionAuthorizeRequest, session_id: str) -> JSONResponse:
             fingerprint = fingerprint_ssh_public_key(body.public_key)
             user_id = await self.ssh_key_repo.get_user_id_by_fingerprint(fingerprint) if fingerprint else None
             if user_id is None:
@@ -40,6 +41,8 @@ class SSHProxyBP(CustomBlueprint):
             ]
             if not sessions:
                 raise errors.MissingResourceError(message="The session does not exist or is not accessible.")
-            return HTTPResponse(status=204)
+
+            data = apispec.SessionAuthorizeResponse(target_host=session_id)
+            return JSONResponse(data)
 
         return "/internal/sessions/<session_id>/authorize", ["POST"], _authorize
