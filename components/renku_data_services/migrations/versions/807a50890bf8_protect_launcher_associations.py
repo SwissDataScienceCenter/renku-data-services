@@ -1,20 +1,19 @@
 """Protect launcher associations
 
 Revision ID: 807a50890bf8
-Revises: fc1a97661d0c
+Revises: 20076b29e3b8
 Create Date: 2026-10-01 15:35:13.648727
 
 """
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 import renku_data_services.utils.sqlalchemy
 
 # revision identifiers, used by Alembic.
 revision = "807a50890bf8"
-down_revision = "fc1a97661d0c"
+down_revision = "20076b29e3b8"
 branch_labels = None
 depends_on = None
 
@@ -31,18 +30,10 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["launcher_id"], ["sessions.launchers.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("launcher_id", "data_connector_to_project_link_id"),
-        schema="sessions",
-    )
-    op.create_table(
-        "launcher_repositories",
-        sa.Column("launcher_id", renku_data_services.utils.sqlalchemy.ULIDType(), nullable=False),
-        sa.Column("repository_id", sa.Integer(), nullable=False),
-        sa.Column(
-            "policy", sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"), nullable=False
+        sa.CheckConstraint(
+            "policy IN ('excluded', 'read_only', 'read_write')",
+            name="_ck_launcher_data_connectors_policy",
         ),
-        sa.ForeignKeyConstraint(["launcher_id"], ["sessions.launchers.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["repository_id"], ["projects.projects_repositories.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("launcher_id", "repository_id"),
         schema="sessions",
     )
     op.create_unique_constraint(
@@ -68,6 +59,10 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("launcher_id", "secret_slot_id"),
+        sa.CheckConstraint(
+            "policy IN ('excluded', 'included')",
+            name="_ck_launcher_secrets_policy",
+        ),
         schema="sessions",
     )
     op.create_index(
@@ -92,7 +87,6 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_sessions_launcher_secrets_secret_slot_id"), table_name="launcher_secrets", schema="sessions")
     op.drop_index(op.f("ix_sessions_launcher_secrets_project_id"), table_name="launcher_secrets", schema="sessions")
     op.drop_table("launcher_secrets", schema="sessions")
-    op.drop_table("launcher_repositories", schema="sessions")
     op.drop_table("launcher_data_connectors", schema="sessions")
     op.drop_constraint("_unique_launcher_id_project_id", "launchers", schema="sessions", type_="unique")
     op.drop_constraint(
