@@ -1291,6 +1291,7 @@ class DataConnectorSecretRepository:
         )
 
         async with self.session_maker() as session:
+            stmt: Select[tuple[schemas.DataConnectorORM, bool]]
             if launcher_id is None:
                 stmt = (
                     select(
@@ -1312,22 +1313,23 @@ class DataConnectorSecretRepository:
             else:
                 stmt_dcs = _build_launcher_data_connector_select(launcher_id=launcher_id)
 
-                policy = stmt_dcs.selected_columns.policy
+                policy: ColumnElement[str] = stmt_dcs.selected_columns.policy
 
                 computed_readonly = (policy == SessionLauncherDataConnectorPolicyName.read_only.value).label(
                     "computed_readonly"
                 )
 
+                # NOTE: with_only_columns keeps the joins from the launcher select and, unlike
+                # add_columns, preserves the row typing.
                 stmt = (
-                    stmt_dcs.add_columns(computed_readonly)
+                    stmt_dcs.with_only_columns(schemas.DataConnectorORM, computed_readonly)
                     .where(
                         schemas.DataConnectorToProjectLinkORM.project_id == project_id,
                         schemas.DataConnectorORM.id.in_(data_connector_ids),
                         policy != SessionLauncherDataConnectorPolicyName.excluded,
                     )
                     .options(
-                        joinedload(schemas.DataConnectorToProjectLinkORM.data_connector)
-                        .joinedload(schemas.DataConnectorORM.slug)
+                        joinedload(schemas.DataConnectorORM.slug)
                         .joinedload(ns_schemas.EntitySlugORM.project)
                         .joinedload(ProjectORM.slug)
                     )
@@ -1335,9 +1337,9 @@ class DataConnectorSecretRepository:
 
             results = await session.stream(stmt)
             async for row in results:
-                dc, computed_readonly = row
+                dc, computed_readonly_val = row.tuple()
                 secrets = await self.get_data_connector_secrets(user, dc.id)
-                yield models.DataConnectorWithSecrets(dc.dump(readonly=computed_readonly), secrets)
+                yield models.DataConnectorWithSecrets(dc.dump(readonly=computed_readonly_val), secrets)
 
     async def get_data_connector_secrets(
         self,
