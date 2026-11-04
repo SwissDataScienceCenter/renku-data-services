@@ -706,6 +706,21 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/SSHKey"
+    SessionAuthorizeResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        target_host:
+          type: string
+      required:
+        - target_host
+    SessionAuthorizeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        public_key:
+          type: string
+      required: [public_key]
     ErrorResponse:
       type: object
       properties:
