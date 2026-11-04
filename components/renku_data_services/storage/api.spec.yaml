@@ -330,9 +330,127 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
+  /storage_classes:
+    get:
+      summary: Get the available storage classes
+      description: |
+        Admin only.
+      responses:
+        "200":
+          description: The list of storage classes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageClasses"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storage_classes
+    post:
+      summary: Create a storage class
+      description: |
+        Admin only.
+
+        The `k8s_storage_class_name` should correspond to the name
+        of a `StorageClass` in Kubernetes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StorageClassPost"
+      responses:
+        "201":
+          description: The patched project storage entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageClass"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storage_classes
+  /storage_classes/{k8s_storage_class_name}:
+    parameters:
+      - in: path
+        name: k8s_storage_class_name
+        required: true
+        schema:
+          $ref: "#/components/schemas/StorageClassName"
+    get:
+      summary: Create a storage class
+      description: |
+        Admin only.
+
+        The `k8s_storage_class_name` should correspond to the name
+        of a `StorageClass` in Kubernetes.
+      responses:
+        "200":
+          description: The storage class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageClass"
+        "404":
+          description: The storage class does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storage_classes
+    patch:
+      summary: Update a storage class
+      description: |
+        Admin only.
+
+        The `k8s_storage_class_name` should correspond to the name
+        of a `StorageClass` in Kubernetes.
+      parameters:
+        - $ref: "#/components/parameters/If-Match"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StorageClassPatch"
+      responses:
+        "200":
+          description: The updated storage class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageClass"
+        "404":
+          description: The storage class does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storage_classes
+    delete:
+      summary: Delete a storage class
+      responses:
+        "204":
+          description: The storage class was deleted or did not exist in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storage_classes
 
 components:
   schemas:
+    MinStorageSize:
+      type: integer
+      format: int64
+      minimum: 0
+      exclusiveMinimum: true
+      description: Minimum size in GB
     MaxStorageSize:
       type: integer
       format: int64
@@ -624,6 +742,66 @@ components:
       required:
         - enabled
         - max_size
+    StorageClasses:
+      description: A list of storage classes.
+      type: array
+      items:
+        $ref: "#/components/schemas/StorageClass"
+    StorageClass:
+      description: A storage class for project storage.
+      type: object
+      additionalProperties: false
+      properties:
+        k8s_storage_class_name:
+          $ref: "#/components/schemas/StorageClassName"
+        display_name:
+          type: string
+          example: Azure Files (SMB)
+        min_size:
+          $ref: "#/components/schemas/MinStorageSize"
+        documentation:
+          type: string
+        creation_date:
+          $ref: "#/components/schemas/CreationDate"
+        updated_at:
+          $ref: "#/components/schemas/CreationDate"
+        etag:
+          $ref: "#/components/schemas/ETag"
+      required:
+        - k8s_storage_class_name
+        - display_name
+        - min_size
+        - creation_date
+        - updated_at
+        - etag
+    StorageClassPost:
+      type: object
+      additionalProperties: false
+      properties:
+        k8s_storage_class_name:
+          $ref: "#/components/schemas/StorageClassName"
+        display_name:
+          type: string
+          example: Azure Files (SMB)
+        min_size:
+          $ref: "#/components/schemas/MinStorageSize"
+        documentation:
+          type: string
+      required:
+        - k8s_storage_class_name
+        - display_name
+        - min_size
+    StorageClassPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+          example: Azure Files (SMB)
+        min_size:
+          $ref: "#/components/schemas/MinStorageSize"
+        documentation:
+          type: string
     Ulid:
       description: ULID identifier
       type: string
@@ -689,6 +867,12 @@ components:
       oneOf:
         - $ref: "#/components/schemas/ProjectIdRef"
         - $ref: "#/components/schemas/ProjectSlugRef"
+    StorageClassName:
+      description: The name of a storage class in Kubernetes
+      type: string
+      example: azurefile-csi
+      minLength: 3
+      maxLength: 256
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
