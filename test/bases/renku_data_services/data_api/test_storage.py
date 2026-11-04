@@ -1168,4 +1168,26 @@ async def test_patch_storage_class(
         f"/api/data/storage_classes/{k8s_storage_class_name}", headers=headers, json=payload
     )
 
-    assert res.status_code == 0, res.text
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    result = res.json
+    assert result.get("k8s_storage_class_name") == "some-storage-class"
+    assert result.get("display_name") == "A new name"
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_class_conflict(
+    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], insert_storage_class
+) -> None:
+    sc = await insert_storage_class()
+    k8s_storage_class_name = sc["k8s_storage_class_name"]
+
+    headers = {"If-Match": "invalid-etag"}
+    headers.update(admin_headers.copy())
+    payload = {"display_name": "A new name"}
+    _, res = await sanic_client.patch(
+        f"/api/data/storage_classes/{k8s_storage_class_name}", headers=headers, json=payload
+    )
+
+    assert res.status_code == 409, res.text
+    assert res.json.get("error", {}).get("message") == f"Current ETag is {sc['etag']}, not invalid-etag."

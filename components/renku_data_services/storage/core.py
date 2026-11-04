@@ -118,3 +118,16 @@ def validate_unsaved_storage_class(body: apispec.StorageClassPost) -> models.Uns
         admin_documentation=body.admin_documentation,
         documentation=body.documentation,
     )
+
+
+def validate_storage_class_patch(body: apispec.StorageClassPatch) -> models.StorageClassPatch:
+    """Validate a patch of a storage class."""
+    min_size = ByteSize.from_gibi(body.min_size) if body.min_size is not None else None
+    if min_size is not None and min_size < ByteSize.from_gibi(1):
+        raise errors.ValidationError(message="The minimum size must be at least 1GiB.")
+    return models.StorageClassPatch(
+        display_name=body.display_name,
+        min_size_bytes=min_size,
+        admin_documentation=body.admin_documentation,
+        documentation=body.documentation,
+    )

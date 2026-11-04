@@ -528,3 +528,35 @@ class StorageClassRepository:
         session.add(sc_orm)
         await session.flush()
         return sc_orm.dump()
+
+    async def update_storage_class(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        k8s_storage_class_name: str,
+        patch: models.StorageClassPatch,
+        etag: str,
+    ) -> models.StorageClass:
+        """Update a storage class in the database."""
+        sc_orm = await self._get_storage_class_orm(
+            session=session, user=user, k8s_storage_class_name=k8s_storage_class_name
+        )
+        if sc_orm is None:
+            raise errors.MissingResourceError(message=f"Storage class '{k8s_storage_class_name}' does not exist.")
+
+        current_etag = sc_orm.dump().etag
+        if current_etag != etag:
+            raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
+        if patch.display_name is not None:
+            sc_orm.display_name = patch.display_name
+        if patch.min_size_bytes is not None:
+            sc_orm.min_size = patch.min_size_bytes
+        if patch.admin_documentation is not None:
+            sc_orm.admin_documentation = patch.admin_documentation
+        if patch.documentation is not None:
+            sc_orm.documentation = patch.documentation
+
+        await session.flush()
+        await session.refresh(sc_orm)
+        return sc_orm.dump()

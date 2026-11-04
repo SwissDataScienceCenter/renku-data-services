@@ -28,6 +28,7 @@ from renku_data_services.storage.core import (
     validate_project_storage_allow_patch,
     validate_project_storage_allow_post,
     validate_project_storage_patch,
+    validate_storage_class_patch,
     validate_unsaved_project_storage,
     validate_unsaved_storage_class,
 )
@@ -442,7 +443,15 @@ class StorageClassesBP(CustomBlueprint):
             body: apispec.StorageClassPatch,
             etag: str,
         ) -> JSONResponse:
-            raise NotImplementedError()
+            patch = validate_storage_class_patch(body=body)
+            async with self.session_maker() as session, session.begin():
+                storage_class = await self.storage_class_repo.update_storage_class(
+                    session=session, user=user, k8s_storage_class_name=k8s_storage_class_name, patch=patch, etag=etag
+                )
+            return validated_json(
+                apispec.StorageClass,
+                storage_class,
+            )
 
         return "/storage_classes/<k8s_storage_class_name>", ["PATCH"], _patch
 
