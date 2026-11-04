@@ -112,3 +112,43 @@ class ProjectStorageORM(BaseORM):
             creation_date=self.creation_date,
             updated_at=self.updated_at,
         )
+
+
+class StorageClassORM(BaseORM):
+    """A storage class."""
+
+    __tablename__ = "storage_classes"
+
+    id: Mapped[str] = mapped_column("id", primary_key=True)
+    """The storage class name in Kubernetes (unique)."""
+
+    display_name: Mapped[str] = mapped_column("display_name")
+    """The display name of the storage class."""
+
+    min_size: Mapped[ByteSize] = mapped_column("min_size", ByteSizeType())
+    """The minimum size of PVCs created with this storage class."""
+
+    documentation: Mapped[str | None] = mapped_column("documentation", nullable=True)
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def dump(self) -> models.StorageClass:
+        """Create a storage class model from the StorageClassORM."""
+        return models.StorageClass(
+            k8s_storage_class_name=self.id,
+            display_name=self.display_name,
+            min_size=self.min_size,
+            documentation=self.documentation,
+            creation_date=self.creation_date,
+            updated_at=self.updated_at,
+        )

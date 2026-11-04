@@ -149,3 +149,30 @@ class ProjectRef:
     def from_slug_str(cls, slug: str) -> ProjectRef:
         """Create a project ref from a path."""
         return ProjectRef(ref=ProjectPath.parse(slug))
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedStorageClass:
+    """Unsaved storage class."""
+
+    k8s_storage_class_name: str
+    display_name: str
+    min_size: ByteSize
+    documentation: str | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class StorageClass(UnsavedStorageClass):
+    """Storage class."""
+
+    creation_date: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class StorageClassPatch:
+    """Model for changes requested on a project storage."""
+
+    display_name: str | None
+    min_size: ByteSize | None
+    documentation: str | None
