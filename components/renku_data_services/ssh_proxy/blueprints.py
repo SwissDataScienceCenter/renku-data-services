@@ -6,9 +6,9 @@ from sanic import Request
 from sanic.response import JSONResponse
 from sanic_ext import validate
 
-from renku_data_services.base_models.validation import validated_json
 from renku_data_services import errors
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.k8s.models import K8sObjectFilter
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
