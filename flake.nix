@@ -150,14 +150,17 @@
         rustc
         spicedb-zed
         ruff
-        poetry
         python313
         basedpyright
         rclone-sdsc
-        azure-cli
         kind
         redocly
         yq-go
+        (writeShellScriptBin "poetry" ''
+          unset PYTHONPATH PYTHONHOME
+          ${poetry}/bin/poetry "$@"
+        ''
+        )
         (writeShellScriptBin "pyfix" ''
           poetry run ruff check --fix
           poetry run ruff format

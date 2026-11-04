@@ -95,6 +95,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         ssh_key_repo=dm.ssh_key_repo,
         authenticator=dm.authenticator,
+        k8s_client=dm.k8s_client,
     )
     resource_pools_users = ResourcePoolUsersBP(
         name="resource_pool_users",
