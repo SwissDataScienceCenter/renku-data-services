@@ -6,6 +6,7 @@ from sanic import Request
 from sanic.response import JSONResponse
 from sanic_ext import validate
 
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services import errors
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.k8s.db import K8sDbCache
@@ -43,6 +44,6 @@ class SSHProxyBP(CustomBlueprint):
                 raise errors.MissingResourceError(message="The session does not exist or is not accessible.")
 
             data = apispec.SessionAuthorizeResponse(target_host=session_id)
-            return JSONResponse(data)
+            return validated_json(apispec.SessionAuthorizeResponse, data)
 
         return "/internal/sessions/<session_id>/authorize", ["POST"], _authorize
