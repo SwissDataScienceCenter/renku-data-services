@@ -12,7 +12,7 @@ from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import (
     ProjectPath,
 )
-from renku_data_services.utils.etag import compute_etag_from_fields
+from renku_data_services.utils.etag import compute_etag_from_fields, compute_etag_from_timestamp
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -157,7 +157,8 @@ class UnsavedStorageClass:
 
     k8s_storage_class_name: str
     display_name: str
-    min_size: ByteSize
+    min_size_bytes: ByteSize
+    admin_documentation: str | None
     documentation: str | None
 
 
@@ -168,11 +169,22 @@ class StorageClass(UnsavedStorageClass):
     creation_date: datetime
     updated_at: datetime
 
+    @property
+    def min_size(self) -> int:
+        """Minimum size (GiB)."""
+        return int(self.min_size_bytes.to_gibi())
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this storage class instance."""
+        return compute_etag_from_timestamp(self.updated_at)
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class StorageClassPatch:
     """Model for changes requested on a project storage."""
 
     display_name: str | None
-    min_size: ByteSize | None
+    min_size_bytes: ByteSize | None
+    admin_documentation: str | None
     documentation: str | None

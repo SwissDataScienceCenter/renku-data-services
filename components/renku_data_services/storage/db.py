@@ -1,9 +1,9 @@
 """Database access for project storage classes."""
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 
 from sqlalchemy import and_, exists, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession
 from ulid import ULID
 
 from renku_data_services import base_models, errors
@@ -451,3 +451,80 @@ class ProjectStorageRepository:
         if storage:
             return models.DeletedProjectStorage(project_id=storage.project_id)
         return None
+
+
+class StorageClassRepository:
+    """Repository for storage classes."""
+
+    async def get_all_storage_classes(
+        self, session: AsyncSession, user: base_models.APIUser
+    ) -> AsyncIterator[models.StorageClass]:
+        """Get all storage classes from the database."""
+        stream = await self._get_all_storage_classes_orm(session=session, user=user)
+        async for sc_orm in stream:
+            yield sc_orm.dump()
+
+    async def _get_all_storage_classes_orm(
+        self, session: AsyncSession, user: base_models.APIUser
+    ) -> AsyncScalarResult[schemas.StorageClassORM]:
+        """Get all storage classes from the database."""
+        if user.id is None or not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+        stmt = select(schemas.StorageClassORM).order_by(schemas.StorageClassORM.id.asc())
+        return await session.stream_scalars(stmt)
+
+    async def get_storage_class_or_none(
+        self, session: AsyncSession, user: base_models.APIUser, k8s_storage_class_name: str
+    ) -> models.StorageClass | None:
+        """Get a storage class from the database."""
+        sc_orm = await self._get_storage_class_orm(
+            session=session, user=user, k8s_storage_class_name=k8s_storage_class_name
+        )
+        return sc_orm.dump() if sc_orm is not None else None
+
+    async def get_storage_class(
+        self, session: AsyncSession, user: base_models.APIUser, k8s_storage_class_name: str
+    ) -> models.StorageClass:
+        """Get a storage class from the database."""
+        storage_class = await self.get_storage_class_or_none(
+            session=session, user=user, k8s_storage_class_name=k8s_storage_class_name
+        )
+        if storage_class is None:
+            raise errors.MissingResourceError(message=f"Storage class '{k8s_storage_class_name}' does not exist.")
+        return storage_class
+
+    async def _get_storage_class_orm(
+        self, session: AsyncSession, user: base_models.APIUser, k8s_storage_class_name: str
+    ) -> schemas.StorageClassORM | None:
+        if user.id is None or not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+        stmt = select(schemas.StorageClassORM).where(schemas.StorageClassORM.id == k8s_storage_class_name)
+        res = await session.scalars(stmt)
+        return res.one_or_none()
+
+    async def insert_storage_class(
+        self, session: AsyncSession, user: base_models.APIUser, storage_class: models.UnsavedStorageClass
+    ) -> models.StorageClass:
+        """Insert a new storage class into the database."""
+        if user.id is None or not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        existing_sc = await self._get_storage_class_orm(
+            session=session, user=user, k8s_storage_class_name=storage_class.k8s_storage_class_name
+        )
+        if existing_sc is not None:
+            raise errors.ValidationError(
+                message=f"Storage class '{storage_class.k8s_storage_class_name}' already exists."
+            )
+
+        sc_orm = schemas.StorageClassORM(
+            id=storage_class.k8s_storage_class_name,
+            display_name=storage_class.display_name,
+            min_size=storage_class.min_size_bytes,
+            admin_documentation=storage_class.admin_documentation,
+            documentation=storage_class.documentation,
+        )
+
+        session.add(sc_orm)
+        await session.flush()
+        return sc_orm.dump()

@@ -92,7 +92,7 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
-from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.db import ProjectStorageRepository, StorageClassRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users import models as user_preferences_models
@@ -434,6 +434,7 @@ class TestDependencyManager(DependencyManager):
             )
             project_repo.apps_cleanup = apps_repo
             session_repo.apps_cleanup = apps_repo
+        storage_class_repo = StorageClassRepository()
         storage_flavor_repo = StorageFlavorRepository()
         return cls(
             config=config,
@@ -495,6 +496,7 @@ class TestDependencyManager(DependencyManager):
             internal_scope_verifier=internal_scope_verifier,
             project_storage_k8s=project_storage_k8s,
             project_storage_repo=project_storage_repo,
+            storage_class_repo=storage_class_repo,
             storage_flavor_repo=storage_flavor_repo,
         )
 

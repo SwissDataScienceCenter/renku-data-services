@@ -1,11 +1,13 @@
 """Cloud storage app."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from sanic import Request, empty
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
+from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -27,8 +29,9 @@ from renku_data_services.storage.core import (
     validate_project_storage_allow_post,
     validate_project_storage_patch,
     validate_unsaved_project_storage,
+    validate_unsaved_storage_class,
 )
-from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.db import ProjectStorageRepository, StorageClassRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -372,9 +375,9 @@ class ProjectStorageBP(CustomBlueprint):
 class StorageClassesBP(CustomBlueprint):
     """Handlers for storage classes."""
 
-    # project_storage_k8s: ProjectStorageK8s
-    # project_storage_repo: ProjectStorageRepository
+    storage_class_repo: StorageClassRepository
     authenticator: base_models.Authenticator
+    session_maker: Callable[..., AsyncSession]
 
     def get_all(self) -> BlueprintFactoryResponse:
         """Get the available storage classes."""
@@ -382,7 +385,10 @@ class StorageClassesBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _get_all(_: Request, user: base_models.APIUser) -> JSONResponse:
-            raise NotImplementedError()
+            async with self.session_maker() as session, session.begin():
+                storage_classes = self.storage_class_repo.get_all_storage_classes(session=session, user=user)
+                result = [item async for item in storage_classes]
+            return validated_json(apispec.StorageClasses, result)
 
         return "/storage_classes", ["GET"], _get_all
 
@@ -393,7 +399,12 @@ class StorageClassesBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.StorageClassPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.StorageClassPost) -> JSONResponse:
-            raise NotImplementedError()
+            new_storage_class = validate_unsaved_storage_class(body=body)
+            async with self.session_maker() as session, session.begin():
+                storage_class = await self.storage_class_repo.insert_storage_class(
+                    session=session, user=user, storage_class=new_storage_class
+                )
+            return validated_json(apispec.StorageClass, storage_class, status=201)
 
         return "/storage_classes", ["POST"], _post
 
@@ -405,8 +416,15 @@ class StorageClassesBP(CustomBlueprint):
         @extract_if_none_match
         async def _get_one(
             _: Request, user: base_models.APIUser, k8s_storage_class_name: str, etag: str | None
-        ) -> JSONResponse:
-            raise NotImplementedError()
+        ) -> JSONResponse | HTTPResponse:
+            async with self.session_maker() as session, session.begin():
+                storage_class = await self.storage_class_repo.get_storage_class(
+                    session=session, user=user, k8s_storage_class_name=k8s_storage_class_name
+                )
+            if storage_class.etag == etag:
+                return HTTPResponse(status=304)
+            headers = {"ETag": storage_class.etag}
+            return validated_json(apispec.StorageClass, storage_class, headers=headers)
 
         return "/storage_classes/<k8s_storage_class_name>", ["GET"], _get_one
 

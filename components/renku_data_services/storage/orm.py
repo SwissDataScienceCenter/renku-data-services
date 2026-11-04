@@ -128,6 +128,8 @@ class StorageClassORM(BaseORM):
     min_size: Mapped[ByteSize] = mapped_column("min_size", ByteSizeType())
     """The minimum size of PVCs created with this storage class."""
 
+    admin_documentation: Mapped[str | None] = mapped_column("admin_documentation", nullable=True)
+
     documentation: Mapped[str | None] = mapped_column("documentation", nullable=True)
 
     creation_date: Mapped[datetime] = mapped_column(
@@ -147,7 +149,8 @@ class StorageClassORM(BaseORM):
         return models.StorageClass(
             k8s_storage_class_name=self.id,
             display_name=self.display_name,
-            min_size=self.min_size,
+            min_size_bytes=self.min_size,
+            admin_documentation=self.admin_documentation,
             documentation=self.documentation,
             creation_date=self.creation_date,
             updated_at=self.updated_at,

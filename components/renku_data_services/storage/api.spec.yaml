@@ -759,6 +759,8 @@ components:
           example: Azure Files (SMB)
         min_size:
           $ref: "#/components/schemas/MinStorageSize"
+        admin_documentation:
+          type: string
         documentation:
           type: string
         creation_date:
@@ -785,6 +787,8 @@ components:
           example: Azure Files (SMB)
         min_size:
           $ref: "#/components/schemas/MinStorageSize"
+        admin_documentation:
+          type: string
         documentation:
           type: string
       required:
@@ -800,6 +804,8 @@ components:
           example: Azure Files (SMB)
         min_size:
           $ref: "#/components/schemas/MinStorageSize"
+        admin_documentation:
+          type: string
         documentation:
           type: string
     Ulid:

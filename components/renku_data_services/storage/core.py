@@ -104,3 +104,17 @@ def validate_project_storage_allow_patch(
     if size and size < ByteSize.from_gibi(1):
         raise errors.ValidationError(message="The maximum size must be at least 1GB")
     return models.ProjectStorageAllowPatch(max_size=size)
+
+
+def validate_unsaved_storage_class(body: apispec.StorageClassPost) -> models.UnsavedStorageClass:
+    """Validate a new storage class."""
+    min_size = ByteSize.from_gibi(body.min_size)
+    if min_size < ByteSize.from_gibi(1):
+        raise errors.ValidationError(message="The minimum size must be at least 1GiB.")
+    return models.UnsavedStorageClass(
+        k8s_storage_class_name=body.k8s_storage_class_name,
+        display_name=body.display_name,
+        min_size_bytes=min_size,
+        admin_documentation=body.admin_documentation,
+        documentation=body.documentation,
+    )

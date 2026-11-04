@@ -351,7 +351,9 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     storage_classes = StorageClassesBP(
         name="storage_classes",
         url_prefix=url_prefix,
+        storage_class_repo=dm.storage_class_repo,
         authenticator=dm.authenticator,
+        session_maker=dm.config.db.async_session_maker,
     )
     app.blueprint(
         [

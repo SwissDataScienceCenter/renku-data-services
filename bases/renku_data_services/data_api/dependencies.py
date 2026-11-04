@@ -39,7 +39,6 @@ from renku_data_services.crc.db import (
     QuotaRepository,
     ResourceFlavorRepository,
     ResourcePoolRepository,
-    StorageFlavorRepository,
 )
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_connectors.db import (
@@ -202,7 +201,6 @@ class DependencyManager:
     internal_scope_verifier: ScopeVerifier
     project_storage_k8s: ProjectStorageK8s
     project_storage_repo: ProjectStorageRepository
-    storage_flavor_repo: StorageFlavorRepository
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -534,7 +532,6 @@ class DependencyManager:
             builds_config=config.builds,
             git_repositories_repo=git_repositories_repo,
         )
-        storage_flavor_repo = StorageFlavorRepository()
         return cls(
             config,
             k8s_client=client,
@@ -595,5 +592,4 @@ class DependencyManager:
             internal_scope_verifier=internal_scope_verifier,
             project_storage_k8s=project_storage_k8s,
             project_storage_repo=project_storage_repo,
-            storage_flavor_repo=storage_flavor_repo,
         )
