@@ -366,3 +366,78 @@ class ProjectStorageBP(CustomBlueprint):
             project_ref=pref,
             max_size=int(ps.max_size.to_gibi()),
         )
+
+
+@dataclass(kw_only=True)
+class StorageClassesBP(CustomBlueprint):
+    """Handlers for storage classes."""
+
+    # project_storage_k8s: ProjectStorageK8s
+    # project_storage_repo: ProjectStorageRepository
+    authenticator: base_models.Authenticator
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get the available storage classes."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _get_all(_: Request, user: base_models.APIUser) -> JSONResponse:
+            raise NotImplementedError()
+
+        return "/storage_classes", ["GET"], _get_all
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Create a storage class."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.StorageClassPost)
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.StorageClassPost) -> JSONResponse:
+            raise NotImplementedError()
+
+        return "/storage_classes", ["POST"], _post
+
+    def get_one(self) -> BlueprintFactoryResponse:
+        """Get a storage class."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @extract_if_none_match
+        async def _get_one(
+            _: Request, user: base_models.APIUser, k8s_storage_class_name: str, etag: str | None
+        ) -> JSONResponse:
+            raise NotImplementedError()
+
+        return "/storage_classes/<k8s_storage_class_name>", ["GET"], _get_one
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Update a storage class."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @if_match_required
+        @validate(json=apispec.StorageClassPatch)
+        async def _patch(
+            _: Request,
+            user: base_models.APIUser,
+            k8s_storage_class_name: str,
+            body: apispec.StorageClassPatch,
+            etag: str,
+        ) -> JSONResponse:
+            raise NotImplementedError()
+
+        return "/storage_classes/<k8s_storage_class_name>", ["PATCH"], _patch
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Delete a storage class."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _delete(
+            _: Request,
+            user: base_models.APIUser,
+            k8s_storage_class_name: str,
+        ) -> JSONResponse:
+            raise NotImplementedError()
+
+        return "/storage_classes/<k8s_storage_class_name>", ["DELETE"], _delete
