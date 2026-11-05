@@ -2,7 +2,7 @@
 
 import asyncio
 import re
-from collections.abc import Callable, Coroutine, Sequence
+from collections.abc import Callable, Coroutine
 from functools import wraps
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
@@ -196,7 +196,7 @@ def require_role(
 
 def internal_token_scope(
     scope: str,
-    *args: Sequence[str],
+    *args: str,
 ) -> Callable[
     [Callable[_P, Coroutine[Any, Any, _T]]],
     Callable[_P, Coroutine[Any, Any, _T]],
@@ -213,7 +213,7 @@ def internal_token_scope(
     will allow only tokens with "scope_1" AND "scope_2".
     """
 
-    allowed_scope_items = set(scope, *args)
+    allowed_scope_items = set([scope, *args])
 
     def decorator(
         f: Callable[_P, Coroutine[Any, Any, _T]],
@@ -257,3 +257,6 @@ def internal_token_scope(
         return decorated_function
 
     return decorator
+
+
+internal_token_scope("a", "b")
