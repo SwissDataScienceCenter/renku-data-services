@@ -9,7 +9,10 @@ from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 from sanic import Request
 
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import AnyAPIUser, APIUser, AuthenticatedAPIUserWithInternalToken, Authenticator
+
+logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
 _P = ParamSpec("_P")
@@ -239,6 +242,10 @@ def internal_token_scope(
                     if item in allowed_scope_items:
                         valid = True
                         break
+                logger.info(
+                    f"@internal_token_scope() scope={api_user.internal_token_scope}, "
+                    f"allowed_scope_items={allowed_scope_items}, valid={valid}"
+                )
                 if not valid:
                     raise errors.ForbiddenError(
                         message="The provided credentials do not allow to perform this operation."

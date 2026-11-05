@@ -58,8 +58,6 @@ class ScopeVerifier:
                 await self._verify_deposit_job_scope(user=user, job_name=splits[1])
                 return 1
             case _:
-                # TODO: remove logger line
-                logger.warning(f"Got unknown scope item: {scope_item}")
                 return 0
 
     async def _verify_session_scope(self, user: base_models.APIUser, server_name: str) -> None:
