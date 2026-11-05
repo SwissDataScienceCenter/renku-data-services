@@ -206,7 +206,7 @@ def internal_token_scope(
 
     To perform an intersection of scope items, call the decorator multiple times:
     @internal_token_scope("scope_1")
-    @internal_token_scope()"scope_2")
+    @internal_token_scope("scope_2")
     will allow only tokens with "scope_1" AND "scope_2".
     """
 

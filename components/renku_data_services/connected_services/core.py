@@ -134,10 +134,17 @@ async def handle_oauth2_token_refresh(
         roles=[],
     )
 
-    # Verify the scope claim
+    # Verify the scope claim: check the lifetime AND the "api:integrations:tokens" scope item
     scope = str(parsed_renku_refresh_token.get("scope", ""))
     await internal_scope_verifier.verify_scope(user=user, scope=scope)
-    # TODO: @internal_token_scope("api:integrations:tokens")
+    scope_is_valid = False
+    scope_items = scope.split(" ")
+    for item in scope_items:
+        if item == "api:integrations:tokens":
+            scope_is_valid = True
+            break
+    if not scope_is_valid:
+        raise errors.ForbiddenError(message="The provided credentials do not allow to perform this operation.")
 
     client = await oauth_client_factory.for_user_connection_raise(user, connection_id)
     oauth_token = await client.get_token()

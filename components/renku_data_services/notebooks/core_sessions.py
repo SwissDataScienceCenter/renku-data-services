@@ -386,7 +386,7 @@ async def patch_data_sources(
         except Exception as err:
             logger.warning(f"Error decoding 'configData' for data connector {str(dc_id)}, skipping! {err}")
             continue
-        internal_token_scope = f"session:{server_name}"
+        internal_token_scope = f"session:{server_name} api:integrations:tokens"
         new_config_data = await data_source_repo.handle_patching_configuration(
             request=request,
             user=user,
