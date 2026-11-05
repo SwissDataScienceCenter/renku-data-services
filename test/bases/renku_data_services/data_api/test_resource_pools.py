@@ -11,7 +11,7 @@ from ulid import ULID
 
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
-from renku_data_services.resource_usage.model import Credit, ResourceClassCost, ResourcePoolLimitPut
+from renku_data_services.resource_usage.model import Credit, ResourceClassCost
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_client, create_rp
 from test.components.renku_data_services.resource_usage.helper import make_resources_request
@@ -2038,12 +2038,8 @@ async def test_resource_pools_quota_with_partial_usage(
     cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(50))
     await repo.set_resource_class_costs(cost)
 
-    # Set limits
-    limits = ResourcePoolLimitPut(
-        pool_id=resource_pool_id,
-        user_limit=Credit.from_int(user_limit),
-    )
-    await repo.set_resource_pool_limits(limits)
+    # Set user limits
+    await repo.set_user_limits(resource_pool_id, Credit.from_int(user_limit))
 
     # Insert resource usage data for the current week (partial usage: 50 credits = 1 hour)
     current_time = datetime.now(UTC)
@@ -2121,12 +2117,8 @@ async def test_resource_pools_quota_with_no_usage(
     cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(50))
     await repo.set_resource_class_costs(cost)
 
-    # Set limits
-    limits = ResourcePoolLimitPut(
-        pool_id=resource_pool_id,
-        user_limit=Credit.from_int(200),
-    )
-    await repo.set_resource_pool_limits(limits)
+    # Set user limits
+    await repo.set_user_limits(resource_pool_id, Credit.from_int(200))
 
     # No usage records inserted
 
@@ -2251,12 +2243,8 @@ async def test_resource_pools_quota_exceeded(
     cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(50))
     await repo.set_resource_class_costs(cost)
 
-    # Set limits
-    limits = ResourcePoolLimitPut(
-        pool_id=resource_pool_id,
-        user_limit=Credit.from_int(100),
-    )
-    await repo.set_resource_pool_limits(limits)
+    # Set user limits
+    await repo.set_user_limits(resource_pool_id, Credit.from_int(100))
 
     # Insert usage that exceeds quota: 3 hours = 150 credits > 100 limit
     current_time = datetime.now(UTC)
@@ -2516,12 +2504,8 @@ async def test_resource_pools_quota_with_no_costs(
 
     repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
 
-    # Set limits but NO costs
-    limits = ResourcePoolLimitPut(
-        pool_id=resource_pool_id,
-        user_limit=Credit.from_int(200),
-    )
-    await repo.set_resource_pool_limits(limits)
+    # Set user limits but NO costs
+    await repo.set_user_limits(resource_pool_id, Credit.from_int(200))
 
     # Insert some usage (though without costs it won't be calculated properly)
     current_time = datetime.now(UTC)
