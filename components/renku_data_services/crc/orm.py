@@ -451,7 +451,9 @@ class ResourcePoolORM(BaseORM):
         server_default=null(),
         nullable=True,
     )
-    storage_class: Mapped[storage_schemas.StorageClassORM | None] = relationship(default=None)
+    storage_class: Mapped[storage_schemas.StorageClassORM | None] = relationship(
+        default=None, lazy="selectin", init=False
+    )
     storage_total_size: Mapped[ByteSize | None] = mapped_column(
         "storage_total_size", ByteSizeType(), default=None, server_default=null(), nullable=True
     )
@@ -527,6 +529,10 @@ class ResourcePoolORM(BaseORM):
             (resource_class.dump(matching_criteria=class_match_criteria) for resource_class in classes),
             key=lambda c: (c.gpu, c.cpu, c.memory, c.max_storage, c.name, c.id),
         )
+
+        storage_config = self._dump_storage_config()
+        logger.info(f"[STORAGE] rp_id = {self.id}, config = {storage_config}")
+
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -554,6 +560,19 @@ class ResourcePoolORM(BaseORM):
             )
         return models.RemoteConfigurationFirecrest.from_dict(
             {**self.remote_json, "provider_id": self.remote_provider_id}
+        )
+
+    def _dump_storage_config(self) -> models.ResourcePoolStorageConfig:
+        """Create a ResourcePoolStorageConfig model from the corresponding columns of the ORM object."""
+        if self.storage_config is None:
+            return models.ResourcePoolStorageConfigDisabled()
+        return models.ResourcePoolStorageConfigEnabled(
+            storage_class_name=self.storage_config.storage_class_id,
+            storage_display_name=self.storage_config.storage_class.display_name,
+            storage_min_size_bytes=self.storage_config.storage_class.min_size,
+            storage_documentation=self.storage_config.storage_class.documentation,
+            storage_total_size_bytes=self.storage_config.total_size,
+            storage_max_size_bytes=self.storage_config.max_size,
         )
 
     def get_cluster_id(self) -> ClusterId:
