@@ -20,6 +20,9 @@ spec:
     - name: frontend
       description: Which frontend should be used in the image. Either "jupyterlab" or "vscodium".
       default: vscodium
+    - name: ai-agents
+      description: Space-separated list of AI coding agents to install, e.g. "pi claude codex". When empty, the agents requested by the repository's project.toml are installed.
+      default: ""
   steps:
     - name: build-and-push
       image: $(params.builder-image)
@@ -29,6 +32,8 @@ spec:
           value: $(params.platform-api-version)
         - name: BP_RENKU_FRONTENDS
           value: $(params.frontend)
+        - name: BP_RENKU_AI_AGENTS
+          value: $(params.ai-agents)
         - name: PARAM_SOURCE_CONTEXT
           value: $(params.shp-source-context)
         - name: PARAM_OUTPUT_IMAGE

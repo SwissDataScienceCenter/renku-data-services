@@ -73,6 +73,11 @@ def validate_unsaved_build_parameters(
         environment.builder_variant, environment.frontend_variant
     )
 
+    if environment.ai_agents is None or len(environment.ai_agents) == 0:
+        ai_agents = None
+    else:
+        ai_agents = [agent.value for agent in environment.ai_agents]
+
     return models.UnsavedBuildParameters(
         repository=environment.repository,
         platforms=platforms,
@@ -80,6 +85,7 @@ def validate_unsaved_build_parameters(
         frontend_variant=frontend_variant,
         repository_revision=environment.repository_revision if environment.repository_revision else None,
         context_dir=environment.context_dir if environment.context_dir else None,
+        ai_agents=ai_agents,
         job_command=cmd_args.command,
         job_args=cmd_args.args,
     )
@@ -115,6 +121,13 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
     else:
         builder_variant, frontend_variant = environment.builder_variant, environment.frontend_variant
 
+    ai_agents: list[str] | ResetType | None = None
+    if environment.ai_agents is None or len(environment.ai_agents) == 0:
+        if "ai_agents" in environment.model_fields_set:
+            ai_agents = RESET
+    else:
+        ai_agents = [agent.value for agent in environment.ai_agents]
+
     return models.BuildParametersPatch(
         repository=environment.repository,
         platforms=platforms,
@@ -122,6 +135,7 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
         frontend_variant=frontend_variant,
         repository_revision=environment.repository_revision,
         context_dir=environment.context_dir,
+        ai_agents=ai_agents,
     )
 
 

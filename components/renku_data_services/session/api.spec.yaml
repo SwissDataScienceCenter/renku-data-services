@@ -988,6 +988,17 @@ components:
       type: string
       minLength: 1
       maxLength: 99
+    AIAgent:
+      description: An AI coding agent that can be installed in an environment built from code.
+      type: string
+      enum: ["pi", "claude", "codex"]
+    AIAgents:
+      description: The AI coding agents to install in the built environment. When not set, the agents requested by the repository's project.toml are installed.
+      type: array
+      items:
+        $ref: "#/components/schemas/AIAgent"
+      nullable: true
+      example: ["pi", "claude", "codex"]
     RepositoryRevision:
       description: A git revision
       type: string
@@ -1070,6 +1081,8 @@ components:
               $ref: "#/components/schemas/RepositoryRevision"
             context_dir:
               $ref: "#/components/schemas/BuildContextDir"
+            ai_agents:
+              $ref: "#/components/schemas/AIAgents"
           required:
             - repository
             - builder_variant
@@ -1100,6 +1113,8 @@ components:
           $ref: "#/components/schemas/RepositoryRevisionPatch"
         context_dir:
           $ref: "#/components/schemas/BuildContextDirPatch"
+        ai_agents:
+          $ref: "#/components/schemas/AIAgents"
     CommandAndArgs:
       description: The command and arguments.
       type: object
