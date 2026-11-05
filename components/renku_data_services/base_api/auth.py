@@ -2,14 +2,14 @@
 
 import asyncio
 import re
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Sequence
 from functools import wraps
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
 from sanic import Request
 
 from renku_data_services import errors
-from renku_data_services.base_models import AnyAPIUser, APIUser, Authenticator
+from renku_data_services.base_models import AnyAPIUser, APIUser, AuthenticatedAPIUserWithInternalToken, Authenticator
 
 _T = TypeVar("_T")
 _P = ParamSpec("_P")
@@ -184,6 +184,67 @@ def require_role(
 
             # the user is authenticated and has the required role
             response = await f(request, user, *args, **kwargs)
+            return response
+
+        return decorated_function
+
+    return decorator
+
+
+def internal_token_scope(
+    scope: str,
+    *args: Sequence[str],
+) -> Callable[
+    [Callable[_P, Coroutine[Any, Any, _T]]],
+    Callable[_P, Coroutine[Any, Any, _T]],
+]:
+    """Decorator which verifies the scope claim when using internal tokens.
+
+    It looks for APIUser in the named or unnamed parameters.
+
+    @internal_token_scope("scope_1", "scope_2") will allow either "scope_1" or "scope_2".
+
+    To perform an intersection of scope items, call the decorator multiple times:
+    @internal_token_scope("scope_1")
+    @internal_token_scope()"scope_2")
+    will allow only tokens with "scope_1" AND "scope_2".
+    """
+
+    allowed_scope_items = set(scope, *args)
+
+    def decorator(
+        f: Callable[_P, Coroutine[Any, Any, _T]],
+    ) -> Callable[_P, Coroutine[Any, Any, _T]]:
+        @wraps(f)
+        async def decorated_function(*args: _P.args, **kwargs: _P.kwargs) -> _T:
+            api_user = None
+            if "requested_by" in kwargs and isinstance(kwargs["requested_by"], APIUser):
+                api_user = kwargs["requested_by"]
+            elif "user" in kwargs and isinstance(kwargs["user"], APIUser):
+                api_user = kwargs["user"]
+            elif len(args) >= 1:
+                api_user_search = [a for a in args if isinstance(a, APIUser)]
+                if len(api_user_search) == 1:
+                    api_user = api_user_search[0]
+                else:
+                    raise errors.ProgrammingError(
+                        detail="Found no or more than one valid non-keyword APIUser arguments when "
+                        "authenticating user, expected only one."
+                    )
+
+            if isinstance(api_user, AuthenticatedAPIUserWithInternalToken):
+                scope_items = api_user.internal_token_scope.split(" ")
+                valid = False
+                for item in scope_items:
+                    if item in allowed_scope_items:
+                        valid = True
+                        break
+                if not valid:
+                    raise errors.ForbiddenError(
+                        message="The provided credentials do not allow to perform this operation."
+                    )
+
+            response = await f(*args, **kwargs)
             return response
 
         return decorated_function

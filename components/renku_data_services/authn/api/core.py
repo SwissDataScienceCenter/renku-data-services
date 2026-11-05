@@ -30,26 +30,37 @@ class ScopeVerifier:
     job_client: "DepositUploadJobClient"
 
     async def verify_scope(self, user: base_models.APIUser, scope: str) -> None:
-        """Verify that the scope claim is valid.
+        """Verify that the scope claim is valid for token refreshes.
 
         * For "session:{server_name}", check that the corresponding session is running
         * For "deposit_job:{job_name}", check that the corresponding job is running
-        """
-        scopes = scope.split(" ")
-        logger.info(f"Verifying scopes: {scopes}")
-        await asyncio.gather(*(self._verify_scope_item(user=user, scope_item=item) for item in scopes))
 
-    async def _verify_scope_item(self, user: base_models.APIUser, scope_item: str) -> None:
+        The token MUST have exactly one lifetime scope from the list above, otherwise
+        the scope claim is rejected.
+
+        Other scope items, e.g. "api:integrations:tokens" are not validated.
+        """
+        scope_items = scope.split(" ")
+        logger.info(f"Verifying scope items: {scope_items}")
+        result = await asyncio.gather(*(self._verify_scope_item(user=user, scope_item=item) for item in scope_items))
+        if sum(result) > 1:
+            logger.error(f"Failed to verify scope '{scope}', more than one lifetime scope found.")
+            raise errors.ForbiddenError(detail=f"Failed to verify scope '{scope}'.")
+
+    async def _verify_scope_item(self, user: base_models.APIUser, scope_item: str) -> int:
         """Verify a single scope item."""
         splits = scope_item.split(":", 1)
         match splits:
             case _ if len(splits) == 2 and splits[0].lower() == "session":
-                return await self._verify_session_scope(user=user, server_name=splits[1])
+                await self._verify_session_scope(user=user, server_name=splits[1])
+                return 1
             case _ if len(splits) == 2 and splits[0].lower() == "deposit_job":
-                return await self._verify_deposit_job_scope(user=user, job_name=splits[1])
+                await self._verify_deposit_job_scope(user=user, job_name=splits[1])
+                return 1
             case _:
+                # TODO: remove logger line
                 logger.warning(f"Got unknown scope item: {scope_item}")
-                return None
+                return 0
 
     async def _verify_session_scope(self, user: base_models.APIUser, server_name: str) -> None:
         """Verify a scope item corresponding to a session."""

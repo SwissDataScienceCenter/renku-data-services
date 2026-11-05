@@ -37,7 +37,7 @@ async def main_container(
         read_only_etc_certs=True,
     )
 
-    internal_token_scope = f"session:{server_name}"
+    internal_token_scope = f"session:{server_name} api:integrations:tokens"
     internal_access_token = internal_token_mint.create_access_token(user=user, scope=internal_token_scope)
     internal_refresh_token = internal_token_mint.create_refresh_token(user=user, scope=internal_token_scope)
 

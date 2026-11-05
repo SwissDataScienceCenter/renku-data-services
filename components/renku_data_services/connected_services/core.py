@@ -137,6 +137,7 @@ async def handle_oauth2_token_refresh(
     # Verify the scope claim
     scope = str(parsed_renku_refresh_token.get("scope", ""))
     await internal_scope_verifier.verify_scope(user=user, scope=scope)
+    # TODO: @internal_token_scope("api:integrations:tokens")
 
     client = await oauth_client_factory.for_user_connection_raise(user, connection_id)
     oauth_token = await client.get_token()
