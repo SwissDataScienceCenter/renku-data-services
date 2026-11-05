@@ -17,8 +17,6 @@ from renku_data_services.resource_usage.constants import ACTIVE_PHASES
 from renku_data_services.resource_usage.model import (
     Credit,
     ResourceClassCostWithPool,
-    ResourcePoolLimitPut,
-    ResourcePoolLimits,
     ResourcesRequest,
     ResourceUsage,
     ResourceUsageQuery,
@@ -161,8 +159,11 @@ class ResourceRequestsRepo:
             else:
                 return None
 
-    async def set_resource_pool_limits(self, limits: ResourcePoolLimitPut) -> bool:
-        """Updates (insert or update) the limits of the given pool. Return false if the resource pool doesn't exist."""
+    async def set_user_limits(self, pool: int, user_limit: Credit) -> bool:
+        """Updates (insert or update) the user limit of the given pool.
+
+        Return false if the resource pool doesn't exist.
+        """
         stmt = sa.text("""
         insert into resource_pools.resource_requests_limits
           (resource_pool_id, user_limit)
@@ -174,7 +175,7 @@ class ResourceRequestsRepo:
         """).bindparams(bindparam("user_limit", type_=CreditType()))
         async with self.session_maker() as session, session.begin():
             try:
-                await session.execute(stmt, limits.__dict__)
+                await session.execute(stmt, {"pool_id": pool, "user_limit": user_limit})
                 return True
             except IntegrityError as ie:
                 # impl note: if a resource pool doesn't exist, the sql statement results in a foreign key error
@@ -185,14 +186,14 @@ class ResourceRequestsRepo:
                 else:
                     raise
 
-    async def delete_resource_pool_limits(self, pool: int) -> None:
-        """Removes limits from the resource pool."""
+    async def delete_user_limits(self, pool: int) -> None:
+        """Removes user limits from the resource pool."""
         stmt = sa.text("delete from resource_pools.resource_requests_limits where resource_pool_id = :pool")
         async with self.session_maker() as session, session.begin():
             await session.execute(stmt, {"pool": pool})
 
-    async def find_resource_pool_limits(self, pool: int) -> ResourcePoolLimits | None:
-        """Finds the limits of the given resource pool.
+    async def find_user_limits(self, pool: int) -> Credit | None:
+        """Finds the user limits of the given resource pool.
 
         If the resource pool doesn't exist, None is returned. If the pool exists, but has no
         limits defined, the limits returned are set to -1.
@@ -206,15 +207,7 @@ class ResourceRequestsRepo:
         async with self.session_maker() as session:
             result = await session.execute(stmt, {"pool_id": pool})
             data = result.one_or_none()
-            return (
-                ResourcePoolLimits(
-                    pool_id=data.pool_id,
-                    total_limit=Credit.unlimited(),
-                    user_limit=Credit.from_int(data.user_limit),
-                )
-                if data is not None
-                else None
-            )
+            return Credit.from_int(data.user_limit) if data is not None else None
 
     async def find_usage(self, rq: ResourceUsageQuery, chunk_size: int = 500) -> AsyncGenerator[ResourceUsage]:
         """Find resource usage."""

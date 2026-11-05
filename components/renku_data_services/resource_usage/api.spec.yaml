@@ -260,6 +260,7 @@ components:
       properties:
         user_limit:
           type: integer
+          description: "A negative value means unlimited usage, zero means no allowance for this pool and a positive value indicates the number of available credits."
       required:
         - user_limit
     ResourceClassCostPut:
@@ -296,8 +297,10 @@ components:
           type: integer
         total_limit:
           type: integer
+          description: "A negative value means unlimited usage, zero means no allowance for this pool and a positive value indicates the number of available credits."
         user_limit:
           type: integer
+          description: "A negative value means unlimited usage, zero means no allowance for this pool and a positive value indicates the number of available credits."
       required:
         - pool_id
         - total_limit
