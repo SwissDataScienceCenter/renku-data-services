@@ -477,7 +477,7 @@ class StorageClassRepository:
         self, session: AsyncSession, user: base_models.APIUser, k8s_storage_class_name: str
     ) -> models.StorageClass | None:
         """Get a storage class from the database."""
-        sc_orm = await self._get_storage_class_orm(
+        sc_orm = await self._get_storage_class_or_none_orm(
             session=session, user=user, k8s_storage_class_name=k8s_storage_class_name
         )
         return sc_orm.dump() if sc_orm is not None else None
@@ -493,7 +493,7 @@ class StorageClassRepository:
             raise errors.MissingResourceError(message=f"Storage class '{k8s_storage_class_name}' does not exist.")
         return storage_class
 
-    async def _get_storage_class_orm(
+    async def _get_storage_class_or_none_orm(
         self, session: AsyncSession, user: base_models.APIUser, k8s_storage_class_name: str
     ) -> schemas.StorageClassORM | None:
         if user.id is None or not user.is_admin:
@@ -509,7 +509,7 @@ class StorageClassRepository:
         if user.id is None or not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
-        existing_sc = await self._get_storage_class_orm(
+        existing_sc = await self._get_storage_class_or_none_orm(
             session=session, user=user, k8s_storage_class_name=storage_class.k8s_storage_class_name
         )
         if existing_sc is not None:
@@ -538,7 +538,7 @@ class StorageClassRepository:
         etag: str,
     ) -> models.StorageClass:
         """Update a storage class in the database."""
-        sc_orm = await self._get_storage_class_orm(
+        sc_orm = await self._get_storage_class_or_none_orm(
             session=session, user=user, k8s_storage_class_name=k8s_storage_class_name
         )
         if sc_orm is None:
@@ -560,3 +560,19 @@ class StorageClassRepository:
         await session.flush()
         await session.refresh(sc_orm)
         return sc_orm.dump()
+
+    async def delete_storage_class(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        k8s_storage_class_name: str,
+    ) -> None:
+        """Update a storage class in the database."""
+        sc_orm = await self._get_storage_class_or_none_orm(
+            session=session, user=user, k8s_storage_class_name=k8s_storage_class_name
+        )
+        if sc_orm is None:
+            return None
+        await session.delete(sc_orm)
+        await session.flush()
+        return None

@@ -464,7 +464,11 @@ class StorageClassesBP(CustomBlueprint):
             _: Request,
             user: base_models.APIUser,
             k8s_storage_class_name: str,
-        ) -> JSONResponse:
-            raise NotImplementedError()
+        ) -> HTTPResponse:
+            async with self.session_maker() as session, session.begin():
+                await self.storage_class_repo.delete_storage_class(
+                    session=session, user=user, k8s_storage_class_name=k8s_storage_class_name
+                )
+            return HTTPResponse(status=204)
 
         return "/storage_classes/<k8s_storage_class_name>", ["DELETE"], _delete

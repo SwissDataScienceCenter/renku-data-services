@@ -1191,3 +1191,30 @@ async def test_patch_storage_class_conflict(
 
     assert res.status_code == 409, res.text
     assert res.json.get("error", {}).get("message") == f"Current ETag is {sc['etag']}, not invalid-etag."
+
+
+@pytest.mark.asyncio
+async def test_delete_storage_class(
+    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], insert_storage_class
+) -> None:
+    sc = await insert_storage_class()
+    k8s_storage_class_name = sc["k8s_storage_class_name"]
+
+    _, res = await sanic_client.delete(f"/api/data/storage_classes/{k8s_storage_class_name}", headers=admin_headers)
+
+    assert res.status_code == 204, res.text
+
+    _, res = await sanic_client.get(f"/api/data/storage_classes/{k8s_storage_class_name}", headers=admin_headers)
+
+    assert res.status_code == 404, res.text
+
+
+@pytest.mark.asyncio
+async def test_delete_storage_class_non_existent(
+    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], insert_storage_class
+) -> None:
+    k8s_storage_class_name = "some-class"
+
+    _, res = await sanic_client.delete(f"/api/data/storage_classes/{k8s_storage_class_name}", headers=admin_headers)
+
+    assert res.status_code == 204, res.text
