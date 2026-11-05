@@ -43,7 +43,10 @@ class ScopeVerifier:
         scope_items = scope.split(" ")
         logger.info(f"Verifying scope items: {scope_items}")
         result = await asyncio.gather(*(self._verify_scope_item(user=user, scope_item=item) for item in scope_items))
-        if sum(result) > 1:
+        if sum(result) <= 0:
+            logger.error(f"Failed to verify scope '{scope}', no lifetime scope found.")
+            raise errors.ForbiddenError(detail=f"Failed to verify scope '{scope}'.")
+        elif sum(result) > 1:
             logger.error(f"Failed to verify scope '{scope}', more than one lifetime scope found.")
             raise errors.ForbiddenError(detail=f"Failed to verify scope '{scope}'.")
 
@@ -98,3 +101,16 @@ class ScopeVerifier:
             )
             raise errors.ForbiddenError(detail=f"Failed to verify deposit job scope '{job_name}'.")
         return None
+
+
+@dataclass(frozen=True, kw_only=True)
+class TestScopeVerifier(ScopeVerifier):
+    """Scope verifier for tests.
+
+    Overrides scope verification for tests.
+    """
+
+    async def _verify_session_scope(self, user: base_models.APIUser, server_name: str) -> None:
+        """Verify a scope item corresponding to a session."""
+        if "valid" not in server_name:
+            raise errors.ForbiddenError(detail=f"Failed to verify session scope '{server_name}'.")
