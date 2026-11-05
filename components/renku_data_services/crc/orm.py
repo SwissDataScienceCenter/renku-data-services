@@ -372,9 +372,6 @@ class ResourcePoolStorageConfigORM(MutableComposite):
     storage_class_id: str
     """ID of the storage class."""
 
-    storage_class: storage_schemas.StorageClassORM
-    """The storage class to use when allocating storage from the resource pool."""
-
     total_size: ByteSize
     """Total allocatable storage."""
 
@@ -395,6 +392,7 @@ class ResourcePoolORM(BaseORM):
             "cpu_limit_factor IS NULL OR cpu_limit_factor >= 1.0",
             name="chk_cpu_limit_factor_gte_1",
         ),
+        # TODO: storage_config constraint
     )
     name: Mapped[str] = mapped_column(String(40), index=True)
     quota: Mapped[str | None] = mapped_column(String(63), index=True, default=None)
@@ -452,7 +450,7 @@ class ResourcePoolORM(BaseORM):
         nullable=True,
     )
     storage_class: Mapped[storage_schemas.StorageClassORM | None] = relationship(
-        default=None, lazy="selectin", init=False
+        storage_schemas.StorageClassORM, default=None, lazy="selectin", init=False
     )
     storage_total_size: Mapped[ByteSize | None] = mapped_column(
         "storage_total_size", ByteSizeType(), default=None, server_default=null(), nullable=True
@@ -464,7 +462,6 @@ class ResourcePoolORM(BaseORM):
     storage_config: Mapped[ResourcePoolStorageConfigORM | None] = composite(
         ResourcePoolStorageConfigORM,
         storage_class_id,
-        storage_class,
         storage_total_size,
         storage_max_size,
         default=None,
@@ -564,13 +561,13 @@ class ResourcePoolORM(BaseORM):
 
     def _dump_storage_config(self) -> models.ResourcePoolStorageConfig:
         """Create a ResourcePoolStorageConfig model from the corresponding columns of the ORM object."""
-        if self.storage_config is None:
+        if self.storage_class_id is None or self.storage_class is None or self.storage_config is None:
             return models.ResourcePoolStorageConfigDisabled()
         return models.ResourcePoolStorageConfigEnabled(
-            storage_class_name=self.storage_config.storage_class_id,
-            storage_display_name=self.storage_config.storage_class.display_name,
-            storage_min_size_bytes=self.storage_config.storage_class.min_size,
-            storage_documentation=self.storage_config.storage_class.documentation,
+            storage_class_name=self.storage_class_id,
+            storage_display_name=self.storage_class.display_name,
+            storage_min_size_bytes=self.storage_class.min_size,
+            storage_documentation=self.storage_class.documentation,
             storage_total_size_bytes=self.storage_config.total_size,
             storage_max_size_bytes=self.storage_config.max_size,
         )
