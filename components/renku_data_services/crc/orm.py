@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import (
     JSON,
@@ -21,10 +22,12 @@ from sqlalchemy import (
     false,
     func,
     literal,
+    null,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
+from sqlalchemy.ext.mutable import MutableComposite
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, composite, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from sqlalchemy.sql import expression
 from ulid import ULID
@@ -38,6 +41,7 @@ from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.resource_usage.model import Credit
+from renku_data_services.storage import orm as storage_schemas
 from renku_data_services.utils.sqlalchemy import ByteSizeType, ULIDType
 
 logger = logging.getLogger(__name__)
@@ -166,12 +170,10 @@ class ResourceClassORM(BaseORM):
     gpu: Mapped[int | None] = mapped_column(BigInteger, default=None)
     quota_enforced: Mapped[bool] = mapped_column(default=False, server_default=false())
     preemptible: Mapped[bool] = mapped_column(default=False, server_default=false())
-    resource_pool_id: Mapped[Optional[int]] = mapped_column(
+    resource_pool_id: Mapped[int | None] = mapped_column(
         ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
     )
-    resource_pool: Mapped[Optional[ResourcePoolORM]] = relationship(
-        back_populates="classes", default=None, lazy="joined"
-    )
+    resource_pool: Mapped[ResourcePoolORM | None] = relationship(back_populates="classes", default=None, lazy="joined")
     resource_flavor_id: Mapped[ULID | None] = mapped_column(
         ForeignKey("resource_flavors.id", ondelete="RESTRICT"), default=None, index=True, nullable=True
     )
@@ -360,6 +362,30 @@ class ClusterORM(BaseORM):
         )
 
 
+@dataclass
+class ResourcePoolStorageConfigORM(MutableComposite):
+    """Storage configuration for a resource pool.
+
+    This is a composite column, see: https://docs.sqlalchemy.org/en/21/orm/composites.html
+    """
+
+    storage_class_id: str
+    """ID of the storage class."""
+
+    storage_class: storage_schemas.StorageClassORM
+    """The storage class to use when allocating storage from the resource pool."""
+
+    total_size: ByteSize
+    """Total allocatable storage."""
+
+    max_size: ByteSize
+    """Maximum size for each storage."""
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        object.__setattr__(self, key, value)
+        self.changed()
+
+
 class ResourcePoolORM(BaseORM):
     """Resource pool specifies a set of resource classes, users that can access them and a quota."""
 
@@ -371,7 +397,7 @@ class ResourcePoolORM(BaseORM):
         ),
     )
     name: Mapped[str] = mapped_column(String(40), index=True)
-    quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
+    quota: Mapped[str | None] = mapped_column(String(63), index=True, default=None)
     users: Mapped[list[UserORM]] = relationship(
         secondary=resource_pools_users,
         back_populates="resource_pools",
@@ -387,9 +413,9 @@ class ResourcePoolORM(BaseORM):
         # flavor, which this column order cannot see.
         order_by="[ResourceClassORM.id]",
     )
-    idle_threshold: Mapped[Optional[int]] = mapped_column(default=None)
-    hibernation_threshold: Mapped[Optional[int]] = mapped_column(default=None)
-    hibernation_warning_period: Mapped[Optional[int]] = mapped_column(default=None)
+    idle_threshold: Mapped[int | None] = mapped_column(default=None)
+    hibernation_threshold: Mapped[int | None] = mapped_column(default=None)
+    hibernation_warning_period: Mapped[int | None] = mapped_column(default=None)
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
     remote_provider_id: Mapped[str | None] = mapped_column(
@@ -403,20 +429,44 @@ class ResourcePoolORM(BaseORM):
         JSONVariant, default=None, server_default=None, nullable=True
     )
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
-    cluster_id: Mapped[Optional[ULID]] = mapped_column(
+    cluster_id: Mapped[ULID | None] = mapped_column(
         ForeignKey(ClusterORM.id, ondelete="SET NULL"), default=None, index=True
     )
-    cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
+    cluster: Mapped[ClusterORM | None] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
 
     # NOTE: we reuse the "build_platform" enum type here
     platform: Mapped[models.RuntimePlatform] = mapped_column(
         Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=literal("linux_amd64")
     )
 
-    cpu_limit_factor: Mapped[Optional[float]] = mapped_column("cpu_limit_factor", Float, default=None, nullable=True)
+    cpu_limit_factor: Mapped[float | None] = mapped_column("cpu_limit_factor", Float, default=None, nullable=True)
     """Used to assign cpu limits based on the cpu value in the resource classes in the pool.
     If the value is zero or unset then cpu limits are not set.
     """
+
+    storage_class_id: Mapped[str | None] = mapped_column(
+        ForeignKey(storage_schemas.StorageClassORM.id, ondelete="RESTRICT", name="resource_pools_storage_class_id_fk"),
+        index=True,
+        default=None,
+        server_default=null(),
+        nullable=True,
+    )
+    storage_class: Mapped[storage_schemas.StorageClassORM | None] = relationship(default=None)
+    storage_total_size: Mapped[ByteSize | None] = mapped_column(
+        "storage_total_size", ByteSizeType(), default=None, server_default=null(), nullable=True
+    )
+    storage_max_size: Mapped[ByteSize | None] = mapped_column(
+        "storage_max_size", ByteSizeType(), default=None, server_default=null(), nullable=True
+    )
+
+    storage_config: Mapped[ResourcePoolStorageConfigORM | None] = composite(
+        ResourcePoolStorageConfigORM,
+        storage_class_id,
+        storage_class,
+        storage_total_size,
+        storage_max_size,
+        default=None,
+    )
 
     @classmethod
     def from_unsaved_model(
@@ -518,12 +568,10 @@ class TolerationORM(BaseORM):
 
     __tablename__ = "tolerations"
     key: Mapped[str] = mapped_column(String(63), index=True)
-    resource_class: Mapped[Optional[ResourceClassORM]] = relationship(
+    resource_class: Mapped[ResourceClassORM | None] = relationship(
         back_populates="tolerations", default=None, lazy="selectin"
     )
-    resource_class_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("resource_classes.id"), default=None, index=True
-    )
+    resource_class_id: Mapped[int | None] = mapped_column(ForeignKey("resource_classes.id"), default=None, index=True)
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
 
 
@@ -532,12 +580,10 @@ class NodeAffinityORM(BaseORM):
 
     __tablename__ = "node_affinities"
     key: Mapped[str] = mapped_column(String(63), index=True)
-    resource_class: Mapped[Optional[ResourceClassORM]] = relationship(
+    resource_class: Mapped[ResourceClassORM | None] = relationship(
         back_populates="node_affinities", default=None, lazy="selectin"
     )
-    resource_class_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("resource_classes.id"), default=None, index=True
-    )
+    resource_class_id: Mapped[int | None] = mapped_column(ForeignKey("resource_classes.id"), default=None, index=True)
     required_during_scheduling: Mapped[bool] = mapped_column(default=False)
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
 
