@@ -45,6 +45,8 @@ components:
       properties:
         target_host:
           type: string
+        target_port:
+          type: integer
       required:
         - target_host
     SessionAuthorizeRequest:
