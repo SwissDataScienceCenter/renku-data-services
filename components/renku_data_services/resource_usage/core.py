@@ -21,7 +21,6 @@ from renku_data_services.resource_usage.model import (
     ResourceClassCost,
     ResourceClassCostWithPool,
     ResourceDataFacade,
-    ResourcePoolLimitPut,
     ResourcePoolLimits,
     ResourcePoolUsageLimits,
     ResourcesRequest,
@@ -31,11 +30,6 @@ if TYPE_CHECKING:
     from renku_data_services.crc.db import ResourcePoolQueryRepository
 
 logger = logging.getLogger(__file__)
-
-
-def validate_resource_pool_limit_put(id: int, body: apispec.ResourcePoolLimitPut) -> ResourcePoolLimitPut:
-    """Validate resource pool limit."""
-    return ResourcePoolLimitPut(id, Credit.from_int(body.user_limit))
 
 
 def validate_resource_class_costs_put(class_id: int, body: apispec.ResourceClassCostPut) -> ResourceClassCost:
@@ -208,15 +202,20 @@ class ResourceUsageService:
         NOTE: Total limits are retrieved from the metering service, while user limits are retrieved from the database.
         If the resource pool does not exist, None is returned.
         """
-        default_limits = await self._repo.find_resource_pool_limits(resource_pool_id)
-        if default_limits is None or self._metering_client is None:
-            return default_limits
+        user_limit = await self._repo.find_user_limits(resource_pool_id)
+        if user_limit is None:
+            # This means the resource pool does not exist
+            return None
 
-        total_limit = await self._metering_client.get_resource_pool_total_limit(resource_pool_id)
+        if self._metering_client is None:
+            total_limit = Credit.unlimited()
+        else:
+            total_limit = await self._metering_client.get_resource_pool_total_limit(resource_pool_id)
+
         return ResourcePoolLimits(
             pool_id=resource_pool_id,
             total_limit=total_limit,
-            user_limit=default_limits.user_limit,
+            user_limit=user_limit,
         )
 
     async def get_current_usage_with_limits(

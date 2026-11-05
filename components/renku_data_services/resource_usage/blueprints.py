@@ -16,9 +16,9 @@ from renku_data_services.resource_usage import apispec
 from renku_data_services.resource_usage.core import (
     ResourceUsageService,
     validate_resource_class_costs_put,
-    validate_resource_pool_limit_put,
 )
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.resource_usage.model import Credit
 
 
 @dataclass(kw_only=True)
@@ -40,8 +40,7 @@ class ResourceUsageBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolLimitPut
         ) -> HTTPResponse:
-            limits = validate_resource_pool_limit_put(resource_pool_id, body=body)
-            result = await self.rr_repo.set_resource_pool_limits(limits)
+            result = await self.rr_repo.set_user_limits(resource_pool_id, Credit.from_int(body.user_limit))
             if not result:
                 raise errors.MissingResourceError()
             else:
@@ -76,7 +75,7 @@ class ResourceUsageBP(CustomBlueprint):
         @only_admins
         @validate_db_ids
         async def _delete(_: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
-            await self.rr_repo.delete_resource_pool_limits(resource_pool_id)
+            await self.rr_repo.delete_user_limits(resource_pool_id)
             return empty()
 
         return "/resource_pools/<resource_pool_id>/limits", ["DELETE"], _delete
