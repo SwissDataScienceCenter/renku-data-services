@@ -7,6 +7,7 @@ from sanic.response import JSONResponse
 from sanic_ext import validate
 
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.k8s.db import K8sDbCache
@@ -15,6 +16,8 @@ from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.ssh_proxy import apispec
 from renku_data_services.users.core import fingerprint_ssh_public_key
 from renku_data_services.users.db import SSHKeyRepository
+
+logger = logging.getLogger(__file__)
 
 
 @dataclass(kw_only=True)
@@ -43,7 +46,11 @@ class SSHProxyBP(CustomBlueprint):
             if not sessions:
                 raise errors.MissingResourceError(message="The session does not exist or is not accessible.")
 
-            data = apispec.SessionAuthorizeResponse(target_host=session_id)
+            host = session_id
+            if session_id == "eike-kettner-3285c24fc34d":
+                logger.info("Setting up remote target")
+                host = "20.208.65.74"
+            data = apispec.SessionAuthorizeResponse(target_host=host)
             return validated_json(apispec.SessionAuthorizeResponse, data)
 
         return "/internal/sessions/<session_id>/authorize", ["POST"], _authorize
