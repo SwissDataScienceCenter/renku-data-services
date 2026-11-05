@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, MetaData, String, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
@@ -16,9 +15,6 @@ from renku_data_services.project.orm import ProjectORM
 from renku_data_services.storage import models
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ByteSizeType, PurePosixPathType, ULIDType
-
-if TYPE_CHECKING:
-    pass
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
