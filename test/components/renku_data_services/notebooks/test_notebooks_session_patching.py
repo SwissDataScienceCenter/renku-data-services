@@ -37,7 +37,7 @@ def test_make_patch_spec_list() -> None:
     ]
 
 
-def test_session_patch_serializes_authentication_with_secret_ref_subclass() -> None:
+def test_session_patch_serializes_authentication_correctly() -> None:
     """Regression test: resuming a session used to send `authentication: null` and remove the authentication.
 
     `ExtraSecret.key_ref()` returns `crs.SecretRef`, a subclass of the generated `SecretRef`. That made
