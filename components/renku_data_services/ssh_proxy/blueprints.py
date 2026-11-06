@@ -46,13 +46,23 @@ class SSHProxyBP(CustomBlueprint):
             if not sessions:
                 raise errors.MissingResourceError(message="The session does not exist or is not accessible.")
 
-            host = session_id
-            port: int | None = None
-            if session_id == "eike-kettner-3285c24fc34d":
-                logger.info("Setting up remote target")
-                host = "20.208.65.74"
-                port = 2222
-            data = apispec.SessionAuthorizeResponse(target_host=host, target_port=port)
+            data: apispec.SessionAuthorizeResponse
+            if session_id == "eike-kettner-3285c24fc34d" or session_id == "eike-kettner-933452f1cefb":
+                logger.info(f"Setting up remote target for {session_id} to 20.208.65.74")
+                data = apispec.SessionAuthorizeResponse(
+                    target_host="20.208.65.74",
+                    target_port=2222,
+                    target_user=session_id,
+                    host_key_pub="rc-eikek-ns1/host_key",
+                    auth_key_priv="rc-eikek-ns1/auth_key",
+                )
+            else:
+                data = apispec.SessionAuthorizeResponse(
+                    target_host=session_id,
+                    target_port=80,
+                    target_user="renku",
+                )
+
             return validated_json(apispec.SessionAuthorizeResponse, data)
 
         return "/internal/sessions/<session_id>/authorize", ["POST"], _authorize

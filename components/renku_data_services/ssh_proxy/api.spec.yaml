@@ -47,8 +47,16 @@ components:
           type: string
         target_port:
           type: integer
+        target_user:
+          type: string
+        host_key_pub:
+          type: string
+        auth_key_priv:
+          type: string
       required:
         - target_host
+        - target_port
+        - target_user
     SessionAuthorizeRequest:
       type: object
       additionalProperties: false
