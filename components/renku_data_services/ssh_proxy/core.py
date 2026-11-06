@@ -36,7 +36,7 @@ class SessionAuthorize:
             raise errors.MissingResourceError(message="The session does not exist or is not accessible.")
 
         # temp hack for testing
-        if session_id == "eike-kettner-3285c24fc34d" or session_id == "eike-kettner-933452f1cefb":
+        if session_id == "eike-kettner-49d93d704c1a":
             logger.info(f"Setting up remote target for {session_id} to 20.208.65.74")
             return SshSessionData(
                 target_host="20.208.65.74",
