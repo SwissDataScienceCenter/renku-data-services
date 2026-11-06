@@ -46,8 +46,4 @@ class SessionAuthorize:
                 auth_key_priv="rc-eikek-ns1/auth_key",
             )
         else:
-            return SshSessionData(
-                target_host=session_id,
-                target_port=80,
-                target_user="renku",
-            )
+            return SshSessionData.default(session_id)
