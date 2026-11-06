@@ -15,7 +15,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.authn.api.core import ScopeVerifier
 from renku_data_services.authn.chained import ChainedAuthenticator
 from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
-from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
+from renku_data_services.base_api.auth import authenticate, internal_token_scope, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
@@ -253,6 +253,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         """Get the access token for a specific OAuth2 connection."""
 
         @authenticate(ChainedAuthenticator(chain=[self.internal_authenticator, self.authenticator]))
+        @internal_token_scope("api:integrations:tokens")
         async def _get_token(_: Request, user: base_models.APIUser, connection_id: ULID) -> JSONResponse:
             client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
             token = await client.get_token()
