@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from ulid import ULID
 
 from renku_data_services.base_models import RESET, ResetType
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.crc import apispec, models
 from renku_data_services.errors import errors
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
@@ -885,3 +886,30 @@ async def calculate_usage_hours(
 
     remaining_hours = remaining_quota / resource_class_cost.cost.value
     return remaining_hours, total_hours
+
+
+def validate_unsaved_storage_flavor(body: apispec.StorageFlavorPost) -> models.UnsavedStorageFlavor:
+    """Validate a new storage flavor."""
+    min_size = ByteSize.from_gibi(body.min_size)
+    if min_size < ByteSize.from_gibi(1):
+        raise errors.ValidationError(message="The minimum size must be at least 1GiB.")
+    return models.UnsavedStorageFlavor(
+        k8s_storage_class_name=body.k8s_storage_class_name,
+        display_name=body.display_name,
+        min_size_bytes=min_size,
+        admin_documentation=body.admin_documentation,
+        documentation=body.documentation,
+    )
+
+
+def validate_storage_flavor_patch(body: apispec.StorageFlavorPatch) -> models.StorageFlavorPatch:
+    """Validate a patch of a storage flavor."""
+    min_size = ByteSize.from_gibi(body.min_size) if body.min_size is not None else None
+    if min_size is not None and min_size < ByteSize.from_gibi(1):
+        raise errors.ValidationError(message="The minimum size must be at least 1GiB.")
+    return models.StorageFlavorPatch(
+        display_name=body.display_name,
+        min_size_bytes=min_size,
+        admin_documentation=body.admin_documentation,
+        documentation=body.documentation,
+    )
