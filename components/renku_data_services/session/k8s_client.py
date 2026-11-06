@@ -205,6 +205,16 @@ class ShipwrightClient:
                 ttlAfterSucceeded=f"{retention_after_succeeded}s" if retention_after_succeeded else None,
             )
 
+        param_values = [
+            crs.ParamValue(name="frontend", value=params.frontend),
+            crs.ParamValue(name="run-image", value=params.run_image),
+            crs.ParamValue(name="builder-image", value=params.builder_image),
+            crs.ParamValue(name="insecure-registries", value=params.insecure_registries),
+        ]
+        # NOTE: Only pass "ai-agents" when set: Shipwright rejects BuildRuns with params their BuildStrategy lacks
+        if params.ai_agents:
+            param_values.append(crs.ParamValue(name="ai-agents", value=" ".join(params.ai_agents)))
+
         build_run = BuildRun(
             metadata=metadata,
             spec=crs.BuildRunSpec(
@@ -219,12 +229,7 @@ class ShipwrightClient:
                             contextDir=params.context_dir,
                         ),
                         strategy=crs.Strategy(kind="BuildStrategy", name=params.build_strategy_name),
-                        paramValues=[
-                            crs.ParamValue(name="frontend", value=params.frontend),
-                            crs.ParamValue(name="run-image", value=params.run_image),
-                            crs.ParamValue(name="builder-image", value=params.builder_image),
-                            crs.ParamValue(name="insecure-registries", value=params.insecure_registries),
-                        ],
+                        paramValues=param_values,
                         output=crs.BuildOutput(
                             image=params.output_image,
                             insecure=params.build_insecure_output_enabled,

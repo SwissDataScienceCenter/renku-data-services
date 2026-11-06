@@ -2077,6 +2077,137 @@ async def test_patch_session_launcher_environment_with_invalid_build_parameters(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+async def test_session_launcher_environment_build_with_ai_agents(
+    sanic_client: SanicASGITestClient, user_headers, create_project, create_session_launcher
+) -> None:
+    project = await create_project(sanic_client, "Project")
+
+    session_launcher = await create_session_launcher(
+        name="Launcher",
+        project_id=project["id"],
+        environment={
+            "repository": "https://github.com/SwissDataScienceCenter/renku",
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+            "ai_agents": ["claude", "pi"],
+        },
+    )
+    launcher_id = session_launcher["id"]
+    assert session_launcher["environment"]["build_parameters"]["ai_agents"] == ["claude", "pi"]
+
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher_id}", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert res.json["environment"]["build_parameters"]["ai_agents"] == ["claude", "pi"]
+
+    async def patch_build_parameters(build_parameters: dict[str, Any]) -> dict[str, Any]:
+        patch_payload = {"environment": {"build_parameters": build_parameters}}
+        _, res = await sanic_client.patch(
+            f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+        )
+        assert res.status_code == 200, res.text
+        return res.json["environment"]["build_parameters"]
+
+    # Omitting the field keeps the stored value
+    build_parameters = await patch_build_parameters({"repository": "https://github.com/some/repo"})
+    assert build_parameters["ai_agents"] == ["claude", "pi"]
+
+    build_parameters = await patch_build_parameters({"ai_agents": ["codex"]})
+    assert build_parameters["ai_agents"] == ["codex"]
+
+    build_parameters = await patch_build_parameters({"ai_agents": None})
+    assert "ai_agents" not in build_parameters
+
+    await patch_build_parameters({"ai_agents": ["pi"]})
+    build_parameters = await patch_build_parameters({"ai_agents": []})
+    assert "ai_agents" not in build_parameters
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+async def test_patch_session_launcher_from_global_environment_to_build_with_ai_agents(
+    sanic_client: SanicASGITestClient, user_headers, create_project, create_session_environment
+) -> None:
+    project = await create_project(sanic_client, "Project")
+    global_env = await create_session_environment("Some environment")
+    payload = {"name": "Launcher", "project_id": project["id"], "environment": {"id": global_env["id"]}}
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    launcher_id = res.json["id"]
+
+    patch_payload = {
+        "environment": {
+            "environment_kind": "CUSTOM",
+            "environment_image_source": "build",
+            "build_parameters": {
+                "repository": "https://github.com/some/repo",
+                "builder_variant": "python",
+                "frontend_variant": "vscodium",
+                "ai_agents": ["codex", "claude"],
+            },
+        },
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json["environment"]["build_parameters"]["ai_agents"] == ["codex", "claude"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ai_agents", [["unknown"], ["claude@1.2.3"], "pi claude"])
+async def test_post_session_launcher_environment_with_invalid_ai_agents(
+    sanic_client, user_headers, create_project, ai_agents
+) -> None:
+    project = await create_project(sanic_client, "Project")
+
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "environment": {
+            "repository": "https://github.com/SwissDataScienceCenter/renku",
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+            "ai_agents": ai_agents,
+        },
+    }
+
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    assert res.status_code == 422, res.text
+    assert "ai_agents" in res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ai_agents", [["unknown"], ["claude@1.2.3"], "pi claude"])
+async def test_patch_session_launcher_environment_with_invalid_ai_agents(
+    sanic_client, user_headers, create_project, create_session_launcher, ai_agents
+) -> None:
+    project = await create_project(sanic_client, "Project")
+
+    session_launcher = await create_session_launcher(
+        name="Launcher",
+        project_id=project["id"],
+        environment={
+            "repository": "https://github.com/SwissDataScienceCenter/renku",
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+        },
+    )
+    launcher_id = session_launcher["id"]
+
+    patch_payload = {"environment": {"build_parameters": {"ai_agents": ai_agents}}}
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 422, res.text
+    assert "ai_agents" in res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_patch_session_launcher_invalid_env_variables(
     sanic_client: SanicASGITestClient,
     valid_resource_pool_payload: dict[str, Any],

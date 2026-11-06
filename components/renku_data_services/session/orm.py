@@ -246,6 +246,8 @@ class BuildParametersORM(BaseORM):
 
     context_dir: Mapped[str | None] = mapped_column("context_dir", String(500), nullable=True, default=None)
 
+    ai_agents: Mapped[list[str] | None] = mapped_column("ai_agents", JSONVariant, nullable=True, default=None)
+
     platforms: Mapped[list["BuildPlatformORM"]] = relationship(
         back_populates="build_parameters",
         default_factory=list,
@@ -265,6 +267,7 @@ class BuildParametersORM(BaseORM):
             frontend_variant=self.frontend_variant,
             repository_revision=self.repository_revision or None,
             context_dir=self.context_dir or None,
+            ai_agents=None if self.ai_agents is None or len(self.ai_agents) == 0 else self.ai_agents,
         )
 
 

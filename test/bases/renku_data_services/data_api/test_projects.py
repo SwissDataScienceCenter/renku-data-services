@@ -1440,6 +1440,7 @@ async def test_project_copy_creates_new_build_and_environment_instances(
             "builder_variant": "python",
             "frontend_variant": "vscodium",
             "environment_image_source": "build",
+            "ai_agents": ["claude", "pi"],
         },
         resource_class_id=resource_pool["classes"][0]["id"],
         disk_storage=42,
@@ -1491,6 +1492,7 @@ async def test_project_copy_creates_new_build_and_environment_instances(
     assert response.status_code == 200, response.text
     copy_build_parameters = response.json[0]["environment"]["build_parameters"]
     assert copy_build_parameters["repository"] == "new_repo"
+    assert copy_build_parameters["ai_agents"] == ["claude", "pi"]
 
 
 @pytest.mark.asyncio
