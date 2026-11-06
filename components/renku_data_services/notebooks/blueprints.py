@@ -115,7 +115,7 @@ class NotebooksNewBP(CustomBlueprint):
                 ssh_proxy_config=self.ssh_proxy_config,
             )
             status = 201 if created else 200
-            return json(session.as_apispec().model_dump(exclude_none=True, mode="json"), status)
+            return json(session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"), status)
 
         return "/sessions", ["POST"], _handler
 
@@ -137,7 +137,7 @@ class NotebooksNewBP(CustomBlueprint):
             sessions = await self.nb_config.k8s_v2_client.list_sessions(user.id, session_mode)
             output: list[dict] = []
             for session in sessions:
-                output.append(session.as_apispec().model_dump(exclude_none=True, mode="json"))
+                output.append(session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"))
             return json(output)
 
         return "/sessions", ["GET"], _handler
@@ -152,7 +152,7 @@ class NotebooksNewBP(CustomBlueprint):
                 raise errors.MissingResourceError(
                     message=f"The session with ID {session_id} does not exist.", quiet=True
                 )
-            return json(session.as_apispec().model_dump(exclude_none=True, mode="json"))
+            return json(session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"))
 
         return "/sessions/<session_id>", ["GET"], _handler
 
@@ -201,10 +201,9 @@ class NotebooksNewBP(CustomBlueprint):
                 resource_requests_repo=self.resource_requests_repo,
                 project_storage_repo=self.project_storage_repo,
                 authz=self.authz,
-                cluster_repo=self.cluster_repo,
                 ssh_proxy_config=self.ssh_proxy_config,
             )
-            return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
+            return json(new_session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"))
 
         return "/sessions/<session_id>", ["PATCH"], _handler
 
