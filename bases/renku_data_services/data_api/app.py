@@ -36,6 +36,7 @@ from renku_data_services.search.blueprints import SearchBP
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
+from renku_data_services.ssh_proxy.core import SessionAuthorize
 from renku_data_services.storage.blueprints import ProjectStorageBP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, SSHKeysBP, UserPreferencesBP, UserSecretsBP
 
@@ -95,6 +96,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         ssh_key_repo=dm.ssh_key_repo,
         authenticator=dm.authenticator,
+        ssh_authorize=SessionAuthorize(dm.ssh_key_repo, dm.k8s_client),
     )
     resource_pools_users = ResourcePoolUsersBP(
         name="resource_pool_users",
