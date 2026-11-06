@@ -1717,6 +1717,8 @@ async def patch_session(
         remove=remove_mounts,
     )
 
+    logger.info(f"[PATCH] ingress={patch.spec.ingress} authentication={patch.spec.authentication}")
+
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
         await nb_config.k8s_v2_client.create_or_patch_secret(K8sSecret.from_v1_secret(s.secret, cluster))
