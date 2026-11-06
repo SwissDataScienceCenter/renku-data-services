@@ -1,19 +1,22 @@
 """Compute resource control (CRC) app."""
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
 from sanic import HTTPResponse, Request, empty, json
+from sanic.response import JSONResponse
 from sanic_ext import validate
+from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
 from renku_data_services.base_api.misc import validate_db_ids, validate_query
 from renku_data_services.base_models.core import Slug
 from renku_data_services.base_models.validation import validated_json
@@ -28,6 +31,8 @@ from renku_data_services.crc.core import (
     validate_resource_flavor_patch,
     validate_resource_pool_post,
     validate_resource_pool_put_or_patch,
+    validate_storage_flavor_patch,
+    validate_unsaved_storage_flavor,
 )
 from renku_data_services.crc.db import (
     ClusterRepository,
@@ -35,6 +40,7 @@ from renku_data_services.crc.db import (
     ResourceFlavorRepository,
     ResourcePoolMemberResult,
     ResourcePoolRepository,
+    StorageFlavorRepository,
 )
 from renku_data_services.crc.models import MemberType, ResourceFlavor, ResourcePoolMemberIdentifier
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -947,3 +953,105 @@ class ClustersBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/clusters/<cluster_id>", ["DELETE"], _handler
+
+
+@dataclass(kw_only=True)
+class StorageFlavorsBP(CustomBlueprint):
+    """Handlers for storage flavors."""
+
+    storage_flavor_repo: StorageFlavorRepository
+    authenticator: base_models.Authenticator
+    session_maker: Callable[..., AsyncSession]
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get the available storage flavors."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _get_all(_: Request, user: base_models.APIUser) -> JSONResponse:
+            async with self.session_maker() as session, session.begin():
+                storage_flavors = self.storage_flavor_repo.get_all_storage_flavors(session=session, user=user)
+                result = [item async for item in storage_flavors]
+            return validated_json(apispec.StorageFlavors, result)
+
+        return "/storage_flavors", ["GET"], _get_all
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Create a storage flavor."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.StorageFlavorPost)
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.StorageFlavorPost) -> JSONResponse:
+            new_storage_flavor = validate_unsaved_storage_flavor(body=body)
+            async with self.session_maker() as session, session.begin():
+                storage_flavor = await self.storage_flavor_repo.insert_storage_flavor(
+                    session=session, user=user, storage_flavor=new_storage_flavor
+                )
+            return validated_json(apispec.StorageFlavor, storage_flavor, status=201)
+
+        return "/storage_flavors", ["POST"], _post
+
+    def get_one(self) -> BlueprintFactoryResponse:
+        """Get a storage class."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @extract_if_none_match
+        async def _get_one(
+            _: Request, user: base_models.APIUser, storage_flavor_id: ULID, etag: str | None
+        ) -> JSONResponse | HTTPResponse:
+            async with self.session_maker() as session, session.begin():
+                storage_flavor = await self.storage_flavor_repo.get_storage_flavor(
+                    session=session, user=user, storage_flavor_id=storage_flavor_id
+                )
+            if storage_flavor.etag == etag:
+                return HTTPResponse(status=304)
+            headers = {"ETag": storage_flavor.etag}
+            return validated_json(apispec.StorageFlavor, storage_flavor, headers=headers)
+
+        return "/storage_flavors/<storage_flavor_id:ulid>", ["GET"], _get_one
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Update a storage class."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @if_match_required
+        @validate(json=apispec.StorageFlavorPatch)
+        async def _patch(
+            _: Request,
+            user: base_models.APIUser,
+            storage_flavor_id: ULID,
+            body: apispec.StorageFlavorPatch,
+            etag: str,
+        ) -> JSONResponse:
+            patch = validate_storage_flavor_patch(body=body)
+            async with self.session_maker() as session, session.begin():
+                storage_flavor = await self.storage_flavor_repo.update_storage_flavor(
+                    session=session, user=user, storage_flavor_id=storage_flavor_id, patch=patch, etag=etag
+                )
+            return validated_json(
+                apispec.StorageFlavor,
+                storage_flavor,
+            )
+
+        return "/storage_flavors/<storage_flavor_id:ulid>", ["PATCH"], _patch
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Delete a storage class."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _delete(
+            _: Request,
+            user: base_models.APIUser,
+            storage_flavor_id: ULID,
+        ) -> HTTPResponse:
+            async with self.session_maker() as session, session.begin():
+                await self.storage_flavor_repo.delete_storage_flavor(
+                    session=session, user=user, storage_flavor_id=storage_flavor_id
+                )
+            return HTTPResponse(status=204)
+
+        return "/storage_flavors/<storage_flavor_id:ulid>", ["DELETE"], _delete
