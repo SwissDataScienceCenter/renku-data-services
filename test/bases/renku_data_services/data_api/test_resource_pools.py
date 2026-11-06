@@ -177,6 +177,12 @@ async def test_resource_pool_creation_with_cluster_ids(
         assert "id" in res.json["cluster"]
         assert res.json["cluster"]["id"] == payload["cluster_id"]
 
+        rp_id = res.json["id"]
+        _, res = await sanic_client.get("/api/data/resource_pools", headers=admin_headers)
+        assert res.status_code == 200, res.text
+        rp = next(rp for rp in res.json if rp["id"] == rp_id)
+        assert rp.get("cluster_id") == payload["cluster_id"]
+
 
 @pytest.mark.parametrize(
     "payload,expected_status_code",
