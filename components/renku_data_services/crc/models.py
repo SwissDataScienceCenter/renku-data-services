@@ -681,6 +681,28 @@ class ResourcePoolMemberIdentifier:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class ResourcePoolStorageConfigDisabled:
+    """Disabled storage configuration for a resource pool."""
+
+    enabled: Final[bool] = field(init=False, default=False)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourcePoolStorageConfigEnabled:
+    """Enabled storage configuration for a resource pool."""
+
+    enabled: Final[bool] = field(init=False, default=True)
+    storage_class_name: str
+    storage_display_name: str
+    storage_min_size_bytes: ByteSize
+    storage_documentation: str | None
+    storage_total_size_bytes: ByteSize
+    storage_max_size_bytes: ByteSize
+
+
+ResourcePoolStorageConfig = ResourcePoolStorageConfigDisabled | ResourcePoolStorageConfigEnabled
+
+
 class UnsavedStorageFlavor:
     """Unsaved storage flavor."""
 
