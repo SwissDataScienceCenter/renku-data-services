@@ -14,14 +14,11 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
-from renku_data_services.k8s.client_interfaces import K8sClient
-from renku_data_services.k8s.models import K8sObjectFilter
-from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret, SecretKind
+from renku_data_services.ssh_proxy.core import SessionAuthorize
 from renku_data_services.users import apispec, models
 from renku_data_services.users.core import (
-    fingerprint_ssh_public_key,
     validate_secret_patch,
     validate_unsaved_secret,
     validate_unsaved_ssh_key,
@@ -317,28 +314,22 @@ class SSHKeysBP(CustomBlueprint):
 
     ssh_key_repo: SSHKeyRepository
     authenticator: base_models.Authenticator
-    k8s_client: K8sClient
+    ssh_authorize: SessionAuthorize
 
     def authorize(self) -> BlueprintFactoryResponse:
         """Authorize a session name."""
 
         @validate(json=apispec.SessionAuthorizeRequest)
         async def _authorize(_: Request, body: apispec.SessionAuthorizeRequest, session_id: str) -> JSONResponse:
-            fingerprint = fingerprint_ssh_public_key(body.public_key)
-            user_id = await self.ssh_key_repo.get_user_id_by_fingerprint(fingerprint) if fingerprint else None
-            if user_id is None:
-                # NOTE: malformed and unknown keys are both a plain "no", so the proxy has one failure branch.
-                raise errors.MissingResourceError(message="No registered SSH key matches the provided key.")
-            sessions = [
-                obj
-                async for obj in self.k8s_client.list(
-                    K8sObjectFilter(gvk=AMALTHEA_SESSION_GVK, name=session_id, user_id=user_id)
-                )
-            ]
-            if not sessions:
-                raise errors.MissingResourceError(message="The session does not exist or is not accessible.")
-            data = apispec.SessionAuthorizeResponse(target_host=session_id)
-            return validated_json(apispec.SessionAuthorizeResponse, data)
+            session_data = await self.ssh_authorize.authorize_session(body.public_key, session_id)
+            result = apispec.SessionAuthorizeResponse(
+                target_host=session_data.target_host,
+                target_port=session_data.target_port,
+                target_user=session_data.target_user,
+                host_key_pub=session_data.host_key_pub,
+                auth_key_priv=session_data.auth_key_priv,
+            )
+            return validated_json(apispec.SessionAuthorizeResponse, result)
 
         return "/users/ssh_keys/<session_id>/authorize", ["POST"], _authorize
 
