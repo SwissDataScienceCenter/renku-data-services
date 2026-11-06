@@ -489,6 +489,16 @@ class ResourcePool:
                 return rc
         return None
 
+    @property
+    def cluster_id(self) -> ClusterId | None:
+        """Get the ID of the cluster the resource pool is bound to, if it is not the default one.
+
+        Used to populate the `cluster_id` field of `ResourcePoolWithIdFiltered` API responses.
+        """
+        if self.cluster is None:
+            return None
+        return self.cluster.id
+
     def get_cluster_id(self) -> ClusterId:
         """Get the ID of the cluster the resource pool refers to."""
         if self.cluster is None:
