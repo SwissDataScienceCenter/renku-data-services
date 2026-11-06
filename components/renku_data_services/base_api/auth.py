@@ -257,6 +257,3 @@ def internal_token_scope(
         return decorated_function
 
     return decorator
-
-
-internal_token_scope("a", "b")
