@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import Enum, StrEnum
 from typing import Any, ClassVar, Never, Optional, Protocol, Self, TypeVar, overload
 
-from pydantic_core import core_schema
+from pydantic_core import PydanticSerializationUnexpectedValue, core_schema
 from sanic import Request
 
 from renku_data_services.errors import errors
@@ -446,10 +446,23 @@ class ResetType(Enum):
             cls,
             core_schema.int_schema(),
             serialization=core_schema.plain_serializer_function_ser_schema(
-                lambda _: None,
+                _serialize_reset,
                 when_used="always",
             ),
         )
+
+
+def _serialize_reset(value: Any) -> None:
+    """Serialize RESET as None, refusing any other value.
+
+    Raising here matters when `ResetType` is part of a union like `Model | ResetType | None`:
+    pydantic tries each union member's serializer in turn, and a serializer that accepts
+    anything would silently turn values that are not an exact match for `Model` (e.g. a model
+    holding a subclass instance in a nested field) into null.
+    """
+    if value is not ResetType.Reset:
+        raise PydanticSerializationUnexpectedValue(f"Expected RESET, got {type(value).__name__}")
+    return None
 
 
 RESET = ResetType.Reset
