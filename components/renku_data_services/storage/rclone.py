@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
-import tempfile
+import os
 from collections.abc import Generator, MutableMapping
 from configparser import ConfigParser
 from copy import deepcopy
@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, NamedTuple, Union, cast, overload
 from urllib.parse import ParseResult, urlparse
 
+import httpx
 from pydantic import BaseModel, Field, InstanceOf, ValidationError, model_serializer, model_validator
 
 from renku_data_services import errors
@@ -44,6 +45,9 @@ class RCloneValidator:
         apply_patches(spec)
         self.providers = RCloneValidator._get_providers(spec)
         self._additional_allowed_storages = additional_allowed_storages or set()
+        # The port where the rclone remote control server can be accessed.
+        self._port: int = int(os.environ.get("RCLONE_PORT", 9999))
+        self._http_client = httpx.AsyncClient(timeout=httpx.Timeout(timeout=5, read=60))
 
     def validate(self, configuration: Union[RCloneConfig, dict[str, Any]], keep_sensitive: bool = False) -> None:
         """Validates an RClone config."""
@@ -63,6 +67,26 @@ class RCloneValidator:
                 sensitive_data_counter += 1
                 continue
             raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
+
+    @staticmethod
+    def _serialize_rc_payload(payload: dict[str, Any]) -> dict[str, str]:
+        """The payload for rc, for the fs field has to be dict[str,str].
+
+        If not rclone fails to deserialize.
+        """
+        output = {}
+        for k, v in payload.items():
+            match v:
+                case bool():
+                    v = str(v).lower()
+                case dict():
+                    v = json.dumps(v)
+                case list():
+                    v = json.dumps(v)
+                case _:
+                    v = str(v)
+            output[k] = v
+        return output
 
     async def test_connection(
         self,
@@ -93,32 +117,38 @@ class RCloneValidator:
                     with_oauth2_config.config if isinstance(with_oauth2_config, RCloneConfig) else with_oauth2_config
                 )
 
-        with tempfile.NamedTemporaryFile(mode="w+", delete=True, encoding="utf-8") as f:
-            test_conf = (
-                transformed_config
-                if isinstance(transformed_config, RCloneConfig)
-                else RCloneConfig(config=transformed_config)
-            )
-            test_conf.write(f, name="temp")
+        test_conf = (
+            transformed_config
+            if isinstance(transformed_config, RCloneConfig)
+            else RCloneConfig(config=transformed_config)
+        )
+        fs_payload = self._serialize_rc_payload(test_conf.config)
+        payload = {
+            "fs": fs_payload,
+            "opt": {"recurse": False, "noModTime": True, "noMimeType": True},
             # Handle SFTP retries, see https://github.com/SwissDataScienceCenter/renku-data-services/issues/893
-            rclone_args = [
-                "lsf",
-                "--low-level-retries=1",  # Connection tests should fail fast.
-                "--retries=1",  # Connection tests should fail fast.
-                "--config",
-                f.name,
-                f"temp:{source_path}",
-            ]
-            logger.debug(f"Execute: rclone {' '.join(rclone_args)}")
-            proc = await asyncio.create_subprocess_exec(
-                "rclone",
-                *rclone_args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            "_config": {"LowLevelRetries": 1, "Retries": 1, "ConnectTimeout": "10s", "Timeout": "30s"},
+            "remote": source_path,
+        }
+        url = f"http://127.0.0.1:{self._port}/operations/list"
+        try:
+            res = await self._http_client.post(url=url, json=payload)
+        except httpx.TimeoutException:
+            return ConnectionResult(False, "the connection test timed out")
+        except httpx.ConnectError:
+            return ConnectionResult(
+                False,
+                "we cannot test the connection, please try again and if the error persists, report it to an admin",
             )
-            _, error = await proc.communicate()
-            success = proc.returncode == 0
-        return ConnectionResult(success=success, error=error.decode())
+        error_msg = ""
+        if res.status_code != 200:
+            default_err = "the data connector configuration is not valid"
+            try:
+                error_msg = res.json().get("error", default_err)
+            except ValueError:
+                error_msg = default_err
+
+        return ConnectionResult(success=res.status_code == 200, error=error_msg)
 
     async def obscure_config(
         self, configuration: Union[RCloneConfig, dict[str, Any]]
