@@ -95,6 +95,16 @@ services:
     group_add:
       - "1000" # Allows access to the solr data in the shared volume
 
+  rclone:
+    image: ghcr.io/swissdatasciencecenter/rclone:sha-308067c
+    restart: unless-stopped
+    network_mode: service:db
+    command:
+      - /rclone
+      - "rcd"
+      - "--rc-no-auth"
+      - "--rc-addr=127.0.0.1:9999"
+
 volumes:
   postgres-data:
   solr_data:
