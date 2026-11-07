@@ -5,7 +5,12 @@ from typing import Any
 import pytest
 
 from renku_data_services.storage.constants import STORAGE_CONFIG
-from renku_data_services.storage.rclone import RCloneValidator, convert_rclone_configuration
+from renku_data_services.storage.rclone import (
+    RCloneValidator,
+    convert_rclone_configuration,
+    rclone_obscure,
+    rclone_reveal,
+)
 
 
 def test_validate_switch_s3_no_endpoint() -> None:
@@ -27,15 +32,15 @@ def test_storage_config() -> None:
         config = STORAGE_CONFIG.get(storage_type)
         assert config is not None, f'Storage type "{storage_type}" (#{pos}) is not covered by STORAGE_CONFIG.'
 
-        assert config.options is None or config.allowed, (
-            f'Storage type "{storage_type}" (#{pos}) cannot specify options because it is not allowed.'
-        )
+        assert (
+            config.options is None or config.allowed
+        ), f'Storage type "{storage_type}" (#{pos}) cannot specify options because it is not allowed.'
         if not config.allowed:
             continue
 
-        assert config.options is not None, (
-            f'Storage type "{storage_type}" (#{pos}) must specify options because it is allowed.'
-        )
+        assert (
+            config.options is not None
+        ), f'Storage type "{storage_type}" (#{pos}) must specify options because it is allowed.'
 
         options: list[dict[str, Any]] = storage.get("Options")
         assert isinstance(options, list), f'Storage type "{storage_type}" (#{pos}) has incorrect options.'
@@ -54,9 +59,9 @@ def test_storage_config() -> None:
             )
         # Check that we do not configure unknown options
         for option_name in config.options:
-            assert option_name in all_option_names, (
-                f'Unknown storage option "{option_name}" in STORAGE_CONFIG"[{storage_type}"].'
-            )
+            assert (
+                option_name in all_option_names
+            ), f'Unknown storage option "{option_name}" in STORAGE_CONFIG"[{storage_type}"].'
 
 
 def test_storage_config_no_unknown() -> None:
@@ -196,3 +201,33 @@ async def test_test_connection(config: dict[str, Any], source_path: str, expecte
     assert result.success == expected_success, result.error
     if not expected_success:
         assert result.error != ""
+
+
+@pytest.mark.parametrize("value", ["hunter2", "pä$$w0rd with spaces & ünïcode", ""])
+def test_rclone_obscure_roundtrip(value: str) -> None:
+    obscured = rclone_obscure(value)
+
+    assert obscured != value
+    assert "=" not in obscured
+    assert rclone_reveal(obscured) == value
+
+
+def test_rclone_obscure_is_randomized() -> None:
+    assert rclone_obscure("hunter2") != rclone_obscure("hunter2")
+
+
+def test_rclone_reveal_value_obscured_by_rclone() -> None:
+    # Generated with `echo -n hunter2 | rclone obscure -` (rclone v1.71.2+renku-1)
+    assert rclone_reveal("xx8vzaajUoH9nAAqVt-7vuWtSOCrkwI") == "hunter2"
+
+
+async def test_obscure_config_obscures_password_options() -> None:
+    validator = RCloneValidator()
+    config = {"type": "sftp", "host": "example.com", "user": "me", "pass": "hunter2"}
+
+    result = await validator.obscure_config(config)
+
+    assert result["pass"] != "hunter2"
+    assert rclone_reveal(result["pass"]) == "hunter2"
+    assert result["host"] == "example.com"
+    assert result["user"] == "me"

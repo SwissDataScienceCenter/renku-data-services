@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import base64
 import io
 import json
 import os
@@ -15,6 +15,7 @@ from typing import IO, TYPE_CHECKING, Any, NamedTuple, Union, cast, overload
 from urllib.parse import ParseResult, urlparse
 
 import httpx
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from pydantic import BaseModel, Field, InstanceOf, ValidationError, model_serializer, model_validator
 
 from renku_data_services import errors
@@ -27,6 +28,37 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from renku_data_services import base_models
     from renku_data_services.notebooks.data_sources import DataSourceRepository
+
+
+# Fixed key used by rclone to obscure values, see fs/config/obscure/obscure.go in the rclone sources.
+# Obscuring is not encryption: anyone can reveal an obscured value, it only prevents shoulder surfing.
+_RCLONE_OBSCURE_KEY = bytes(
+    [
+        0x9C, 0x93, 0x5B, 0x48, 0x73, 0x0A, 0x55, 0x4D, 0x6B, 0xFD, 0x7C, 0x63, 0xC8, 0x86, 0xA9, 0x2B,
+        0xD3, 0x90, 0x19, 0x8E, 0xB8, 0x12, 0x8A, 0xFB, 0xF4, 0xDE, 0x16, 0x2B, 0x8B, 0x95, 0xF6, 0x38,
+    ]
+)  # fmt: skip
+
+
+def rclone_obscure(value: str) -> str:
+    """Obscure a value in the same way as `rclone obscure`.
+
+    The result is the URL-safe base64 encoding (without padding) of a random 16 byte IV
+    followed by the value encrypted with AES-256-CTR under rclone's fixed key.
+    """
+    iv = os.urandom(16)
+    encryptor = Cipher(algorithms.AES(_RCLONE_OBSCURE_KEY), modes.CTR(iv)).encryptor()
+    ciphertext = encryptor.update(value.encode()) + encryptor.finalize()
+    return base64.urlsafe_b64encode(iv + ciphertext).decode().rstrip("=")
+
+
+def rclone_reveal(value: str) -> str:
+    """Reveal a value obscured with `rclone obscure` or `rclone_obscure`, like `rclone reveal`."""
+    raw = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    if len(raw) < 16:
+        raise ValueError("The obscured value is too short.")
+    decryptor = Cipher(algorithms.AES(_RCLONE_OBSCURE_KEY), modes.CTR(raw[:16])).decryptor()
+    return (decryptor.update(raw[16:]) + decryptor.finalize()).decode()
 
 
 class ConnectionResult(NamedTuple):
@@ -446,21 +478,7 @@ class RCloneProviderSchema(BaseModel):
         """Obscure all password options."""
         for passwd in self.password_options:
             if val := configuration.get(passwd.name):
-                proc = await asyncio.create_subprocess_exec(
-                    "rclone",
-                    "obscure",
-                    "-",
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                result, error = await proc.communicate(input=str(val).encode())
-                success = proc.returncode == 0
-                if not success:
-                    raise errors.ConfigurationError(
-                        message=f"Couldn't obscure password value for field '{passwd.name}'"
-                    )
-                configuration[passwd.name] = result.decode().strip()
+                configuration[passwd.name] = rclone_obscure(str(val))
         return configuration
 
     def get_private_fields(
