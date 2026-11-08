@@ -96,11 +96,10 @@ services:
       - "1000" # Allows access to the solr data in the shared volume
 
   rclone:
-    image: ghcr.io/swissdatasciencecenter/rclone:sha-308067c
+    image: rclone/rclone:1.76
     restart: unless-stopped
     network_mode: service:db
     command:
-      - /rclone
       - "rcd"
       - "--rc-no-auth"
       - "--rc-addr=127.0.0.1:9999"
