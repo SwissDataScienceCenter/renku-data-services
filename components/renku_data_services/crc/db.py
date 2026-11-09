@@ -69,7 +69,7 @@ class _Base:
         self.authz: Authz = authz
 
 
-_ORM = TypeVar("_ORM", schemas.ResourcePoolORM, schemas.ResourceClassORM)
+_ORM = TypeVar("_ORM", schemas.ResourcePoolORM, schemas.ResourceClassORM, schemas.StorageQuotaORM)
 
 
 async def _filter_by_authz(
@@ -2351,3 +2351,86 @@ class StorageFlavorRepository:
         await session.delete(sf_orm)
         await session.flush()
         return None
+
+
+class StorageQuotaRepository:
+    """Repository for storage quotas."""
+
+    def __init__(self, authz: Authz) -> None:
+        self.authz: Authz = authz
+
+    async def get_all_storage_quotas(
+        self, session: AsyncSession, user: base_models.APIUser
+    ) -> AsyncIterator[models.StorageQuota]:
+        """Get all storage quotas from the database."""
+        stream = await self._get_all_storage_quotas_orm(session=session, user=user)
+        async for sq_orm in stream:
+            yield sq_orm.dump()
+
+    async def _get_all_storage_quotas_orm(
+        self, session: AsyncSession, user: base_models.APIUser
+    ) -> AsyncScalarResult[schemas.StorageQuotaORM]:
+        stmt = (
+            select(schemas.StorageQuotaORM)
+            .join(schemas.ResourcePoolORM, schemas.StorageQuotaORM.resource_pool_id)
+            .order_by(schemas.StorageQuotaORM.id.asc())
+        )
+        # NOTE: The line below ensures that the right users can access the right resources, do not remove.
+        stmt = await _filter_by_authz(user, stmt, self.authz)
+        return await session.stream_scalars(stmt)
+
+    async def get_storage_quota_or_none(
+        self, session: AsyncSession, user: base_models.APIUser, storage_quota_id: ULID
+    ) -> models.StorageQuota | None:
+        """Get a storage quota from the database."""
+        sq_orm = await self._get_storage_quota_or_none_orm(
+            session=session, user=user, storage_quota_id=storage_quota_id
+        )
+        return sq_orm.dump() if sq_orm is not None else None
+
+    async def get_storage_quota(
+        self, session: AsyncSession, user: base_models.APIUser, storage_quota_id: ULID
+    ) -> models.StorageQuota:
+        """Get a storage quota from the database."""
+        storage_quota = await self.get_storage_quota_or_none(
+            session=session, user=user, storage_quota_id=storage_quota_id
+        )
+        if storage_quota is None:
+            raise errors.MissingResourceError(
+                message=f"Storage quota with ID '{str(storage_quota_id)}' does not exist "
+                "or you do not have access to it."
+            )
+        return storage_quota
+
+    async def _get_storage_quota_or_none_orm(
+        self, session: AsyncSession, user: base_models.APIUser, storage_quota_id: ULID
+    ) -> schemas.StorageQuotaORM | None:
+        stmt = select(schemas.StorageQuotaORM).where(schemas.StorageQuotaORM.id == storage_quota_id)
+        res = await session.scalars(stmt)
+        sq_orm = res.one_or_none()
+        if sq_orm is None:
+            return None
+        authorized = await self.authz.has_permission(
+            user, ResourceType.resource_pool, sq_orm.resource_pool_id, Scope.READ
+        )
+        return sq_orm if authorized else None
+
+    async def insert_storage_quota(
+        self, session: AsyncSession, user: base_models.APIUser, storage_quota: models.UnsavedStorageQuota
+    ) -> models.StorageQuota:
+        """Insert a new storage quota into the database."""
+        if user.id is None or not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        # TODO: Check resource_pool_id + storage_flavor_id
+
+        sq_orm = schemas.StorageQuotaORM(
+            resource_pool_id=storage_quota.resource_pool_id,
+            storage_flavor_id=storage_quota.storage_flavor_id,
+            total_size=storage_quota.total_size_bytes,
+            max_size=storage_quota.max_size_bytes,
+        )
+
+        session.add(sq_orm)
+        await session.flush()
+        return sq_orm.dump()
