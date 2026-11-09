@@ -727,6 +727,7 @@ class StorageFlavorPatch:
 class UnsavedStorageQuota:
     """Unsaved storage quota."""
 
+    resource_pool_id: int
     storage_flavor_id: ULID
     total_size_bytes: ByteSize
     max_size_bytes: ByteSize
@@ -740,23 +741,14 @@ class StorageQuota(UnsavedStorageQuota):
     """
 
     id: ULID
-    storage_flavor_etag: str
-    # TODO
-    # storage_flavor_display_name: str
-    # storage_flavor_min_size_bytes: ByteSize
-    # storage_flavor_documentation: str | None
+    storage_flavor: StorageFlavor
     creation_date: datetime
     updated_at: datetime
-
-    # @property
-    # def storage_flavor_min_size(self) -> int:
-    #     """Minimum size (GiB)."""
-    #     return int(self.storage_flavor_min_size_bytes.to_gibi())
 
     @property
     def etag(self) -> str:
         """Entity tag value for this storage class instance."""
-        return compute_etag_from_fields(self.updated_at, self.storage_flavor_etag)
+        return compute_etag_from_fields(self.updated_at, self.storage_flavor.etag)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
