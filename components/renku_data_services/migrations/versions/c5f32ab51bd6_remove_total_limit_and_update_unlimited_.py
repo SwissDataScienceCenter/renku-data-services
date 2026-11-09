@@ -1,8 +1,8 @@
 """remove total_limit and update unlimited value
 
-Revision ID: cb5e65e0b194
-Revises: 3016b9c4de5e
-Create Date: 2026-10-26 15:51:31.976596
+Revision ID: c5f32ab51bd6
+Revises: e4265957153e
+Create Date: 2026-11-09 11:01:51.677371
 
 """
 
@@ -12,8 +12,8 @@ from alembic import op
 from renku_data_services.utils.sqlalchemy import CreditType
 
 # revision identifiers, used by Alembic.
-revision = "cb5e65e0b194"
-down_revision = "3016b9c4de5e"
+revision = "c5f32ab51bd6"
+down_revision = "e4265957153e"
 branch_labels = None
 depends_on = None
 
