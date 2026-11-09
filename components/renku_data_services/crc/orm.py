@@ -636,3 +636,55 @@ class StorageFlavorORM(BaseORM):
             creation_date=self.creation_date,
             updated_at=self.updated_at,
         )
+
+
+class StorageQuotaORM(BaseORM):
+    """A storage quota."""
+
+    __tablename__ = "storage_quotas"
+
+    id: Mapped[ULID] = mapped_column(
+        "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
+    )
+    """ID of the storage quota."""
+
+    resource_pool_id: Mapped[int] = mapped_column(ForeignKey(ResourcePoolORM.id, ondelete="CASCADE"), index=True)
+    """ID of the parent resource pool."""
+
+    resource_pool: Mapped[ResourcePoolORM] = relationship(lazy="select")
+
+    storage_flavor_id: Mapped[ULID] = mapped_column(ForeignKey(StorageFlavorORM.id, ondelete="RESTRICT"), index=True)
+    """ID of the storage flavor used for this storage quota."""
+
+    storage_flavor: Mapped[StorageFlavorORM] = relationship(lazy="selectin")
+
+    total_size: Mapped[ByteSize] = mapped_column("total_size", ByteSizeType())
+    """The total size of storage allocatable in the storage quota."""
+
+    max_size: Mapped[ByteSize] = mapped_column("max_size", ByteSizeType())
+    """The maximum size for each storage allocated in the quota."""
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def dump(self) -> models.StorageQuota:
+        """Create a storage quota model from the StorageClassORM."""
+        return models.StorageQuota(
+            id=self.id,
+            resource_pool_id=self.resource_pool_id,
+            storage_flavor_id=self.storage_flavor_id,
+            storage_flavor=self.storage_flavor.dump(),
+            total_size_bytes=self.total_size,
+            max_size_bytes=self.max_size,
+            creation_date=self.creation_date,
+            updated_at=self.updated_at,
+        )
