@@ -1446,6 +1446,8 @@ paths:
         - storage_flavors
     delete:
       summary: Delete a storage flavor
+      description: |
+        Admin only.
       responses:
         "204":
           description: The storage flavor was deleted or did not exist in the first place
