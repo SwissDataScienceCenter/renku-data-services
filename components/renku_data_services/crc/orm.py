@@ -651,12 +651,12 @@ class StorageQuotaORM(BaseORM):
     resource_pool_id: Mapped[int] = mapped_column(ForeignKey(ResourcePoolORM.id, ondelete="CASCADE"), index=True)
     """ID of the parent resource pool."""
 
-    resource_pool: Mapped[ResourcePoolORM] = relationship(lazy="select")
+    resource_pool: Mapped[ResourcePoolORM] = relationship(init=False, lazy="select")
 
     storage_flavor_id: Mapped[ULID] = mapped_column(ForeignKey(StorageFlavorORM.id, ondelete="RESTRICT"), index=True)
     """ID of the storage flavor used for this storage quota."""
 
-    storage_flavor: Mapped[StorageFlavorORM] = relationship(lazy="selectin")
+    storage_flavor: Mapped[StorageFlavorORM] = relationship(init=False, lazy="selectin")
 
     total_size: Mapped[ByteSize] = mapped_column("total_size", ByteSizeType())
     """The total size of storage allocatable in the storage quota."""
