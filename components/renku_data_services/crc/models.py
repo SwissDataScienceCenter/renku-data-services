@@ -19,7 +19,7 @@ from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import ResourceType
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sPatch, K8sResourceQuota
-from renku_data_services.utils.etag import compute_etag_from_timestamp
+from renku_data_services.utils.etag import compute_etag_from_fields, compute_etag_from_timestamp
 
 
 class ResourcesProtocol(Protocol):
@@ -681,28 +681,6 @@ class ResourcePoolMemberIdentifier:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ResourcePoolStorageConfigDisabled:
-    """Disabled storage configuration for a resource pool."""
-
-    enabled: Final[bool] = field(init=False, default=False)
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class ResourcePoolStorageConfigEnabled:
-    """Enabled storage configuration for a resource pool."""
-
-    enabled: Final[bool] = field(init=False, default=True)
-    storage_class_name: str
-    storage_display_name: str
-    storage_min_size_bytes: ByteSize
-    storage_documentation: str | None
-    storage_total_size_bytes: ByteSize
-    storage_max_size_bytes: ByteSize
-
-
-ResourcePoolStorageConfig = ResourcePoolStorageConfigDisabled | ResourcePoolStorageConfigEnabled
-
-
 class UnsavedStorageFlavor:
     """Unsaved storage flavor."""
 
@@ -743,3 +721,47 @@ class StorageFlavorPatch:
     min_size_bytes: ByteSize | None
     admin_documentation: str | None
     documentation: str | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedStorageQuota:
+    """Unsaved storage quota."""
+
+    storage_flavor_id: ULID
+    total_size_bytes: ByteSize
+    max_size_bytes: ByteSize
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class StorageQuota(UnsavedStorageQuota):
+    """Storage quota.
+
+    Storage quota represents allocated resources for self-provisioned storage.
+    """
+
+    id: ULID
+    storage_flavor_etag: str
+    # TODO
+    # storage_flavor_display_name: str
+    # storage_flavor_min_size_bytes: ByteSize
+    # storage_flavor_documentation: str | None
+    creation_date: datetime
+    updated_at: datetime
+
+    # @property
+    # def storage_flavor_min_size(self) -> int:
+    #     """Minimum size (GiB)."""
+    #     return int(self.storage_flavor_min_size_bytes.to_gibi())
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this storage class instance."""
+        return compute_etag_from_fields(self.updated_at, self.storage_flavor_etag)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class StorageQuotaPatch:
+    """Model for changes requested on a storage quota."""
+
+    total_size_bytes: ByteSize | None
+    max_size_bytes: ByteSize | None
