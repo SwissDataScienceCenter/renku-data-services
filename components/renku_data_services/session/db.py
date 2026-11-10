@@ -1386,6 +1386,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             visibility = result.metadata.visibility
 
         if visibility == RepositoryVisibility.private:
+            if launcher and launcher.launcher_type == models.LauncherType.app:
+                raise errors.ValidationError(message=constants.APP_PRIVATE_REPOSITORY_MESSAGE)
             if not self.builds_config.private_builds_enabled:
                 raise errors.CannotStartBuildError(message="Private repository builds are not enabled")
             if isinstance(result.metadata, Metadata) and not result.metadata.pull_permission:
