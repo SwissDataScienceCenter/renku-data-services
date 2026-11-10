@@ -45,6 +45,7 @@ API_SPECS := \
     components/renku_data_services/storage/apispec.py \
     components/renku_data_services/users/apispec.py \
     components/renku_data_services/project/apispec.py \
+    components/renku_data_services/project/v1/apispec.py \
     components/renku_data_services/session/apispec.py \
     components/renku_data_services/namespace/apispec.py \
     components/renku_data_services/secrets/apispec.py \

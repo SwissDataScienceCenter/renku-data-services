@@ -29,6 +29,7 @@ from renku_data_services.notifications.blueprints import NotificationsBP
 from renku_data_services.persisted_logs.blueprints import PersistedLogsBP
 from renku_data_services.platform.blueprints import PlatformConfigBP, PlatformUrlRedirectBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
+from renku_data_services.project.v1.blueprints import ProjectsBP as ProjectsBPV1
 from renku_data_services.renku_apps.blueprints import RenkuAppBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.resource_usage.blueprints import ResourceUsageBP
@@ -129,7 +130,15 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         user_preferences_repo=dm.user_preferences_repo,
         authenticator=dm.authenticator,
     )
-    misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=dm.spec, version=dm.config.version)
+    misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=dm.spec, version=dm.config.version, apispec_v1=dm.spec_v1)
+    project_v1 = ProjectsBPV1(
+        name="projects_v1",
+        url_prefix=url_prefix,
+        api_version="v1",
+        project_repo=dm.project_repo,
+        authenticator=dm.authenticator,
+        metrics=dm.metrics,
+    )
     project = ProjectsBP(
         name="projects",
         url_prefix=url_prefix,
@@ -356,6 +365,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             storage_schema.blueprint(),
             user_preferences.blueprint(),
             misc.blueprint(),
+            project_v1.blueprint(),
             project.blueprint(),
             project_session_secrets.blueprint(),
             group.blueprint(),

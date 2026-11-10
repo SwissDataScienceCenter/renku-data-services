@@ -1,0 +1,335 @@
+openapi: 3.0.2
+info:
+  title: Renku Data Services API
+  description: |
+    Service that allows creating, updating, deleting, and managing Renku native projects.
+    All errors have the same format as the schema called ErrorResponse.
+  version: v1
+servers:
+  - url: /api/data
+paths:
+  /v1/projects:
+    get:
+      summary: Get all projects
+      parameters:
+        - in: query
+          description: query parameters
+          name: params
+          style: form
+          explode: true
+          schema:
+            $ref: "#/components/schemas/ProjectGetQuery"
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectsList"
+          headers:
+            page:
+              description: The index of the current page (starting at 1).
+              required: true
+              schema:
+                type: integer
+            per-page:
+              description: The number of items per page.
+              required: true
+              schema:
+                type: integer
+            total:
+              description: The total number of items.
+              required: true
+              schema:
+                type: integer
+            total-pages:
+              description: The total number of pages.
+              required: true
+              schema:
+                type: integer
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects (v1)
+    post:
+      summary: Create a new project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectPost"
+      responses:
+        "201":
+          description: The project was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects (v1)
+components:
+  schemas:
+    ProjectsList:
+      description: A list of Renku projects
+      type: array
+      items:
+        $ref: "#/components/schemas/Project"
+      minItems: 0
+    Project:
+      description: A Renku native project definition and metadata
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          $ref: "#/components/schemas/ProjectName"
+        namespace:
+          $ref: "#/components/schemas/SlugResponse"
+        slug:
+          $ref: "#/components/schemas/SlugResponse"
+        creation_date:
+          $ref: "#/components/schemas/CreationDate"
+        created_by:
+          $ref: "#/components/schemas/UserId"
+        updated_at:
+          $ref: "#/components/schemas/UpdatedAt"
+        repositories:
+          $ref: "#/components/schemas/RepositoriesList"
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+        description:
+          $ref: "#/components/schemas/Description"
+        etag:
+          $ref: "#/components/schemas/ETag"
+        keywords:
+          $ref: "#/components/schemas/KeywordsList"
+        documentation:
+          $ref: "#/components/schemas/ProjectDocumentation"
+        template_id:
+          $ref: "#/components/schemas/Ulid"
+        is_template:
+          $ref: "#/components/schemas/IsTemplate"
+          default: false
+        secrets_mount_directory:
+          $ref: "#/components/schemas/SecretsMountDirectory"
+      required:
+        - "id"
+        - "name"
+        - "namespace"
+        - "slug"
+        - "created_by"
+        - "creation_date"
+        - "visibility"
+        - "secrets_mount_directory"
+      example:
+        id: "01AN4Z79ZS5XN0F25N3DB94T4R"
+        name: "Renku R Project"
+        namespace: "our-projects"
+        slug: "r-project"
+        created_by:
+          id: "owner-KC-id"
+        visibility: "public"
+        repositories:
+          - url: https://github.com/SwissDataScienceCenter/project-1.git
+          - url: git@github.com:SwissDataScienceCenter/project-2.git
+        keywords:
+          - "keyword 1"
+          - "keyword 2"
+        template_id: "01JC3CB5426KC7P5STS5X3KSS8"
+        secrets_mount_directory: "/secrets"
+    ProjectPost:
+      description: Project metadata to be created in Renku
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/ProjectName"
+        namespace:
+          $ref: "#/components/schemas/Slug"
+        slug:
+          $ref: "#/components/schemas/Slug"
+        repositories:
+          $ref: "#/components/schemas/RepositoriesList"
+        visibility:
+          # When copying a project from a template project, the default visibility is the same as template project's
+          # visibility.
+          # Its default value is ``private``, when creating a project without copying.
+          $ref: "#/components/schemas/Visibility"
+        description:
+          $ref: "#/components/schemas/Description"
+        keywords:
+          $ref: "#/components/schemas/KeywordsList"
+        documentation:
+          $ref: "#/components/schemas/ProjectDocumentation"
+        secrets_mount_directory:
+          $ref: "#/components/schemas/SecretsMountDirectory"
+      required:
+        - name
+        - namespace
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
+    ProjectName:
+      description: Renku project name
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: "My Renku Project :)"
+    Slug:
+      description: A command-line/url friendly name for a namespace
+      type: string
+      minLength: 1
+      maxLength: 99
+      # Slug regex rules
+      # from https://docs.gitlab.com/ee/user/reserved_names.html#limitations-on-usernames-project-and-group-names
+      # - cannot end in .git
+      # - cannot end in .atom
+      # - cannot contain any combination of two or more consecutive -._
+      # - has to start with letter or number
+      # - cannot contain uppercase characters
+      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*$'
+      example: "a-slug-example"
+    SlugResponse:
+      description: A command-line/url friendly name for a namespace
+      type: string
+      minLength: 1
+      example: "a-slug-example"
+    CreationDate:
+      description: The date and time the resource was created (in UTC and ISO-8601 format)
+      type: string
+      format: date-time
+      example: "2023-11-01T17:32:28Z"
+    UpdatedAt:
+      description: The date and time the resource was updated (in UTC and ISO-8601 format)
+      type: string
+      format: date-time
+      example: "2023-11-01T17:32:28Z"
+    Description:
+      description: A description for the resource
+      type: string
+      maxLength: 500
+    Keyword:
+      description: A single keyword
+      type: string
+      minLength: 1
+      maxLength: 99
+    KeywordsList:
+      description: Project keywords
+      type: array
+      items:
+        $ref: "#/components/schemas/Keyword"
+      minItems: 0
+      example:
+        - "project"
+        - "keywords"
+    ProjectDocumentation:
+      description: Renku project documentation
+      type: string
+      minLength: 0
+      maxLength: 5000
+      example: "My Renku Project Documentation :)"
+    RepositoriesList:
+      description: A list of repositories
+      type: array
+      items:
+        $ref: "#/components/schemas/Repository"
+      minItems: 0
+      example:
+        - https://github.com/SwissDataScienceCenter/project-1.git
+        - git@github.com:SwissDataScienceCenter/project-2.git
+    Repository:
+      description: A git repository URL
+      type: string
+    Visibility:
+      description: Project's visibility levels
+      type: string
+      enum:
+        - private
+        - public
+    IsTemplate:
+      description: Shows if a project is a template or not
+      type: boolean
+    SecretsMountDirectory:
+      description: |
+        The location where the secrets will be provided inside sessions, if left unset it will default to `/secrets`.
+        Relative locations are supported and will be mounted relative to the session environment's mount directory.
+      type: string
+      minLength: 1
+      default: "/secrets"
+      example: "/secrets"
+    UserId:
+      type: string
+      description: Keycloak user ID
+      example: f74a228b-1790-4276-af5f-25c2424e9b0c
+      pattern: "^[A-Za-z0-9]{1}[A-Za-z0-9-]+$"
+    ETag:
+      type: string
+      description: Entity Tag
+      example: "9EE498F9D565D0C41E511377425F32F3"
+    ProjectGetQuery:
+      description: Query params for project get request
+      allOf:
+        - $ref: "#/components/schemas/PaginationRequest"
+        - properties:
+            namespace:
+              description: A namespace, used as a filter.
+              type: string
+              default: ""
+            direct_member:
+              description: A flag to filter projects where the user is a direct member.
+              type: boolean
+              default: false
+    PaginationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        page:
+          description: Result's page number starting from 1
+          type: integer
+          minimum: 1
+          default: 1
+        per_page:
+          description: The number of results per page
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: "A more detailed optional message showing what the problem was"
+            message:
+              type: string
+              example: "Something went wrong - please try again later"
+            trace_id:
+              type: string
+              example: "ac93950e9e114a55c67fb8e5ef519bbe"
+              description: Sentry trace ID for linking to corresponding log entries
+          required:
+            - "code"
+            - "message"
+      required:
+        - "error"
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

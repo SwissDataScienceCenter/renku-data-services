@@ -18,10 +18,13 @@ class CustomBlueprint:
     additional public methods all of which return Sanic route handlers. See the BlueprintFactory type for the
     signature that the methods are supposed to have. The return value should return a tuple of the url for the route
     (i.e. "/api"), the list of methods (i.e. GET, POST, PATCH) and the handler itself.
+
+    If the `api_version` attribute is set, every route is registered under `/<api_version>/<url>`.
     """
 
     name: str
     url_prefix: str
+    api_version: str | None = None
     request_middlewares: list[RequestMiddlewareType] = field(default_factory=list, repr=False)
     response_middlewares: list[ResponseMiddlewareType] = field(default_factory=list, repr=False)
 
@@ -33,7 +36,8 @@ class CustomBlueprint:
             if name != "blueprint" and not name.startswith("_"):
                 method_factory = cast(BlueprintFactory, method)
                 url, http_methods, handler = method_factory()
-                bp.add_route(handler=handler, uri=url, methods=http_methods, name=name)
+                uri = f"/{self.api_version.strip('/')}/{url.strip('/')}" if self.api_version else url
+                bp.add_route(handler=handler, uri=uri, methods=http_methods, name=name)
         for req_mw in self.request_middlewares:
             bp.middleware("request")(req_mw)
         for res_mw in self.response_middlewares:

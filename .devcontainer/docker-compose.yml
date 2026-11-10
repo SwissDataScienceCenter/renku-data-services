@@ -66,7 +66,9 @@ services:
   swagger:
     image: swaggerapi/swagger-ui
     environment:
-      SWAGGER_JSON_URL: http://localhost:8000/api/data/spec.json
+      URLS: >-
+        [{"name": "latest", "url": "http://localhost:8000/api/data/spec.json"},
+        {"name": "v1", "url": "http://localhost:8000/api/data/v1/spec.json"}]
       PORT: "8080"
     network_mode: service:db
 
