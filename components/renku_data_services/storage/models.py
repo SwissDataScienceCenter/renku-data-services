@@ -149,3 +149,26 @@ class ProjectRef:
     def from_slug_str(cls, slug: str) -> ProjectRef:
         """Create a project ref from a path."""
         return ProjectRef(ref=ProjectPath.parse(slug))
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedProjectStorageV2:
+    """Unsaved project storage."""
+
+    project_id: ULID
+    storage_quota_id: ULID
+    requested_size_bytes: ByteSize
+    mount_path: PurePosixPath
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageV2(UnsavedProjectStorageV2):
+    """Project storage.
+
+    Project storage represents self-provisioned storage backed by a Persistent Volume Claim in Kubernetes.
+    """
+
+    id: ULID
+    created_by: str
+    creation_date: datetime
+    updated_at: datetime
