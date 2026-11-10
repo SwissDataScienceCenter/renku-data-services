@@ -71,17 +71,18 @@ spec:
           echo "> Processing environment variables..."
           ENV_DIR="/platform/env"
 
-          envs=($(env))
-
+          # Read one KEY=VALUE line at a time. `envs=($(env))` word-splits values,
+          # so a space-separated BP_RENKU_AI_AGENTS list was truncated to its first agent.
           # Denying the creation of non required files from system environments.
           # The creation of a file named PATH (corresponding to PATH system environment)
           # caused failure for python source during pip install (https://github.com/Azure-Samples/python-docs-hello-world)
           block_list=("PATH" "HOSTNAME" "PWD" "_" "SHLVL" "HOME" "")
 
-          for env in "${envs[@]}"; do
+          while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ -z "$line" || "$line" != *=* ]] && continue
             blocked=false
 
-            IFS='=' read -r key value string <<< "$env"
+            IFS='=' read -r key value string <<< "$line"
 
             for str in "${block_list[@]}"; do
               if [[ "$key" == "$str" ]]; then
@@ -94,7 +95,11 @@ spec:
               path="${ENV_DIR}/${key}"
               echo -n "$value" > "$path"
             fi
-          done
+          done < <(env)
+
+          # #region agent log
+          echo "> BP_RENKU_AI_AGENTS=[$(cat "${ENV_DIR}/BP_RENKU_AI_AGENTS" 2>/dev/null || true)]"
+          # #endregion
 
           /cnb/lifecycle/creator \
             -app=${PARAM_SOURCE_CONTEXT} \
