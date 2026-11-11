@@ -1,6 +1,7 @@
 """Internal SSH proxy blueprint."""
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
@@ -81,7 +82,9 @@ class SSHSessionInteractionBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @require_role(self.ssh_proxy_role)
         async def _touch(_: Request, _user: base_models.APIUser, session_id: str) -> HTTPResponse:
-            await self._ssh_session(session_id)
+            session = await self._ssh_session(session_id)
+            now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            await self.k8s_client.patch(session, {"spec": {"culling": {"lastInteraction": now}}})
             return HTTPResponse(status=204)
 
         return "/internal/sessions/<session_id>/interaction", ["POST"], _touch

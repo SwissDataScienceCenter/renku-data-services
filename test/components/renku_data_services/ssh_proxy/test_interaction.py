@@ -3,6 +3,7 @@
 import json
 import uuid
 from collections.abc import AsyncIterable, AsyncIterator
+from datetime import UTC, datetime
 
 import pytest_asyncio
 from box import Box
@@ -155,4 +156,34 @@ async def test_non_ssh_session_is_404(client_factory, app_manager_instance):
         _, clock = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
     assert touch.status_code == 404
     assert clock.status_code == 404
+    assert k8s.patches == []
+
+
+async def test_touch_writes_one_field_and_answers_204(client_factory, app_manager_instance):
+    cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
+    session = session_object(str(uuid.uuid4()), state="Running")
+    await cache.upsert(session)
+    client, k8s = client_factory(session)
+    before = datetime.now(UTC)
+    async with client as c:
+        _, response = await c.post(URL.format(session_id=SESSION_ID), headers=role_headers())
+    after = datetime.now(UTC)
+
+    assert response.status_code == 204
+    assert response.body == b""
+    assert len(k8s.patches) == 1
+    patch = k8s.patches[0]
+    assert list(patch.keys()) == ["spec"]
+    assert list(patch["spec"].keys()) == ["culling"]
+    last_interaction = patch["spec"]["culling"]["lastInteraction"]
+    assert last_interaction.endswith("Z")
+    written = datetime.fromisoformat(last_interaction.replace("Z", "+00:00"))
+    assert before.replace(microsecond=0) <= written <= after
+
+
+async def test_touch_does_not_patch_when_the_session_is_unknown(client_factory):
+    client, k8s = client_factory(None)
+    async with client as c:
+        _, response = await c.post(URL.format(session_id=MISSING_ID), headers=role_headers())
+    assert response.status_code == 404
     assert k8s.patches == []
