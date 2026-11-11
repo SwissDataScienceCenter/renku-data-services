@@ -38,7 +38,7 @@ from renku_data_services.search.blueprints import SearchBP
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
-from renku_data_services.storage.blueprints import ProjectStorageBP, StorageSchemaBP
+from renku_data_services.storage.blueprints import ProjectStorageBP, ProjectStorageV2BP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, SSHKeysBP, UserPreferencesBP, UserSecretsBP
 
 
@@ -356,6 +356,13 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         session_maker=dm.config.db.async_session_maker,
     )
+    project_storages_v2 = ProjectStorageV2BP(
+        name="project_storages_v2",
+        url_prefix=url_prefix,
+        project_storage_v2_repo=dm.project_storage_v2_repo,
+        authenticator=dm.authenticator,
+        session_maker=dm.config.db.async_session_maker,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -392,6 +399,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             project_storage.blueprint(),
             storage_flavors.blueprint(),
             storage_quotas.blueprint(),
+            project_storages_v2.blueprint(),
         ]
     )
     if builds is not None:
