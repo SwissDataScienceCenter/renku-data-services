@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
@@ -47,6 +48,11 @@ class SSHProxyBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/internal/sessions/<session_id>/authorize", ["POST"], _authorize
+
+
+def _parse_timestamp(value: Any) -> datetime:
+    """Parse an RFC3339 timestamp from a manifest into an aware datetime."""
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
 
 @dataclass(kw_only=True)
@@ -95,7 +101,28 @@ class SSHSessionInteractionBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @require_role(self.ssh_proxy_role)
         async def _clock(_: Request, _user: base_models.APIUser, session_id: str) -> JSONResponse:
-            await self._ssh_session(session_id)
-            return json({"seconds_until_hibernate": None, "alive": False})
+            cached = await self._ssh_session(session_id)
+            session = await self.k8s_client.get(cached)
+            if session is None:
+                raise errors.MissingResourceError(message="The session does not exist or is not an SSH session.")
+            status = session.manifest.get("status") or {}
+            culling = session.manifest.get("spec", {}).get("culling") or {}
+            now = datetime.now(UTC)
+            deadline = status.get("willHibernateAt")
+            last_interaction = culling.get("lastInteraction")
+            remaining = None if deadline is None else max(0, int((_parse_timestamp(deadline) - now).total_seconds()))
+            since_input = (
+                None
+                if last_interaction is None
+                else max(0, int((now - _parse_timestamp(last_interaction)).total_seconds()))
+            )
+            alive = status.get("state") in ("Running", "RunningDegraded")
+            return json(
+                {
+                    "seconds_until_hibernate": remaining,
+                    "seconds_since_last_interaction": since_input,
+                    "alive": alive,
+                }
+            )
 
         return "/internal/sessions/<session_id>/interaction", ["GET"], _clock

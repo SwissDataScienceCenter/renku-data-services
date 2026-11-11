@@ -3,7 +3,7 @@
 import json
 import uuid
 from collections.abc import AsyncIterable, AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest_asyncio
 from box import Box
@@ -187,3 +187,78 @@ async def test_touch_does_not_patch_when_the_session_is_unknown(client_factory):
         _, response = await c.post(URL.format(session_id=MISSING_ID), headers=role_headers())
     assert response.status_code == 404
     assert k8s.patches == []
+
+
+async def test_clock_returns_remaining_seconds_and_alive(client_factory, app_manager_instance):
+    cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
+    deadline = datetime.now(UTC) + timedelta(minutes=10)
+    session = session_object(str(uuid.uuid4()), state="Running", willHibernateAt=deadline.isoformat())
+    await cache.upsert(session)
+    client, _ = client_factory(session)
+    async with client as c:
+        _, response = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
+    assert response.status_code == 200
+    body = response.json
+    assert 590 <= body["seconds_until_hibernate"] <= 600
+    assert body["alive"] is True
+
+
+async def test_clock_without_a_deadline_returns_null(client_factory, app_manager_instance):
+    cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
+    session = session_object(str(uuid.uuid4()), state="Running")
+    await cache.upsert(session)
+    client, _ = client_factory(session)
+    async with client as c:
+        _, response = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
+    assert response.json["seconds_until_hibernate"] is None
+    assert response.json["alive"] is True
+
+
+async def test_clock_reports_the_idle_age(client_factory, app_manager_instance):
+    cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
+    session = session_object(str(uuid.uuid4()), state="Running")
+    session.manifest["spec"]["culling"]["lastInteraction"] = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
+    await cache.upsert(session)
+    client, _ = client_factory(session)
+    async with client as c:
+        _, response = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
+    assert 115 <= response.json["seconds_since_last_interaction"] <= 125
+
+
+async def test_clock_without_a_touch_reports_a_null_idle_age(client_factory, app_manager_instance):
+    cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
+    session = session_object(str(uuid.uuid4()), state="Running")
+    await cache.upsert(session)
+    client, _ = client_factory(session)
+    async with client as c:
+        _, response = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
+    assert response.json["seconds_since_last_interaction"] is None
+
+
+async def test_clock_hibernated_is_not_alive(client_factory, app_manager_instance):
+    cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
+    session = session_object(str(uuid.uuid4()), state="Hibernated")
+    await cache.upsert(session)
+    client, _ = client_factory(session)
+    async with client as c:
+        _, response = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
+    assert response.json["alive"] is False
+
+
+async def test_clock_running_degraded_is_alive(client_factory, app_manager_instance):
+    cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
+    session = session_object(str(uuid.uuid4()), state="RunningDegraded")
+    await cache.upsert(session)
+    client, _ = client_factory(session)
+    async with client as c:
+        _, response = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
+    assert response.json["alive"] is True
+
+
+async def test_clock_returns_404_when_the_session_is_gone(client_factory, app_manager_instance):
+    cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
+    await cache.upsert(session_object(str(uuid.uuid4()), state="Running"))
+    client, _ = client_factory(None)
+    async with client as c:
+        _, response = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
+    assert response.status_code == 404
