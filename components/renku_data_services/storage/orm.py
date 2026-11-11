@@ -169,3 +169,19 @@ class ProjectStorageV2ORM(BaseORM):
         onupdate=func.now(),
         nullable=False,
     )
+
+    def dump(self) -> models.ProjectStorageV2:
+        """Create a project storage model from the ProjectStorageV2ORM."""
+        return models.ProjectStorageV2(
+            id=self.id,
+            project_id=self.project_id,
+            storage_quota_id=self.storage_quota_id,
+            requested_size_bytes=self.requested_size,
+            actual_size_bytes=self.actual_size,
+            mount_path=self.mount_path,
+            k8s_pvc_name=self.k8s_pvc_name,
+            k8s_pvc_status=self.k8s_pvc_status,
+            created_by=self.created_by_id,
+            creation_date=self.creation_date,
+            updated_at=self.updated_at,
+        )
