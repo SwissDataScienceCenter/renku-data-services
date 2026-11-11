@@ -705,7 +705,7 @@ class ProjectStorageV2Repository:
             # Update the storage attributes from k8s
             async with self._with_locked_project_storage(session=session, storage_orm=storage_orm) as locked_orm:
                 locked_orm.k8s_pvc_status = pvc.get_status()
-                _actual_size = pvc.get_actual_size()
+                # _actual_size = pvc.get_actual_size()
                 # ? Mhm do we need to parse the size?
                 await session.flush()
                 await session.refresh(locked_orm)
@@ -732,7 +732,7 @@ class ProjectStorageV2Repository:
             pvc = await k8s_client.create_persistent_volume_claim_v2(new_pvc)
             locked_orm.k8s_pvc_name = k8s_pvc_name
             locked_orm.k8s_pvc_status = pvc.get_status()
-            _actual_size = pvc.get_actual_size()
+            # _actual_size = pvc.get_actual_size()
             # ? Mhm do we need to parse the size?
             await session.flush()
             await session.refresh(locked_orm)
