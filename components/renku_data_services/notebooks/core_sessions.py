@@ -1157,13 +1157,14 @@ async def start_session(
         await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
     )
 
-    # project storage
-    project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
-    session_extras = session_extras.concat(
-        await get_project_storage(
-            user, project_storage_k8s, project_storage_repo, project.id, storage_mount, cluster, authz
-        )
-    )
+    # # project storage
+    # project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
+    # session_extras = session_extras.concat(
+    #     await get_project_storage(
+    #         user, project_storage_k8s, project_storage_repo, project.id, storage_mount, cluster, authz
+    #     )
+    # )
+    # TODO: project storage v2
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings
@@ -1682,22 +1683,24 @@ async def patch_session(
     if session_type.is_non_interactive:
         session_extras = session_extras.extra_container_as_sidecars()
 
-    # When resuming, we need to check for a project storage and disable it if it has been removed
+    # # When resuming, we need to check for a project storage and disable it if it has been removed
+    # remove_mounts: list[str] | None = None
+    # if is_being_resumed:
+    #     storage_db = await project_storage_repo.get_storage_to(user, project.id)
+    #     if storage_db is None:
+    #         logger.debug(f"Removing project storage mounts on project {project.id}")
+    #         remove_mounts = [f"ps-{project.id}-0".lower()]
+    #     else:
+    #         # but if a project storage has been added, we need to add it to the resumed session
+    #         logger.debug(f"Adding storage to resumed session for project {project.id}")
+    #         project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
+    #         session_extras = session_extras.concat(
+    #             await get_project_storage(
+    #                 user, project_storage_k8s, project_storage_repo, project.id, storage_mount, cluster, authz
+    #             )
+    #         )
     remove_mounts: list[str] | None = None
-    if is_being_resumed:
-        storage_db = await project_storage_repo.get_storage_to(user, project.id)
-        if storage_db is None:
-            logger.debug(f"Removing project storage mounts on project {project.id}")
-            remove_mounts = [f"ps-{project.id}-0".lower()]
-        else:
-            # but if a project storage has been added, we need to add it to the resumed session
-            logger.debug(f"Adding storage to resumed session for project {project.id}")
-            project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
-            session_extras = session_extras.concat(
-                await get_project_storage(
-                    user, project_storage_k8s, project_storage_repo, project.id, storage_mount, cluster, authz
-                )
-            )
+    # TODO: project storage v2
 
     # Construct session patch
     patch.spec.extraContainers = _make_patch_spec_list(
