@@ -620,6 +620,7 @@ class ProjectStorageV2Repository:
             )
 
         # TODO: check remaining size from quota
+        # TODO: do this now
 
         storage_orm = schemas.ProjectStorageV2ORM(
             project_id=project_id,
