@@ -1,11 +1,13 @@
 """Cloud storage app."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from sanic import Request, empty
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
+from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -27,8 +29,9 @@ from renku_data_services.storage.core import (
     validate_project_storage_allow_post,
     validate_project_storage_patch,
     validate_unsaved_project_storage,
+    validate_unsaved_project_storage_v2,
 )
-from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.db import ProjectStorageRepository, ProjectStorageV2Repository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -366,3 +369,30 @@ class ProjectStorageBP(CustomBlueprint):
             project_ref=pref,
             max_size=int(ps.max_size.to_gibi()),
         )
+
+
+@dataclass(kw_only=True)
+class ProjectStorageV2BP(CustomBlueprint):
+    """Handlers for project storages v2."""
+
+    project_storage_v2_repo: ProjectStorageV2Repository
+    authenticator: base_models.Authenticator
+    session_maker: Callable[..., AsyncSession]
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Create a project storage."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.ProjectStoragePostV2)
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.ProjectStoragePostV2) -> JSONResponse:
+            _new_storage = validate_unsaved_project_storage_v2(body=body)
+            # new_storage_quota = validate_unsaved_storage_quota(body=body)
+            # async with self.session_maker() as session, session.begin():
+            #     storage_quota = await self.storage_quota_repo.insert_storage_quota(
+            #         session=session, user=user, storage_quota=new_storage_quota
+            #     )
+            # return validated_json(apispec.StorageQuota, storage_quota, status=201)
+            raise NotImplementedError()
+
+        return "/project_storage_v2", ["POST"], _post
