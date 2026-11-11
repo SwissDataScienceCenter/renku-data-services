@@ -152,6 +152,7 @@ class DependencyManager:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     authz: Authz
+    k8s_db_cache: K8sDbCache
     member_repo: MemberRepository
     rp_repo: ResourcePoolRepository
     resource_flavor_repo: ResourceFlavorRepository
@@ -572,6 +573,7 @@ class DependencyManager:
             metrics=metrics,
             shipwright_client=shipwright_client,
             authz=authz,
+            k8s_db_cache=k8s_db_cache,
             low_level_user_secrets_repo=low_level_user_secrets_repo,
             url_redirect_repo=url_redirect_repo,
             git_provider_helper=git_provider_helper,
