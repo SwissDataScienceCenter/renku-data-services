@@ -386,13 +386,11 @@ class ProjectStorageV2BP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectStoragePostV2)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ProjectStoragePostV2) -> JSONResponse:
-            _new_storage = validate_unsaved_project_storage_v2(body=body)
-            # new_storage_quota = validate_unsaved_storage_quota(body=body)
-            # async with self.session_maker() as session, session.begin():
-            #     storage_quota = await self.storage_quota_repo.insert_storage_quota(
-            #         session=session, user=user, storage_quota=new_storage_quota
-            #     )
-            # return validated_json(apispec.StorageQuota, storage_quota, status=201)
-            raise NotImplementedError()
+            new_storage = validate_unsaved_project_storage_v2(body=body)
+            async with self.session_maker() as session, session.begin():
+                storage = await self.project_storage_v2_repo.insert_project_storage(
+                    session=session, user=user, project_storage=new_storage
+                )
+            return validated_json(apispec.ProjectStorageV2, storage, status=201)
 
         return "/project_storage_v2", ["POST"], _post

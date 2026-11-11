@@ -1,5 +1,8 @@
 """Base models for API specifications."""
 
+from pathlib import PurePosixPath
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, field_validator
 from ulid import ULID
 
@@ -12,14 +15,18 @@ class BaseAPISpec(BaseModel):
         from_attributes=True,
     )
 
-    @field_validator("storage_id", mode="before", check_fields=False)
+    @field_validator("*", mode="before", check_fields=False)
     @classmethod
-    def serialize_storage_id(cls, storage_id: str | ULID) -> str:
-        """Custom serializer that can handle ULIDs."""
-        return str(storage_id)
+    def serialize_ulid(cls, value: Any) -> Any:
+        """Handle ULIDs."""
+        if isinstance(value, ULID):
+            return str(value)
+        return value
 
-    @field_validator("secret_id", mode="before", check_fields=False)
+    @field_validator("mount_path", mode="before", check_fields=False)
     @classmethod
-    def secret_storage_id(cls, secret_id: str | ULID) -> str:
-        """Custom serializer that can handle ULIDs."""
-        return str(secret_id)
+    def serialize_mount_path(cls, value: Any) -> Any:
+        """Handle mount path serialization."""
+        if isinstance(value, PurePosixPath):
+            return value.as_posix()
+        return value
