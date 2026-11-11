@@ -50,9 +50,13 @@ class SSHProxyBP(CustomBlueprint):
         return "/internal/sessions/<session_id>/authorize", ["POST"], _authorize
 
 
-def _parse_timestamp(value: Any) -> datetime:
-    """Parse an RFC3339 timestamp from a manifest into an aware datetime."""
-    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+def _parse_timestamp(value: Any) -> datetime | None:
+    """Parse an RFC3339 timestamp from a manifest, or None when it is unusable."""
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
 
 
 @dataclass(kw_only=True)
@@ -108,14 +112,10 @@ class SSHSessionInteractionBP(CustomBlueprint):
             status = session.manifest.get("status") or {}
             culling = session.manifest.get("spec", {}).get("culling") or {}
             now = datetime.now(UTC)
-            deadline = status.get("willHibernateAt")
-            last_interaction = culling.get("lastInteraction")
-            remaining = None if deadline is None else max(0, int((_parse_timestamp(deadline) - now).total_seconds()))
-            since_input = (
-                None
-                if last_interaction is None
-                else max(0, int((now - _parse_timestamp(last_interaction)).total_seconds()))
-            )
+            deadline = _parse_timestamp(status.get("willHibernateAt"))
+            interaction = _parse_timestamp(culling.get("lastInteraction"))
+            remaining = None if deadline is None else max(0, int((deadline - now).total_seconds()))
+            since_input = None if interaction is None else max(0, int((now - interaction).total_seconds()))
             alive = status.get("state") in ("Running", "RunningDegraded")
             return json(
                 {

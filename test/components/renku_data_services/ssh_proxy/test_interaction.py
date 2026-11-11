@@ -262,3 +262,17 @@ async def test_clock_returns_404_when_the_session_is_gone(client_factory, app_ma
     async with client as c:
         _, response = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
     assert response.status_code == 404
+
+
+async def test_clock_tolerates_unparseable_timestamps(client_factory, app_manager_instance):
+    cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
+    session = session_object(str(uuid.uuid4()), state="Running", willHibernateAt="not a timestamp")
+    session.manifest["spec"]["culling"]["lastInteraction"] = "13 o'clock"
+    await cache.upsert(session)
+    client, _ = client_factory(session)
+    async with client as c:
+        _, response = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
+    assert response.status_code == 200
+    assert response.json["seconds_until_hibernate"] is None
+    assert response.json["seconds_since_last_interaction"] is None
+    assert response.json["alive"] is True
