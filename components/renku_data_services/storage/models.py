@@ -169,6 +169,9 @@ class ProjectStorageV2(UnsavedProjectStorageV2):
     """
 
     id: ULID
+    actual_size_bytes: ByteSize | None
+    k8s_pvc_name: str | None
+    k8s_pvc_status: str | None
     created_by: str
     creation_date: datetime
     updated_at: datetime
