@@ -379,6 +379,31 @@ class ProjectStorageV2BP(CustomBlueprint):
     authenticator: base_models.Authenticator
     session_maker: Callable[..., AsyncSession]
 
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get all visible project storages.
+
+        The list of storages can be filtered using the query parameters.
+        """
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.ProjectStoragesGetQueryV2)
+        async def _get_all(
+            _: Request, user: base_models.APIUser, query: apispec.ProjectStoragesGetQueryV2
+        ) -> JSONResponse:
+            project_id = ULID.from_str(query.project_id) if query.project_id else None
+            storage_quota_id = ULID.from_str(query.storage_quota_id) if query.storage_quota_id else None
+            async with self.session_maker() as session, session.begin():
+                storages = self.project_storage_v2_repo.get_all_project_storages(
+                    session=session,
+                    user=user,
+                    project_id=project_id,
+                    storage_quota_id=storage_quota_id,
+                )
+                result = [item async for item in storages]
+            return validated_json(apispec.ProjectStoragesV2, result)
+
+        return "/storage_flavors", ["GET"], _get_all
+
     def post(self) -> BlueprintFactoryResponse:
         """Create a project storage."""
 
