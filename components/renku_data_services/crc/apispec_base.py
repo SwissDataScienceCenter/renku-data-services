@@ -61,6 +61,14 @@ class BaseAPISpec(BaseModel):
             return None
         return str(environment_id)
 
+    @field_validator("storage_flavor_id", mode="before", check_fields=False)
+    @classmethod
+    def serialize_storage_flavor_id(cls, storage_flavor_id: str | ULID | None) -> str | None:
+        """Custom serializer that can handle the storage flavor ULID."""
+        if storage_flavor_id is None:
+            return None
+        return str(storage_flavor_id)
+
     @field_validator("environment_kind", mode="before", check_fields=False)
     @classmethod
     def serialize_environment_kind(cls, environment_kind: models.EnvironmentKind | str) -> str:
