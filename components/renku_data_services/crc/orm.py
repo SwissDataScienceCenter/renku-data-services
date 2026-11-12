@@ -563,18 +563,22 @@ class StorageFlavorORM(BaseORM):
     """The storage class name in Kubernetes."""
 
     display_name: Mapped[str] = mapped_column("display_name")
-    """The display name of the storage class."""
+    """The display name of the storage flavor."""
 
     min_size: Mapped[ByteSize] = mapped_column("min_size", ByteSizeType())
-    """The minimum size of PVCs created with this storage class."""
+    """The minimum size of PVCs created with the storage class."""
 
     admin_documentation: Mapped[str | None] = mapped_column("admin_documentation", nullable=True)
+    """Documentation for admin users."""
 
     documentation: Mapped[str | None] = mapped_column("documentation", nullable=True)
+    """Documentation for regular users."""
 
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
     )
+    """Creation timestamp of the storage flavor."""
+
     updated_at: Mapped[datetime] = mapped_column(
         "updated_at",
         DateTime(timezone=True),
@@ -583,6 +587,7 @@ class StorageFlavorORM(BaseORM):
         onupdate=func.now(),
         nullable=False,
     )
+    """Update timestamp of the storage flavor."""
 
     def dump(self) -> models.StorageFlavor:
         """Create a storage class model from the StorageClassORM."""

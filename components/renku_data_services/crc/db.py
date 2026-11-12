@@ -1963,7 +1963,7 @@ class ClusterRepository:
                 match key, value:
                     case "session_protocol", SessionProtocol():
                         setattr(saved_cluster, key, value.value)
-                    case "session_storage_flavor", "":
+                    case "session_storage_class", "":
                         # If we received an empty string in the storage class, reset it to the default storage class by
                         # setting it to None.
                         setattr(saved_cluster, key, None)
@@ -2288,7 +2288,7 @@ class StorageFlavorRepository:
     async def insert_storage_flavor(
         self, session: AsyncSession, user: base_models.APIUser, storage_flavor: models.UnsavedStorageFlavor
     ) -> models.StorageFlavor:
-        """Insert a new storage class into the database."""
+        """Insert a new storage flavor into the database."""
         if user.id is None or not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
@@ -2312,7 +2312,7 @@ class StorageFlavorRepository:
         patch: models.StorageFlavorPatch,
         etag: str,
     ) -> models.StorageFlavor:
-        """Update a storage class in the database."""
+        """Update a storage flavor in the database."""
         sf_orm = await self._get_storage_flavor_or_none_orm(
             session=session, user=user, storage_flavor_id=storage_flavor_id
         )
@@ -2342,7 +2342,7 @@ class StorageFlavorRepository:
         user: base_models.APIUser,
         storage_flavor_id: ULID,
     ) -> None:
-        """Update a storage class in the database."""
+        """Update a storage flavor in the database."""
         sf_orm = await self._get_storage_flavor_or_none_orm(
             session=session, user=user, storage_flavor_id=storage_flavor_id
         )

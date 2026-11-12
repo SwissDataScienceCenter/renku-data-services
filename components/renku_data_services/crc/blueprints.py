@@ -993,7 +993,7 @@ class StorageFlavorsBP(CustomBlueprint):
         return "/storage_flavors", ["POST"], _post
 
     def get_one(self) -> BlueprintFactoryResponse:
-        """Get a storage class."""
+        """Get a storage flavor."""
 
         @authenticate(self.authenticator)
         @only_admins
@@ -1013,7 +1013,7 @@ class StorageFlavorsBP(CustomBlueprint):
         return "/storage_flavors/<storage_flavor_id:ulid>", ["GET"], _get_one
 
     def patch(self) -> BlueprintFactoryResponse:
-        """Update a storage class."""
+        """Update a storage flavor."""
 
         @authenticate(self.authenticator)
         @only_admins
@@ -1039,7 +1039,7 @@ class StorageFlavorsBP(CustomBlueprint):
         return "/storage_flavors/<storage_flavor_id:ulid>", ["PATCH"], _patch
 
     def delete(self) -> BlueprintFactoryResponse:
-        """Delete a storage class."""
+        """Delete a storage flavor."""
 
         @authenticate(self.authenticator)
         @only_admins
