@@ -2356,7 +2356,8 @@ class StorageFlavorRepository:
 class StorageQuotaRepository:
     """Repository for storage quotas."""
 
-    def __init__(self, authz: Authz) -> None:
+    def __init__(self, storage_flavor_repo: StorageFlavorRepository, authz: Authz) -> None:
+        self.storage_flavor_repo = storage_flavor_repo
         self.authz: Authz = authz
 
     async def get_all_storage_quotas(
@@ -2372,7 +2373,7 @@ class StorageQuotaRepository:
     ) -> AsyncScalarResult[schemas.StorageQuotaORM]:
         stmt = (
             select(schemas.StorageQuotaORM)
-            .join(schemas.ResourcePoolORM, schemas.StorageQuotaORM.resource_pool_id)
+            .join(schemas.StorageQuotaORM.resource_pool)
             .order_by(schemas.StorageQuotaORM.id.asc())
         )
         # NOTE: The line below ensures that the right users can access the right resources, do not remove.
@@ -2410,7 +2411,7 @@ class StorageQuotaRepository:
         sq_orm = res.one_or_none()
         if sq_orm is None:
             return None
-        authorized = await self.authz.has_permission(
+        authorized = user.is_admin or await self.authz.has_permission(
             user, ResourceType.resource_pool, sq_orm.resource_pool_id, Scope.READ
         )
         return sq_orm if authorized else None
@@ -2422,15 +2423,26 @@ class StorageQuotaRepository:
         if user.id is None or not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
-        # TODO: Check resource_pool_id + storage_flavor_id
+        resource_pool_id = storage_quota.resource_pool_id
+        rp_stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
+        rp_res = await session.scalars(rp_stmt)
+        rp_orm = rp_res.one_or_none()
+        if rp_orm is None:
+            raise errors.MissingResourceError(message=f"The resource pool with ID {resource_pool_id} does not exist.")
+
+        storage_flavor_id = storage_quota.storage_flavor_id
+        await self.storage_flavor_repo.get_storage_flavor(
+            session=session, user=user, storage_flavor_id=storage_flavor_id
+        )
 
         sq_orm = schemas.StorageQuotaORM(
-            resource_pool_id=storage_quota.resource_pool_id,
-            storage_flavor_id=storage_quota.storage_flavor_id,
+            resource_pool_id=resource_pool_id,
+            storage_flavor_id=storage_flavor_id,
             total_size=storage_quota.total_size_bytes,
             max_size=storage_quota.max_size_bytes,
         )
 
         session.add(sq_orm)
         await session.flush()
+        await session.refresh(sq_orm)
         return sq_orm.dump()

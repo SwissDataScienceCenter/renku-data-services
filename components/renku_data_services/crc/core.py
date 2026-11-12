@@ -913,3 +913,19 @@ def validate_storage_flavor_patch(body: apispec.StorageFlavorPatch) -> models.St
         admin_documentation=body.admin_documentation,
         documentation=body.documentation,
     )
+
+
+def validate_unsaved_storage_quota(body: apispec.StorageQuotaPost) -> models.UnsavedStorageQuota:
+    """Validate a new storage quota."""
+    total_size = ByteSize.from_gibi(body.total_size)
+    if total_size < ByteSize.from_gibi(1):
+        raise errors.ValidationError(message="The total size must be at least 1GiB.")
+    max_size = ByteSize.from_gibi(body.max_size)
+    if max_size < ByteSize.from_gibi(1):
+        raise errors.ValidationError(message="The maximum size must be at least 1GiB.")
+    return models.UnsavedStorageQuota(
+        resource_pool_id=body.resource_pool_id,
+        storage_flavor_id=ULID.from_str(body.storage_flavor_id),
+        total_size_bytes=total_size,
+        max_size_bytes=max_size,
+    )
