@@ -1,9 +1,9 @@
 """Database access for project storage classes."""
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 
 from sqlalchemy import and_, exists, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession
 from ulid import ULID
 
 from renku_data_services import base_models, errors
@@ -462,15 +462,41 @@ class ProjectStorageV2Repository:
         self.storage_quota_repo = storage_quota_repo
         self.authz = authz
 
-    # async def _get_project_storage_from_project_id_or_none_orm(
-    #     self, session: AsyncSession, user: base_models.APIUser, project_id: ULID
-    # ) -> schemas.ProjectStorageV2ORM | None:
-    #     authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
-    #     if not authorized:
-    #         return None
-    #     stmt = select(schemas.ProjectStorageV2ORM).where(schemas.ProjectStorageV2ORM.project_id == project_id)
-    #     res = await session.scalars(stmt)
-    #     return res.one_or_none()
+    async def get_all_project_storages(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        project_id: ULID | None = None,
+        storage_quota_id: ULID | None = None,
+    ) -> AsyncIterator[models.ProjectStorageV2]:
+        """Get all visible project storages from the database.
+
+        The result can be filtered with project_id and storage_quota_id.
+        """
+        stream = await self._get_all_project_storages_orm(
+            session=session, user=user, project_id=project_id, storage_quota_id=storage_quota_id
+        )
+        async for storage_orm in stream:
+            yield storage_orm.dump()
+
+    async def _get_all_project_storages_orm(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        project_id: ULID | None = None,
+        storage_quota_id: ULID | None = None,
+    ) -> AsyncScalarResult[schemas.ProjectStorageV2ORM]:
+        project_ids: list[str]
+        if project_id:
+            authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+            project_ids = [str(project_id)] if authorized else []
+        else:
+            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+        stmt = select(schemas.ProjectStorageV2ORM).order_by(schemas.ProjectStorageV2ORM.id.asc())
+        stmt = stmt.where(schemas.ProjectStorageV2ORM.project_id.in_(project_ids))
+        if storage_quota_id:
+            stmt = stmt.where(schemas.ProjectStorageV2ORM.storage_quota_id == storage_quota_id)
+        return await session.stream_scalars(stmt)
 
     async def insert_project_storage(
         self, session: AsyncSession, user: base_models.APIUser, project_storage: models.UnsavedProjectStorageV2

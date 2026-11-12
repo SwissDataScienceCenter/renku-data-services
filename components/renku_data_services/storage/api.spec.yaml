@@ -333,6 +333,16 @@ paths:
   /project_storage_v2:
     get:
       summary: Get all visible project storages
+      description: |
+        The list of storages can be filtered using the
+        query parameters.
+      parameters:
+        - in: query
+          name: params
+          style: form
+          explode: true
+          schema:
+            $ref: "#/components/schemas/ProjectStoragesGetQueryV2"
       responses:
         "200":
           description: The list of all visible project storages
@@ -425,26 +435,26 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - project_storage
-  /projects/{project_id}/storage_v2:
-    parameters:
-      - in: path
-        name: project_id
-        required: true
-        schema:
-          $ref: "#/components/schemas/Ulid"
-    get:
-      summary: Get the project storage v2 for a given project
-      responses:
-        "200":
-          description: The list of project storages (currently either one or empty).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProjectStoragesV2"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - projects
+  # /projects/{project_id}/storage_v2:
+  #   parameters:
+  #     - in: path
+  #       name: project_id
+  #       required: true
+  #       schema:
+  #         $ref: "#/components/schemas/Ulid"
+  #   get:
+  #     summary: Get the project storage v2 for a given project
+  #     responses:
+  #       "200":
+  #         description: The list of project storages (currently either one or empty).
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: "#/components/schemas/ProjectStoragesV2"
+  #       default:
+  #         $ref: "#/components/responses/Error"
+  #     tags:
+  #       - projects
 
 components:
   schemas:
@@ -808,6 +818,15 @@ components:
           $ref: "#/components/schemas/MaxStorageSize"
         mount_path:
           type: string
+    ProjectStoragesGetQueryV2:
+      description: Query parameters for filtering project storages
+      type: object
+      properties:
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        storage_quota_id:
+          $ref: "#/components/schemas/Ulid"
+      example: {}
     Ulid:
       description: ULID identifier
       type: string
