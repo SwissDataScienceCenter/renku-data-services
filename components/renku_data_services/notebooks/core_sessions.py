@@ -1213,17 +1213,18 @@ async def start_session(
     #     )
     # )
     # TODO: project storage v2
-    session_extras = session_extras.concat(
-        await get_project_storage_v2(
-            nb_config=nb_config,
-            user=user,
-            project_storage_v2_repo=project_storage_v2_repo,
-            project_id=project.id,
-            storage_mount=storage_mount,
-            session_cluster=cluster,
-            authz=authz,
+    if session_location == SessionLocation.local:
+        session_extras = session_extras.concat(
+            await get_project_storage_v2(
+                nb_config=nb_config,
+                user=user,
+                project_storage_v2_repo=project_storage_v2_repo,
+                project_id=project.id,
+                storage_mount=storage_mount,
+                session_cluster=cluster,
+                authz=authz,
+            )
         )
-    )
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings
