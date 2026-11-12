@@ -311,6 +311,12 @@ class ClusterORM(BaseORM):
     session_ingress_use_default_cluster_tls_cert: Mapped[bool] = mapped_column(
         default=False, server_default=expression.false()
     )
+    ssh_target_host: Mapped[str | None] = mapped_column(String(), default=None, nullable=True)
+    ssh_target_port: Mapped[int | None] = mapped_column(Integer, default=None, nullable=True)
+    ssh_username: Mapped[str | None] = mapped_column(String(), default=None, nullable=True)
+    ssh_public_host_key: Mapped[str | None] = mapped_column(String(), default=None, nullable=True)
+    ssh_public_auth_key: Mapped[str | None] = mapped_column(String(), default=None, nullable=True)
+    ssh_session_secret_name: Mapped[str | None] = mapped_column(String(), default=None, nullable=True)
 
     def dump(self) -> SavedClusterSettings:
         """Create a cluster model from the ORM object."""

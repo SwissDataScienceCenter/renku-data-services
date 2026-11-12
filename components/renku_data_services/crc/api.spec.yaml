@@ -1389,6 +1389,8 @@ components:
         session_ingress_use_default_cluster_tls_cert:
           type: boolean
           default: false
+        ssh_settings:
+          $ref: "#/components/schemas/SshSettings"
       required:
         [
           "name",
@@ -1399,6 +1401,29 @@ components:
           "session_path",
           "session_ingress_annotations",
         ]
+    SshSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        target_host:
+          type: string
+        target_port:
+          type: integer
+        username:
+          type: string
+        public_host_key:
+          type: string
+        public_auth_key:
+          type: string
+        session_secret_name:
+          type: string
+      required:
+        - target_host
+        - target_port
+        - username
+        - public_host_key
+        - public_auth_key
+        - session_secret_name
     ClusterPatch:
       type: object
       additionalProperties: false
