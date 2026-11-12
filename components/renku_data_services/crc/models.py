@@ -746,6 +746,31 @@ class StorageQuota(UnsavedStorageQuota):
     updated_at: datetime
 
     @property
+    def storage_flavor_display_name(self) -> str:
+        """Display name of the used storage flavor."""
+        return self.storage_flavor.display_name
+
+    @property
+    def storage_flavor_min_size(self) -> int:
+        """Minimum size from the used storage flavor."""
+        return self.storage_flavor.min_size
+
+    @property
+    def storage_flavor_documentation(self) -> str | None:
+        """Minimum size from the used storage flavor."""
+        return self.storage_flavor.documentation
+
+    @property
+    def total_size(self) -> int:
+        """Total size (GiB) of the quota."""
+        return int(self.total_size_bytes.to_gibi())
+
+    @property
+    def max_size(self) -> int:
+        """Maximum size (GiB) per storage in the quota."""
+        return int(self.max_size_bytes.to_gibi())
+
+    @property
     def etag(self) -> str:
         """Entity tag value for this storage class instance."""
         return compute_etag_from_fields(self.updated_at, self.storage_flavor.etag)

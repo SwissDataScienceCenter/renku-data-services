@@ -14,7 +14,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.base_api.auth import authenticate, only_admins
+from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
 from renku_data_services.base_api.misc import validate_db_ids, validate_query
@@ -33,6 +33,7 @@ from renku_data_services.crc.core import (
     validate_resource_pool_put_or_patch,
     validate_storage_flavor_patch,
     validate_unsaved_storage_flavor,
+    validate_unsaved_storage_quota,
 )
 from renku_data_services.crc.db import (
     ClusterRepository,
@@ -41,6 +42,7 @@ from renku_data_services.crc.db import (
     ResourcePoolMemberResult,
     ResourcePoolRepository,
     StorageFlavorRepository,
+    StorageQuotaRepository,
 )
 from renku_data_services.crc.models import MemberType, ResourceFlavor, ResourcePoolMemberIdentifier
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -1055,3 +1057,61 @@ class StorageFlavorsBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/storage_flavors/<storage_flavor_id:ulid>", ["DELETE"], _delete
+
+
+@dataclass(kw_only=True)
+class StorageQuotasBP(CustomBlueprint):
+    """Handlers for storage quotas."""
+
+    storage_quota_repo: StorageQuotaRepository
+    authenticator: base_models.Authenticator
+    session_maker: Callable[..., AsyncSession]
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get all visible storage quotas."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_all(_: Request, user: base_models.APIUser) -> JSONResponse:
+            async with self.session_maker() as session, session.begin():
+                storage_quotas = self.storage_quota_repo.get_all_storage_quotas(session=session, user=user)
+                result = [item async for item in storage_quotas]
+            return validated_json(apispec.StorageQuotas, result)
+
+        return "/storage_quotas", ["GET"], _get_all
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Create a storage quota."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.StorageQuotaPost)
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.StorageQuotaPost) -> JSONResponse:
+            new_storage_quota = validate_unsaved_storage_quota(body=body)
+            async with self.session_maker() as session, session.begin():
+                storage_quota = await self.storage_quota_repo.insert_storage_quota(
+                    session=session, user=user, storage_quota=new_storage_quota
+                )
+            return validated_json(apispec.StorageQuota, storage_quota, status=201)
+
+        return "/storage_quotas", ["POST"], _post
+
+    def get_one(self) -> BlueprintFactoryResponse:
+        """Get a storage quota."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @extract_if_none_match
+        async def _get_one(
+            _: Request, user: base_models.APIUser, storage_quota_id: ULID, etag: str | None
+        ) -> JSONResponse | HTTPResponse:
+            async with self.session_maker() as session, session.begin():
+                storage_quota = await self.storage_quota_repo.get_storage_quota(
+                    session=session, user=user, storage_quota_id=storage_quota_id
+                )
+            if storage_quota.etag == etag:
+                return HTTPResponse(status=304)
+            headers = {"ETag": storage_quota.etag}
+            return validated_json(apispec.StorageQuota, storage_quota, headers=headers)
+
+        return "/storage_quotas/<storage_quota_id:ulid>", ["GET"], _get_one
