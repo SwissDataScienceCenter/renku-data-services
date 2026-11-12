@@ -1505,7 +1505,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/StorageQuotas"
+                $ref: "#/components/schemas/StorageQuota"
         "404":
           description: The storage quota does not exist
           content:
