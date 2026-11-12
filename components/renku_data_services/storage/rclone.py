@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
+import base64
 import io
 import json
-import tempfile
+import os
 from collections.abc import Generator, MutableMapping
 from configparser import ConfigParser
 from copy import deepcopy
@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, NamedTuple, Union, cast, overload
 from urllib.parse import ParseResult, urlparse
 
+import httpx
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from pydantic import BaseModel, Field, InstanceOf, ValidationError, model_serializer, model_validator
 
 from renku_data_services import errors
@@ -26,6 +28,37 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from renku_data_services import base_models
     from renku_data_services.notebooks.data_sources import DataSourceRepository
+
+
+# Fixed key used by rclone to obscure values, see fs/config/obscure/obscure.go in the rclone sources.
+# Obscuring is not encryption: anyone can reveal an obscured value, it only prevents shoulder surfing.
+_RCLONE_OBSCURE_KEY = bytes(
+    [
+        0x9C, 0x93, 0x5B, 0x48, 0x73, 0x0A, 0x55, 0x4D, 0x6B, 0xFD, 0x7C, 0x63, 0xC8, 0x86, 0xA9, 0x2B,
+        0xD3, 0x90, 0x19, 0x8E, 0xB8, 0x12, 0x8A, 0xFB, 0xF4, 0xDE, 0x16, 0x2B, 0x8B, 0x95, 0xF6, 0x38,
+    ]
+)  # fmt: skip
+
+
+def rclone_obscure(value: str) -> str:
+    """Obscure a value in the same way as `rclone obscure`.
+
+    The result is the URL-safe base64 encoding (without padding) of a random 16 byte IV
+    followed by the value encrypted with AES-256-CTR under rclone's fixed key.
+    """
+    iv = os.urandom(16)
+    encryptor = Cipher(algorithms.AES(_RCLONE_OBSCURE_KEY), modes.CTR(iv)).encryptor()
+    ciphertext = encryptor.update(value.encode()) + encryptor.finalize()
+    return base64.urlsafe_b64encode(iv + ciphertext).decode().rstrip("=")
+
+
+def rclone_reveal(value: str) -> str:
+    """Reveal a value obscured with `rclone obscure` or `rclone_obscure`, like `rclone reveal`."""
+    raw = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    if len(raw) < 16:
+        raise ValueError("The obscured value is too short.")
+    decryptor = Cipher(algorithms.AES(_RCLONE_OBSCURE_KEY), modes.CTR(raw[:16])).decryptor()
+    return (decryptor.update(raw[16:]) + decryptor.finalize()).decode()
 
 
 class ConnectionResult(NamedTuple):
@@ -44,6 +77,9 @@ class RCloneValidator:
         apply_patches(spec)
         self.providers = RCloneValidator._get_providers(spec)
         self._additional_allowed_storages = additional_allowed_storages or set()
+        # The port where the rclone remote control server can be accessed.
+        self._port: int = int(os.environ.get("RCLONE_PORT", 9999))
+        self._http_client = httpx.AsyncClient(timeout=httpx.Timeout(timeout=5, read=60))
 
     def validate(self, configuration: Union[RCloneConfig, dict[str, Any]], keep_sensitive: bool = False) -> None:
         """Validates an RClone config."""
@@ -63,6 +99,26 @@ class RCloneValidator:
                 sensitive_data_counter += 1
                 continue
             raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
+
+    @staticmethod
+    def _serialize_rc_payload(payload: dict[str, Any]) -> dict[str, str]:
+        """The payload for rc, for the fs field has to be dict[str,str].
+
+        If not rclone fails to deserialize.
+        """
+        output = {}
+        for k, v in payload.items():
+            match v:
+                case bool():
+                    v = str(v).lower()
+                case dict():
+                    v = json.dumps(v)
+                case list():
+                    v = json.dumps(v)
+                case _:
+                    v = str(v)
+            output[k] = v
+        return output
 
     async def test_connection(
         self,
@@ -93,32 +149,38 @@ class RCloneValidator:
                     with_oauth2_config.config if isinstance(with_oauth2_config, RCloneConfig) else with_oauth2_config
                 )
 
-        with tempfile.NamedTemporaryFile(mode="w+", delete=True, encoding="utf-8") as f:
-            test_conf = (
-                transformed_config
-                if isinstance(transformed_config, RCloneConfig)
-                else RCloneConfig(config=transformed_config)
-            )
-            test_conf.write(f, name="temp")
+        test_conf = (
+            transformed_config
+            if isinstance(transformed_config, RCloneConfig)
+            else RCloneConfig(config=transformed_config)
+        )
+        fs_payload = self._serialize_rc_payload(test_conf.config)
+        payload = {
+            "fs": fs_payload,
+            "opt": {"recurse": False, "noModTime": True, "noMimeType": True},
             # Handle SFTP retries, see https://github.com/SwissDataScienceCenter/renku-data-services/issues/893
-            rclone_args = [
-                "lsf",
-                "--low-level-retries=1",  # Connection tests should fail fast.
-                "--retries=1",  # Connection tests should fail fast.
-                "--config",
-                f.name,
-                f"temp:{source_path}",
-            ]
-            logger.debug(f"Execute: rclone {' '.join(rclone_args)}")
-            proc = await asyncio.create_subprocess_exec(
-                "rclone",
-                *rclone_args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            "_config": {"LowLevelRetries": 1, "Retries": 1, "ConnectTimeout": "10s", "Timeout": "30s"},
+            "remote": source_path,
+        }
+        url = f"http://127.0.0.1:{self._port}/operations/list"
+        try:
+            res = await self._http_client.post(url=url, json=payload)
+        except httpx.TimeoutException:
+            return ConnectionResult(False, "the connection test timed out")
+        except httpx.ConnectError:
+            return ConnectionResult(
+                False,
+                "we cannot test the connection, please try again and if the error persists, report it to an admin",
             )
-            _, error = await proc.communicate()
-            success = proc.returncode == 0
-        return ConnectionResult(success=success, error=error.decode())
+        error_msg = ""
+        if res.status_code != 200:
+            default_err = "the data connector configuration is not valid"
+            try:
+                error_msg = res.json().get("error", default_err)
+            except ValueError:
+                error_msg = default_err
+
+        return ConnectionResult(success=res.status_code == 200, error=error_msg)
 
     async def obscure_config(
         self, configuration: Union[RCloneConfig, dict[str, Any]]
@@ -416,21 +478,7 @@ class RCloneProviderSchema(BaseModel):
         """Obscure all password options."""
         for passwd in self.password_options:
             if val := configuration.get(passwd.name):
-                proc = await asyncio.create_subprocess_exec(
-                    "rclone",
-                    "obscure",
-                    "-",
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                result, error = await proc.communicate(input=str(val).encode())
-                success = proc.returncode == 0
-                if not success:
-                    raise errors.ConfigurationError(
-                        message=f"Couldn't obscure password value for field '{passwd.name}'"
-                    )
-                configuration[passwd.name] = result.decode().strip()
+                configuration[passwd.name] = rclone_obscure(str(val))
         return configuration
 
     def get_private_fields(

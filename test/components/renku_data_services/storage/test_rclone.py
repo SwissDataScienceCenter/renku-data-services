@@ -5,7 +5,12 @@ from typing import Any
 import pytest
 
 from renku_data_services.storage.constants import STORAGE_CONFIG
-from renku_data_services.storage.rclone import RCloneValidator, convert_rclone_configuration
+from renku_data_services.storage.rclone import (
+    RCloneValidator,
+    convert_rclone_configuration,
+    rclone_obscure,
+    rclone_reveal,
+)
 
 
 def test_validate_switch_s3_no_endpoint() -> None:
@@ -175,3 +180,54 @@ def test_storage_config_no_unknown() -> None:
 def test_rclone_convert(input: dict[str, Any], expected: dict[str, Any]) -> None:
     converted = convert_rclone_configuration(input)
     assert converted == expected
+
+
+@pytest.mark.external_service_skip(
+    reason="Depends on a running rclone binary and on the public AWS S3 bucket 'giab'.",
+)
+@pytest.mark.parametrize(
+    "config,source_path,expected_success",
+    [
+        # Public AWS open data bucket, accessible anonymously.
+        ({"type": "s3", "provider": "AWS"}, "giab/", True),
+        ({"type": "s3", "provider": "AWS"}, "does_not_exist_at_all/", False),
+    ],
+)
+async def test_test_connection(config: dict[str, Any], source_path: str, expected_success: bool) -> None:
+    validator = RCloneValidator()
+
+    result = await validator.test_connection(config, source_path)
+
+    assert result.success == expected_success, result.error
+    if not expected_success:
+        assert result.error != ""
+
+
+@pytest.mark.parametrize("value", ["hunter2", "pä$$w0rd with spaces & ünïcode", ""])
+def test_rclone_obscure_roundtrip(value: str) -> None:
+    obscured = rclone_obscure(value)
+
+    assert obscured != value
+    assert "=" not in obscured
+    assert rclone_reveal(obscured) == value
+
+
+def test_rclone_obscure_is_randomized() -> None:
+    assert rclone_obscure("hunter2") != rclone_obscure("hunter2")
+
+
+def test_rclone_reveal_value_obscured_by_rclone() -> None:
+    # Generated with `echo -n hunter2 | rclone obscure -` (rclone v1.71.2+renku-1)
+    assert rclone_reveal("xx8vzaajUoH9nAAqVt-7vuWtSOCrkwI") == "hunter2"
+
+
+async def test_obscure_config_obscures_password_options() -> None:
+    validator = RCloneValidator()
+    config = {"type": "sftp", "host": "example.com", "user": "me", "pass": "hunter2"}
+
+    result = await validator.obscure_config(config)
+
+    assert result["pass"] != "hunter2"
+    assert rclone_reveal(result["pass"]) == "hunter2"
+    assert result["host"] == "example.com"
+    assert result["user"] == "me"
