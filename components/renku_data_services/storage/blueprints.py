@@ -402,7 +402,7 @@ class ProjectStorageV2BP(CustomBlueprint):
                 result = [item async for item in storages]
             return validated_json(apispec.ProjectStoragesV2, result)
 
-        return "/storage_flavors", ["GET"], _get_all
+        return "/project_storage_v2", ["GET"], _get_all
 
     def post(self) -> BlueprintFactoryResponse:
         """Create a project storage."""
