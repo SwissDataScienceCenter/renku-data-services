@@ -689,7 +689,6 @@ class ProjectStorageV2Repository:
             raise errors.ValidationError(
                 message=f"Project storage with ID '{storage_id}' cannot be used in cluster '{expected_cluster_id}'."
             )
-            pass
         namespace = cluster.namespace
 
         # Check if the PVC should already exist
@@ -712,6 +711,7 @@ class ProjectStorageV2Repository:
                 return locked_orm.dump(), pvc
 
         # Create the PVC
+        # TODO: handle create_persistent_volume_claim_v2() failure: the PVC may already exist
         async with self._with_locked_project_storage(session=session, storage_orm=storage_orm) as locked_orm:
             k8s_pvc_name = f"{constants.PROJECT_STORAGE_V2_PVC_PREFIX}-{str(locked_orm.id).lower()}"
             new_pvc = K8sPersistentVolumeClaimV2.new(
