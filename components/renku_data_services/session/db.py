@@ -235,6 +235,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 repository=environment.build_parameters.repository,
                 repository_revision=environment.build_parameters.repository_revision,
                 context_dir=environment.build_parameters.context_dir,
+                ai_agents=environment.build_parameters.ai_agents,
             )
             session.add(new_build_parameters)
 
@@ -265,6 +266,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             repository=new_build_parameters_environment.repository,
             repository_revision=new_build_parameters_environment.repository_revision,
             context_dir=new_build_parameters_environment.context_dir,
+            ai_agents=new_build_parameters_environment.ai_agents,
         )
         session.add(build_parameters_orm)
 
@@ -391,6 +393,10 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             environment.build_parameters.context_dir = None
         elif build_parameters.context_dir:
             environment.build_parameters.context_dir = build_parameters.context_dir
+        if build_parameters.ai_agents is RESET:
+            environment.build_parameters.ai_agents = None
+        elif build_parameters.ai_agents is not None:
+            environment.build_parameters.ai_agents = build_parameters.ai_agents
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: ULID, patch: models.EnvironmentPatch
@@ -567,6 +573,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     repository=launcher.environment.repository,
                     repository_revision=launcher.environment.repository_revision,
                     context_dir=launcher.environment.context_dir,
+                    ai_agents=launcher.environment.ai_agents,
                 )
                 session.add(build_parameters_orm)
 
@@ -953,6 +960,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     repository=new_custom_built_environment.repository,
                     repository_revision=new_custom_built_environment.repository_revision,
                     context_dir=new_custom_built_environment.context_dir,
+                    ai_agents=new_custom_built_environment.ai_agents,
                 )
                 session.add(build_parameters_orm)
 
@@ -1424,6 +1432,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             labels=labels,
             annotations=annotations,
             frontend=build_parameters.frontend_variant,
+            ai_agents=build_parameters.ai_agents,
             git_repository_revision=git_repository_revision,
             context_dir=context_dir,
             build_insecure_output_enabled=self.builds_config.build_insecure_output_enabled,
