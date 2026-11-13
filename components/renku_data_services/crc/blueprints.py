@@ -887,6 +887,7 @@ class ClustersBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.Cluster)
         async def _handler(_request: Request, user: base_models.APIUser, body: apispec.Cluster) -> HTTPResponse:
+            print(">>>> handle POST /clusters")
             cluster = validate_cluster(body)
             cluster, kpair = await self.remote_cluster_setup.setup_remote_cluster(user, cluster)
             response = apispec.ClusterWithId.model_validate(cluster).model_copy(
