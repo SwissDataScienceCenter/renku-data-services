@@ -1481,6 +1481,8 @@ components:
           type: string
         session_ingress_use_default_cluster_tls_cert:
           type: boolean
+        ssh_public_key:
+          type: string
       required:
         [
           "name",
