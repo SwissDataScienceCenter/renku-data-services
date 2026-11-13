@@ -791,6 +791,7 @@ class ProjectStorageV2Repository:
 
     async def delete_project_storage(
         self,
+        k8s_client: NotebookK8sClient,
         session: AsyncSession,
         user: base_models.APIUser,
         storage_id: ULID,
@@ -805,7 +806,30 @@ class ProjectStorageV2Repository:
                 message="You do not have the required permissions to remove storage "
                 f"from project '{storage_orm.project_id}'."
             )
-        # TODO: handle removal in k8s
-        await session.delete(storage_orm)
-        await session.flush()
+
+        # Get the storage class, resource pool and cluster for the project storage
+        # NOTE: no authorization: the user can delete the storage so we MUST determine the correct attributes for it
+        sq_orm = await self._get_storage_quota_and_resource_pool_without_authz_or_none_orm(
+            session=session, storage_quota_id=storage_orm.storage_quota_id
+        )
+        if sq_orm is None:
+            raise errors.ProgrammingError(
+                message=f"Storage quota with ID '{storage_orm.storage_quota_id}' does not exist "
+                f"from project storage '{storage_id}'."
+            )
+        rp_orm = sq_orm.resource_pool
+        cluster_id = ClusterId(rp_orm.cluster_id) if rp_orm.cluster_id is not None else None
+        cluster = await k8s_client.cluster_by_id(cluster_id=cluster_id)
+        namespace = cluster.namespace
+
+        async with self._with_locked_project_storage(session=session, storage_orm=storage_orm) as locked_orm:
+            if storage_orm.k8s_pvc_name:
+                meta = K8sPersistentVolumeClaimV2.meta(
+                    name=storage_orm.k8s_pvc_name, namespace=namespace, cluster_id=cluster.id
+                )
+                await k8s_client.get_persistent_volume_claim_v2(meta)
+
+            await session.delete(locked_orm)
+            await session.flush()
+
         return None

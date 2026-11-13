@@ -532,3 +532,7 @@ class NotebookK8sClient(SecretClient):
         """Create a persistent volume claim (v2)."""
         obj = await self.__client.create(pvc, True)
         return K8sPersistentVolumeClaimV2.from_k8s_object(obj)
+
+    async def delete_persistent_volume_claim_v2(self, pvc: K8sObjectMeta) -> None:
+        """Delete a persistent volume claim (v2)."""
+        await self.__client.delete(pvc)
