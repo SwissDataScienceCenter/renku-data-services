@@ -4,15 +4,16 @@ from box import Box
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sSecret
-from renku_data_services.app_config import logging
 
 logger = logging.getLogger(__file__)
+
 
 class RemoteClusterSetup:
     """Registers remote clusters and prepares what is needed to connect to them, such as SSH keys."""
@@ -30,7 +31,7 @@ class RemoteClusterSetup:
         None when SSH is not configured.
         """
 
-        logger.info(f"Setting up remote cluster from settings: {model}")
+        logger.debug(f"Setting up remote cluster from settings: {model}")
         remote_cluster = await self.__repo.insert(user, model)
         kpair = (
             await self.enable_ssh_remote_cluster(model.ssh_settings, remote_cluster.id) if model.ssh_settings else None
