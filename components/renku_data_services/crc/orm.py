@@ -357,6 +357,11 @@ class ClusterORM(BaseORM):
             session_tls_secret_name=cluster.session_tls_secret_name,
             session_storage_class=cluster.session_storage_class,
             session_ingress_use_default_cluster_tls_cert=cluster.session_ingress_use_default_cluster_tls_cert,
+            ssh_target_host=cluster.ssh_settings.target_host if cluster.ssh_settings else None,
+            ssh_target_port=cluster.ssh_settings.target_port if cluster.ssh_settings else None,
+            ssh_username=cluster.ssh_settings.username if cluster.ssh_settings else None,
+            ssh_public_host_key=cluster.ssh_settings.public_host_key if cluster.ssh_settings else None,
+            ssh_session_secret_name=cluster.ssh_settings.session_secret_name if cluster.ssh_settings else None,
         )
 
 
