@@ -46,6 +46,20 @@ class MiscBP(CustomBlueprint):
         return "/version", ["GET"], _get_version
 
 
+@dataclass(kw_only=True)
+class RootInternalBP(CustomBlueprint):
+    """Blueprint for internal routes mounted at the root (/)."""
+
+    def get_readyz(self) -> BlueprintFactoryResponse:
+        """Readiness endpoint."""
+
+        async def _get_readyz(_: Request) -> JSONResponse:
+            """Returns server readiness."""
+            return json({"ready": True})
+
+        return "/readyz", ["GET"], _get_readyz
+
+
 _T = TypeVar("_T")
 _P = ParamSpec("_P")
 
