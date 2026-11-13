@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     devshell-tools.url = "github:eikek/devshell-tools";
     devshell-tools.inputs.nixpkgs.follows = "nixpkgs";
@@ -20,7 +20,7 @@
             enable = true;
             databases = ["renku_test"];
             init-script = ./.devcontainer/generate_ulid_func.sql;
-            pkg = nixpkgs.legacyPackages.${system}.postgresql_16;
+            pkg = nixpkgs.legacyPackages.${system}.postgresql_18;
             pgweb = {
               enable = true;
               database = "renku";
@@ -95,6 +95,7 @@
         LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
         POETRY_VIRTUALENVS_PREFER_ACTIVE_PYTHON = "true";
         POETRY_VIRTUALENVS_OPTIONS_SYSTEM_SITE_PACKAGES = "true";
+        POETRY_VIRTUALENVS_IN_PROJECT = "true";
         POETRY_INSTALLER_NO_BINARY = "ruff";
       };
       devSettings =
@@ -140,7 +141,7 @@
 
       commonPackages = with pkgs; [
         redis
-        postgresql_16
+        postgresql_18
         jq
         #devshellToolsPkgs.openapi-docs
         devshellToolsPkgs.solr
@@ -154,10 +155,14 @@
         python313
         basedpyright
         rclone-sdsc
-        azure-cli
         kind
         redocly
         yq-go
+        (writeShellScriptBin "poetry" ''
+          unset PYTHONPATH PYTHONHOME
+          ${poetry}/bin/poetry "$@"
+        ''
+        )
         (writeShellScriptBin "pyfix" ''
           poetry run ruff check --fix
           poetry run ruff format

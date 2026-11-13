@@ -40,6 +40,7 @@ from renku_data_services.crc.db import (
     ResourceFlavorRepository,
     ResourcePoolRepository,
 )
+from renku_data_services.crc.remote_cluster import RemoteClusterSetup
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -177,6 +178,7 @@ class DependencyManager:
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
     cluster_repo: ClusterRepository
+    remote_cluster_setup: RemoteClusterSetup
     data_source_repo: DataSourceRepository
     image_check_repo: ImageCheckRepository
     metrics_repo: MetricsRepository
@@ -329,6 +331,7 @@ class DependencyManager:
         )
         job_client = DepositUploadJobClient(client)
         secret_client = K8sSecretClient(client)
+        remote_cluster_setup = RemoteClusterSetup(cluster_repo, client)
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
@@ -566,6 +569,7 @@ class DependencyManager:
             data_connector_repo=data_connector_repo,
             data_connector_secret_repo=data_connector_secret_repo,
             cluster_repo=cluster_repo,
+            remote_cluster_setup=remote_cluster_setup,
             data_source_repo=data_source_repo,
             image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,

@@ -378,6 +378,18 @@ class ClusterPatch:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class SshSettings:
+    """Settings for SSH access to the cluster."""
+
+    target_host: str
+    target_port: int
+    username: str
+    public_host_key: str
+    session_secret_name: str
+    auth_key_secret_name: str
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class ClusterSettings:
     """K8s Cluster settings."""
 
@@ -393,6 +405,7 @@ class ClusterSettings:
     session_storage_class: str | None
     service_account_name: str | None = None
     session_ingress_use_default_cluster_tls_cert: bool = False
+    ssh_settings: SshSettings | None = None
 
     def to_cluster_patch(self) -> ClusterPatch:
         """Convert to ClusterPatch."""
@@ -675,3 +688,11 @@ class ResourcePoolMemberIdentifier:
         if resource_type == ResourceType.project:
             return cls(member_id=str(resource_id), member_type=MemberType.PROJECT)
         return cls(member_id=str(resource_id), member_type=MemberType.USER)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SshKeyPair:
+    """A keypair to use wit ssh."""
+
+    public_part: str
+    private_part: str

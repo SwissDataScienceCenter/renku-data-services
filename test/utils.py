@@ -40,6 +40,7 @@ from renku_data_services.crc.db import (
     ResourceFlavorRepository,
     ResourcePoolRepository,
 )
+from renku_data_services.crc.remote_cluster import RemoteClusterSetup
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
@@ -212,6 +213,7 @@ class TestDependencyManager(DependencyManager):
 
         job_client = DepositUploadJobClient(client)
         secret_client = K8sSecretClient(client)
+        remote_cluster_setup = RemoteClusterSetup(cluster_repo, client)
 
         shipwright_client = None
         gitrepositoriesrepository_class = GitRepositoriesRepository
@@ -467,6 +469,7 @@ class TestDependencyManager(DependencyManager):
             data_connector_repo=data_connector_repo,
             data_connector_secret_repo=data_connector_secret_repo,
             cluster_repo=cluster_repo,
+            remote_cluster_setup=remote_cluster_setup,
             data_source_repo=data_source_repo,
             image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,
