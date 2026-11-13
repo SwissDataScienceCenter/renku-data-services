@@ -498,6 +498,17 @@ class ProjectStorageV2Repository:
             stmt = stmt.where(schemas.ProjectStorageV2ORM.storage_quota_id == storage_quota_id)
         return await session.stream_scalars(stmt)
 
+    async def _get_project_storage_or_none_orm(
+        self, session: AsyncSession, user: base_models.APIUser, storage_id: ULID
+    ) -> schemas.ProjectStorageV2ORM | None:
+        stmt = select(schemas.ProjectStorageV2ORM).where(schemas.ProjectStorageV2ORM.id == storage_id)
+        res = await session.scalars(stmt)
+        storage_orm = res.one_or_none()
+        if storage_orm is None:
+            return None
+        authorized = await self.authz.has_permission(user, ResourceType.project, storage_orm.project_id, Scope.READ)
+        return storage_orm if authorized else None
+
     async def insert_project_storage(
         self, session: AsyncSession, user: base_models.APIUser, project_storage: models.UnsavedProjectStorageV2
     ) -> models.ProjectStorageV2:
@@ -574,3 +585,24 @@ class ProjectStorageV2Repository:
         stmt = select(schemas.ProjectStorageV2ORM).where(schemas.ProjectStorageV2ORM.project_id == project_id)
         res = await session.scalars(stmt)
         return res.one_or_none()
+
+    async def delete_project_storage(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        storage_id: ULID,
+    ) -> None:
+        """Delete a project storage from the database."""
+        storage_orm = await self._get_project_storage_or_none_orm(session=session, user=user, storage_id=storage_id)
+        if storage_orm is None:
+            return None
+        authorized = await self.authz.has_permission(user, ResourceType.project, storage_orm.project_id, Scope.DELETE)
+        if not authorized:
+            raise errors.ForbiddenError(
+                message="You do not have the required permissions to remove storage "
+                f"from project '{storage_orm.project_id}'."
+            )
+        # TODO: handle removal in k8s
+        await session.delete(storage_orm)
+        await session.flush()
+        return None
