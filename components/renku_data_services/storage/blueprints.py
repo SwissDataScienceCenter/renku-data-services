@@ -419,3 +419,21 @@ class ProjectStorageV2BP(CustomBlueprint):
             return validated_json(apispec.ProjectStorageV2, storage, status=201)
 
         return "/project_storage_v2", ["POST"], _post
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Delete a project storage."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete(
+            _: Request,
+            user: base_models.APIUser,
+            storage_id: ULID,
+        ) -> HTTPResponse:
+            async with self.session_maker() as session, session.begin():
+                await self.project_storage_v2_repo.delete_project_storage(
+                    session=session, user=user, storage_id=storage_id
+                )
+            return HTTPResponse(status=204)
+
+        return "/project_storage_v2/<storage_id:ulid>", ["DELETE"], _delete
