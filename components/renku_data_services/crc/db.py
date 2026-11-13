@@ -2342,7 +2342,7 @@ class StorageFlavorRepository:
         user: base_models.APIUser,
         storage_flavor_id: ULID,
     ) -> None:
-        """Update a storage flavor in the database."""
+        """Delete a storage flavor from the database."""
         sf_orm = await self._get_storage_flavor_or_none_orm(
             session=session, user=user, storage_flavor_id=storage_flavor_id
         )
