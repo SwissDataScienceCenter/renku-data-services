@@ -313,6 +313,13 @@ def app_launcher_project_visibility_is_valid(launcher_type: LauncherType, projec
     return launcher_type != LauncherType.app or project_is_public
 
 
+def app_launcher_image_is_valid(launcher_type: LauncherType, image: str, private_image_prefix: str | None) -> bool:
+    """Whether a launcher of this type may run an image, given the prefix of private build images."""
+    if launcher_type != LauncherType.app or not private_image_prefix:
+        return True
+    return not image.startswith(private_image_prefix)
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedSessionLauncher:
     """Session launcher model that has not been persisted in the DB."""

@@ -14,8 +14,9 @@ from renku_data_services.project.db import ProjectRepository
 from renku_data_services.renku_apps.core import build_app, select_mountable_connectors
 from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
 from renku_data_services.renku_apps.models import App
+from renku_data_services.session.constants import APP_PRIVATE_REPOSITORY_MESSAGE
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.models import app_launcher_project_visibility_is_valid
+from renku_data_services.session.models import app_launcher_image_is_valid, app_launcher_project_visibility_is_valid
 from renku_data_services.storage.rclone import RCloneValidator
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,15 @@ class RenkuAppsRepository:
                 message=f"App '{launcher.name}' cannot be started because project "
                 f"'{project.slug}' is not public. Make the project public to start its app."
             )
+
+        builds_config = self.session_repo.builds_config
+        private_image_prefix = (
+            builds_config.build_output_private_image_prefix if builds_config.private_builds_enabled else None
+        )
+        if not app_launcher_image_is_valid(
+            launcher.launcher_type, launcher.environment.container_image, private_image_prefix
+        ):
+            raise errors.ValidationError(message=APP_PRIVATE_REPOSITORY_MESSAGE)
 
         if await self.k8s_client.get_app_deployment_for_project(launcher.project_id) is not None:
             raise errors.ConflictError(message=f"An app already exists for project '{launcher.project_id}'.")
