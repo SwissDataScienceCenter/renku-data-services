@@ -14,7 +14,11 @@ from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.resource_usage.config import OpenMeterConfig
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
-from renku_data_services.resource_usage.metering import EntitlementValueQueryResponse, OpenMeterClient
+from renku_data_services.resource_usage.metering import (
+    MeteredEntitlementValue,
+    NonMeteredEntitlementValue,
+    OpenMeterClient,
+)
 from renku_data_services.resource_usage.model import Credit, ResourceClassCostWithPool
 from test.components.renku_data_services.resource_usage.test_db import create_resource_class
 
@@ -102,15 +106,25 @@ class FakeOpenMeter:
             return httpx.Response(404)
         subjects = body["subject"]
         user_filter = body.get("advancedMeterGroupByFilters", {}).get("user_id", {}).get("$eq")
+        # Without windowSize, OpenMeter returns one window spanning the whole queried period.
+        window = {
+            "windowStart": body.get("from", "2026-01-01T00:00:00Z"),
+            "windowEnd": body.get("to", "2026-02-01T00:00:00Z"),
+        }
         if user_filter is None:
             rows = [
-                {"value": sum(v for (s, _), v in METER_USAGE.items() if s == subject), "subject": subject}
+                {
+                    "value": sum(v for (s, _), v in METER_USAGE.items() if s == subject),
+                    "subject": subject,
+                    "groupBy": {},
+                    **window,
+                }
                 for subject in subjects
                 if any(s == subject for s, _ in METER_USAGE)
             ]
         else:
             rows = [
-                {"value": v, "subject": s, "groupBy": {"user_id": u}}
+                {"value": v, "subject": s, "groupBy": {"user_id": u}, **window}
                 for (s, u), v in METER_USAGE.items()
                 if s in subjects and u == user_filter
             ]
@@ -183,7 +197,7 @@ async def test_query_compute_usage_error(client: OpenMeterClient, fake_openmeter
 async def test_query_customer_entitlement_value(client: OpenMeterClient) -> None:
     """Test querying a customer entitlement value."""
     result = await client.query_customer_entitlement_value(EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY)
-    assert isinstance(result, EntitlementValueQueryResponse)
+    assert isinstance(result, MeteredEntitlementValue)
     assert result.hasAccess is True
     assert result.balance == 80.0
     assert result.usage == 20.0
@@ -220,6 +234,28 @@ async def test_get_resource_pool_total_limit_no_entitlement(client: OpenMeterCli
     """Test getting the total limit of a resource pool without an entitlement."""
     result = await client.get_resource_pool_total_limit(resource_pool_id=2)
     assert result.is_unlimited() is True
+
+
+@pytest.mark.parametrize("body", [{"hasAccess": True}, {"hasAccess": False, "config": '{"limit": 5}'}])
+async def test_non_metered_entitlement_value(
+    client: OpenMeterClient, fake_openmeter: FakeOpenMeter, body: dict[str, Any]
+) -> None:
+    """Boolean and static entitlement values parse as non-metered and give an unlimited pool limit."""
+    fake_openmeter.override_response = httpx.Response(200, json=body)
+    result = await client.query_customer_entitlement_value(EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY)
+    assert isinstance(result, NonMeteredEntitlementValue)
+    assert result.hasAccess is body["hasAccess"]
+    assert result.config == body.get("config")
+    assert (await client.get_resource_pool_total_limit(resource_pool_id=1)).is_unlimited() is True
+
+
+async def test_partial_metered_entitlement_value_falls_back_to_non_metered(
+    client: OpenMeterClient, fake_openmeter: FakeOpenMeter
+) -> None:
+    """A value that does not match the metered schema is parsed as non-metered instead of failing."""
+    fake_openmeter.override_response = httpx.Response(200, json={"hasAccess": True, "balance": 80.0})
+    result = await client.query_customer_entitlement_value(EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY)
+    assert isinstance(result, NonMeteredEntitlementValue)
 
 
 async def test_get_resource_pool_total_limit_error(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:

@@ -185,29 +185,49 @@ Only the metered variant is modelled; static and boolean entitlements are return
 _entitlement_query_response_adapter: TypeAdapter[EntitlementQueryResponse] = TypeAdapter(EntitlementQueryResponse)
 
 
-class EntitlementValueQueryResponse(BaseModel):
-    """Response from OpenMeter entitlement value query."""
+class MeteredEntitlementValue(BaseModel):
+    """Value of a metered OpenMeter entitlement."""
 
     hasAccess: bool
     """Whether the subject has access to the feature. Shared accross all entitlement types."""
-    balance: float | None = None
-    """Only available for metered entitlements.
-    Metered entitlements are built around a balance calculation where feature usage is deducted from the issued grants.
-    Balance represents the remaining balance of the entitlement, it's value never turns negative."""
-    usage: float | None = None
-    """Only available for metered entitlements. Returns the total feature usage in the current period."""
-    overage: float | None = None
-    """Only available for metered entitlements. Overage represents the usage that wasn't covered by grants,
+    balance: float
+    """Metered entitlements are built around a balance calculation where feature usage is deducted
+    from the issued grants. Balance represents the remaining balance of the entitlement,
+    it's value never turns negative."""
+    usage: float
+    """The total feature usage in the current period."""
+    overage: float
+    """Overage represents the usage that wasn't covered by grants,
     e.g. if the subject had a total feature usage of 100 in the period but they were only granted 80,
     there would be 20 overage."""
-    totalAvailableGrantAmount: float | None = None
-    """Only available for metered entitlements.
-    The summed amount of all grant active at query time PLUS the used amount of since inactive grants."""
+    totalAvailableGrantAmount: float
+    """The summed amount of all grant active at query time PLUS the used amount of since inactive grants."""
+    grantBalances: dict[str, float] | None = None
+    """The closing balance of each active grant at query time.
+    The key is the grant ID and the value is the remaining balance."""
+
+
+class NonMeteredEntitlementValue(BaseModel):
+    """Value of a boolean or static OpenMeter entitlement."""
+
+    hasAccess: bool
+    """Whether the subject has access to the feature. Shared accross all entitlement types."""
     config: str | None = None
     """Only available for static entitlements. The JSON parsable config of the entitlement."""
-    grantBalances: dict[str, float] | None = None
-    """Only available for metered entitlements. The closing balance of each active grant at query time.
-    The key is the grant ID and the value is the remaining balance."""
+
+
+EntitlementValueQueryResponse = Annotated[
+    MeteredEntitlementValue | NonMeteredEntitlementValue, Field(union_mode="left_to_right")
+]
+"""Response from OpenMeter entitlement value query (EntitlementValueV2).
+
+The response has no type field. It is parsed as metered if it has all the metered fields,
+otherwise as non-metered (boolean, static, or anything else carrying only hasAccess).
+"""
+
+_entitlement_value_query_response_adapter: TypeAdapter[EntitlementValueQueryResponse] = TypeAdapter(
+    EntitlementValueQueryResponse
+)
 
 
 def _validate[T: BaseModel](model: type[T], body: Any) -> T:
@@ -297,7 +317,12 @@ class OpenMeterClient:
                 f"No customer entitlement value found for customer={customer_id_or_key}, feature_key={feature_key}"
             )
             return None
-        return _validate(EntitlementValueQueryResponse, res)
+        try:
+            return _entitlement_value_query_response_adapter.validate_python(res)
+        except ValidationError as ex:
+            raise errors.ThirdPartyAPIError(
+                message="Unexpected OpenMeter response for EntitlementValueQueryResponse."
+            ) from ex
 
     def get_resource_pool_key(self, resource_pool_id: int) -> str:
         """Get the OpenMeter customer / subject key for a resource pool."""
@@ -309,7 +334,12 @@ class OpenMeterClient:
         entitlement_value = await self.query_customer_entitlement_value(customer_key, self._feature_key)
         if entitlement_value is None:
             return Credit.unlimited()
-
+        if not isinstance(entitlement_value, MeteredEntitlementValue):
+            logger.warning(
+                f"Entitlement for customer={customer_key}, feature_key={self._feature_key} is not metered, "
+                "treating the resource pool limit as unlimited"
+            )
+            return Credit.unlimited()
         return Credit.from_float(entitlement_value.totalAvailableGrantAmount)
 
     async def get_usage(
@@ -334,7 +364,7 @@ class OpenMeterClient:
             user_body = {"advancedMeterGroupByFilters": {"user_id": {"$eq": user_id}}, "groupBy": ["user_id"]}
             body.update(user_body)
         res = await self.query_meter(self._meter_key, body)
-        return Credit.from_float(res.data[0].get("value", 0)) if res.data else Credit.zero()
+        return Credit.from_float(res.data[0].value) if res.data else Credit.zero()
 
     async def get_current_period(self, resource_pool_id: int) -> tuple[datetime | None, datetime | None]:
         """Get the start and end dates of the current usage period defined in OpenMeter's entitlement.
