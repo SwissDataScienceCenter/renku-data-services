@@ -933,7 +933,9 @@ async def get_mount_work_dir(
     return storage_mount, work_dir
 
 
-def ssh_proxy_session_extras(ssh_config: SshProxyConfig, storage_mount: PurePosixPath) -> SessionExtraResources:
+def ssh_proxy_session_extras(
+    ssh_config: SshProxyConfig, storage_mount: PurePosixPath, session_location: SessionLocation
+) -> SessionExtraResources:
     """Volumes and mounts delivering the proxy-to-session keys to a session.
 
     Only ssh frontends are reached by the proxy; every other session must not get the keys.
@@ -955,40 +957,97 @@ def ssh_proxy_session_extras(ssh_config: SshProxyConfig, storage_mount: PurePosi
         )
 
     ssh_dir = (storage_mount / ".ssh").as_posix()
-    return SessionExtraResources(
-        volumes=[
-            ExtraVolume(
-                name="ssh-session-host-key",
-                secret=SecretAsVolume(
-                    secretName=ssh_config.session_host_key_secret_name,
-                    items=[
-                        SecretAsVolumeItem(key=ssh_config.session_host_key_secret_key, path="dropbear_ed25519_host_key")
-                    ],
+    if session_location == SessionLocation.local:
+        return SessionExtraResources(
+            volumes=[
+                ExtraVolume(
+                    name="ssh-session-host-key",
+                    secret=SecretAsVolume(
+                        secretName=ssh_config.session_host_key_secret_name,
+                        items=[
+                            SecretAsVolumeItem(
+                                key=ssh_config.session_host_key_secret_key, path="dropbear_ed25519_host_key"
+                            )
+                        ],
+                    ),
                 ),
-            ),
-            ExtraVolume(
-                name="ssh-proxy-session-auth-key",
-                secret=SecretAsVolume(
-                    secretName=ssh_config.proxy_auth_key_secret_name,
-                    items=[SecretAsVolumeItem(key=ssh_config.proxy_auth_key_secret_key, path="proxy_auth_key.pub")],
+                ExtraVolume(
+                    name="ssh-proxy-session-auth-key",
+                    secret=SecretAsVolume(
+                        secretName=ssh_config.proxy_auth_key_secret_name,
+                        items=[SecretAsVolumeItem(key=ssh_config.proxy_auth_key_secret_key, path="proxy_auth_key.pub")],
+                    ),
                 ),
-            ),
-        ],
-        volume_mounts=[
-            ExtraVolumeMount(
-                name="ssh-session-host-key",
-                mountPath=f"{ssh_dir}/dropbear_ed25519_host_key",
-                subPath="dropbear_ed25519_host_key",
-                readOnly=True,
-            ),
-            ExtraVolumeMount(
-                name="ssh-proxy-session-auth-key",
-                mountPath=f"{ssh_dir}/proxy_auth_key.pub",
-                subPath="proxy_auth_key.pub",
-                readOnly=True,
-            ),
-        ],
-    )
+            ],
+            volume_mounts=[
+                ExtraVolumeMount(
+                    name="ssh-session-host-key",
+                    mountPath=f"{ssh_dir}/dropbear_ed25519_host_key",
+                    subPath="dropbear_ed25519_host_key",
+                    readOnly=True,
+                ),
+                ExtraVolumeMount(
+                    name="ssh-proxy-session-auth-key",
+                    mountPath=f"{ssh_dir}/proxy_auth_key.pub",
+                    subPath="proxy_auth_key.pub",
+                    readOnly=True,
+                ),
+            ],
+        )
+    else:
+        # TODO this must come from registered cluster data
+        return SessionExtraResources(
+            volumes=[
+                ExtraVolume(
+                    name="ssh-session-host-key",
+                    secret=SecretAsVolume(
+                        secretName="renku-ssh-session-keys",
+                        items=[SecretAsVolumeItem(key="ssh_host_ed25519_key", path="dropbear_ed25519_host_key")],
+                    ),
+                ),
+                ExtraVolume(
+                    name="ssh-proxy-session-auth-key",
+                    secret=SecretAsVolume(
+                        secretName="renku-ssh-session-keys",
+                        items=[SecretAsVolumeItem(key="authorized_keys", path="proxy_auth_key.pub")],
+                    ),
+                ),
+            ],
+            volume_mounts=[
+                ExtraVolumeMount(
+                    name="ssh-session-host-key",
+                    mountPath=f"{ssh_dir}/dropbear_ed25519_host_key",
+                    subPath="dropbear_ed25519_host_key",
+                    readOnly=True,
+                ),
+                ExtraVolumeMount(
+                    name="ssh-proxy-session-auth-key",
+                    mountPath=f"{ssh_dir}/proxy_auth_key.pub",
+                    subPath="proxy_auth_key.pub",
+                    readOnly=True,
+                ),
+            ],
+        )
+
+
+async def fully_determine_resource_pool(
+    rp_repo: ResourcePoolRepository, user: APIUser, resource_class_id: int | None
+) -> tuple[ResourcePool, ResourceClass]:
+    """Bla."""
+
+    if resource_class_id is None:
+        resource_pool = await rp_repo.get_default_resource_pool()
+        resource_class = resource_pool.get_default_resource_class()
+        if not resource_class and len(resource_pool.classes) > 0:
+            resource_class = resource_pool.classes[0]
+        if not resource_class or not resource_class.id:
+            raise errors.ProgrammingError(message="Cannot find any resource classes in the default pool.")
+    else:
+        resource_pool = await rp_repo.get_resource_pool_from_class(user, resource_class_id)
+        resource_class = resource_pool.get_resource_class(resource_class_id)
+        if not resource_class or not resource_class.id:
+            raise errors.MissingResourceError(message=f"The resource class with ID {resource_class_id} does not exist.")
+    return resource_pool, resource_class
 
 
 def session_has_http_frontend(build_parameters: BuildParameters | None) -> bool:
@@ -1066,18 +1125,8 @@ async def start_session(
             )
 
     # Fully determine the resource pool and resource class
-    if resource_class_id is None:
-        resource_pool = await rp_repo.get_default_resource_pool()
-        resource_class = resource_pool.get_default_resource_class()
-        if not resource_class and len(resource_pool.classes) > 0:
-            resource_class = resource_pool.classes[0]
-        if not resource_class or not resource_class.id:
-            raise errors.ProgrammingError(message="Cannot find any resource classes in the default pool.")
-    else:
-        resource_pool = await rp_repo.get_resource_pool_from_class(user, resource_class_id)
-        resource_class = resource_pool.get_resource_class(resource_class_id)
-        if not resource_class or not resource_class.id:
-            raise errors.MissingResourceError(message=f"The resource class with ID {resource_class_id} does not exist.")
+    resource_pool, resource_class = await fully_determine_resource_pool(rp_repo, user, resource_class_id)
+
     await nb_config.crc_validator.validate_class_storage(user, resource_class.id, launch_request.disk_storage)
     disk_storage = launch_request.disk_storage or resource_class.default_storage
 
@@ -1116,7 +1165,9 @@ async def start_session(
 
     # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
     if not session_has_http_frontend(launcher.environment.build_parameters):
-        session_extras = session_extras.concat(ssh_proxy_session_extras(ssh_proxy_config, storage_mount))
+        session_extras = session_extras.concat(
+            ssh_proxy_session_extras(ssh_proxy_config, storage_mount, session_location)
+        )
 
     # Data connectors
     session_extras = session_extras.concat(
@@ -1573,7 +1624,12 @@ async def patch_session(
 
     # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
     if session.likely_ssh():
-        session_extras = session_extras.concat(ssh_proxy_session_extras(ssh_proxy_config, storage_mount))
+        resource_class_id = body.resource_class_id or launcher.resource_class_id
+        resource_pool, _ = await fully_determine_resource_pool(rp_repo, user, resource_class_id)
+        session_location = SessionLocation.remote if resource_pool.remote else SessionLocation.local
+        session_extras = session_extras.concat(
+            ssh_proxy_session_extras(ssh_proxy_config, storage_mount, session_location)
+        )
 
     # Data connectors: skip
     # TODO: How can we patch data connectors? Should we even patch them?
