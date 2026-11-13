@@ -126,7 +126,7 @@ from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import BuildParameters, Environment, FrontendVariant, SessionLauncher
-from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.db import ProjectStorageRepository, ProjectStorageV2Repository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import get_effective_quota
@@ -232,8 +232,50 @@ async def get_project_storage(
     )
 
 
-async def get_project_storage_v2() -> SessionExtraResources:
+async def get_project_storage_v2(
+    nb_config: NotebooksConfig,
+    user: APIUser,
+    project_storage_v2_repo: ProjectStorageV2Repository,
+    project_id: ULID,
+    storage_mount: PurePosixPath,
+    session_cluster: ClusterConnection,
+    authz: Authz,
+) -> SessionExtraResources:
     """Return SessionExtras corresponding to the project storage v2 if it exists."""
+    try:
+        storage_tuple = await project_storage_v2_repo.handle_project_storage_for_session(
+            k8s_client=nb_config.k8s_v2_client,
+            user=user,
+            project_id=project_id,
+            expected_cluster_id=session_cluster.id,
+        )
+        if storage_tuple is None:
+            return SessionExtraResources()
+        storage, pvc = storage_tuple
+        logger.debug(f"Configuring project storage for {project_id}: {storage}")
+        mount_path = storage.mount_path
+        if not mount_path.is_absolute():
+            mount_path = storage_mount / mount_path
+
+        volume_name = "project-storage"
+        can_write = await authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        return SessionExtraResources(
+            volume_mounts=[
+                ExtraVolumeMount(
+                    mountPath=mount_path.as_posix(),
+                    name=volume_name,
+                    readOnly=not can_write,
+                )
+            ],
+            volumes=[
+                ExtraVolume(
+                    name=volume_name,
+                    persistentVolumeClaim=PersistentVolumeClaim(claimName=pvc.name),
+                )
+            ],
+        )
+    except Exception as err:
+        logger.error(f"Could not handle project storage for project '{project_id}': {err}")
     return SessionExtraResources()
 
 
@@ -1021,7 +1063,8 @@ async def start_session(
     data_connector_secret_repo: DataConnectorSecretRepository,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
-    project_storage_repo: ProjectStorageRepository,
+    # project_storage_repo: ProjectStorageRepository,
+    project_storage_v2_repo: ProjectStorageV2Repository,
     rp_repo: ResourcePoolRepository,
     session_repo: SessionRepository,
     user_repo: UserRepo,
@@ -1170,7 +1213,17 @@ async def start_session(
     #     )
     # )
     # TODO: project storage v2
-    session_extras = session_extras.concat(await get_project_storage_v2())
+    session_extras = session_extras.concat(
+        await get_project_storage_v2(
+            nb_config=nb_config,
+            user=user,
+            project_storage_v2_repo=project_storage_v2_repo,
+            project_id=project.id,
+            storage_mount=storage_mount,
+            session_cluster=cluster,
+            authz=authz,
+        )
+    )
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings

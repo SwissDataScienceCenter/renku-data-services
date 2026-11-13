@@ -233,6 +233,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         project_repo=dm.project_repo,
         project_session_secret_repo=dm.project_session_secret_repo,
         project_storage_repo=dm.project_storage_repo,
+        project_storage_v2_repo=dm.project_storage_v2_repo,
         rp_repo=dm.rp_repo,
         session_repo=dm.session_repo,
         user_repo=dm.kc_user_repo,

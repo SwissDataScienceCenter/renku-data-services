@@ -469,7 +469,10 @@ class ProjectStorageRepository:
 class ProjectStorageV2Repository:
     """Repository for project storages v2."""
 
-    def __init__(self, storage_quota_repo: StorageQuotaRepository, authz: Authz) -> None:
+    def __init__(
+        self, session_maker: Callable[..., AsyncSession], storage_quota_repo: StorageQuotaRepository, authz: Authz
+    ) -> None:
+        self.session_maker = session_maker
         self.storage_quota_repo = storage_quota_repo
         self.authz = authz
 
@@ -509,6 +512,41 @@ class ProjectStorageV2Repository:
             stmt = stmt.where(schemas.ProjectStorageV2ORM.storage_quota_id == storage_quota_id)
         return await session.stream_scalars(stmt)
 
+    # async def get_all_storage_flavors(
+    #     self, session: AsyncSession, user: base_models.APIUser
+    # ) -> AsyncIterator[models.StorageFlavor]:
+    #     """Get all storage flavors from the database."""
+    #     stream = await self._get_all_storage_flavors_orm(session=session, user=user)
+    #     async for sf_orm in stream:
+    #         yield sf_orm.dump()
+
+    # async def _get_all_storage_flavors_orm(
+    #     self, session: AsyncSession, user: base_models.APIUser
+    # ) -> AsyncScalarResult[schemas.StorageFlavorORM]:
+    #     if user.id is None or not user.is_admin:
+    #         raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+    #     stmt = select(schemas.StorageFlavorORM).order_by(schemas.StorageFlavorORM.id.asc())
+    #     return await session.stream_scalars(stmt)
+
+    async def get_project_storage_or_none(
+        self, session: AsyncSession, user: base_models.APIUser, storage_id: ULID
+    ) -> models.ProjectStorageV2 | None:
+        """Get a project storage from the database."""
+        storage_orm = await self._get_project_storage_or_none_orm(session=session, user=user, storage_id=storage_id)
+        return storage_orm.dump() if storage_orm is not None else None
+
+    async def get_project_storage(
+        self, session: AsyncSession, user: base_models.APIUser, storage_id: ULID
+    ) -> models.ProjectStorageV2:
+        """Get a project storage from the database."""
+        storage = await self.get_project_storage_or_none(session=session, user=user, storage_id=storage_id)
+        if storage is None:
+            raise errors.MissingResourceError(
+                message=f"Project storage with ID '{str(storage_id)}' does not exist "
+                "or you do not have access to it."
+            )
+        return storage
+
     async def _get_project_storage_or_none_orm(
         self, session: AsyncSession, user: base_models.APIUser, storage_id: ULID
     ) -> schemas.ProjectStorageV2ORM | None:
@@ -519,6 +557,25 @@ class ProjectStorageV2Repository:
             return None
         authorized = await self.authz.has_permission(user, ResourceType.project, storage_orm.project_id, Scope.READ)
         return storage_orm if authorized else None
+
+    async def get_project_storage_from_project_id_or_none(
+        self, session: AsyncSession, user: base_models.APIUser, project_id: ULID
+    ) -> models.ProjectStorageV2 | None:
+        """Get the unique project storage linked to a specific project ID from the database."""
+        storage_orm = await self._get_project_storage_from_project_id_or_none_orm(
+            session=session, user=user, project_id=project_id
+        )
+        return storage_orm.dump() if storage_orm is not None else None
+
+    async def _get_project_storage_from_project_id_or_none_orm(
+        self, session: AsyncSession, user: base_models.APIUser, project_id: ULID
+    ) -> schemas.ProjectStorageV2ORM | None:
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            return None
+        stmt = select(schemas.ProjectStorageV2ORM).where(schemas.ProjectStorageV2ORM.project_id == project_id)
+        res = await session.scalars(stmt)
+        return res.one_or_none()
 
     async def insert_project_storage(
         self, session: AsyncSession, user: base_models.APIUser, project_storage: models.UnsavedProjectStorageV2
@@ -604,7 +661,7 @@ class ProjectStorageV2Repository:
         user: base_models.APIUser,
         storage_id: ULID,
         expected_cluster_id: ClusterId,
-    ) -> models.ProjectStorageV2:
+    ) -> tuple[models.ProjectStorageV2, K8sPersistentVolumeClaimV2]:
         """Get or create the Persistent Volume Claim backing a project storage.
 
         The expected_cluster_id attribute must correspond to the same cluster where the PVC will be used.
@@ -652,7 +709,7 @@ class ProjectStorageV2Repository:
                 # ? Mhm do we need to parse the size?
                 await session.flush()
                 await session.refresh(locked_orm)
-                return locked_orm.dump()
+                return locked_orm.dump(), pvc
 
         # Create the PVC
         async with self._with_locked_project_storage(session=session, storage_orm=storage_orm) as locked_orm:
@@ -679,7 +736,7 @@ class ProjectStorageV2Repository:
             # ? Mhm do we need to parse the size?
             await session.flush()
             await session.refresh(locked_orm)
-            return locked_orm.dump()
+            return locked_orm.dump(), pvc
 
     @asynccontextmanager
     async def _with_locked_project_storage(
@@ -706,6 +763,31 @@ class ProjectStorageV2Repository:
         )
         res = await session.scalars(stmt)
         return res.one_or_none()
+
+    async def handle_project_storage_for_session(
+        self,
+        k8s_client: NotebookK8sClient,
+        user: base_models.APIUser,
+        project_id: ULID,
+        expected_cluster_id: ClusterId,
+    ) -> tuple[models.ProjectStorageV2, K8sPersistentVolumeClaimV2] | None:
+        """Handle project storage for sessions."""
+        async with self.session_maker() as session, session.begin():
+            storage = await self.get_project_storage_from_project_id_or_none(
+                session=session,
+                user=user,
+                project_id=project_id,
+            )
+            if storage is None:
+                return None
+            pvc = await self.get_or_create_backing_pvc(
+                k8s_client=k8s_client,
+                session=session,
+                user=user,
+                storage_id=storage.id,
+                expected_cluster_id=expected_cluster_id,
+            )
+            return pvc
 
     async def delete_project_storage(
         self,
