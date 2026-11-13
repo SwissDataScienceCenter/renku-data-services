@@ -12,13 +12,13 @@ from renku_data_services.base_api.blueprint import CustomBlueprint
 from renku_data_services.base_api.misc import BlueprintFactoryResponse, validate_db_ids
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.resource_usage import apispec, model
+from renku_data_services.resource_usage import apispec
 from renku_data_services.resource_usage.core import (
     ResourceUsageService,
     validate_resource_class_costs_put,
-    validate_resource_pool_limit_put,
 )
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.resource_usage.model import Credit
 
 
 @dataclass(kw_only=True)
@@ -40,8 +40,7 @@ class ResourceUsageBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolLimitPut
         ) -> HTTPResponse:
-            limits = validate_resource_pool_limit_put(resource_pool_id, body=body)
-            result = await self.rr_repo.set_resource_pool_limits(limits)
+            result = await self.rr_repo.set_user_limits(resource_pool_id, Credit.from_int(body.user_limit))
             if not result:
                 raise errors.MissingResourceError()
             else:
@@ -56,7 +55,7 @@ class ResourceUsageBP(CustomBlueprint):
         @only_admins
         @validate_db_ids
         async def _get(_: Request, user: base_models.APIUser, resource_pool_id: int) -> JSONResponse:
-            result = await self.rr_repo.find_resource_pool_limits(resource_pool_id)
+            result = await self.rr_svc.get_limits(resource_pool_id)
             if result:
                 return validated_json(
                     apispec.ResourcePoolLimits,
@@ -76,7 +75,7 @@ class ResourceUsageBP(CustomBlueprint):
         @only_admins
         @validate_db_ids
         async def _delete(_: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
-            await self.rr_repo.delete_resource_pool_limits(resource_pool_id)
+            await self.rr_repo.delete_user_limits(resource_pool_id)
             return empty()
 
         return "/resource_pools/<resource_pool_id>/limits", ["DELETE"], _delete
@@ -140,6 +139,7 @@ class ResourceUsageBP(CustomBlueprint):
         """Get usage of a pool."""
 
         @authenticate(self.authenticator)
+        @only_admins
         @validate_db_ids
         @validate(query=apispec.ResourcePoolsResourcePoolIdUsageGetParametersQuery)
         async def _get(
@@ -148,39 +148,26 @@ class ResourceUsageBP(CustomBlueprint):
             resource_pool_id: int,
             query: apispec.ResourcePoolsResourcePoolIdUsageGetParametersQuery,
         ) -> HTTPResponse:
-            start_date = query.start_date
-            end_date = query.end_date
-            requested_by = query.user_id
-            requested_by = str(requested_by) if requested_by else user.id
-            if requested_by != user.id and (user.access_token is None or not user.is_admin):
-                raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+            # Validate that the resource pool exists and the user has access to it
+            await self.rp_repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
 
-            rp = await self.rp_repo.get_resource_pool(user, resource_pool_id)
-            enforcement_enabled = any([c.quota_enforced for c in rp.classes])
-
-            result: model.ResourcePoolUsage | None = None
-            if not enforcement_enabled:
-                result = None
-            elif start_date:
-                result = await self.rr_svc.get_for_date(resource_pool_id, requested_by or "", start_date, end_date)
-            else:
-                result = await self.rr_svc.get_running_week(resource_pool_id, requested_by or "")
+            result = await self.rr_svc.get_usage_with_limits(
+                resource_pool_id, query.user_id, query.start_date, query.end_date
+            )
             if result:
-                output = apispec.ResourcePoolUsage(
-                    total_usage=apispec.ResourceUsageSummary(
-                        runtime=result.total_usage.runtime_hours, cost=result.total_usage.cost.value
-                    ),
+                output = apispec.ResourcePoolUsageLimits(
+                    total_usage=result.total_usage.value,
                     pool_limits=apispec.ResourcePoolLimits(
                         pool_id=result.pool_limits.pool_id,
                         total_limit=result.pool_limits.total_limit.value,
                         user_limit=result.pool_limits.user_limit.value,
                     ),
-                    user_usage=apispec.ResourceUsageSummary(
-                        runtime=result.user_usage.runtime_hours, cost=result.user_usage.cost.value
-                    ),
+                    user_usage=result.user_usage.value if result.user_usage is not None else None,
+                    start_date=result.start_date,
+                    end_date=result.end_date,
                 )
                 return validated_json(
-                    apispec.ResourcePoolUsage,
+                    apispec.ResourcePoolUsageLimits,
                     output,
                 )
             else:
