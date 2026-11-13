@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sanic import Request, empty
 from sanic.response import HTTPResponse, JSONResponse
@@ -22,6 +22,7 @@ from renku_data_services.base_api.etag import extract_if_none_match, if_match_re
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
+from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage import apispec, models
 from renku_data_services.storage.core import (
@@ -34,9 +35,6 @@ from renku_data_services.storage.core import (
 from renku_data_services.storage.db import ProjectStorageRepository, ProjectStorageV2Repository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
-
-if TYPE_CHECKING:
-    from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 
 
 @dataclass(kw_only=True)
