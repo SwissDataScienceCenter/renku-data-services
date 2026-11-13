@@ -2,7 +2,7 @@ ARG RCLONE_IMAGE_REPOSITORY="ghcr.io/swissdatasciencecenter/rclone"
 ARG RCLONE_IMAGE_TAG="sha-308067c"
 FROM ${RCLONE_IMAGE_REPOSITORY}:${RCLONE_IMAGE_TAG} AS rclone
 
-FROM python:3.13-bookworm AS builder
+FROM python:3.15-bookworm AS builder
 ARG DEV_BUILD=false
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
@@ -31,7 +31,7 @@ RUN if $DEV_BUILD ; then \
 RUN /home/renku/.local/bin/poetry -C projects/renku_data_service build-project -f wheel --custom-temp-path=/tmp
 RUN env/bin/pip --no-cache-dir install projects/renku_data_service/dist/*.whl
 
-FROM python:3.13-slim-bookworm
+FROM python:3.15-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 RUN apt-get update && apt-get install -y \
