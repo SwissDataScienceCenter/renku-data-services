@@ -685,7 +685,7 @@ def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:
             username=body.ssh_settings.username,
             public_host_key=body.ssh_settings.public_host_key,
             session_secret_name=body.ssh_settings.session_secret_name,
-            auth_key_secret_name="renku-ssh-identities",
+            auth_key_secret_name="renku-ssh-identities",  # nosec B106
         )
         if body.ssh_settings
         else None,
