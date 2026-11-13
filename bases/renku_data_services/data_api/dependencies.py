@@ -543,6 +543,7 @@ class DependencyManager:
             authz=authz,
         )
         project_storage_v2_repo = ProjectStorageV2Repository(
+            session_maker=config.db.async_session_maker,
             storage_quota_repo=storage_quota_repo,
             authz=authz,
         )

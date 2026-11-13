@@ -233,6 +233,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         project_repo=dm.project_repo,
         project_session_secret_repo=dm.project_session_secret_repo,
         project_storage_repo=dm.project_storage_repo,
+        project_storage_v2_repo=dm.project_storage_v2_repo,
         rp_repo=dm.rp_repo,
         session_repo=dm.session_repo,
         user_repo=dm.kc_user_repo,
@@ -359,6 +360,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     project_storages_v2 = ProjectStorageV2BP(
         name="project_storages_v2",
         url_prefix=url_prefix,
+        k8s_client=dm.config.nb_config.k8s_v2_client,
         project_storage_v2_repo=dm.project_storage_v2_repo,
         authenticator=dm.authenticator,
         session_maker=dm.config.db.async_session_maker,
