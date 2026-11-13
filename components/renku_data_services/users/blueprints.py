@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from typing import Any
 
-from renku_data_services.ssh_proxy.model import SshSessionData
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
 from sanic_ext import validate
@@ -18,6 +17,7 @@ from renku_data_services.errors import errors
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.ssh_proxy.core import SessionAuthorize
+from renku_data_services.ssh_proxy.model import SshSessionData
 from renku_data_services.users import apispec, models
 from renku_data_services.users.core import (
     validate_secret_patch,
@@ -322,7 +322,9 @@ class SSHKeysBP(CustomBlueprint):
 
         @validate(json=apispec.SessionAuthorizeRequest)
         async def _authorize(_: Request, body: apispec.SessionAuthorizeRequest, session_id: str) -> JSONResponse:
-            session_data = SshSessionData.default(session_id) #await self.ssh_authorize.authorize_session(body.public_key, session_id)
+            session_data = SshSessionData.default(
+                session_id
+            )  # await self.ssh_authorize.authorize_session(body.public_key, session_id)
             result = apispec.SessionAuthorizeResponse(
                 target_host=session_data.target_host,
                 target_port=session_data.target_port,

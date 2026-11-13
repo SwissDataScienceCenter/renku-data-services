@@ -315,7 +315,6 @@ class ClusterORM(BaseORM):
     ssh_target_port: Mapped[int | None] = mapped_column(Integer, default=None, nullable=True)
     ssh_username: Mapped[str | None] = mapped_column(String(), default=None, nullable=True)
     ssh_public_host_key: Mapped[str | None] = mapped_column(String(), default=None, nullable=True)
-    ssh_public_auth_key: Mapped[str | None] = mapped_column(String(), default=None, nullable=True)
     ssh_session_secret_name: Mapped[str | None] = mapped_column(String(), default=None, nullable=True)
 
     def dump(self) -> SavedClusterSettings:

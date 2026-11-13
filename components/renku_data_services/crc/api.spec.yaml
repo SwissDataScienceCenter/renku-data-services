@@ -1413,8 +1413,6 @@ components:
           type: string
         public_host_key:
           type: string
-        public_auth_key:
-          type: string
         session_secret_name:
           type: string
       required:
@@ -1422,7 +1420,6 @@ components:
         - target_port
         - username
         - public_host_key
-        - public_auth_key
         - session_secret_name
     ClusterPatch:
       type: object
