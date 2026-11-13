@@ -28,6 +28,7 @@ from renku_data_services.k8s.models import (
     K8sPatch,
     K8sPatches,
     K8sPersistentVolumeClaim,
+    K8sPersistentVolumeClaimV2,
     K8sSecret,
 )
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
@@ -184,6 +185,10 @@ class NotebookK8sClient(SecretClient):
     def cluster_id() -> ClusterId:
         """Cluster id of the main cluster."""
         return DEFAULT_K8S_CLUSTER
+
+    async def cluster_by_id(self, cluster_id: ClusterId | None) -> ClusterConnection:
+        """Return the cluster connection from the cluster ID."""
+        return await self.__client.cluster_by_id(cluster_id or self.cluster_id())
 
     async def cluster_by_class_id(self, class_id: int | None, api_user: APIUser) -> ClusterConnection:
         """Return the cluster associated with the given resource class id."""
@@ -516,3 +521,14 @@ class NotebookK8sClient(SecretClient):
         """Create a persistent volume for the given project storage."""
 
         await self.__client.patch(pvc, patch)
+
+    # NOTE: fully cluster-aware methods below
+    async def get_persistent_volume_claim_v2(self, pvc: K8sObjectMeta) -> K8sPersistentVolumeClaimV2 | None:
+        """Get a persistent volume claim (v2)."""
+        obj = await self.__client.get(pvc)
+        return K8sPersistentVolumeClaimV2.from_k8s_object(obj) if obj is not None else None
+
+    async def create_persistent_volume_claim_v2(self, pvc: K8sPersistentVolumeClaimV2) -> K8sPersistentVolumeClaimV2:
+        """Create a persistent volume claim (v2)."""
+        obj = await self.__client.create(pvc, True)
+        return K8sPersistentVolumeClaimV2.from_k8s_object(obj)

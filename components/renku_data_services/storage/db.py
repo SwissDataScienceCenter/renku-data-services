@@ -1,25 +1,36 @@
 """Database access for project storage classes."""
 
-from collections.abc import AsyncIterator, Callable
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession
+from sqlalchemy.orm import selectinload
 from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_api.pagination import PaginationRequest
+from renku_data_services.crc import orm as rp_schemas
 from renku_data_services.crc.db import StorageQuotaRepository
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.models import K8sPersistentVolumeClaimV2
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import orm as project_schemas
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.orm import ProjectORM
-from renku_data_services.storage import models
+from renku_data_services.storage import constants, models
 from renku_data_services.storage import orm as schemas
 from renku_data_services.storage.config import ProjectStorageConfig
 from renku_data_services.utils.core import with_db_session, with_db_transaction
+
+if TYPE_CHECKING:
+    from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 
 
 class ProjectStorageRepository:
@@ -583,6 +594,116 @@ class ProjectStorageV2Repository:
         self, session: AsyncSession, user: base_models.APIUser, project_id: ULID
     ) -> schemas.ProjectStorageV2ORM | None:
         stmt = select(schemas.ProjectStorageV2ORM).where(schemas.ProjectStorageV2ORM.project_id == project_id)
+        res = await session.scalars(stmt)
+        return res.one_or_none()
+
+    async def get_or_create_backing_pvc(
+        self,
+        k8s_client: NotebookK8sClient,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        storage_id: ULID,
+        expected_cluster_id: ClusterId,
+    ) -> models.ProjectStorageV2:
+        """Get or create the Persistent Volume Claim backing a project storage.
+
+        The expected_cluster_id attribute must correspond to the same cluster where the PVC will be used.
+        """
+        storage_orm = await self._get_project_storage_or_none_orm(session=session, user=user, storage_id=storage_id)
+        if storage_orm is None:
+            raise errors.MissingResourceError(
+                message=f"Project storage with ID '{storage_id}' does not exist or you do not have access to it."
+            )
+
+        # Get the storage class, resource pool and cluster for the project storage
+        # NOTE: no authorization: the user can see the storage so we MUST determine the correct attributes for it
+        sq_orm = await self._get_storage_quota_and_resource_pool_without_authz_or_none_orm(
+            session=session, storage_quota_id=storage_orm.storage_quota_id
+        )
+        if sq_orm is None:
+            raise errors.ProgrammingError(
+                message=f"Storage quota with ID '{storage_orm.storage_quota_id}' does not exist "
+                f"from project storage '{storage_id}'."
+            )
+        rp_orm = sq_orm.resource_pool
+        cluster_id = ClusterId(rp_orm.cluster_id) if rp_orm.cluster_id is not None else None
+        cluster = await k8s_client.cluster_by_id(cluster_id=cluster_id)
+        if cluster.id != expected_cluster_id:
+            raise errors.ValidationError(
+                message=f"Project storage with ID '{storage_id}' cannot be used in cluster '{expected_cluster_id}'."
+            )
+            pass
+        namespace = cluster.namespace
+
+        # Check if the PVC should already exist
+        if storage_orm.k8s_pvc_name:
+            meta = K8sPersistentVolumeClaimV2.meta(
+                name=storage_orm.k8s_pvc_name, namespace=namespace, cluster_id=cluster.id
+            )
+            pvc = await k8s_client.get_persistent_volume_claim_v2(meta)
+            if pvc is None:
+                raise errors.ProgrammingError(
+                    message=f"Storage quota with ID '{storage_orm.storage_quota_id}' has lost its persistent volume."
+                )
+            # Update the storage attributes from k8s
+            async with self._with_locked_project_storage(session=session, storage_orm=storage_orm) as locked_orm:
+                locked_orm.k8s_pvc_status = pvc.get_status()
+                _actual_size = pvc.get_actual_size()
+                # ? Mhm do we need to parse the size?
+                await session.flush()
+                await session.refresh(locked_orm)
+                return locked_orm.dump()
+
+        # Create the PVC
+        async with self._with_locked_project_storage(session=session, storage_orm=storage_orm) as locked_orm:
+            k8s_pvc_name = f"{constants.PROJECT_STORAGE_V2_PVC_PREFIX}-{str(locked_orm.id).lower()}"
+            new_pvc = K8sPersistentVolumeClaimV2.new(
+                name=k8s_pvc_name,
+                namespace=namespace,
+                cluster=cluster.id,
+                access_modes=["ReadWriteMany"],
+                storage_class_name=sq_orm.storage_flavor.k8s_storage_class_name,
+                size=locked_orm.requested_size,
+                labels=dict(),
+                annotations={
+                    "renku.io/storage_id": str(locked_orm.id),
+                    "renku.io/project_id": str(locked_orm.project_id),
+                    "renku.io/resource_pool_id": str(rp_orm.id),
+                    "renku.io/storage_quota_id": str(sq_orm.id),
+                },
+            )
+            pvc = await k8s_client.create_persistent_volume_claim_v2(new_pvc)
+            locked_orm.k8s_pvc_name = k8s_pvc_name
+            locked_orm.k8s_pvc_status = pvc.get_status()
+            _actual_size = pvc.get_actual_size()
+            # ? Mhm do we need to parse the size?
+            await session.flush()
+            await session.refresh(locked_orm)
+            return locked_orm.dump()
+
+    @asynccontextmanager
+    async def _with_locked_project_storage(
+        self, session: AsyncSession, storage_orm: schemas.ProjectStorageV2ORM
+    ) -> AsyncGenerator[schemas.ProjectStorageV2ORM]:
+        """Lock a project storage for updates."""
+        stmt = (
+            select(schemas.ProjectStorageV2ORM)
+            .where(schemas.ProjectStorageV2ORM.id == storage_orm.id)
+            .with_for_update(key_share=True)
+        )
+        res = await session.scalars(stmt)
+        locked_orm = res.one()
+        yield locked_orm
+        await session.flush()
+
+    async def _get_storage_quota_and_resource_pool_without_authz_or_none_orm(
+        self, session: AsyncSession, storage_quota_id: ULID
+    ) -> rp_schemas.StorageQuotaORM | None:
+        stmt = (
+            select(rp_schemas.StorageQuotaORM)
+            .where(rp_schemas.StorageQuotaORM.id == storage_quota_id)
+            .options(selectinload(schemas.StorageQuotaORM.resource_pool))
+        )
         res = await session.scalars(stmt)
         return res.one_or_none()
 
