@@ -1896,7 +1896,7 @@ class ClusterRepository:
         raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
 
     @_only_admins
-    async def insert(self, api_user: base_models.APIUser, cluster: ClusterSettings) -> ClusterSettings:
+    async def insert(self, api_user: base_models.APIUser, cluster: ClusterSettings) -> SavedClusterSettings:
         """Creates a new cluster configuration."""
 
         cluster_orm = ClusterORM.load(cluster)
