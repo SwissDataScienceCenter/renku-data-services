@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import (
     JSON,
@@ -24,6 +25,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.mutable import MutableComposite
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from sqlalchemy.sql import expression
@@ -166,12 +168,10 @@ class ResourceClassORM(BaseORM):
     gpu: Mapped[int | None] = mapped_column(BigInteger, default=None)
     quota_enforced: Mapped[bool] = mapped_column(default=False, server_default=false())
     preemptible: Mapped[bool] = mapped_column(default=False, server_default=false())
-    resource_pool_id: Mapped[Optional[int]] = mapped_column(
+    resource_pool_id: Mapped[int | None] = mapped_column(
         ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
     )
-    resource_pool: Mapped[Optional[ResourcePoolORM]] = relationship(
-        back_populates="classes", default=None, lazy="joined"
-    )
+    resource_pool: Mapped[ResourcePoolORM | None] = relationship(back_populates="classes", default=None, lazy="joined")
     resource_flavor_id: Mapped[ULID | None] = mapped_column(
         ForeignKey("resource_flavors.id", ondelete="RESTRICT"), default=None, index=True, nullable=True
     )
@@ -360,6 +360,27 @@ class ClusterORM(BaseORM):
         )
 
 
+@dataclass
+class ResourcePoolStorageConfigORM(MutableComposite):
+    """Storage configuration for a resource pool.
+
+    This is a composite column, see: https://docs.sqlalchemy.org/en/21/orm/composites.html
+    """
+
+    storage_class_id: str
+    """ID of the storage class."""
+
+    total_size: ByteSize
+    """Total allocatable storage."""
+
+    max_size: ByteSize
+    """Maximum size for each storage."""
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        object.__setattr__(self, key, value)
+        self.changed()
+
+
 class ResourcePoolORM(BaseORM):
     """Resource pool specifies a set of resource classes, users that can access them and a quota."""
 
@@ -369,9 +390,10 @@ class ResourcePoolORM(BaseORM):
             "cpu_limit_factor IS NULL OR cpu_limit_factor >= 1.0",
             name="chk_cpu_limit_factor_gte_1",
         ),
+        # TODO: storage_config constraint
     )
     name: Mapped[str] = mapped_column(String(40), index=True)
-    quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
+    quota: Mapped[str | None] = mapped_column(String(63), index=True, default=None)
     users: Mapped[list[UserORM]] = relationship(
         secondary=resource_pools_users,
         back_populates="resource_pools",
@@ -387,9 +409,9 @@ class ResourcePoolORM(BaseORM):
         # flavor, which this column order cannot see.
         order_by="[ResourceClassORM.id]",
     )
-    idle_threshold: Mapped[Optional[int]] = mapped_column(default=None)
-    hibernation_threshold: Mapped[Optional[int]] = mapped_column(default=None)
-    hibernation_warning_period: Mapped[Optional[int]] = mapped_column(default=None)
+    idle_threshold: Mapped[int | None] = mapped_column(default=None)
+    hibernation_threshold: Mapped[int | None] = mapped_column(default=None)
+    hibernation_warning_period: Mapped[int | None] = mapped_column(default=None)
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
     remote_provider_id: Mapped[str | None] = mapped_column(
@@ -403,17 +425,17 @@ class ResourcePoolORM(BaseORM):
         JSONVariant, default=None, server_default=None, nullable=True
     )
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
-    cluster_id: Mapped[Optional[ULID]] = mapped_column(
+    cluster_id: Mapped[ULID | None] = mapped_column(
         ForeignKey(ClusterORM.id, ondelete="SET NULL"), default=None, index=True
     )
-    cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
+    cluster: Mapped[ClusterORM | None] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
 
     # NOTE: we reuse the "build_platform" enum type here
     platform: Mapped[models.RuntimePlatform] = mapped_column(
         Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=literal("linux_amd64")
     )
 
-    cpu_limit_factor: Mapped[Optional[float]] = mapped_column("cpu_limit_factor", Float, default=None, nullable=True)
+    cpu_limit_factor: Mapped[float | None] = mapped_column("cpu_limit_factor", Float, default=None, nullable=True)
     """Used to assign cpu limits based on the cpu value in the resource classes in the pool.
     If the value is zero or unset then cpu limits are not set.
     """
@@ -477,6 +499,10 @@ class ResourcePoolORM(BaseORM):
             (resource_class.dump(matching_criteria=class_match_criteria) for resource_class in classes),
             key=lambda c: (c.gpu, c.cpu, c.memory, c.max_storage, c.name, c.id),
         )
+
+        # storage_config = self._dump_storage_config()
+        # logger.info(f"[STORAGE] rp_id = {self.id}, config = {storage_config}")
+
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -506,6 +532,19 @@ class ResourcePoolORM(BaseORM):
             {**self.remote_json, "provider_id": self.remote_provider_id}
         )
 
+    # def _dump_storage_config(self) -> models.ResourcePoolStorageConfig:
+    #     """Create a ResourcePoolStorageConfig model from the corresponding columns of the ORM object."""
+    #     if self.storage_class_id is None or self.storage_class is None or self.storage_config is None:
+    #         return models.ResourcePoolStorageConfigDisabled()
+    #     return models.ResourcePoolStorageConfigEnabled(
+    #         storage_class_name=self.storage_class_id,
+    #         storage_display_name=self.storage_class.display_name,
+    #         storage_min_size_bytes=self.storage_class.min_size,
+    #         storage_documentation=self.storage_class.documentation,
+    #         storage_total_size_bytes=self.storage_config.total_size,
+    #         storage_max_size_bytes=self.storage_config.max_size,
+    #     )
+
     def get_cluster_id(self) -> ClusterId:
         """Get the ID of the cluster the resource pool refers to."""
         if self.cluster_id is None:
@@ -518,12 +557,10 @@ class TolerationORM(BaseORM):
 
     __tablename__ = "tolerations"
     key: Mapped[str] = mapped_column(String(63), index=True)
-    resource_class: Mapped[Optional[ResourceClassORM]] = relationship(
+    resource_class: Mapped[ResourceClassORM | None] = relationship(
         back_populates="tolerations", default=None, lazy="selectin"
     )
-    resource_class_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("resource_classes.id"), default=None, index=True
-    )
+    resource_class_id: Mapped[int | None] = mapped_column(ForeignKey("resource_classes.id"), default=None, index=True)
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
 
 
@@ -532,12 +569,10 @@ class NodeAffinityORM(BaseORM):
 
     __tablename__ = "node_affinities"
     key: Mapped[str] = mapped_column(String(63), index=True)
-    resource_class: Mapped[Optional[ResourceClassORM]] = relationship(
+    resource_class: Mapped[ResourceClassORM | None] = relationship(
         back_populates="node_affinities", default=None, lazy="selectin"
     )
-    resource_class_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("resource_classes.id"), default=None, index=True
-    )
+    resource_class_id: Mapped[int | None] = mapped_column(ForeignKey("resource_classes.id"), default=None, index=True)
     required_during_scheduling: Mapped[bool] = mapped_column(default=False)
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
 
@@ -598,6 +633,58 @@ class StorageFlavorORM(BaseORM):
             min_size_bytes=self.min_size,
             admin_documentation=self.admin_documentation,
             documentation=self.documentation,
+            creation_date=self.creation_date,
+            updated_at=self.updated_at,
+        )
+
+
+class StorageQuotaORM(BaseORM):
+    """A storage quota."""
+
+    __tablename__ = "storage_quotas"
+
+    id: Mapped[ULID] = mapped_column(
+        "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
+    )
+    """ID of the storage quota."""
+
+    resource_pool_id: Mapped[int] = mapped_column(ForeignKey(ResourcePoolORM.id, ondelete="CASCADE"), index=True)
+    """ID of the parent resource pool."""
+
+    resource_pool: Mapped[ResourcePoolORM] = relationship(init=False, lazy="select")
+
+    storage_flavor_id: Mapped[ULID] = mapped_column(ForeignKey(StorageFlavorORM.id, ondelete="RESTRICT"), index=True)
+    """ID of the storage flavor used for this storage quota."""
+
+    storage_flavor: Mapped[StorageFlavorORM] = relationship(init=False, lazy="selectin")
+
+    total_size: Mapped[ByteSize] = mapped_column("total_size", ByteSizeType())
+    """The total size of storage allocatable in the storage quota."""
+
+    max_size: Mapped[ByteSize] = mapped_column("max_size", ByteSizeType())
+    """The maximum size for each storage allocated in the quota."""
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def dump(self) -> models.StorageQuota:
+        """Create a storage quota model from the StorageClassORM."""
+        return models.StorageQuota(
+            id=self.id,
+            resource_pool_id=self.resource_pool_id,
+            storage_flavor_id=self.storage_flavor_id,
+            storage_flavor=self.storage_flavor.dump(),
+            total_size_bytes=self.total_size,
+            max_size_bytes=self.max_size,
             creation_date=self.creation_date,
             updated_at=self.updated_at,
         )

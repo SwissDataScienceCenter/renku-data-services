@@ -836,6 +836,31 @@ def create_storage_flavor(sanic_client: SanicASGITestClient, admin_headers: dict
     return create_storage_flavor_helper
 
 
+@pytest.fixture
+def create_storage_quota(
+    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], create_resource_pool, create_storage_flavor
+):
+    """Fixture for creating a new storage quota."""
+
+    async def create_storage_quota_helper(**kwargs: dict[str, Any]) -> dict[str, Any]:
+        payload = {
+            "total_size": 64,
+            "max_size": 16,
+        }
+        payload.update(kwargs.copy())
+        if payload.get("resource_pool_id") is None:
+            rp = await create_resource_pool(admin=True, public=False)
+            payload["resource_pool_id"] = rp["id"]
+        if payload.get("storage_flavor_id") is None:
+            sf = await create_storage_flavor()
+            payload["storage_flavor_id"] = sf["id"]
+        _, res = await sanic_client.post("/api/data/storage_quotas", headers=admin_headers, json=payload)
+        assert res.status_code == 201, res.text
+        return res.json
+
+    return create_storage_quota_helper
+
+
 @pytest_asyncio.fixture
 async def create_resource_pool(cluster, sanic_client, user_headers, admin_headers, valid_resource_pool_payload):
     async def create_resource_pool_helper(admin: bool = False, **payload) -> dict[str, Any]:

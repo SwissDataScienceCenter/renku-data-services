@@ -1455,6 +1455,135 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - storage_flavors
+  /storage_quotas:
+    get:
+      summary: Get all visible storage quotas
+      responses:
+        "200":
+          description: The list of all visible storage quotas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageQuotas"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storage_quotas
+    post:
+      summary: Create a storage quota
+      description: |
+        Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StorageQuotaPost"
+      responses:
+        "201":
+          description: The newly created storage quota
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageQuota"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storage_quotas
+  /storage_quotas/{storage_quota_id}:
+    parameters:
+      - in: path
+        name: storage_quota_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    get:
+      summary: Get a storage quota
+      responses:
+        "200":
+          description: The storage quota
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageQuota"
+        "404":
+          description: The storage quota does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storage_quotas
+    patch:
+      summary: Update a storage quota
+      description: |
+        Admin only.
+      parameters:
+        - $ref: "#/components/parameters/If-Match"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StorageQuotaPatch"
+      responses:
+        "200":
+          description: The updated storage quota
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageQuotas"
+        "404":
+          description: The storage quota does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storage_quotas
+    delete:
+      summary: Delete a storage quota
+      description: |
+        Admin only.
+      responses:
+        "204":
+          description: The storage quota was deleted or did not exist in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storage_quotas
+  /resource_pools/{resource_pool_id}/storage_quotas:
+    parameters:
+      - in: path
+        name: resource_pool_id
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+    get:
+      summary: Get all storage quotas in a resource pool
+      responses:
+        "200":
+          description: The list of storage quotas in the resource pool
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageQuotas"
+        "404":
+          description: The resource pool does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storage_quotas
   /version:
     get:
       summary: Get the version of the service
@@ -2642,6 +2771,75 @@ components:
           type: string
         documentation:
           type: string
+    StorageQuotas:
+      description: A list of storage quotas.
+      type: array
+      items:
+        $ref: "#/components/schemas/StorageQuota"
+    StorageQuota:
+      description: A storage quota.
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        resource_pool_id:
+          $ref: "#/components/schemas/IntegerId"
+        storage_flavor_id:
+          $ref: "#/components/schemas/Ulid"
+        storage_flavor_display_name:
+          type: string
+          example: Azure Files (SMB)
+        storage_flavor_min_size:
+          $ref: "#/components/schemas/MinStorageSize"
+        storage_flavor_documentation:
+          type: string
+        total_size:
+          $ref: "#/components/schemas/MaxStorageSize"
+        max_size:
+          $ref: "#/components/schemas/MaxStorageSize"
+        creation_date:
+          $ref: "#/components/schemas/CreationDate"
+        updated_at:
+          $ref: "#/components/schemas/UpdatedAt"
+        etag:
+          $ref: "#/components/schemas/ETag"
+      required:
+        - id
+        - resource_pool_id
+        - storage_flavor_id
+        - storage_flavor_display_name
+        - storage_flavor_min_size
+        - total_size
+        - max_size
+        - creation_date
+        - updated_at
+        - etag
+    StorageQuotaPost:
+      type: object
+      additionalProperties: false
+      properties:
+        resource_pool_id:
+          $ref: "#/components/schemas/IntegerId"
+        storage_flavor_id:
+          $ref: "#/components/schemas/Ulid"
+        total_size:
+          $ref: "#/components/schemas/MaxStorageSize"
+        max_size:
+          $ref: "#/components/schemas/MaxStorageSize"
+      required:
+        - resource_pool_id
+        - storage_flavor_id
+        - total_size
+        - max_size
+    StorageQuotaPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        total_size:
+          $ref: "#/components/schemas/MaxStorageSize"
+        max_size:
+          $ref: "#/components/schemas/MaxStorageSize"
     ConfigName:
       type: string
       description: |
@@ -2903,6 +3101,12 @@ components:
       minimum: 0
       exclusiveMinimum: true
       description: Minimum size in GB
+    MaxStorageSize:
+      type: integer
+      format: int64
+      minimum: 0
+      exclusiveMinimum: true
+      description: Maximum size in GB
     ErrorResponse:
       type: object
       properties:
