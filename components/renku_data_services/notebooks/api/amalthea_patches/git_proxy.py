@@ -27,7 +27,7 @@ async def main_container(
     internal_token_mint: RenkuSelfTokenMint,
 ) -> client.V1Container | None:
     """The patch that adds the git proxy container to a session statefulset."""
-    if not user.is_authenticated or not repositories or user.access_token is None or user.refresh_token is None:
+    if not user.is_authenticated or not repositories or user.access_token is None:
         return None
 
     etc_cert_volume_mount = get_certificates_volume_mounts(
