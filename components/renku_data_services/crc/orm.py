@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import (
@@ -9,6 +10,7 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     Column,
+    DateTime,
     Enum,
     Float,
     Identity,
@@ -17,7 +19,9 @@ from sqlalchemy import (
     String,
     Table,
     false,
+    func,
     literal,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
@@ -27,13 +31,14 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.connected_services import orm as cs_schemas
 from renku_data_services.crc import models
 from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.resource_usage.model import Credit
-from renku_data_services.utils.sqlalchemy import ULIDType
+from renku_data_services.utils.sqlalchemy import ByteSizeType, ULIDType
 
 logger = logging.getLogger(__name__)
 
@@ -541,4 +546,58 @@ class NodeAffinityORM(BaseORM):
         return models.NodeAffinity(
             key=self.key,
             required_during_scheduling=self.required_during_scheduling,
+        )
+
+
+class StorageFlavorORM(BaseORM):
+    """A storage flavor."""
+
+    __tablename__ = "storage_flavors"
+
+    id: Mapped[ULID] = mapped_column(
+        "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
+    )
+    """ID of the storage flavor."""
+
+    k8s_storage_class_name: Mapped[str] = mapped_column("k8s_storage_class_name")
+    """The storage class name in Kubernetes."""
+
+    display_name: Mapped[str] = mapped_column("display_name")
+    """The display name of the storage flavor."""
+
+    min_size: Mapped[ByteSize] = mapped_column("min_size", ByteSizeType())
+    """The minimum size of PVCs created with the storage class."""
+
+    admin_documentation: Mapped[str | None] = mapped_column("admin_documentation", nullable=True)
+    """Documentation for admin users."""
+
+    documentation: Mapped[str | None] = mapped_column("documentation", nullable=True)
+    """Documentation for regular users."""
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
+    )
+    """Creation timestamp of the storage flavor."""
+
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    """Update timestamp of the storage flavor."""
+
+    def dump(self) -> models.StorageFlavor:
+        """Create a storage class model from the StorageClassORM."""
+        return models.StorageFlavor(
+            id=self.id,
+            k8s_storage_class_name=self.k8s_storage_class_name,
+            display_name=self.display_name,
+            min_size_bytes=self.min_size,
+            admin_documentation=self.admin_documentation,
+            documentation=self.documentation,
+            creation_date=self.creation_date,
+            updated_at=self.updated_at,
         )

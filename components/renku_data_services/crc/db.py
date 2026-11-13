@@ -9,14 +9,14 @@ it all in one place.
 from __future__ import annotations
 
 from asyncio import gather
-from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Collection, Coroutine, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from functools import wraps
 from typing import TYPE_CHECKING, Any, Concatenate, Optional, ParamSpec, TypeVar
 from uuid import uuid4
 
 from sqlalchemy import NullPool, delete, false, select, true
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select, or_
 from ulid import ULID
@@ -2235,3 +2235,119 @@ class QuotaRepository:
         patch = quota.to_patch({self._label_name: self._label_value})
         patched_quota = await self.rq_client.patch_resource_quota(quota.id, patch, cluster_id)
         return models.Quota.from_k8s_resource_quota(patched_quota)
+
+
+class StorageFlavorRepository:
+    """Repository for storage flavors."""
+
+    async def get_all_storage_flavors(
+        self, session: AsyncSession, user: base_models.APIUser
+    ) -> AsyncIterator[models.StorageFlavor]:
+        """Get all storage flavors from the database."""
+        stream = await self._get_all_storage_flavors_orm(session=session, user=user)
+        async for sf_orm in stream:
+            yield sf_orm.dump()
+
+    async def _get_all_storage_flavors_orm(
+        self, session: AsyncSession, user: base_models.APIUser
+    ) -> AsyncScalarResult[schemas.StorageFlavorORM]:
+        if user.id is None or not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+        stmt = select(schemas.StorageFlavorORM).order_by(schemas.StorageFlavorORM.id.asc())
+        return await session.stream_scalars(stmt)
+
+    async def get_storage_flavor_or_none(
+        self, session: AsyncSession, user: base_models.APIUser, storage_flavor_id: ULID
+    ) -> models.StorageFlavor | None:
+        """Get a storage flavor from the database."""
+        sf_orm = await self._get_storage_flavor_or_none_orm(
+            session=session, user=user, storage_flavor_id=storage_flavor_id
+        )
+        return sf_orm.dump() if sf_orm is not None else None
+
+    async def get_storage_flavor(
+        self, session: AsyncSession, user: base_models.APIUser, storage_flavor_id: ULID
+    ) -> models.StorageFlavor:
+        """Get a storage flavor from the database."""
+        storage_flavor = await self.get_storage_flavor_or_none(
+            session=session, user=user, storage_flavor_id=storage_flavor_id
+        )
+        if storage_flavor is None:
+            raise errors.MissingResourceError(message=f"Storage flavor '{str(storage_flavor_id)}' does not exist.")
+        return storage_flavor
+
+    async def _get_storage_flavor_or_none_orm(
+        self, session: AsyncSession, user: base_models.APIUser, storage_flavor_id: ULID
+    ) -> schemas.StorageFlavorORM | None:
+        if user.id is None or not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+        stmt = select(schemas.StorageFlavorORM).where(schemas.StorageFlavorORM.id == storage_flavor_id)
+        res = await session.scalars(stmt)
+        return res.one_or_none()
+
+    async def insert_storage_flavor(
+        self, session: AsyncSession, user: base_models.APIUser, storage_flavor: models.UnsavedStorageFlavor
+    ) -> models.StorageFlavor:
+        """Insert a new storage flavor into the database."""
+        if user.id is None or not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        sf_orm = schemas.StorageFlavorORM(
+            k8s_storage_class_name=storage_flavor.k8s_storage_class_name,
+            display_name=storage_flavor.display_name,
+            min_size=storage_flavor.min_size_bytes,
+            admin_documentation=storage_flavor.admin_documentation,
+            documentation=storage_flavor.documentation,
+        )
+
+        session.add(sf_orm)
+        await session.flush()
+        return sf_orm.dump()
+
+    async def update_storage_flavor(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        storage_flavor_id: ULID,
+        patch: models.StorageFlavorPatch,
+        etag: str,
+    ) -> models.StorageFlavor:
+        """Update a storage flavor in the database."""
+        sf_orm = await self._get_storage_flavor_or_none_orm(
+            session=session, user=user, storage_flavor_id=storage_flavor_id
+        )
+        if sf_orm is None:
+            raise errors.MissingResourceError(message=f"Storage flavor '{str(storage_flavor_id)}' does not exist.")
+
+        current_etag = sf_orm.dump().etag
+        if current_etag != etag:
+            raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
+        if patch.display_name is not None:
+            sf_orm.display_name = patch.display_name
+        if patch.min_size_bytes is not None:
+            sf_orm.min_size = patch.min_size_bytes
+        if patch.admin_documentation is not None:
+            sf_orm.admin_documentation = patch.admin_documentation
+        if patch.documentation is not None:
+            sf_orm.documentation = patch.documentation
+
+        await session.flush()
+        await session.refresh(sf_orm)
+        return sf_orm.dump()
+
+    async def delete_storage_flavor(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        storage_flavor_id: ULID,
+    ) -> None:
+        """Delete a storage flavor from the database."""
+        sf_orm = await self._get_storage_flavor_or_none_orm(
+            session=session, user=user, storage_flavor_id=storage_flavor_id
+        )
+        if sf_orm is None:
+            return None
+        await session.delete(sf_orm)
+        await session.flush()
+        return None
