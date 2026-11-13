@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
+from ulid import ULID
+
 from renku_data_services import errors
 from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import (
@@ -104,3 +106,17 @@ def validate_project_storage_allow_patch(
     if size and size < ByteSize.from_gibi(1):
         raise errors.ValidationError(message="The maximum size must be at least 1GB")
     return models.ProjectStorageAllowPatch(max_size=size)
+
+
+def validate_unsaved_project_storage_v2(body: apispec.ProjectStoragePostV2) -> models.UnsavedProjectStorageV2:
+    """Validate a new project storage v2."""
+    requested_size = ByteSize.from_gibi(body.requested_size)
+    if requested_size < ByteSize.from_gibi(1):
+        raise errors.ValidationError(message="The requested size must be at least 1GiB.")
+    _validate_mount_path(body.mount_path)
+    return models.UnsavedProjectStorageV2(
+        project_id=ULID.from_str(body.project_id),
+        storage_quota_id=ULID.from_str(body.storage_quota_id),
+        requested_size_bytes=requested_size,
+        mount_path=PurePosixPath(body.mount_path),
+    )

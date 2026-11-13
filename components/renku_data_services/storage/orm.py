@@ -11,6 +11,7 @@ from ulid import ULID
 
 from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
+from renku_data_services.crc.orm import StorageQuotaORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.storage import models
 from renku_data_services.users.orm import UserORM
@@ -104,6 +105,82 @@ class ProjectStorageORM(BaseORM):
             storage_class=self.storage_class,
             size=self.size_limit,
             mount_path=self.mount_path,
+            created_by=self.created_by_id,
+            creation_date=self.creation_date,
+            updated_at=self.updated_at,
+        )
+
+
+class ProjectStorageV2ORM(BaseORM):
+    """ORM model for project storage configuration."""
+
+    __tablename__ = "project_storages_v2"
+
+    id: Mapped[ULID] = mapped_column(
+        "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
+    )
+    """ID of the project storage."""
+
+    project_id: Mapped[ULID] = mapped_column(
+        ForeignKey(ProjectORM.id, ondelete="RESTRICT"), index=True, nullable=False, unique=True
+    )
+    """ID of the parent project.
+
+    The ondelete="RESTRICT" ensures that there are no orphaned PVCs in Kubernetes.
+    """
+
+    storage_quota_id: Mapped[ULID] = mapped_column(
+        ForeignKey(StorageQuotaORM.id, ondelete="RESTRICT"), index=True, nullable=False
+    )
+    """ID of the storage quota used to allocate this project storage.
+
+    The ondelete="RESTRICT" ensures that there are no orphaned PVCs in Kubernetes.
+    """
+
+    requested_size: Mapped[ByteSize] = mapped_column("requested_size", ByteSizeType())
+    """The requested size of this project storage."""
+
+    actual_size: Mapped[ByteSize | None] = mapped_column("actual_size", ByteSizeType(), nullable=True)
+    """The actual size of this project storage.
+
+    The actual size is unknown until the backing Persistent Volume Claim is created in Kubernetes.
+    """
+
+    mount_path: Mapped[PurePosixPath] = mapped_column("target_path", PurePosixPathType())
+    """Mount path of the project storage inside sessions."""
+
+    k8s_pvc_name: Mapped[str | None] = mapped_column("k8s_pvc_name", nullable=True)
+    """Name of the PVC backing this project storage."""
+
+    k8s_pvc_status: Mapped[str | None] = mapped_column("k8s_pvc_status", nullable=True)
+    """Status of the PVC backing this project storage."""
+
+    created_by_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
+    """User ID of the creator of the project storage."""
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def dump(self) -> models.ProjectStorageV2:
+        """Create a project storage model from the ProjectStorageV2ORM."""
+        return models.ProjectStorageV2(
+            id=self.id,
+            project_id=self.project_id,
+            storage_quota_id=self.storage_quota_id,
+            requested_size_bytes=self.requested_size,
+            actual_size_bytes=self.actual_size,
+            mount_path=self.mount_path,
+            k8s_pvc_name=self.k8s_pvc_name,
+            k8s_pvc_status=self.k8s_pvc_status,
             created_by=self.created_by_id,
             creation_date=self.creation_date,
             updated_at=self.updated_at,

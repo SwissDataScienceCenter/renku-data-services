@@ -1,11 +1,13 @@
 """Cloud storage app."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from sanic import Request, empty
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
+from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -27,8 +29,9 @@ from renku_data_services.storage.core import (
     validate_project_storage_allow_post,
     validate_project_storage_patch,
     validate_unsaved_project_storage,
+    validate_unsaved_project_storage_v2,
 )
-from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.db import ProjectStorageRepository, ProjectStorageV2Repository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -366,3 +369,71 @@ class ProjectStorageBP(CustomBlueprint):
             project_ref=pref,
             max_size=int(ps.max_size.to_gibi()),
         )
+
+
+@dataclass(kw_only=True)
+class ProjectStorageV2BP(CustomBlueprint):
+    """Handlers for project storages v2."""
+
+    project_storage_v2_repo: ProjectStorageV2Repository
+    authenticator: base_models.Authenticator
+    session_maker: Callable[..., AsyncSession]
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get all visible project storages.
+
+        The list of storages can be filtered using the query parameters.
+        """
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.ProjectStoragesGetQueryV2)
+        async def _get_all(
+            _: Request, user: base_models.APIUser, query: apispec.ProjectStoragesGetQueryV2
+        ) -> JSONResponse:
+            project_id = ULID.from_str(query.project_id) if query.project_id else None
+            storage_quota_id = ULID.from_str(query.storage_quota_id) if query.storage_quota_id else None
+            async with self.session_maker() as session, session.begin():
+                storages = self.project_storage_v2_repo.get_all_project_storages(
+                    session=session,
+                    user=user,
+                    project_id=project_id,
+                    storage_quota_id=storage_quota_id,
+                )
+                result = [item async for item in storages]
+            return validated_json(apispec.ProjectStoragesV2, result)
+
+        return "/project_storage_v2", ["GET"], _get_all
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Create a project storage."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.ProjectStoragePostV2)
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.ProjectStoragePostV2) -> JSONResponse:
+            new_storage = validate_unsaved_project_storage_v2(body=body)
+            async with self.session_maker() as session, session.begin():
+                storage = await self.project_storage_v2_repo.insert_project_storage(
+                    session=session, user=user, project_storage=new_storage
+                )
+            return validated_json(apispec.ProjectStorageV2, storage, status=201)
+
+        return "/project_storage_v2", ["POST"], _post
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Delete a project storage."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete(
+            _: Request,
+            user: base_models.APIUser,
+            storage_id: ULID,
+        ) -> HTTPResponse:
+            async with self.session_maker() as session, session.begin():
+                await self.project_storage_v2_repo.delete_project_storage(
+                    session=session, user=user, storage_id=storage_id
+                )
+            return HTTPResponse(status=204)
+
+        return "/project_storage_v2/<storage_id:ulid>", ["DELETE"], _delete

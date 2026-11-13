@@ -1,17 +1,19 @@
 """Database access for project storage classes."""
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 
 from sqlalchemy import and_, exists, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession
 from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_api.pagination import PaginationRequest
+from renku_data_services.crc.db import StorageQuotaRepository
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.project import orm as project_schemas
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.storage import models
@@ -450,4 +452,157 @@ class ProjectStorageRepository:
 
         if storage:
             return models.DeletedProjectStorage(project_id=storage.project_id)
+        return None
+
+
+class ProjectStorageV2Repository:
+    """Repository for project storages v2."""
+
+    def __init__(self, storage_quota_repo: StorageQuotaRepository, authz: Authz) -> None:
+        self.storage_quota_repo = storage_quota_repo
+        self.authz = authz
+
+    async def get_all_project_storages(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        project_id: ULID | None = None,
+        storage_quota_id: ULID | None = None,
+    ) -> AsyncIterator[models.ProjectStorageV2]:
+        """Get all visible project storages from the database.
+
+        The result can be filtered with project_id and storage_quota_id.
+        """
+        stream = await self._get_all_project_storages_orm(
+            session=session, user=user, project_id=project_id, storage_quota_id=storage_quota_id
+        )
+        async for storage_orm in stream:
+            yield storage_orm.dump()
+
+    async def _get_all_project_storages_orm(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        project_id: ULID | None = None,
+        storage_quota_id: ULID | None = None,
+    ) -> AsyncScalarResult[schemas.ProjectStorageV2ORM]:
+        project_ids: list[str]
+        if project_id:
+            authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+            project_ids = [str(project_id)] if authorized else []
+        else:
+            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+        stmt = select(schemas.ProjectStorageV2ORM).order_by(schemas.ProjectStorageV2ORM.id.asc())
+        stmt = stmt.where(schemas.ProjectStorageV2ORM.project_id.in_(project_ids))
+        if storage_quota_id:
+            stmt = stmt.where(schemas.ProjectStorageV2ORM.storage_quota_id == storage_quota_id)
+        return await session.stream_scalars(stmt)
+
+    async def _get_project_storage_or_none_orm(
+        self, session: AsyncSession, user: base_models.APIUser, storage_id: ULID
+    ) -> schemas.ProjectStorageV2ORM | None:
+        stmt = select(schemas.ProjectStorageV2ORM).where(schemas.ProjectStorageV2ORM.id == storage_id)
+        res = await session.scalars(stmt)
+        storage_orm = res.one_or_none()
+        if storage_orm is None:
+            return None
+        authorized = await self.authz.has_permission(user, ResourceType.project, storage_orm.project_id, Scope.READ)
+        return storage_orm if authorized else None
+
+    async def insert_project_storage(
+        self, session: AsyncSession, user: base_models.APIUser, project_storage: models.UnsavedProjectStorageV2
+    ) -> models.ProjectStorageV2:
+        """Insert a new project storage into the database."""
+        if user.id is None:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        project_id = project_storage.project_id
+        project_orm = self._get_project_orm_or_none(session=session, user=user, project_id=project_id)
+        if project_orm is None:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.DELETE)
+        if not authorized:
+            raise errors.ForbiddenError(
+                message=f"You do not have the required permissions to add storage to project '{project_id}'."
+            )
+
+        existing_storage_orm = await self._get_existing_project_storage_or_none_orm(
+            session=session, user=user, project_id=project_id
+        )
+        if existing_storage_orm:
+            raise errors.ValidationError(message=f"There is already a project storage for project '{project_id}'.")
+
+        storage_quota = await self.storage_quota_repo.get_storage_quota(
+            session=session, user=user, storage_quota_id=project_storage.storage_quota_id
+        )
+        if project_storage.requested_size_bytes < storage_quota.storage_flavor.min_size_bytes:
+            raise errors.ValidationError(
+                message=f"The requested storage size ({project_storage.requested_size_bytes}) "
+                f"for project '{project_id}' "
+                f"is lower than the minimum size of {storage_quota.storage_flavor.min_size_bytes}."
+            )
+        if project_storage.requested_size_bytes > storage_quota.max_size_bytes:
+            raise errors.ValidationError(
+                message=f"The requested storage size ({project_storage.requested_size_bytes}) "
+                f"for project '{project_id}' "
+                f"is higher than the maximum size of {storage_quota.max_size_bytes}."
+            )
+
+        # TODO: check remaining size from quota
+
+        storage_orm = schemas.ProjectStorageV2ORM(
+            project_id=project_id,
+            storage_quota_id=storage_quota.id,
+            requested_size=project_storage.requested_size_bytes,
+            actual_size=None,
+            mount_path=project_storage.mount_path,
+            k8s_pvc_name=None,
+            k8s_pvc_status=None,
+            created_by_id=user.id,
+        )
+
+        session.add(storage_orm)
+        await session.flush()
+        # await session.refresh(sq_orm)
+        return storage_orm.dump()
+
+    async def _get_project_orm_or_none(
+        self, session: AsyncSession, user: base_models.APIUser, project_id: ULID
+    ) -> project_schemas.ProjectORM | None:
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            return None
+        stmt = select(project_schemas.ProjectORM).where(project_schemas.ProjectORM.id == project_id)
+        res = await session.scalars(stmt)
+        return res.one_or_none()
+
+    async def _get_existing_project_storage_or_none_orm(
+        self, session: AsyncSession, user: base_models.APIUser, project_id: ULID
+    ) -> schemas.ProjectStorageV2ORM | None:
+        stmt = select(schemas.ProjectStorageV2ORM).where(schemas.ProjectStorageV2ORM.project_id == project_id)
+        res = await session.scalars(stmt)
+        return res.one_or_none()
+
+    async def delete_project_storage(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        storage_id: ULID,
+    ) -> None:
+        """Delete a project storage from the database."""
+        storage_orm = await self._get_project_storage_or_none_orm(session=session, user=user, storage_id=storage_id)
+        if storage_orm is None:
+            return None
+        authorized = await self.authz.has_permission(user, ResourceType.project, storage_orm.project_id, Scope.DELETE)
+        if not authorized:
+            raise errors.ForbiddenError(
+                message="You do not have the required permissions to remove storage "
+                f"from project '{storage_orm.project_id}'."
+            )
+        # TODO: handle removal in k8s
+        await session.delete(storage_orm)
+        await session.flush()
         return None

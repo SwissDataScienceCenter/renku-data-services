@@ -12,7 +12,7 @@ from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import (
     ProjectPath,
 )
-from renku_data_services.utils.etag import compute_etag_from_fields
+from renku_data_services.utils.etag import compute_etag_from_fields, compute_etag_from_timestamp
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -149,3 +149,44 @@ class ProjectRef:
     def from_slug_str(cls, slug: str) -> ProjectRef:
         """Create a project ref from a path."""
         return ProjectRef(ref=ProjectPath.parse(slug))
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedProjectStorageV2:
+    """Unsaved project storage."""
+
+    project_id: ULID
+    storage_quota_id: ULID
+    requested_size_bytes: ByteSize
+    mount_path: PurePosixPath
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageV2(UnsavedProjectStorageV2):
+    """Project storage.
+
+    Project storage represents self-provisioned storage backed by a Persistent Volume Claim in Kubernetes.
+    """
+
+    id: ULID
+    actual_size_bytes: ByteSize | None
+    k8s_pvc_name: str | None
+    k8s_pvc_status: str | None
+    created_by: str
+    creation_date: datetime
+    updated_at: datetime
+
+    @property
+    def requested_size(self) -> int:
+        """Requested size (GiB)."""
+        return int(self.requested_size_bytes.to_gibi())
+
+    @property
+    def actual_size(self) -> int | None:
+        """Actual size (GiB)."""
+        return int(self.actual_size_bytes.to_gibi()) if self.actual_size_bytes is not None else None
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project storage instance."""
+        return compute_etag_from_timestamp(self.updated_at)
