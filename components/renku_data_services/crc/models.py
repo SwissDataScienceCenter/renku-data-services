@@ -385,8 +385,8 @@ class SshSettings:
     target_port: int
     username: str
     public_host_key: str
-    public_auth_key: str
     session_secret_name: str
+    auth_key_secret_name: str
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -688,3 +688,11 @@ class ResourcePoolMemberIdentifier:
         if resource_type == ResourceType.project:
             return cls(member_id=str(resource_id), member_type=MemberType.PROJECT)
         return cls(member_id=str(resource_id), member_type=MemberType.USER)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SshKeyPair:
+    """A keypair to use wit ssh."""
+
+    public_part: str
+    private_part: str
