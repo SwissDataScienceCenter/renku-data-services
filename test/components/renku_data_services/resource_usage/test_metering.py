@@ -2,7 +2,7 @@
 
 import json
 import re
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -19,7 +19,14 @@ from renku_data_services.resource_usage.metering import (
     NonMeteredEntitlementValue,
     OpenMeterClient,
 )
-from renku_data_services.resource_usage.model import Credit, ResourceClassCostWithPool
+from renku_data_services.resource_usage.model import (
+    Credit,
+    CreditBalance,
+    CreditUsage,
+    ResourceClassCostWithPool,
+    next_week_start,
+    week_start,
+)
 from test.components.renku_data_services.resource_usage.test_db import create_resource_class
 
 ENDPOINT_URL = "http://openmeter.test"
@@ -154,8 +161,8 @@ def client(fake_openmeter: FakeOpenMeter) -> OpenMeterClient:
 async def test_query_compute_usage_nonexisting_user(client: OpenMeterClient) -> None:
     """Test querying compute usage for a non-existing user."""
     result = await client.get_usage(resource_pool_id=1, user_id=NON_EXISTING_USER_ID, start_date=None, end_date=None)
-    assert isinstance(result, Credit)
-    assert result == Credit.zero()
+    assert isinstance(result, CreditUsage)
+    assert result.value == Credit.zero()
 
 
 async def test_query_compute_usage_existing_user(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
@@ -183,8 +190,32 @@ async def test_query_compute_usage_with_dates(client: OpenMeterClient, fake_open
     """Test that the date range is forwarded to OpenMeter."""
     await client.get_usage(resource_pool_id=1, user_id=None, start_date=PERIOD_FROM, end_date=PERIOD_TO)
     body = fake_openmeter.meter_query_bodies()[-1]
-    assert body["from"] == PERIOD_FROM.isoformat()
-    assert body["to"] == PERIOD_TO.isoformat()
+    assert datetime.fromisoformat(body["from"]) == PERIOD_FROM
+    assert datetime.fromisoformat(body["to"]) == PERIOD_TO
+
+
+@pytest.mark.parametrize(
+    "current_time,expected_start",
+    [
+        # Monday at midnight is the start of its own week
+        (datetime(2026, 11, 16, 0, 0, tzinfo=UTC), datetime(2026, 11, 16, tzinfo=UTC)),
+        # Wednesday afternoon: the window starts on Monday at midnight, not at the current time of day
+        (datetime(2026, 11, 18, 15, 30, tzinfo=UTC), datetime(2026, 11, 16, tzinfo=UTC)),
+        # Sunday just before midnight still belongs to the same week
+        (datetime(2026, 11, 22, 23, 59, tzinfo=UTC), datetime(2026, 11, 16, tzinfo=UTC)),
+        # Times in other timezones are converted to UTC first: this is Sunday 23:00 UTC
+        (datetime.fromisoformat("2026-11-23T01:00:00+02:00"), datetime(2026, 11, 16, tzinfo=UTC)),
+    ],
+)
+async def test_get_usage_of_week(
+    client: OpenMeterClient, fake_openmeter: FakeOpenMeter, current_time: datetime, expected_start: datetime
+) -> None:
+    """The weekly usage is queried from Monday 00:00 UTC up to the current time, including today."""
+    result = await client.get_usage_of_week(resource_pool_id=1, user_id=EXISTING_USER_ID, current_time=current_time)
+    assert result.value == Credit.from_int(12)
+    body = fake_openmeter.meter_query_bodies()[-1]
+    assert datetime.fromisoformat(body["from"]) == expected_start
+    assert datetime.fromisoformat(body["to"]) == current_time
 
 
 async def test_query_compute_usage_error(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
@@ -224,16 +255,35 @@ async def test_query_customer_entitlement_value_error(client: OpenMeterClient, f
         await client.query_customer_entitlement_value(EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY)
 
 
-async def test_get_resource_pool_total_limit(client: OpenMeterClient) -> None:
-    """Test getting the total limit of a resource pool with an entitlement."""
-    result = await client.get_resource_pool_balance(resource_pool_id=1)
-    assert result == Credit.from_int(100)
+async def test_get_balance(client: OpenMeterClient) -> None:
+    """The balance of a pool is the entitlement balance and it expires at the end of the usage period."""
+    result = await client.get_balance(resource_pool_id=1)
+    assert result == CreditBalance(Credit.from_int(80), PERIOD_TO)
 
 
-async def test_get_resource_pool_total_limit_no_entitlement(client: OpenMeterClient) -> None:
-    """Test getting the total limit of a resource pool without an entitlement."""
-    result = await client.get_resource_pool_balance(resource_pool_id=2)
-    assert result.is_unlimited() is True
+async def test_get_limit(client: OpenMeterClient) -> None:
+    """The limit of a pool for the current period is balance + usage - overage."""
+    result = await client.get_limit(resource_pool_id=1)
+    assert result == CreditUsage(Credit.from_int(100), start=PERIOD_FROM, end=PERIOD_TO)
+
+
+async def test_get_limit_with_overage(client: OpenMeterClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Usage that is not covered by grants is not part of the limit."""
+    monkeypatch.setitem(
+        ENTITLEMENT_VALUES,
+        (EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY),
+        {"hasAccess": False, "balance": 0.0, "usage": 120.0, "overage": 20.0, "totalAvailableGrantAmount": 100.0},
+    )
+    result = await client.get_limit(resource_pool_id=1)
+    assert result is not None
+    assert result.value == Credit.from_int(100)
+    assert await client.get_balance(resource_pool_id=1) == CreditBalance(Credit.zero(), PERIOD_TO)
+
+
+async def test_get_balance_and_limit_no_entitlement(client: OpenMeterClient) -> None:
+    """A pool without an entitlement has no balance and no limit."""
+    assert await client.get_balance(resource_pool_id=2) is None
+    assert await client.get_limit(resource_pool_id=2) is None
 
 
 @pytest.mark.parametrize("body", [{"hasAccess": True}, {"hasAccess": False, "config": '{"limit": 5}'}])
@@ -246,7 +296,8 @@ async def test_non_metered_entitlement_value(
     assert isinstance(result, NonMeteredEntitlementValue)
     assert result.hasAccess is body["hasAccess"]
     assert result.config == body.get("config")
-    assert (await client.get_resource_pool_balance(resource_pool_id=1)).is_unlimited() is True
+    assert await client.get_balance(resource_pool_id=1) is None
+    assert await client.get_limit(resource_pool_id=1) is None
 
 
 async def test_partial_metered_entitlement_value_falls_back_to_non_metered(
@@ -258,11 +309,11 @@ async def test_partial_metered_entitlement_value_falls_back_to_non_metered(
     assert isinstance(result, NonMeteredEntitlementValue)
 
 
-async def test_get_resource_pool_total_limit_error(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
+async def test_get_balance_error(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
     """Test that an unexpected status from OpenMeter raises an error."""
     fake_openmeter.fail_with_status = 500
     with pytest.raises(errors.ThirdPartyAPIError):
-        await client.get_resource_pool_balance(resource_pool_id=1)
+        await client.get_balance(resource_pool_id=1)
 
 
 @pytest.mark.parametrize("exception", [httpx.ConnectError("boom"), httpx.ReadTimeout("boom")])
@@ -295,8 +346,7 @@ async def test_empty_entitlement_body(client: OpenMeterClient, fake_openmeter: F
     fake_openmeter.override_response = httpx.Response(200, json={})
     assert await client.query_customer_entitlement(EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY) is None
     assert await client.query_customer_entitlement_value(EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY) is None
-    result = await client.get_resource_pool_balance(resource_pool_id=1)
-    assert result.is_unlimited() is True
+    assert await client.get_balance(resource_pool_id=1) is None
 
 
 @pytest.fixture
@@ -307,31 +357,29 @@ async def service(app_manager_instance: DependencyManager, client: OpenMeterClie
     return ResourceUsageService(repo=repo, metering_client=client)
 
 
-async def test_service_get_current_usage_with_limits(service: ResourceUsageService) -> None:
-    """Test getting the current usage and limits of a resource pool."""
-    result = await service.get_current_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID)
+async def test_service_get_usage_with_limits(service: ResourceUsageService) -> None:
+    """Test getting the usage and limits of a resource pool for a timeframe."""
+    result = await service.get_usage_with_limits(
+        resource_pool_id=1, user_id=EXISTING_USER_ID, start_date=PERIOD_FROM, end_date=PERIOD_TO
+    )
     assert result is not None
     assert result.total_usage.value == 20
     assert result.user_usage is not None
     assert result.user_usage.value == 12
-    assert result.pool_limits.total_limit == Credit.from_int(100)
-    assert result.pool_limits.user_limit.is_unlimited() is True
+    assert result.pool_limits.total_limit == CreditBalance(Credit.from_int(100), PERIOD_TO)
+    assert result.pool_limits.user_limit.value.is_unlimited() is True
+    assert result.pool_limits.user_limit.expiry == next_week_start()
     assert result.start_date == PERIOD_FROM
     assert result.end_date == PERIOD_TO
 
 
-@pytest.mark.parametrize(
-    "failure",
-    [{"fail_with_status": 500}, {"fail_with_exception": httpx.ConnectError("boom")}],
-    ids=["status", "transport"],
-)
-async def test_service_get_current_usage_with_limits_error(
-    service: ResourceUsageService, fake_openmeter: FakeOpenMeter, failure: dict[str, Any]
-) -> None:
-    """Test that OpenMeter failures disable the quota check instead of raising."""
-    for attr, value in failure.items():
-        setattr(fake_openmeter, attr, value)
-    assert await service.get_current_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID) is None
+async def test_service_get_user_quota(service: ResourceUsageService) -> None:
+    """The user quota includes the usage of the current week next to the remaining quota."""
+    await service._repo.set_user_limits(1, Credit.from_int(50))
+    result = await service.get_user_quota(resource_pool_id=1, user_id=EXISTING_USER_ID)
+    assert result is not None
+    assert result.weekly_usage == Credit.from_int(12)
+    assert result.remaining == CreditBalance(Credit.from_int(38), next_week_start())
 
 
 async def test_service_get_usage_with_limits_error(
@@ -345,68 +393,124 @@ async def test_service_get_usage_with_limits_error(
         )
 
 
-async def test_service_calculate_usage_hours_with_no_cost(service: ResourceUsageService) -> None:
-    """Test that calculate_usage_hours returns (None, None) when resource_class_cost is None."""
-    usage = await service.get_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID)
-    remaining_quota = service.get_remaining_quota(usage)
-    remaining_hours, total_hours = service.calculate_usage_hours(
-        resource_class_cost=None,
-        usage=usage,
-        remaining_quota=remaining_quota,
-    )
-    assert remaining_hours is None
-    assert total_hours is None
+async def test_service_get_limits_pool_without_user_limit(service: ResourceUsageService) -> None:
+    """An existing pool without a user limit row has an unlimited user limit instead of being missing."""
+    limits = await service.get_limits(resource_pool_id=1)
+    assert limits is not None
+    assert limits.user_limit.value.is_unlimited() is True
+    assert await service.get_limits(resource_pool_id=999) is None
 
 
-async def test_service_calculate_usage_hours_with_zero_cost(service: ResourceUsageService) -> None:
-    """Test that calculate_usage_hours returns (None, None) when resource_class_cost.cost.value is 0."""
-    usage = await service.get_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID)
-    remaining_quota = service.get_remaining_quota(usage)
-    resource_class_cost = ResourceClassCostWithPool(
-        resource_pool_id=1,
-        resource_class_id=1,
-        cost=Credit.from_int(0),
-    )
-    remaining_hours, total_hours = service.calculate_usage_hours(
-        resource_class_cost=resource_class_cost,
-        usage=usage,
-        remaining_quota=remaining_quota,
-    )
-    assert remaining_hours is None
-    assert total_hours is None
+@pytest.mark.parametrize(
+    "user_limit,has_entitlement,expected_credits,resets",
+    [
+        # Pool balance (80) is the binding constraint, it resets at the end of the entitlement period
+        (None, True, 80, "period"),
+        (200, True, 80, "period"),
+        # Weekly user limit is the binding constraint: 50 - 12 used this week, resets next Monday
+        (50, True, 38, "week"),
+        (50, False, 38, "week"),
+        # Usage above the weekly limit is clamped to zero
+        (10, True, 0, "week"),
+        # Zero means no allowance at all
+        (0, True, 0, "week"),
+        # No limits anywhere: there is no quota to report
+        (None, False, None, None),
+    ],
+    ids=["pool-only", "pool-binding", "user-binding", "user-only", "user-exhausted", "user-zero", "unlimited"],
+)
+async def test_service_get_remaining_quota(
+    service: ResourceUsageService,
+    monkeypatch: pytest.MonkeyPatch,
+    user_limit: int | None,
+    has_entitlement: bool,
+    expected_credits: int | None,
+    resets: str | None,
+) -> None:
+    """The remaining quota is the smaller of the pool balance and what is left of the weekly user limit."""
+    key = (EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY)
+    if not has_entitlement:
+        monkeypatch.delitem(ENTITLEMENTS, key)
+        monkeypatch.delitem(ENTITLEMENT_VALUES, key)
+    if user_limit is not None:
+        await service._repo.set_user_limits(1, Credit.from_int(user_limit))
+
+    result = await service.get_remaining_quota(resource_pool_id=1, user_id=EXISTING_USER_ID)
+
+    if expected_credits is None:
+        assert result is None
+    else:
+        expected_expiry = PERIOD_TO if resets == "period" else next_week_start()
+        assert result == CreditBalance(Credit.from_int(expected_credits), expected_expiry)
 
 
-async def test_service_calculate_usage_hours_with_usage(service: ResourceUsageService) -> None:
-    """Test that calculate_usage_hours returns correct values when resource_class_cost is valid."""
-    usage = await service.get_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID)
-    remaining_quota = service.get_remaining_quota(usage)
-    resource_class_cost = ResourceClassCostWithPool(
-        resource_pool_id=1,
-        resource_class_id=1,
-        cost=Credit.from_int(10),
-    )
-    remaining_hours, total_hours = service.calculate_usage_hours(
-        resource_class_cost=resource_class_cost,
-        usage=usage,
-        remaining_quota=remaining_quota,
-    )
-    assert remaining_hours == 8.0  # (100 - 20) / 10
-    assert total_hours == 10.0  # 100 / 10
+async def test_service_get_remaining_quota_error(service: ResourceUsageService, fake_openmeter: FakeOpenMeter) -> None:
+    """OpenMeter failures are raised so that callers can decide how to handle them."""
+    fake_openmeter.fail_with_status = 500
+    with pytest.raises(errors.ThirdPartyAPIError):
+        await service.get_remaining_quota(resource_pool_id=1, user_id=EXISTING_USER_ID)
 
 
-async def test_service_calculate_usage_hours_with_negative_remaining_quota(service: ResourceUsageService) -> None:
-    """Test that calculate_usage_hours returns 0 remaining hours when remaining_quota is negative."""
-    usage = await service.get_usage_with_limits(resource_pool_id=1, user_id=EXISTING_USER_ID)
-    remaining_quota = -10.0  # Simulate negative remaining quota
-    resource_class_cost = ResourceClassCostWithPool(
-        resource_pool_id=1,
-        resource_class_id=1,
-        cost=Credit.from_int(10),
+RESET_AT = datetime(2026, 11, 23, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "cost,remaining_quota,expected",
+    [
+        (None, CreditBalance(Credit.from_int(80), RESET_AT), (None, None)),
+        (0, CreditBalance(Credit.from_int(80), RESET_AT), (None, None)),
+        (10, None, (None, None)),
+        (10, CreditBalance(Credit.unlimited(), None), (None, None)),
+        (10, CreditBalance(Credit.from_int(80), RESET_AT), (8.0, RESET_AT)),
+        (30, CreditBalance(Credit.from_int(80), RESET_AT), (80 / 30, RESET_AT)),
+        (10, CreditBalance(Credit.zero(), RESET_AT), (0.0, RESET_AT)),
+        (10, CreditBalance(Credit.from_int(80), None), (8.0, None)),
+    ],
+    ids=["no-cost", "zero-cost", "no-quota", "unlimited", "remaining", "fractional", "exhausted", "never-resets"],
+)
+def test_calculate_usage_hours(
+    cost: int | None,
+    remaining_quota: CreditBalance | None,
+    expected: tuple[float, datetime | None] | tuple[None, None],
+) -> None:
+    """Remaining hours are the remaining credits divided by the hourly cost of the class."""
+    resource_class_cost = (
+        ResourceClassCostWithPool(resource_pool_id=1, resource_class_id=1, cost=Credit.from_int(cost))
+        if cost is not None
+        else None
     )
-    remaining_hours, total_hours = service.calculate_usage_hours(
-        resource_class_cost=resource_class_cost,
-        usage=usage,
-        remaining_quota=remaining_quota,
-    )
-    assert remaining_hours == 0.0
-    assert total_hours == 10.0  # 100 / 10
+    assert ResourceUsageService.calculate_usage_hours(resource_class_cost, remaining_quota) == expected
+
+
+@pytest.mark.parametrize(
+    "left,right,expected",
+    [
+        (Credit.from_int(10), Credit.from_int(3), Credit.from_int(7)),
+        (Credit.from_int(3), Credit.from_int(10), Credit.zero()),
+        (Credit.unlimited(), Credit.from_int(10), Credit.unlimited()),
+        (Credit.from_int(10), Credit.unlimited(), Credit.zero()),
+    ],
+)
+def test_credit_subtraction(left: Credit, right: Credit, expected: Credit) -> None:
+    """Subtracting credits never goes below zero and unlimited stays unlimited."""
+    assert left - right == expected
+
+
+def test_credit_ordering_and_hash() -> None:
+    """Unlimited is larger than any finite amount and all unlimited values are interchangeable."""
+    assert Credit.from_int(5) < Credit.unlimited()
+    assert not Credit.unlimited() < Credit.from_int(5)
+    assert Credit.zero() <= Credit.zero()
+    assert min(Credit.unlimited(), Credit.from_int(5)) == Credit.from_int(5)
+    assert Credit(-1) == Credit(-5)
+    assert hash(Credit(-1)) == hash(Credit(-5))
+    assert Credit.from_int(10) * 0.5 == Credit.from_int(5)
+    assert Credit.unlimited() * 2 == Credit.unlimited()
+
+
+def test_week_boundaries() -> None:
+    """Weeks start on Monday 00:00 UTC."""
+    wednesday = datetime(2026, 11, 18, 15, 30, tzinfo=UTC)
+    assert week_start(wednesday) == datetime(2026, 11, 16, tzinfo=UTC)
+    assert next_week_start(wednesday) == datetime(2026, 11, 23, tzinfo=UTC)
+    assert next_week_start(wednesday) - week_start(wednesday) == timedelta(days=7)

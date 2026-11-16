@@ -3,7 +3,8 @@
 API schemas taken from https://openmeter.io/docs/api/open-source.
 """
 
-from datetime import UTC, datetime, timedelta, tzinfo
+import asyncio
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Annotated, Any, Literal, Protocol
 
@@ -13,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, TypeAdapt
 from renku_data_services.app_config import logging
 from renku_data_services.errors import errors
 from renku_data_services.resource_usage.config import OpenMeterConfig
-from renku_data_services.resource_usage.model import Credit, CreditBalance, CreditUsage
+from renku_data_services.resource_usage.model import Credit, CreditBalance, CreditUsage, week_start
 
 logger = logging.getLogger(__file__)
 
@@ -356,8 +357,10 @@ class OpenMeterClient(ResourceUsageMetering):
         self, resource_pool_id: int
     ) -> tuple[MeteredEntitlement, MeteredEntitlementValue] | tuple[None, None]:
         customer_key = self.get_resource_pool_key(resource_pool_id)
-        entitlement = await self.query_customer_entitlement(customer_key, self._feature_key)
-        entitlement_value = await self.query_customer_entitlement_value(customer_key, self._feature_key)
+        entitlement, entitlement_value = await asyncio.gather(
+            self.query_customer_entitlement(customer_key, self._feature_key),
+            self.query_customer_entitlement_value(customer_key, self._feature_key),
+        )
         if not isinstance(entitlement, MeteredEntitlement):
             logger.warning(
                 f"Entitlement for customer={customer_key}, feature_key={self._feature_key} is not metered, "
@@ -441,6 +444,4 @@ class OpenMeterClient(ResourceUsageMetering):
         For the current calendar week - from 00:00 UTC time.
         """
         now = current_time.astimezone(UTC) if current_time is not None else datetime.now(UTC)
-        start = now.replace(microsecond=0, second=0, minute=0, hour=0) - timedelta(days=now.weekday())
-        usage = await self.get_usage(resource_pool_id, user_id, start, now)
-        return usage
+        return await self.get_usage(resource_pool_id, user_id, week_start(now), now)

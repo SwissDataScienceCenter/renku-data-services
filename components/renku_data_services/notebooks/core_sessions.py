@@ -18,7 +18,6 @@ from kubernetes.client import (
     V1ObjectMeta,
     V1Secret,
 )
-from renku_data_services.resource_usage.model import Credit
 from sanic import Request
 from toml import dumps
 from ulid import ULID
@@ -124,6 +123,7 @@ from renku_data_services.project.models import SessionSecret
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.resource_usage.model import Credit
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import BuildParameters, Environment, FrontendVariant, SessionLauncher
@@ -897,8 +897,19 @@ def get_remote_env(
 
 
 async def _check_quota(resource_usage_service: ResourceUsageService, resource_pool_id: int, user_id: str) -> None:
-    """Raise a ValidationError if the user has exhausted their quota, do nothing otherwise."""
-    remaining_quota = await resource_usage_service.get_remaining_quota(resource_pool_id, user_id)
+    """Raise a ValidationError if the user has exhausted their quota, do nothing otherwise.
+
+    NOTE: If the metering service cannot be reached the quota is not enforced, so that an
+    outage does not prevent users from launching or resuming sessions.
+    """
+    try:
+        remaining_quota = await resource_usage_service.get_remaining_quota(resource_pool_id, user_id)
+    except errors.ThirdPartyAPIError as e:
+        logger.error(
+            f"Could not check the quota of user {user_id} in resource pool {resource_pool_id}, "
+            f"allowing the session to start: {e}"
+        )
+        return
     if remaining_quota is None:
         return
 
