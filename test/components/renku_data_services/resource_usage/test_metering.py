@@ -226,13 +226,13 @@ async def test_query_customer_entitlement_value_error(client: OpenMeterClient, f
 
 async def test_get_resource_pool_total_limit(client: OpenMeterClient) -> None:
     """Test getting the total limit of a resource pool with an entitlement."""
-    result = await client.get_resource_pool_total_limit(resource_pool_id=1)
+    result = await client.get_resource_pool_balance(resource_pool_id=1)
     assert result == Credit.from_int(100)
 
 
 async def test_get_resource_pool_total_limit_no_entitlement(client: OpenMeterClient) -> None:
     """Test getting the total limit of a resource pool without an entitlement."""
-    result = await client.get_resource_pool_total_limit(resource_pool_id=2)
+    result = await client.get_resource_pool_balance(resource_pool_id=2)
     assert result.is_unlimited() is True
 
 
@@ -246,7 +246,7 @@ async def test_non_metered_entitlement_value(
     assert isinstance(result, NonMeteredEntitlementValue)
     assert result.hasAccess is body["hasAccess"]
     assert result.config == body.get("config")
-    assert (await client.get_resource_pool_total_limit(resource_pool_id=1)).is_unlimited() is True
+    assert (await client.get_resource_pool_balance(resource_pool_id=1)).is_unlimited() is True
 
 
 async def test_partial_metered_entitlement_value_falls_back_to_non_metered(
@@ -262,7 +262,7 @@ async def test_get_resource_pool_total_limit_error(client: OpenMeterClient, fake
     """Test that an unexpected status from OpenMeter raises an error."""
     fake_openmeter.fail_with_status = 500
     with pytest.raises(errors.ThirdPartyAPIError):
-        await client.get_resource_pool_total_limit(resource_pool_id=1)
+        await client.get_resource_pool_balance(resource_pool_id=1)
 
 
 @pytest.mark.parametrize("exception", [httpx.ConnectError("boom"), httpx.ReadTimeout("boom")])
@@ -290,22 +290,12 @@ async def test_query_compute_usage_invalid_response(client: OpenMeterClient, fak
         await client.get_usage(resource_pool_id=1, user_id=None)
 
 
-async def test_get_current_period_invalid_entitlement(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
-    """Test that an entitlement without a current usage period raises an error."""
-    entitlement = dict(ENTITLEMENTS[(EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY)])
-    del entitlement["currentUsagePeriod"]
-    fake_openmeter.override_response = httpx.Response(200, json=entitlement)
-    with pytest.raises(errors.ThirdPartyAPIError):
-        await client.get_current_period(resource_pool_id=1)
-    assert fake_openmeter.meter_query_bodies() == []
-
-
 async def test_empty_entitlement_body(client: OpenMeterClient, fake_openmeter: FakeOpenMeter) -> None:
     """Test that an empty body from the entitlement endpoints is treated as no entitlement."""
     fake_openmeter.override_response = httpx.Response(200, json={})
     assert await client.query_customer_entitlement(EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY) is None
     assert await client.query_customer_entitlement_value(EXISTING_CUSTOMER_KEY, EXISTING_FEATURE_KEY) is None
-    result = await client.get_resource_pool_total_limit(resource_pool_id=1)
+    result = await client.get_resource_pool_balance(resource_pool_id=1)
     assert result.is_unlimited() is True
 
 

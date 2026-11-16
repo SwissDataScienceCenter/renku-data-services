@@ -60,7 +60,9 @@ class ResourceUsageBP(CustomBlueprint):
                 return validated_json(
                     apispec.ResourcePoolLimits,
                     apispec.ResourcePoolLimits(
-                        total_limit=result.total_limit.value, user_limit=result.user_limit.value, pool_id=result.pool_id
+                        total_limit=result.total_limit.value.value,
+                        user_limit=result.user_limit.value.value,
+                        pool_id=result.pool_id,
                     ),
                 )
             else:
@@ -159,8 +161,8 @@ class ResourceUsageBP(CustomBlueprint):
                     total_usage=result.total_usage.value,
                     pool_limits=apispec.ResourcePoolLimits(
                         pool_id=result.pool_limits.pool_id,
-                        total_limit=result.pool_limits.total_limit.value,
-                        user_limit=result.pool_limits.user_limit.value,
+                        total_limit=result.pool_limits.total_limit.value.value,
+                        user_limit=result.pool_limits.user_limit.value.value,
                     ),
                     user_usage=result.user_usage.value if result.user_usage is not None else None,
                     start_date=result.start_date,

@@ -260,7 +260,10 @@ components:
       properties:
         user_limit:
           type: integer
-          description: "A negative value means unlimited usage, zero means no allowance for this pool and a positive value indicates the number of available credits."
+          description: |
+            Credit limit per week, per user.
+            A negative value means unlimited usage, zero means no allowance for this pool
+            and a positive value indicates the number of available credits.
       required:
         - user_limit
     ResourceClassCostPut:
@@ -297,10 +300,28 @@ components:
           type: integer
         total_limit:
           type: integer
-          description: "A negative value means unlimited usage, zero means no allowance for this pool and a positive value indicates the number of available credits."
+          description: |
+            The total limit in credits for all users.
+            A negative value means unlimited usage, zero means no allowance for this pool
+            and a positive value indicates the number of available credits.
+        total_limit_expiry:
+          type: string
+          format: date-time
+          description: |
+            The date when the total limit expires and potentially resets.
+            If undefined the limit does not reset or there is simply no limit.
         user_limit:
           type: integer
-          description: "A negative value means unlimited usage, zero means no allowance for this pool and a positive value indicates the number of available credits."
+          description: |
+            Credit limit per week, per user.
+            A negative value means unlimited usage, zero means no allowance for this pool
+            and a positive value indicates the number of available credits."
+        user_limit_expiry:
+          type: string
+          format: date-time
+          description: |
+            The date when the user limit expires and potentially resets.
+            If undefined the limit does not reset or there is simply no limit.
       required:
         - pool_id
         - total_limit
@@ -336,7 +357,7 @@ components:
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses

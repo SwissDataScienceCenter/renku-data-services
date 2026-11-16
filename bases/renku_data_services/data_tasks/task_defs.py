@@ -505,12 +505,11 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
 
             session_name, user_id, resource_pool_id, resource_class_id = metadata
 
-            usage = await dm.resource_usage_service.get_current_usage_with_limits(resource_pool_id, user_id)
-            remaining_quota = dm.resource_usage_service.get_remaining_quota(usage)
+            remaining_quota = await dm.resource_usage_service.get_remaining_quota(resource_pool_id, user_id)
             if remaining_quota is None:
                 continue
 
-            if remaining_quota <= 0:
+            if remaining_quota.value.value == 0:
                 message = f"Your session {session_name} in resource pool {resource_pool_id} has exhausted its quota"
                 log_message = (
                     f"Session {session_name} for user {user_id} has exhausted its quota in resource pool "
@@ -538,7 +537,7 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
                 await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=hibernation_alert)
                 logger.info(log_message)
 
-            elif remaining_quota <= dm.config.session_quota_alert_remaining_threshold:
+            elif remaining_quota.value <= dm.config.session_quota_alert_remaining_threshold:
                 alert = UnsavedAlert(
                     user_id=user_id,
                     event_type="session_quota_low",
