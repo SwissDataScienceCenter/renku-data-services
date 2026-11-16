@@ -160,7 +160,12 @@ class ProjectStorageV2BP(CustomBlueprint):
             patch = validate_project_storage_v2_patch(body=body)
             async with self.session_maker() as session, session.begin():
                 storage = await self.project_storage_v2_repo.update_project_storage(
-                    session=session, user=user, storage_id=storage_id, patch=patch, etag=etag
+                    k8s_client=self.k8s_client,
+                    session=session,
+                    user=user,
+                    storage_id=storage_id,
+                    patch=patch,
+                    etag=etag,
                 )
             return validated_json(apispec.ProjectStorage, storage)
 
