@@ -160,7 +160,7 @@ class ResourceRequestsLimitsORM(BaseORM):
     """Resource pool id."""
 
     user_limit: Mapped[Credit] = mapped_column("user_limit", CreditType(), nullable=False)
-    """Usage limit per user."""
+    """Usage limit per week, per user."""
 
 
 class ResourceClassCostORM(BaseORM):

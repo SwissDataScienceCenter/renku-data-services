@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from math import ceil
 from typing import Any, Final, Optional, Protocol, Self
@@ -207,7 +208,7 @@ class ResourceClass(ResourcesCompareMixin):
     tolerations: list[str] = field(default_factory=list)
     quota: str | None = None
     usage_hours_remaining: float | None = None
-    usage_hours_total: float | None = None
+    usage_hours_reset_at: datetime | None = None
     quota_enforced: bool = False
     preemptible: bool = False
     remote: FirecrestClassRemote | None = None

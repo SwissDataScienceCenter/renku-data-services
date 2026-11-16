@@ -8,22 +8,26 @@ from itertools import islice
 from typing import Any
 
 import sqlalchemy.sql as sa
-from sqlalchemy import bindparam
+from sqlalchemy import bindparam, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.app_config import logging
+from renku_data_services.crc.orm import ResourcePoolORM
 from renku_data_services.resource_usage.constants import ACTIVE_PHASES
 from renku_data_services.resource_usage.model import (
     Credit,
+    CreditBalance,
     ResourceClassCostWithPool,
     ResourcesRequest,
     ResourceUsage,
     ResourceUsageQuery,
+    next_week_start,
 )
 from renku_data_services.resource_usage.orm import (
     ResourceClassCost,
     ResourceClassCostORM,
+    ResourceRequestsLimitsORM,
     ResourceRequestsLogORM,
 )
 from renku_data_services.utils.sqlalchemy import CreditType, get_postgres_error_code
@@ -187,22 +191,25 @@ class ResourceRequestsRepo:
         async with self.session_maker() as session, session.begin():
             await session.execute(stmt, {"pool": pool})
 
-    async def find_user_limits(self, pool: int) -> Credit | None:
-        """Finds the user limits of the given resource pool.
+    async def find_user_limits(self, pool: int) -> CreditBalance | None:
+        """Finds the weekly per-user limit of the given resource pool.
 
         If the resource pool doesn't exist, None is returned. If the pool exists, but has no
-        limits defined, the limits returned are set to -1.
+        limits defined, the limit returned is unlimited. The expiry is the start of the next
+        calendar week (Monday 00:00 UTC), when the weekly limit resets.
         """
-        stmt = sa.text("""
-        select rp.id as pool_id, coalesce(l.user_limit, -1) as user_limit
-        from "resource_pools"."resource_pools" rp
-        left join "resource_pools"."resource_requests_limits" l on l.resource_pool_id = rp.id
-        where rp.id = :pool_id
-        """)
+        stmt = (
+            select(ResourcePoolORM.id, ResourceRequestsLimitsORM.user_limit)
+            .outerjoin(ResourceRequestsLimitsORM, ResourceRequestsLimitsORM.id == ResourcePoolORM.id)
+            .where(ResourcePoolORM.id == pool)
+        )
         async with self.session_maker() as session:
-            result = await session.execute(stmt, {"pool_id": pool})
-            data = result.one_or_none()
-            return Credit.from_int(data.user_limit) if data is not None else None
+            result = await session.execute(stmt)
+            row = result.one_or_none()
+        if row is None:
+            return None
+        user_limit = row.user_limit if row.user_limit is not None else Credit.unlimited()
+        return CreditBalance(user_limit, next_week_start())
 
     async def find_usage(self, rq: ResourceUsageQuery, chunk_size: int = 500) -> AsyncGenerator[ResourceUsage]:
         """Find resource usage."""

@@ -18,7 +18,7 @@ from renku_data_services.resource_usage.core import (
     validate_resource_class_costs_put,
 )
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
-from renku_data_services.resource_usage.model import Credit
+from renku_data_services.resource_usage.model import Credit, ResourcePoolLimits
 
 
 @dataclass(kw_only=True)
@@ -59,9 +59,7 @@ class ResourceUsageBP(CustomBlueprint):
             if result:
                 return validated_json(
                     apispec.ResourcePoolLimits,
-                    apispec.ResourcePoolLimits(
-                        total_limit=result.total_limit.value, user_limit=result.user_limit.value, pool_id=result.pool_id
-                    ),
+                    _pool_limits_to_apispec(result),
                 )
             else:
                 raise errors.MissingResourceError()
@@ -157,11 +155,7 @@ class ResourceUsageBP(CustomBlueprint):
             if result:
                 output = apispec.ResourcePoolUsageLimits(
                     total_usage=result.total_usage.value,
-                    pool_limits=apispec.ResourcePoolLimits(
-                        pool_id=result.pool_limits.pool_id,
-                        total_limit=result.pool_limits.total_limit.value,
-                        user_limit=result.pool_limits.user_limit.value,
-                    ),
+                    pool_limits=_pool_limits_to_apispec(result.pool_limits),
                     user_usage=result.user_usage.value if result.user_usage is not None else None,
                     start_date=result.start_date,
                     end_date=result.end_date,
@@ -176,3 +170,13 @@ class ResourceUsageBP(CustomBlueprint):
                 )
 
         return "/resource_pools/<resource_pool_id>/usage", ["GET"], _get
+
+
+def _pool_limits_to_apispec(limits: ResourcePoolLimits) -> apispec.ResourcePoolLimits:
+    return apispec.ResourcePoolLimits(
+        pool_id=limits.pool_id,
+        total_limit=limits.total_limit.value.value,
+        total_limit_expiry=limits.total_limit.expiry,
+        user_limit=limits.user_limit.value.value,
+        user_limit_expiry=limits.user_limit.expiry,
+    )

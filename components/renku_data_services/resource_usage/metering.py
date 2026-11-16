@@ -1,15 +1,20 @@
-"""OpenMeter event emission for session resource usage metering."""
+"""OpenMeter event emission for session resource usage metering.
 
-from datetime import datetime
-from typing import Any, Optional, Protocol
+API schemas taken from https://openmeter.io/docs/api/open-source.
+"""
+
+import asyncio
+from datetime import UTC, datetime, timedelta
+from enum import StrEnum
+from typing import Annotated, Any, Literal, Protocol
 
 import httpx
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, TypeAdapter, ValidationError
 
 from renku_data_services.app_config import logging
 from renku_data_services.errors import errors
 from renku_data_services.resource_usage.config import OpenMeterConfig
-from renku_data_services.resource_usage.model import Credit
+from renku_data_services.resource_usage.model import Credit, CreditBalance, CreditUsage, week_start
 
 logger = logging.getLogger(__file__)
 
@@ -23,57 +28,231 @@ class ResourceUsageMetering(Protocol):
         user_id: str | None,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
-    ) -> Credit:
-        """Get compute usage for a resource pool or a specific user from the metering service."""
+    ) -> CreditUsage:
+        """Get compute usage for a resource pool or a specific user from the metering service.
+
+        If user_id is None, the total usage for the resource pool is returned.
+        Otherwise, the usage for the specified user within the resource pool is returned.
+        If the start_date is unset it is for all time.
+        If the end date is unset it is up to the present.
+        """
         ...
 
-    async def get_current_period(self, resource_pool_id: int) -> tuple[datetime | None, datetime | None]:
-        """Get the start and end dates of the current usage period defined in the metering service."""
+    async def get_usage_of_week(
+        self, resource_pool_id: int, user_id: str | None, current_time: datetime | None = None
+    ) -> CreditUsage:
+        """Get compute usage for a resource pool or a specific user.
+
+        For the current calendar week starting on Monday from 00:00 UTC time.
+        If you specify current_time it is for the calendar week that includes that time.
+        """
         ...
 
-    async def get_resource_pool_total_limit(self, resource_pool_id: int) -> Credit:
-        """Get the total usage limit for a resource pool from the metering service."""
+    async def get_balance(self, resource_pool_id: int) -> CreditBalance | None:
+        """Get the remaining credit balance for a resource pool.
+
+        If None, then there is no metering or entitlement.
+        """
         ...
+
+    async def get_limit(self, resource_pool_id: int) -> CreditUsage | None:
+        """Get the total credit limit for a resource pool and the period it applies to.
+
+        If None, then it means there is no limit.
+        """
+        ...
+
+
+class WindowSize(StrEnum):
+    """Query aggrgegation window size."""
+
+    MINUTE = "MINUTE"
+    HOUR = "HOUR"
+    DAY = "DAY"
+    MONTH = "MONTH"
+
+
+class MeterQueryRow(BaseModel):
+    """A row in the result of a meter query."""
+
+    subject: str | None
+    """The subject the value is aggregated over. If not specified, the value is aggregated over all subjects."""
+    groupBy: dict[str, str | None]
+    """The group by values the value is aggregated over."""
+    value: float
+    """The aggregated value."""
+    windowStart: datetime
+    """The start of the window the value is aggregated over"""
+    windowEnd: datetime
+    """The end of the window the value is aggregated over"""
+    customerId: str | None = None
+    """The customer ID the value is aggregated over."""
 
 
 class MeterQueryResponse(BaseModel):
     """Response from OpenMeter meter query."""
 
-    data: list[dict[str, Any]]
+    data: list[MeterQueryRow]
+    from_: datetime | None = Field(alias="from", default=None)
+    """The start of the period the usage is queried from.
+    If not specified, the usage is queried from the beginning of time."""
+    to: datetime | None = None
+    """The end of the period the usage is queried to.
+    If not specified, the usage is queried up to the current time."""
+    windowSize: WindowSize | None = None
+    """The window size that the usage is aggregated.
+    If not specified, the usage is aggregated over the entire period."""
 
 
-class UsagePeriod(BaseModel):
+class MeterQueryRequest(BaseModel):
+    """The request body for a meter query."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    advancedMeterGroupByFilters: dict[str, Any] | None = None
+    """Optional advanced meter group by filters. You can use this to filter for values of the meter groupBy fields."""
+    clientId: str | None = None
+    """Client ID Useful to track progress of a query."""
+    filterCustomerId: list[str] | None = None
+    """Filtering by multiple customers."""
+    filterGroupBy: dict[str, list[str]] | None = None
+    """Simple filter for group bys with exact match."""
+    from_: datetime | None = Field(alias="from", default=None)
+    """Start date-time in RFC 3339 format. Inclusive.
+    If not specified it is from the beginning of time.
+    If the eventFrom is set on the meter, then that value is used over beginning of time."""
+    to: datetime | None = None
+    """End date-time in RFC 3339 format. Exclusive. If not specified it is up until the present."""
+    groupBy: list[str] | None = None
+    """If not specified a single aggregate will be returned for each subject and time window.
+    "subject" is a reserved group by value."""
+    subject: list[str] | None = None
+    """Filtering by multiple subjects."""
+    windowSize: WindowSize | None = None
+    """If not specified, a single usage aggregate will be returned
+    for the entirety of the specified period for each subject and group."""
+    windowTimeZone: str | None = None
+    """The value is the name of the time zone as defined in the
+    IANA Time Zone Database (http://www.iana.org/time-zones).
+    If not specified, the UTC timezone will be used."""
+
+
+class CurrentUsagePeriod(BaseModel):
     """Usage period for OpenMeter entitlement."""
 
     from_: datetime = Field(alias="from")
     to: datetime
 
 
-class EntitlementQueryResponse(BaseModel):
-    """Response from OpenMeter entitlement query."""
+class EntitlementInterval(StrEnum):
+    """Human readable period for OpenMeter entitlements."""
 
-    activeFrom: str
-    currentUsagePeriod: UsagePeriod
+    DAY = "DAY"
+    WEEK = "WEEK"
+    MONTH = "MONTH"
+    YEAR = "YEAR"
+
+
+class UsagePeriod(BaseModel):
+    """The period for the entitlement."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    anchor: datetime
+    """Indicates the date and time of the period when it rolls over.
+    For example, interval: MONTH with anchor: 2026-01-15T00:00:00Z
+    resets usage on the 15th of every month at 00:00 UTC."""
+    interval: EntitlementInterval | timedelta
+    """Note that the timedelta values do not round trip deserialize/serialize.
+    Eg: 'P3M' -> timedelta(days=90) -> 'P90D'."""
+
+
+class MeteredEntitlement(BaseModel):
+    """Metered variant of the OpenMeter entitlement query response."""
+
+    activeFrom: datetime
+    """The cadence start of the resource."""
+    currentUsagePeriod: CurrentUsagePeriod
     customerId: str
+    """The identifier unique to the customer."""
     customerKey: str
+    """The identifier key unique to the customer."""
     featureId: str
+    """The feature the subject is entitled to use."""
     featureKey: str
+    """The feature the subject is entitled to use."""
     isSoftLimit: bool
-    measureUsageFrom: str
-    type: str
-    usagePeriod: dict[str, str]
+    """If softLimit=true the subject can use the feature even if the entitlement is exhausted,
+    hasAccess will always be true."""
+    measureUsageFrom: datetime
+    """The time from which usage is measured. If not specified on creation, defaults to entitlement creation time."""
+    type: Literal["metered"]
+    """The type of entitlement."""
+    usagePeriod: UsagePeriod
+    """The usage period of the entitlement."""
 
 
-class EntitlementValueQueryResponse(BaseModel):
-    """Response from OpenMeter entitlement value query."""
+def _entitlement_type(v: Any) -> str:
+    """Route metered entitlements to the model and everything else (static, boolean) to a plain dict."""
+    entitlement_type = v.get("type") if isinstance(v, dict) else getattr(v, "type", None)
+    return "metered" if entitlement_type == "metered" else "other"
 
-    hasAccess: Optional[bool] = None
+
+EntitlementQueryResponse = Annotated[
+    Annotated[MeteredEntitlement, Tag("metered")] | Annotated[dict[str, Any], Tag("other")],
+    Discriminator(_entitlement_type),
+]
+"""Response from OpenMeter entitlement query (EntitlementV2).
+
+Only the metered variant is modelled; static and boolean entitlements are returned as raw dicts.
+"""
+
+_entitlement_query_response_adapter: TypeAdapter[EntitlementQueryResponse] = TypeAdapter(EntitlementQueryResponse)
+
+
+class MeteredEntitlementValue(BaseModel):
+    """Value of a metered OpenMeter entitlement."""
+
+    hasAccess: bool
+    """Whether the subject has access to the feature. Shared accross all entitlement types."""
     balance: float
+    """Metered entitlements are built around a balance calculation where feature usage is deducted
+    from the issued grants. Balance represents the remaining balance of the entitlement,
+    it's value never turns negative."""
     usage: float
+    """The total feature usage in the current period."""
     overage: float
+    """Overage represents the usage that wasn't covered by grants,
+    e.g. if the subject had a total feature usage of 100 in the period but they were only granted 80,
+    there would be 20 overage."""
     totalAvailableGrantAmount: float
-    config: Optional[str] = None
-    grantBalances: Optional[dict[str, float]] = None
+    """The summed amount of all grant active at query time PLUS the used amount of since inactive grants."""
+    grantBalances: dict[str, float] | None = None
+    """The closing balance of each active grant at query time.
+    The key is the grant ID and the value is the remaining balance."""
+
+
+class NonMeteredEntitlementValue(BaseModel):
+    """Value of a boolean or static OpenMeter entitlement."""
+
+    hasAccess: bool
+    """Whether the subject has access to the feature. Shared accross all entitlement types."""
+    config: str | None = None
+    """Only available for static entitlements. The JSON parsable config of the entitlement."""
+
+
+EntitlementValueQueryResponse = Annotated[
+    MeteredEntitlementValue | NonMeteredEntitlementValue, Field(union_mode="left_to_right")
+]
+"""Response from OpenMeter entitlement value query (EntitlementValueV2).
+
+The response has no type field. It is parsed as metered if it has all the metered fields,
+otherwise as non-metered (boolean, static, or anything else carrying only hasAccess).
+"""
+
+_entitlement_value_query_response_adapter: TypeAdapter[EntitlementValueQueryResponse] = TypeAdapter(
+    EntitlementValueQueryResponse
+)
 
 
 def _validate[T: BaseModel](model: type[T], body: Any) -> T:
@@ -83,7 +262,7 @@ def _validate[T: BaseModel](model: type[T], body: Any) -> T:
         raise errors.ThirdPartyAPIError(message=f"Unexpected OpenMeter response for {model.__name__}.") from ex
 
 
-class OpenMeterClient:
+class OpenMeterClient(ResourceUsageMetering):
     """Client for interacting with the OpenMeter API.
 
     NOTE: This client assumes that all resource pools are represented as OpenMeter customers,
@@ -142,7 +321,12 @@ class OpenMeterClient:
                 f"No customer entitlement found for customer={customer_id_or_key}, feature_key={feature_key}"
             )
             return None
-        return _validate(EntitlementQueryResponse, res)
+        try:
+            return _entitlement_query_response_adapter.validate_python(res)
+        except ValidationError as ex:
+            raise errors.ThirdPartyAPIError(
+                message="Unexpected OpenMeter response for EntitlementQueryResponse."
+            ) from ex
 
     async def query_customer_entitlement_value(
         self, customer_id_or_key: str, feature_key: str
@@ -158,20 +342,63 @@ class OpenMeterClient:
                 f"No customer entitlement value found for customer={customer_id_or_key}, feature_key={feature_key}"
             )
             return None
-        return _validate(EntitlementValueQueryResponse, res)
+        try:
+            return _entitlement_value_query_response_adapter.validate_python(res)
+        except ValidationError as ex:
+            raise errors.ThirdPartyAPIError(
+                message="Unexpected OpenMeter response for EntitlementValueQueryResponse."
+            ) from ex
 
     def get_resource_pool_key(self, resource_pool_id: int) -> str:
         """Get the OpenMeter customer / subject key for a resource pool."""
         return f"{self._customer_key_prefix}{resource_pool_id}"
 
-    async def get_resource_pool_total_limit(self, resource_pool_id: int) -> Credit:
-        """Get the total usage limit for a resource pool from OpenMeter."""
+    async def _get_entitlement(
+        self, resource_pool_id: int
+    ) -> tuple[MeteredEntitlement, MeteredEntitlementValue] | tuple[None, None]:
         customer_key = self.get_resource_pool_key(resource_pool_id)
-        entitlement_value = await self.query_customer_entitlement_value(customer_key, self._feature_key)
-        if entitlement_value is None:
-            return Credit.unlimited()
+        entitlement, entitlement_value = await asyncio.gather(
+            self.query_customer_entitlement(customer_key, self._feature_key),
+            self.query_customer_entitlement_value(customer_key, self._feature_key),
+        )
+        if not isinstance(entitlement, MeteredEntitlement):
+            logger.warning(
+                f"Entitlement for customer={customer_key}, feature_key={self._feature_key} is not metered, "
+                "or is undefined, treating the resource pool limit as unlimited"
+            )
+            return None, None
+        if not isinstance(entitlement_value, MeteredEntitlementValue):
+            logger.warning(
+                f"Entitlement for customer={customer_key}, feature_key={self._feature_key} is not metered, "
+                "or is undefined, treating the resource pool limit as unlimited"
+            )
+            return None, None
+        return entitlement, entitlement_value
 
-        return Credit.from_float(entitlement_value.totalAvailableGrantAmount)
+    async def get_balance(self, resource_pool_id: int) -> CreditBalance | None:
+        """Get the remaining credit balance for a resource pool from OpenMeter.
+
+        If there is no quota or there is not measurement then None is returned.
+        """
+        entitlement, entitlement_value = await self._get_entitlement(resource_pool_id)
+        if not entitlement or not entitlement_value:
+            return None
+        return CreditBalance(Credit.from_float(entitlement_value.balance), entitlement.currentUsagePeriod.to)
+
+    async def get_limit(self, resource_pool_id: int) -> CreditUsage | None:
+        """Get the limit for the resource pool.
+
+        If there is no limit, None is returned.
+        """
+        entitlement, entitlement_value = await self._get_entitlement(resource_pool_id)
+        if not entitlement or not entitlement_value:
+            return None
+        # Openmeter does not return the "total limit for the period", so we have to calculate it
+        return CreditUsage(
+            Credit.from_float(entitlement_value.balance + entitlement_value.usage - entitlement_value.overage),
+            start=entitlement.currentUsagePeriod.from_,
+            end=entitlement.currentUsagePeriod.to,
+        )
 
     async def get_usage(
         self,
@@ -179,33 +406,42 @@ class OpenMeterClient:
         user_id: str | None,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
-    ) -> Credit:
+    ) -> CreditUsage:
         """Get compute usage for a resource pool or a specific user from OpenMeter.
 
         If user_id is None, the total usage for the resource pool is returned.
         Otherwise, the usage for the specified user within the resource pool is returned.
+        If the start_date is unset it is for all time.
+        If the end date is unset it is up to the present.
         """
         subject_key = self.get_resource_pool_key(resource_pool_id)
-        body: dict[str, Any] = {"subject": [subject_key]}
+        body = MeterQueryRequest(subject=[subject_key])
         if start_date is not None:
-            body["from"] = start_date.isoformat()
+            body.from_ = start_date
         if end_date is not None:
-            body["to"] = end_date.isoformat()
+            body.to = end_date
         if user_id is not None:
-            user_body = {"advancedMeterGroupByFilters": {"user_id": {"$eq": user_id}}, "groupBy": ["user_id"]}
-            body.update(user_body)
-        res = await self.query_meter(self._meter_key, body)
-        return Credit.from_float(res.data[0].get("value", 0)) if res.data else Credit.zero()
+            body.advancedMeterGroupByFilters = {"user_id": {"$eq": user_id}}
+            body.groupBy = ["user_id"]
+        res = await self.query_meter(self._meter_key, body.model_dump(mode="json", by_alias=True, exclude_none=True))
+        if not res.data:
+            return CreditUsage(
+                Credit.zero(),
+                start=start_date or datetime.min.replace(tzinfo=UTC),
+                end=end_date or datetime.now(tz=UTC),
+            )
+        return CreditUsage(
+            Credit.from_float(res.data[0].value),
+            start=res.from_ or datetime.min.replace(tzinfo=UTC),
+            end=res.to or datetime.now(tz=UTC),
+        )
 
-    async def get_current_period(self, resource_pool_id: int) -> tuple[datetime | None, datetime | None]:
-        """Get the start and end dates of the current usage period defined in OpenMeter's entitlement.
+    async def get_usage_of_week(
+        self, resource_pool_id: int, user_id: str | None, current_time: datetime | None = None
+    ) -> CreditUsage:
+        """Get compute usage for a resource pool or a specific user from OpenMeter.
 
-        Current period is defined by the entitlement's currentUsagePeriod.
-        If no entitlement is found, None is returned for both dates.
+        For the current calendar week - from 00:00 UTC time.
         """
-        customer_key = self.get_resource_pool_key(resource_pool_id)
-        entitlement = await self.query_customer_entitlement(customer_key, self._feature_key)
-        if entitlement is None:
-            return None, None
-        else:
-            return entitlement.currentUsagePeriod.from_, entitlement.currentUsagePeriod.to
+        now = current_time.astimezone(UTC) if current_time is not None else datetime.now(UTC)
+        return await self.get_usage(resource_pool_id, user_id, week_start(now), now)
