@@ -28,6 +28,7 @@ from renku_data_services.storage.core import (
     validate_project_storage_allow_patch,
     validate_project_storage_allow_post,
     validate_project_storage_patch,
+    validate_project_storage_v2_patch,
     validate_unsaved_project_storage,
     validate_unsaved_project_storage_v2,
 )
@@ -419,6 +420,29 @@ class ProjectStorageV2BP(CustomBlueprint):
             return validated_json(apispec.ProjectStorageV2, storage, status=201)
 
         return "/project_storage_v2", ["POST"], _post
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Update a project storage."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @if_match_required
+        @validate(json=apispec.ProjectStoragePatchV2)
+        async def _patch(
+            _: Request,
+            user: base_models.APIUser,
+            storage_id: ULID,
+            body: apispec.ProjectStoragePatchV2,
+            etag: str,
+        ) -> HTTPResponse:
+            patch = validate_project_storage_v2_patch(body=body)
+            async with self.session_maker() as session, session.begin():
+                storage = await self.project_storage_v2_repo.update_project_storage(
+                    session=session, user=user, storage_id=storage_id, patch=patch, etag=etag
+                )
+            return validated_json(apispec.ProjectStorageV2, storage)
+
+        return "/project_storage_v2/<storage_id:ulid>", ["PATCH"], _patch
 
     def delete(self) -> BlueprintFactoryResponse:
         """Delete a project storage."""
