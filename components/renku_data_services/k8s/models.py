@@ -551,3 +551,87 @@ class K8sPersistentVolumeClaim(K8sObject):
     def get_storage_class(self) -> str:
         """Return the storage class name from the manifest."""
         return str(self.manifest.spec.storageClassName)
+
+
+class K8sPersistentVolumeClaimV2(K8sObject):
+    """Represents a k8s persistent volume claim (v2)."""
+
+    def __init__(
+        self,
+        name: str,
+        namespace: str,
+        cluster: ClusterId,
+        manifest: Box,
+    ) -> None:
+        super().__init__(
+            name=name,
+            namespace=namespace,
+            cluster=cluster,
+            gvk=GVK(version="v1", kind="PersistentVolumeClaim"),
+            manifest=manifest,
+        )
+
+    @classmethod
+    def new(
+        cls,
+        name: str,
+        namespace: str,
+        cluster: ClusterId,
+        access_modes: list[str],
+        storage_class_name: str,
+        size: ByteSize,
+        labels: dict[str, str],
+        annotations: dict[str, str],
+    ) -> Self:
+        """Create a new perstistent volume claim."""
+        return cls(
+            name=name,
+            namespace=namespace,
+            cluster=cluster,
+            manifest=Box(
+                {
+                    "metadata": {
+                        "namespace": namespace,
+                        "name": name,
+                        "labels": labels,
+                        "annotations": annotations,
+                    },
+                    "spec": {
+                        "accessModes": access_modes,
+                        "storageClassName": storage_class_name,
+                        "resources": {"requests": {"storage": f"{size.to_gibi()}Gi"}},
+                    },
+                }
+            ),
+        )
+
+    @classmethod
+    def meta(cls, name: str, namespace: str, cluster_id: ClusterId) -> K8sObjectMeta:
+        """Return a K8sObjectMeta describing the named pvc."""
+        return K8sObjectMeta(
+            name=name,
+            namespace=namespace,
+            cluster=cluster_id,
+            gvk=GVK(version="v1", kind="PersistentVolumeClaim"),
+        )
+
+    @classmethod
+    def from_k8s_object(cls, k8s_object: K8sObject) -> Self:
+        """Convert a k8s object to a K8sPersistentVolumeClaimV2 object."""
+        assert k8s_object.namespace is not None
+        return cls(
+            name=k8s_object.name,
+            namespace=k8s_object.namespace,
+            cluster=k8s_object.cluster,
+            manifest=k8s_object.manifest,
+        )
+
+    def get_status(self) -> str:
+        """Return the status from the manifest."""
+        return str(self.manifest.status.phase)
+
+    def get_actual_size(self) -> str | None:
+        """Return the actual size of the PVC from the manifest."""
+        capacity: dict[str, Any] = self.manifest.capacity
+        storage = capacity.get("storage")
+        return str(storage) if storage else None

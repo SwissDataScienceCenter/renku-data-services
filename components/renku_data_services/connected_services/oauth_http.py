@@ -138,7 +138,6 @@ class ConnectionLock:
         self._session_maker = session_maker
         self._id = id
 
-    # TODO: Use this or similar?
     @asynccontextmanager
     async def with_locked(self) -> AsyncGenerator[OAuth2ConnectionORM]:
         """Lock the connection for update."""
