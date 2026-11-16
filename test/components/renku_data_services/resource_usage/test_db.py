@@ -13,6 +13,7 @@ from renku_data_services.resource_usage.model import (
     DataSize,
     ResourceClassCost,
     ResourceUsageQuery,
+    next_week_start,
 )
 from test.components.renku_data_services.resource_usage.helper import assert_view_records, make_resources_request
 
@@ -67,14 +68,22 @@ async def test_resource_requests_limits(app_manager_instance: DependencyManager)
 
     (pool_id, _) = await create_resource_class(app_manager_instance)
 
+    # An existing pool without limits has an unlimited user limit
+    user_limit = await repo.find_user_limits(pool_id)
+    assert user_limit is not None
+    assert user_limit.value == Credit.unlimited()
+
     await repo.set_user_limits(pool_id, Credit.from_int(25))
     user_limit = await repo.find_user_limits(pool_id)
     assert user_limit is not None
-    assert user_limit == Credit.from_int(25)
+    assert user_limit.value == Credit.from_int(25)
+    # The weekly user limit resets at the start of next week
+    assert user_limit.expiry == next_week_start()
 
     await repo.delete_user_limits(pool_id)
     user_limit = await repo.find_user_limits(pool_id)
-    assert user_limit == Credit.unlimited()
+    assert user_limit is not None
+    assert user_limit.value == Credit.unlimited()
 
     user_limit = await repo.find_user_limits(-1)
     assert user_limit is None

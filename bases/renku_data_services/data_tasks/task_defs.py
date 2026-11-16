@@ -543,7 +543,9 @@ async def _check_session_quota_and_send_alerts(dm: DependencyManager) -> None:
                     event_type="session_quota_low",
                     session_name=session_name,
                     title="Session quota running low",
-                    message=f"Only {remaining_quota} units of your quota remain in resource pool {resource_pool_id}.",
+                    message=(
+                        f"Only {remaining_quota.value} units of your quota remain in resource pool {resource_pool_id}."
+                    ),
                 )
                 await dm.notifications_repo.create_or_update_alert(user=admin_user, alert=alert)
                 logger.info(f"Created quota alert for user {user_id}, session {session_name}")

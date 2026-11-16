@@ -17,7 +17,7 @@ from sqlalchemy import (
     String,
     text,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
 
 from renku_data_services.crc.orm import ResourceClassORM, ResourcePoolORM
@@ -161,8 +161,6 @@ class ResourceRequestsLimitsORM(BaseORM):
 
     user_limit: Mapped[Credit] = mapped_column("user_limit", CreditType(), nullable=False)
     """Usage limit per week, per user."""
-
-    resource_pool: Mapped[ResourcePoolORM] = relationship()
 
 
 class ResourceClassCostORM(BaseORM):

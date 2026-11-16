@@ -315,7 +315,7 @@ components:
           description: |
             Credit limit per week, per user.
             A negative value means unlimited usage, zero means no allowance for this pool
-            and a positive value indicates the number of available credits."
+            and a positive value indicates the number of available credits.
         user_limit_expiry:
           type: string
           format: date-time
