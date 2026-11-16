@@ -529,3 +529,5 @@ BLOCKED_OPTIONS: Final[dict[str, set[str]]] = dict(
     for key, config in STORAGE_CONFIG.items()
     if config.allowed and config.options
 )
+
+PROJECT_STORAGE_V2_PVC_PREFIX: Final[str] = "ps"

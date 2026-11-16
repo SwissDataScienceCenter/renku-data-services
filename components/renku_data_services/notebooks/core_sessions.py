@@ -232,6 +232,11 @@ async def get_project_storage(
     )
 
 
+async def get_project_storage_v2() -> SessionExtraResources:
+    """Return SessionExtras corresponding to the project storage v2 if it exists."""
+    return SessionExtraResources()
+
+
 async def get_auth_secret_authenticated(
     nb_config: NotebooksConfig,
     user: AuthenticatedAPIUser,
@@ -1165,6 +1170,7 @@ async def start_session(
     #     )
     # )
     # TODO: project storage v2
+    session_extras = session_extras.concat(await get_project_storage_v2())
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings
