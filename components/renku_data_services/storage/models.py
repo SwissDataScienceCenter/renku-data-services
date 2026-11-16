@@ -190,3 +190,11 @@ class ProjectStorageV2(UnsavedProjectStorageV2):
     def etag(self) -> str:
         """Entity tag value for this project storage instance."""
         return compute_etag_from_timestamp(self.updated_at)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageV2Patch:
+    """Model for changes requested on a project storage."""
+
+    requested_size_bytes: ByteSize | None
+    mount_path: PurePosixPath | None

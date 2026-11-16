@@ -586,6 +586,41 @@ class ProjectStorageV2Repository:
         res = await session.scalars(stmt)
         return res.one_or_none()
 
+    async def update_project_storage(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        storage_id: ULID,
+        patch: models.ProjectStorageV2Patch,
+        etag: str,
+    ) -> models.ProjectStorageV2:
+        """Update a project storage in the database."""
+        storage_orm = await self._get_project_storage_or_none_orm(session=session, user=user, storage_id=storage_id)
+        if storage_orm is None:
+            raise errors.MissingResourceError(
+                message=f"Project storage '{str(storage_id)}' does not exist or you do not have access to it."
+            )
+        authorized = await self.authz.has_permission(user, ResourceType.project, storage_orm.project_id, Scope.DELETE)
+        if not authorized:
+            raise errors.ForbiddenError(
+                message="You do not have the required permissions to update storage "
+                f"from project '{storage_orm.project_id}'."
+            )
+
+        current_etag = storage_orm.dump().etag
+        if current_etag != etag:
+            raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
+        # TODO: handle updating in K8s
+        if patch.requested_size_bytes is not None:
+            storage_orm.requested_size = patch.requested_size_bytes
+        if patch.mount_path is not None:
+            storage_orm.mount_path = patch.mount_path
+
+        await session.flush()
+        await session.refresh(storage_orm)
+        return storage_orm.dump()
+
     async def delete_project_storage(
         self,
         session: AsyncSession,

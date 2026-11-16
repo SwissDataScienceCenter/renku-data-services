@@ -120,3 +120,16 @@ def validate_unsaved_project_storage_v2(body: apispec.ProjectStoragePostV2) -> m
         requested_size_bytes=requested_size,
         mount_path=PurePosixPath(body.mount_path),
     )
+
+
+def validate_project_storage_v2_patch(body: apispec.ProjectStoragePatchV2) -> models.ProjectStorageV2Patch:
+    """Validate a patch of a project storage."""
+    requested_size = ByteSize.from_gibi(body.requested_size) if body.requested_size is not None else None
+    if requested_size is not None and requested_size < ByteSize.from_gibi(1):
+        raise errors.ValidationError(message="The requested size must be at least 1GiB.")
+    if body.mount_path:
+        _validate_mount_path(body.mount_path)
+    return models.ProjectStorageV2Patch(
+        requested_size_bytes=requested_size,
+        mount_path=PurePosixPath(body.mount_path) if body.mount_path else None,
+    )
