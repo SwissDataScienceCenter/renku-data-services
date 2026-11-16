@@ -18,6 +18,7 @@ from kubernetes.client import (
     V1ObjectMeta,
     V1Secret,
 )
+from renku_data_services.resource_usage.model import Credit
 from sanic import Request
 from toml import dumps
 from ulid import ULID
@@ -897,12 +898,11 @@ def get_remote_env(
 
 async def _check_quota(resource_usage_service: ResourceUsageService, resource_pool_id: int, user_id: str) -> None:
     """Raise a ValidationError if the user has exhausted their quota, do nothing otherwise."""
-    usage = await resource_usage_service.get_current_usage_with_limits(resource_pool_id, user_id)
-    remaining_quota = resource_usage_service.get_remaining_quota(usage)
+    remaining_quota = await resource_usage_service.get_remaining_quota(resource_pool_id, user_id)
     if remaining_quota is None:
         return
 
-    if remaining_quota <= 0:
+    if remaining_quota.value <= Credit.zero():
         raise errors.ValidationError(
             message="Cannot start the session because your quota in the selected resource pool is exhausted."
         )

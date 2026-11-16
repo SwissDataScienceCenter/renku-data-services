@@ -15,6 +15,8 @@ from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.resource_usage.metering import ResourceUsageMetering
 from renku_data_services.resource_usage.model import (
     Credit,
+    CreditBalance,
+    CreditUsage,
     ResourceClassCost,
     ResourceClassCostWithPool,
     ResourceDataFacade,
@@ -186,14 +188,18 @@ class ResourceUsageService:
             # This means the resource pool does not exist
             return None
 
+        total_limit: CreditUsage | None
         if self._metering_client is None:
-            total_limit = Credit.unlimited()
+            total_limit = CreditUsage(Credit.unlimited(), datetime.min, datetime.max)
         else:
-            total_limit = await self._metering_client.get_resource_pool_total_limit(resource_pool_id)
+            total_limit = await self._metering_client.get_limit(resource_pool_id)
+
+        if not total_limit:
+            total_limit = CreditUsage(Credit.unlimited(), datetime.min, datetime.max)
 
         return ResourcePoolLimits(
             pool_id=resource_pool_id,
-            total_limit=total_limit,
+            total_limit=CreditBalance(total_limit.value, total_limit.end),
             user_limit=user_limit,
         )
 
@@ -206,11 +212,14 @@ class ResourceUsageService:
         if self._metering_client is None:
             return None
 
+        now = datetime.now(UTC)
+        now = now.replace(microsecond=0, second=0, minute=0, hour=0)
+        start = now - timedelta(days=now.weekday())
         try:
-            start_date, end_date = await self._metering_client.get_current_period(resource_pool_id)
-            return await self.get_usage_with_limits(resource_pool_id, user_id, start_date, end_date)
+            result = await self.get_usage_with_limits(resource_pool_id, user_id, start, start + timedelta(days=7))
+            return result
         except errors.ThirdPartyAPIError as e:
-            logger.error(f"Error querying current compute usage with limits: {e}")
+            logger.error(f"Error querying current compute usage with limits {e}")
             return None
 
     async def get_usage_with_limits(
@@ -224,71 +233,47 @@ class ResourceUsageService:
         if self._metering_client is None:
             return None
 
-        if user_id is None:
-            user_usage = None
-            total_usage, limits = await asyncio.gather(
-                self._metering_client.get_usage(resource_pool_id, None, start_date, end_date),
-                self.get_limits(resource_pool_id),
-            )
-        else:
-            total_usage, user_usage, limits = await asyncio.gather(
-                self._metering_client.get_usage(resource_pool_id, None, start_date, end_date),
-                self._metering_client.get_usage(resource_pool_id, user_id, start_date, end_date),
-                self.get_limits(resource_pool_id),
-            )
+        user_usage = None
+        if user_id is not None:
+            user_usage = await self._metering_client.get_usage(resource_pool_id, user_id, start_date, end_date)
+        total_usage = await self._metering_client.get_usage(resource_pool_id, None, start_date, end_date)
+        limits = await self.get_limits(resource_pool_id)
+
         if limits is None:
             return None
 
         return ResourcePoolUsageLimits(
-            total_usage=total_usage,
-            user_usage=user_usage,
+            total_usage=total_usage.value,
+            user_usage=user_usage.value if user_usage else None,
             pool_limits=limits,
             start_date=start_date,
             end_date=end_date,
         )
 
-    @staticmethod
-    def get_remaining_quota(usage: ResourcePoolUsageLimits | None) -> float | None:
+    async def get_remaining_quota(self, resource_pool_id: int, user_id: str) -> CreditBalance | None:
         """Compute the remaining quota based on the usage and limits."""
-        if usage is None:
+        if not self._metering_client:
             return None
-
-        user_limit = usage.pool_limits.user_limit
-        total_limit = usage.pool_limits.total_limit
-        if user_limit.is_unlimited() or usage.user_usage is None:
-            remaining_user_quota = float("inf")
-        else:
-            remaining_user_quota = user_limit.value - usage.user_usage.value
-        if total_limit.is_unlimited():
-            remaining_total_quota = float("inf")
-        else:
-            remaining_total_quota = total_limit.value - usage.total_usage.value
-
-        if remaining_user_quota == float("inf") and remaining_total_quota == float("inf"):
-            return None
-
-        return min(remaining_user_quota, remaining_total_quota)
+        meter_balance = await self._metering_client.get_balance(resource_pool_id) or CreditBalance(
+            Credit.unlimited(), expiry=datetime.max
+        )
+        weekly_usage = await self._metering_client.get_usage_of_week(resource_pool_id, user_id)
+        weekly_limit = await self._repo.find_user_limits(resource_pool_id) or CreditBalance(
+            Credit.unlimited(), weekly_usage.end
+        )
+        balance_weekly = weekly_limit.value - weekly_usage.value
+        if balance_weekly < meter_balance.value:
+            return CreditBalance(balance_weekly, weekly_limit.expiry)
+        return meter_balance
 
     @staticmethod
     def calculate_usage_hours(
         resource_class_cost: ResourceClassCostWithPool | None,
-        usage: ResourcePoolUsageLimits | None,
-        remaining_quota: float | None,
-    ) -> tuple[float | None, float | None]:
-        """Return remaining and total hours for a resource class, or (None, None) if no limits are set."""
-        if not resource_class_cost or resource_class_cost.cost.value == 0 or usage is None or remaining_quota is None:
+        remaining_quota: CreditBalance | None,
+    ) -> tuple[float, datetime] | tuple[None, None]:
+        """Return remaining hours for a resource class, and when they reset, if no quota is set return None, None."""
+        if not resource_class_cost or resource_class_cost.cost.value == 0 or remaining_quota is None:
             return None, None
 
-        limits = usage.pool_limits
-        # NOTE: Calculate quota based on the minimum of user and total limits.
-        total_quota = limits.user_limit.__min__(limits.total_limit)
-        if total_quota.is_unlimited():
-            return None, None
-
-        total_hours = total_quota.value / resource_class_cost.cost.value
-
-        if remaining_quota <= 0:
-            return 0.0, total_hours
-
-        remaining_hours = remaining_quota / resource_class_cost.cost.value
-        return remaining_hours, total_hours
+        remaining_hours = remaining_quota.value.value / resource_class_cost.cost.value
+        return remaining_hours, remaining_quota.expiry
