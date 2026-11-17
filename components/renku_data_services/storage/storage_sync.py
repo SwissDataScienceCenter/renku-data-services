@@ -47,41 +47,37 @@ class ProjectStorageSyncHanlder:
                 logger.info(f"Sync project storage '{str(storage_orm.id)}' with PVC '{storage_orm.k8s_pvc_name}'")
                 if storage_orm.k8s_pvc_name is None or storage_orm.actual_size is not None:
                     continue
-                sq_orm = (
-                    await self.project_storage_v2_repo._get_storage_quota_and_resource_pool_without_authz_or_none_orm(
+                async with session.begin():
+                    sq_orm = await self.project_storage_v2_repo._get_storage_quota_and_resource_pool_without_authz_or_none_orm(  # noqa E501
                         session=session, storage_quota_id=storage_orm.storage_quota_id
                     )
-                )
-                if sq_orm is None:
-                    logger.error(
-                        f"Storage quota with ID '{storage_orm.storage_quota_id}' does not exist "
-                        f"from project storage '{storage_orm.id}'."
+                    if sq_orm is None:
+                        logger.error(
+                            f"Storage quota with ID '{storage_orm.storage_quota_id}' does not exist "
+                            f"from project storage '{storage_orm.id}'."
+                        )
+                        continue
+                    rp_orm = sq_orm.resource_pool
+                    cluster_id = ClusterId(rp_orm.cluster_id) if rp_orm.cluster_id is not None else None
+                    cluster = await self.k8s_client.cluster_by_id(cluster_id=cluster_id)
+                    namespace = cluster.namespace
+                    meta = K8sPersistentVolumeClaimV2.meta(
+                        name=storage_orm.k8s_pvc_name, namespace=namespace, cluster_id=cluster.id
                     )
-                    continue
-                rp_orm = sq_orm.resource_pool
-                cluster_id = ClusterId(rp_orm.cluster_id) if rp_orm.cluster_id is not None else None
-                cluster = await self.k8s_client.cluster_by_id(cluster_id=cluster_id)
-                namespace = cluster.namespace
-                meta = K8sPersistentVolumeClaimV2.meta(
-                    name=storage_orm.k8s_pvc_name, namespace=namespace, cluster_id=cluster.id
-                )
-                pvc = await self.k8s_client.get_persistent_volume_claim_v2(meta)
-                if pvc is None:
-                    logger.error(
-                        f"Storage quota with ID '{storage_orm.storage_quota_id}' has lost its persistent volume."
-                    )
-                    continue
-                # Update the storage attributes from k8s
-                async with (
-                    session.begin(),
-                    self.project_storage_v2_repo._with_locked_project_storage(
+                    pvc = await self.k8s_client.get_persistent_volume_claim_v2(meta)
+                    if pvc is None:
+                        logger.error(
+                            f"Storage quota with ID '{storage_orm.storage_quota_id}' has lost its persistent volume."
+                        )
+                        continue
+                    # Update the storage attributes from k8s
+                    async with self.project_storage_v2_repo._with_locked_project_storage(
                         session=session, storage_orm=storage_orm
-                    ) as locked_orm,
-                ):
-                    locked_orm.k8s_pvc_status = pvc.get_status()
-                    locked_orm.actual_size = pvc.get_actual_size()
-                    await session.flush()
-                    await session.refresh(locked_orm)
+                    ) as locked_orm:
+                        locked_orm.k8s_pvc_status = pvc.get_status()
+                        locked_orm.actual_size = pvc.get_actual_size()
+                        await session.flush()
+                        await session.refresh(locked_orm)
 
     async def _get_all_project_storages_orm(
         self,
