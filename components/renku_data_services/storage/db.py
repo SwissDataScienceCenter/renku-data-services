@@ -733,6 +733,7 @@ class ProjectStorageV2Repository:
             pvc = await k8s_client.create_persistent_volume_claim_v2(new_pvc)
             locked_orm.k8s_pvc_name = k8s_pvc_name
             locked_orm.k8s_pvc_status = pvc.get_status()
+            locked_orm.actual_size = None
             # _actual_size = pvc.get_actual_size()
             # ? Mhm do we need to parse the size?
             await session.flush()
@@ -846,8 +847,10 @@ class ProjectStorageV2Repository:
                     )
                     new_size_str = f"{patch.requested_size_bytes.to_gibi()}Gi"
                     k8s_pvc_patch = {"spec": {"resources": {"requests": {"storage": new_size_str}}}}
-                    await k8s_client.patch_persistent_volume_claim_v2(meta, k8s_pvc_patch)
-                storage_orm.requested_size = patch.requested_size_bytes
+                    pvc = await k8s_client.patch_persistent_volume_claim_v2(meta, k8s_pvc_patch)
+                locked_orm.requested_size = patch.requested_size_bytes
+                locked_orm.k8s_pvc_status = pvc.get_status()
+                locked_orm.actual_size = None
                 await session.flush()
                 await session.refresh(locked_orm)
 
