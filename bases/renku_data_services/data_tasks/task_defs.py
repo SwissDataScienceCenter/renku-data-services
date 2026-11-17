@@ -616,6 +616,17 @@ async def purge_expired_persisted_logs(dm: DependencyManager) -> None:
             await asyncio.sleep(dm.config.long_task_period_s)
 
 
+async def sync_project_storage_pvcs(dm: DependencyManager) -> None:
+    """Sync the state of PVCs backing project storages."""
+    while True:
+        try:
+            logger.info("TODO!")
+        except Exception as e:
+            logger.warning(f"Failed to sync project storage PVCs: {e}", exc_info=True)
+        else:
+            await asyncio.sleep(dm.config.short_task_period_s)
+
+
 def all_tasks(dm: DependencyManager) -> TaskDefininions:
     """A dict of task factories to be managed in main."""
     # Impl. note: We pass the entire config to the coroutines, because

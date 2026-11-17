@@ -13,6 +13,7 @@ from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
 from kr8s.objects import Secret
 from kubernetes.client import V1Secret
+from kubernetes.utils import parse_quantity
 
 from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.errors import ProgrammingError, errors
@@ -630,8 +631,11 @@ class K8sPersistentVolumeClaimV2(K8sObject):
         """Return the status from the manifest."""
         return str(self.manifest.status.phase)
 
-    def get_actual_size(self) -> str | None:
+    def get_actual_size(self) -> ByteSize | None:
         """Return the actual size of the PVC from the manifest."""
-        capacity: dict[str, Any] = self.manifest.capacity
-        storage = capacity.get("storage")
-        return str(storage) if storage else None
+        capacity: dict[str, Any] = self.manifest.status.get("capacity", dict())
+        storage: str | None = capacity.get("storage")
+        if not storage:
+            return None
+        storage_bytes = int(parse_quantity(storage))
+        return ByteSize(storage_bytes)
