@@ -620,7 +620,7 @@ async def sync_project_storage_pvcs(dm: DependencyManager) -> None:
     """Sync the state of PVCs backing project storages."""
     while True:
         try:
-            logger.info("TODO!")
+            await dm.project_storage_sync_hanlder.sync_storages()
         except Exception as e:
             logger.warning(f"Failed to sync project storage PVCs: {e}", exc_info=True)
         else:
@@ -656,5 +656,6 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
             "monitor_session_quota_and_send_alerts": lambda: monitor_session_quota_and_send_alerts(dm),
             "collect_persisted_logs": lambda: collect_persisted_logs(dm),
             "purge_expired_persisted_logs": lambda: purge_expired_persisted_logs(dm),
+            "sync_project_storage_pvcs": lambda: sync_project_storage_pvcs(dm),
         }
     )
