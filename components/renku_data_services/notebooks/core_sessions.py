@@ -959,6 +959,7 @@ def ssh_proxy_session_extras(
     ssh_dir = (storage_mount / ".ssh").as_posix()
     ssh_settings = cluster_settings.ssh_settings
     if ssh_settings is None:
+        logger.info("SSH Settings is NONE, using defaults for local cluster")
         return SessionExtraResources(
             volumes=[
                 ExtraVolume(
@@ -996,7 +997,7 @@ def ssh_proxy_session_extras(
             ],
         )
     else:
-        # TODO this must come from registered cluster data
+        logger.info(f"SSH Settings: {ssh_settings}")
         return SessionExtraResources(
             volumes=[
                 ExtraVolume(
