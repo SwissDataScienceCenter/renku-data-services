@@ -1108,6 +1108,7 @@ async def start_session(
     resource_class_id = launch_request.resource_class_id or launcher.resource_class_id
 
     cluster = await nb_config.k8s_v2_client.cluster_by_class_id(resource_class_id, user)
+    logger.info(f">>>>>> Cluster: {cluster.id}")
 
     server_name = renku_2_make_server_name(
         user=user,
@@ -1179,7 +1180,7 @@ async def start_session(
     # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
     if not session_has_http_frontend(launcher.environment.build_parameters):
         session_extras = session_extras.concat(
-            ssh_proxy_session_extras(ssh_proxy_config, storage_mount, cluster_settings)
+            ssh_proxy_session_extras(ssh_proxy_config, storage_mount, resource_pool.cluster or cluster_settings)
         )
 
     # Data connectors
