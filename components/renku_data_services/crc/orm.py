@@ -22,12 +22,11 @@ from sqlalchemy import (
     false,
     func,
     literal,
-    null,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableComposite
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, composite, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from sqlalchemy.sql import expression
 from ulid import ULID
@@ -41,7 +40,6 @@ from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.resource_usage.model import Credit
-from renku_data_services.storage import orm as storage_schemas
 from renku_data_services.utils.sqlalchemy import ByteSizeType, ULIDType
 
 logger = logging.getLogger(__name__)
@@ -442,31 +440,6 @@ class ResourcePoolORM(BaseORM):
     If the value is zero or unset then cpu limits are not set.
     """
 
-    storage_class_id: Mapped[str | None] = mapped_column(
-        ForeignKey(storage_schemas.StorageClassORM.id, ondelete="RESTRICT", name="resource_pools_storage_class_id_fk"),
-        index=True,
-        default=None,
-        server_default=null(),
-        nullable=True,
-    )
-    storage_class: Mapped[storage_schemas.StorageClassORM | None] = relationship(
-        storage_schemas.StorageClassORM, default=None, lazy="selectin", init=False
-    )
-    storage_total_size: Mapped[ByteSize | None] = mapped_column(
-        "storage_total_size", ByteSizeType(), default=None, server_default=null(), nullable=True
-    )
-    storage_max_size: Mapped[ByteSize | None] = mapped_column(
-        "storage_max_size", ByteSizeType(), default=None, server_default=null(), nullable=True
-    )
-
-    storage_config: Mapped[ResourcePoolStorageConfigORM | None] = composite(
-        ResourcePoolStorageConfigORM,
-        storage_class_id,
-        storage_total_size,
-        storage_max_size,
-        default=None,
-    )
-
     @classmethod
     def from_unsaved_model(
         cls,
@@ -527,8 +500,8 @@ class ResourcePoolORM(BaseORM):
             key=lambda c: (c.gpu, c.cpu, c.memory, c.max_storage, c.name, c.id),
         )
 
-        storage_config = self._dump_storage_config()
-        logger.info(f"[STORAGE] rp_id = {self.id}, config = {storage_config}")
+        # storage_config = self._dump_storage_config()
+        # logger.info(f"[STORAGE] rp_id = {self.id}, config = {storage_config}")
 
         return models.ResourcePool(
             id=self.id,
@@ -559,18 +532,18 @@ class ResourcePoolORM(BaseORM):
             {**self.remote_json, "provider_id": self.remote_provider_id}
         )
 
-    def _dump_storage_config(self) -> models.ResourcePoolStorageConfig:
-        """Create a ResourcePoolStorageConfig model from the corresponding columns of the ORM object."""
-        if self.storage_class_id is None or self.storage_class is None or self.storage_config is None:
-            return models.ResourcePoolStorageConfigDisabled()
-        return models.ResourcePoolStorageConfigEnabled(
-            storage_class_name=self.storage_class_id,
-            storage_display_name=self.storage_class.display_name,
-            storage_min_size_bytes=self.storage_class.min_size,
-            storage_documentation=self.storage_class.documentation,
-            storage_total_size_bytes=self.storage_config.total_size,
-            storage_max_size_bytes=self.storage_config.max_size,
-        )
+    # def _dump_storage_config(self) -> models.ResourcePoolStorageConfig:
+    #     """Create a ResourcePoolStorageConfig model from the corresponding columns of the ORM object."""
+    #     if self.storage_class_id is None or self.storage_class is None or self.storage_config is None:
+    #         return models.ResourcePoolStorageConfigDisabled()
+    #     return models.ResourcePoolStorageConfigEnabled(
+    #         storage_class_name=self.storage_class_id,
+    #         storage_display_name=self.storage_class.display_name,
+    #         storage_min_size_bytes=self.storage_class.min_size,
+    #         storage_documentation=self.storage_class.documentation,
+    #         storage_total_size_bytes=self.storage_config.total_size,
+    #         storage_max_size_bytes=self.storage_config.max_size,
+    #     )
 
     def get_cluster_id(self) -> ClusterId:
         """Get the ID of the cluster the resource pool refers to."""
