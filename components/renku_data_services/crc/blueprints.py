@@ -32,6 +32,7 @@ from renku_data_services.crc.core import (
     validate_resource_pool_post,
     validate_resource_pool_put_or_patch,
     validate_storage_flavor_patch,
+    validate_storage_quota_patch,
     validate_unsaved_storage_flavor,
     validate_unsaved_storage_quota,
 )
@@ -1115,3 +1116,30 @@ class StorageQuotasBP(CustomBlueprint):
             return validated_json(apispec.StorageQuota, storage_quota, headers=headers)
 
         return "/storage_quotas/<storage_quota_id:ulid>", ["GET"], _get_one
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Update a storage quota."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @if_match_required
+        @validate(json=apispec.StorageQuotaPatch)
+        async def _patch(
+            _: Request,
+            user: base_models.APIUser,
+            storage_quota_id: ULID,
+            body: apispec.StorageQuotaPatch,
+            etag: str,
+        ) -> JSONResponse:
+            patch = validate_storage_quota_patch(body=body)
+            async with self.session_maker() as session, session.begin():
+                storage_quota = await self.storage_quota_repo.update_storage_quota(
+                    session=session,
+                    user=user,
+                    storage_quota_id=storage_quota_id,
+                    patch=patch,
+                    etag=etag,
+                )
+            return validated_json(apispec.StorageQuota, storage_quota)
+
+        return "/storage_quotas/<storage_quota_id:ulid>", ["PATCH"], _patch

@@ -2450,3 +2450,35 @@ class StorageQuotaRepository:
         await session.flush()
         await session.refresh(sq_orm)
         return sq_orm.dump()
+
+    async def update_storage_quota(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        storage_quota_id: ULID,
+        patch: models.StorageQuotaPatch,
+        etag: str,
+    ) -> models.StorageQuota:
+        """Update a storage quota in the database."""
+        if user.id is None or not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+        sq_orm = await self._get_storage_quota_or_none_orm(
+            session=session, user=user, storage_quota_id=storage_quota_id
+        )
+        if sq_orm is None:
+            raise errors.MissingResourceError(
+                message=f"Storage quota with ID '{str(storage_quota_id)}' does not exist."
+            )
+
+        current_etag = sq_orm.dump().etag
+        if current_etag != etag:
+            raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
+        if patch.total_size_bytes is not None:
+            sq_orm.total_size = patch.total_size_bytes
+        if patch.max_size_bytes is not None:
+            sq_orm.max_size = patch.max_size_bytes
+
+        await session.flush()
+        await session.refresh(sq_orm)
+        return sq_orm.dump()
