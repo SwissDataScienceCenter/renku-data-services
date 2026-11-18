@@ -929,3 +929,17 @@ def validate_unsaved_storage_quota(body: apispec.StorageQuotaPost) -> models.Uns
         total_size_bytes=total_size,
         max_size_bytes=max_size,
     )
+
+
+def validate_storage_quota_patch(body: apispec.StorageQuotaPatch) -> models.StorageQuotaPatch:
+    """Validate a patch of a storage quota."""
+    total_size = ByteSize.from_gibi(body.total_size) if body.total_size is not None else None
+    if total_size is not None and total_size < ByteSize.from_gibi(1):
+        raise errors.ValidationError(message="The total size must be at least 1GiB.")
+    max_size = ByteSize.from_gibi(body.max_size) if body.max_size is not None else None
+    if max_size is not None and max_size < ByteSize.from_gibi(1):
+        raise errors.ValidationError(message="The maximum size must be at least 1GiB.")
+    return models.StorageQuotaPatch(
+        total_size_bytes=total_size,
+        max_size_bytes=max_size,
+    )
