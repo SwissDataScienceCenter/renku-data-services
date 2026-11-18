@@ -618,9 +618,16 @@ class ProjectStorageV2Repository:
                 f"for project '{project_id}' "
                 f"is higher than the maximum size of {storage_quota.max_size_bytes}."
             )
-
-        # TODO: check remaining size from quota
-        # TODO: do this now
+        # Validate that there is enough free space in the quota
+        resources = await self.storage_quota_repo.get_storage_quota_resources(
+            session=session, user=user, storage_quota_id=project_storage.storage_quota_id
+        )
+        if project_storage.requested_size_bytes > resources.free_size_bytes:
+            raise errors.ValidationError(
+                message=f"The requested storage size ({project_storage.requested_size_bytes}) "
+                f"for project '{project_id}' "
+                f"is higher than the remaining size {resources.free_size_bytes} in the quota."
+            )
 
         storage_orm = schemas.ProjectStorageV2ORM(
             project_id=project_id,
@@ -832,11 +839,37 @@ class ProjectStorageV2Repository:
         cluster = await k8s_client.cluster_by_id(cluster_id=cluster_id)
         namespace = cluster.namespace
 
-        if patch.requested_size_bytes is not None:
+        if patch.requested_size_bytes is not None and patch.requested_size_bytes != storage_orm.requested_size:
+            # Validate that there is enough free space in the quota
+            current_size = storage_orm.requested_size
+            if (
+                storage_orm.k8s_pvc_name
+                and storage_orm.actual_size is not None
+                and storage_orm.actual_size > current_size
+            ):
+                current_size = storage_orm.actual_size
+            if patch.requested_size_bytes > current_size:
+                increment_size = patch.requested_size_bytes - current_size
+                resources = await self.storage_quota_repo.get_storage_quota_resources(
+                    session=session, user=user, storage_quota_id=storage_orm.storage_quota_id
+                )
+                if increment_size > resources.free_size_bytes:
+                    raise errors.ValidationError(
+                        message=f"The requested storage size extension ({increment_size}) "
+                        f"for project '{storage_orm.project_id}' "
+                        f"is higher than the remaining size {resources.free_size_bytes} in the quota."
+                    )
+
             async with self._with_locked_project_storage(session=session, storage_orm=storage_orm) as locked_orm:
                 if locked_orm.k8s_pvc_name:
-                    # TODO: check with actual size here
-                    if patch.requested_size_bytes < locked_orm.requested_size:
+                    current_size = locked_orm.requested_size
+                    if (
+                        locked_orm.k8s_pvc_name
+                        and locked_orm.actual_size is not None
+                        and locked_orm.actual_size > current_size
+                    ):
+                        current_size = locked_orm.actual_size
+                    if patch.requested_size_bytes < current_size:
                         raise errors.ValidationError(
                             message="The storage cannot be downsized "
                             f"({locked_orm.requested_size} -> {patch.requested_size_bytes}), only extended."
