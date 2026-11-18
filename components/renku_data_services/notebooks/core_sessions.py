@@ -1233,6 +1233,7 @@ async def start_session(
         "renku.io/resource_class_id": str(resource_class.id),
         "renku.io/resource_pool_id": str(resource_pool.id),
     }
+    logger.warning(f">>>>>>\n {annotations}  \n<<<<<<<<<")
     if launch_request.submission_id:
         annotations.update({"renku.io/submission_id": str(launch_request.submission_id)})
 
