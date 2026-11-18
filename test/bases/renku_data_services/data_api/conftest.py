@@ -813,6 +813,29 @@ async def create_session_secret_slot(sanic_client: SanicASGITestClient, user_hea
     return create_session_secret_slot_helper
 
 
+@pytest.fixture
+def create_storage_flavor(sanic_client: SanicASGITestClient, admin_headers: dict[str, str]):
+    """Fixture for creating a new storage flavor."""
+
+    async def create_storage_flavor_helper(
+        headers: dict[str, str] | None = None, **kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        headers = headers if headers is not None else admin_headers
+        payload = {
+            "k8s_storage_class_name": "some-storage-class",
+            "display_name": "A storage flavor",
+            "min_size": 8,
+            "admin_documentation": "Admin docs.",
+            "documentation": "User docs.",
+        }
+        payload.update(kwargs.copy())
+        _, res = await sanic_client.post("/api/data/storage_flavors", headers=headers, json=payload)
+        assert res.status_code == 201, res.text
+        return res.json
+
+    return create_storage_flavor_helper
+
+
 @pytest_asyncio.fixture
 async def create_resource_pool(cluster, sanic_client, user_headers, admin_headers, valid_resource_pool_payload):
     async def create_resource_pool_helper(admin: bool = False, **payload) -> dict[str, Any]:
