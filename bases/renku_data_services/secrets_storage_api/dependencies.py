@@ -32,6 +32,7 @@ class DependencyManager:
     ssh_key_repo: SSHKeyRepository
     k8s_db_cache: K8sDbCache
     k8s_client: K8sClient
+    cluster_repo: ClusterRepository
     _user_secrets_repo: LowLevelUserSecretsRepo | None = field(default=None, repr=False, init=False)
 
     @property
@@ -76,4 +77,5 @@ class DependencyManager:
             ssh_key_repo=ssh_key_repo,
             k8s_db_cache=k8s_db_cache,
             k8s_client=client,
+            cluster_repo=cluster_repo,
         )
