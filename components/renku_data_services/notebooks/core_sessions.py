@@ -934,7 +934,7 @@ async def get_mount_work_dir(
 
 
 def ssh_proxy_session_extras(
-    ssh_config: SshProxyConfig, storage_mount: PurePosixPath, session_location: SessionLocation
+    ssh_config: SshProxyConfig, storage_mount: PurePosixPath, cluster_settings: ClusterSettings
 ) -> SessionExtraResources:
     """Volumes and mounts delivering the proxy-to-session keys to a session.
 
@@ -957,7 +957,8 @@ def ssh_proxy_session_extras(
         )
 
     ssh_dir = (storage_mount / ".ssh").as_posix()
-    if session_location == SessionLocation.local:
+    ssh_settings = cluster_settings.ssh_settings
+    if ssh_settings is None:
         return SessionExtraResources(
             volumes=[
                 ExtraVolume(
@@ -1001,7 +1002,7 @@ def ssh_proxy_session_extras(
                 ExtraVolume(
                     name="ssh-session-host-key",
                     secret=SecretAsVolume(
-                        secretName="renku-ssh-session-keys",
+                        secretName=ssh_settings.session_secret_name,
                         items=[SecretAsVolumeItem(key="ssh_host_ed25519_key", path="dropbear_ed25519_host_key")],
                     ),
                 ),
@@ -1152,6 +1153,14 @@ async def start_session(
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
+    # Cluster settings (ingress, storage class, etc)
+    cluster_settings: ClusterSettings
+    try:
+        cluster_settings = await cluster_repo.select(cluster.id)
+    except errors.MissingResourceError:
+        # Fallback to global, main cluster parameters
+        cluster_settings = nb_config.local_cluster_settings()
+
     # User secrets
     session_extras = SessionExtraResources()
     session_extras = session_extras.concat(
@@ -1169,7 +1178,7 @@ async def start_session(
     # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
     if not session_has_http_frontend(launcher.environment.build_parameters):
         session_extras = session_extras.concat(
-            ssh_proxy_session_extras(ssh_proxy_config, storage_mount, session_location)
+            ssh_proxy_session_extras(ssh_proxy_config, storage_mount, cluster_settings)
         )
 
     # Data connectors
@@ -1214,14 +1223,6 @@ async def start_session(
         )
     )
 
-    # Cluster settings (ingress, storage class, etc)
-    cluster_settings: ClusterSettings
-    try:
-        cluster_settings = await cluster_repo.select(cluster.id)
-    except errors.MissingResourceError:
-        # Fallback to global, main cluster parameters
-        cluster_settings = nb_config.local_cluster_settings()
-
     ingress_config = SessionIngress(server_name=server_name, cluster_settings=cluster_settings)
 
     storage_class = cluster_settings.get_storage_class()
@@ -1236,7 +1237,6 @@ async def start_session(
         "renku.io/resource_class_id": str(resource_class.id),
         "renku.io/resource_pool_id": str(resource_pool.id),
     }
-    logger.warning(f">>>>>>\n {annotations}  \n<<<<<<<<<")
     if launch_request.submission_id:
         annotations.update({"renku.io/submission_id": str(launch_request.submission_id)})
 
@@ -1451,6 +1451,7 @@ async def patch_session(
     internal_gitlab_user: APIUser,
     nb_config: NotebooksConfig,
     git_provider_helper: GitProviderHelperProto,
+    cluster_repo: ClusterRepository,
     data_connector_secret_repo: DataConnectorSecretRepository,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
@@ -1632,9 +1633,17 @@ async def patch_session(
     if session.likely_ssh():
         resource_class_id = body.resource_class_id or launcher.resource_class_id
         resource_pool, _ = await fully_determine_resource_pool(rp_repo, user, resource_class_id)
-        session_location = SessionLocation.remote if resource_pool.remote else SessionLocation.local
+
+        # Cluster settings (ingress, storage class, etc)
+        cluster_settings: ClusterSettings
+        try:
+            cluster_settings = await cluster_repo.select(cluster.id)
+        except errors.MissingResourceError:
+            # Fallback to global, main cluster parameters
+            cluster_settings = nb_config.local_cluster_settings()
+
         session_extras = session_extras.concat(
-            ssh_proxy_session_extras(ssh_proxy_config, storage_mount, session_location)
+            ssh_proxy_session_extras(ssh_proxy_config, storage_mount, cluster_settings)
         )
 
     # Data connectors: skip

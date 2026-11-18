@@ -187,6 +187,7 @@ class NotebooksNewBP(CustomBlueprint):
                 internal_gitlab_user=internal_gitlab_user,
                 nb_config=self.nb_config,
                 git_provider_helper=self.git_provider_helper,
+                cluster_repo=self.cluster_repo,
                 data_connector_secret_repo=self.data_connector_secret_repo,
                 project_repo=self.project_repo,
                 project_session_secret_repo=self.project_session_secret_repo,
