@@ -956,80 +956,41 @@ def ssh_proxy_session_extras(
             "(specifically its private portion) has not been set by the Renku administrator."
         )
 
-    ssh_dir = (storage_mount / ".ssh").as_posix()
+    # Only the source of the two keys differs between the local cluster and remote clusters
     ssh_settings = cluster_settings.ssh_settings
     if ssh_settings is None:
         logger.info("SSH Settings is NONE, using defaults for local cluster")
-        return SessionExtraResources(
-            volumes=[
-                ExtraVolume(
-                    name="ssh-session-host-key",
-                    secret=SecretAsVolume(
-                        secretName=ssh_config.session_host_key_secret_name,
-                        items=[
-                            SecretAsVolumeItem(
-                                key=ssh_config.session_host_key_secret_key, path="dropbear_ed25519_host_key"
-                            )
-                        ],
-                    ),
-                ),
-                ExtraVolume(
-                    name="ssh-proxy-session-auth-key",
-                    secret=SecretAsVolume(
-                        secretName=ssh_config.proxy_auth_key_secret_name,
-                        items=[SecretAsVolumeItem(key=ssh_config.proxy_auth_key_secret_key, path="proxy_auth_key.pub")],
-                    ),
-                ),
-            ],
-            volume_mounts=[
-                ExtraVolumeMount(
-                    name="ssh-session-host-key",
-                    mountPath=f"{ssh_dir}/dropbear_ed25519_host_key",
-                    subPath="dropbear_ed25519_host_key",
-                    readOnly=True,
-                ),
-                ExtraVolumeMount(
-                    name="ssh-proxy-session-auth-key",
-                    mountPath=f"{ssh_dir}/proxy_auth_key.pub",
-                    subPath="proxy_auth_key.pub",
-                    readOnly=True,
-                ),
-            ],
-        )
+        host_key = (ssh_config.session_host_key_secret_name, ssh_config.session_host_key_secret_key)
+        auth_key = (ssh_config.proxy_auth_key_secret_name, ssh_config.proxy_auth_key_secret_key)
     else:
         logger.info(f"SSH Settings: {ssh_settings}")
-        return SessionExtraResources(
-            volumes=[
-                ExtraVolume(
-                    name="ssh-session-host-key",
-                    secret=SecretAsVolume(
-                        secretName=ssh_settings.session_secret_name,
-                        items=[SecretAsVolumeItem(key="ssh_host_ed25519_key", path="dropbear_ed25519_host_key")],
-                    ),
-                ),
-                ExtraVolume(
-                    name="ssh-proxy-session-auth-key",
-                    secret=SecretAsVolume(
-                        secretName="renku-ssh-session-keys",
-                        items=[SecretAsVolumeItem(key="authorized_keys", path="proxy_auth_key.pub")],
-                    ),
-                ),
-            ],
-            volume_mounts=[
-                ExtraVolumeMount(
-                    name="ssh-session-host-key",
-                    mountPath=f"{ssh_dir}/dropbear_ed25519_host_key",
-                    subPath="dropbear_ed25519_host_key",
-                    readOnly=True,
-                ),
-                ExtraVolumeMount(
-                    name="ssh-proxy-session-auth-key",
-                    mountPath=f"{ssh_dir}/proxy_auth_key.pub",
-                    subPath="proxy_auth_key.pub",
-                    readOnly=True,
-                ),
-            ],
-        )
+        host_key = (ssh_settings.session_secret_name, "ssh_host_ed25519_key")
+        auth_key = ("renku-ssh-session-keys", "authorized_keys")
+
+    ssh_dir = storage_mount / ".ssh"
+    # (volume name, secret name, key in the secret, file name in the session's .ssh directory)
+    files = [
+        ("ssh-session-host-key", *host_key, "dropbear_ed25519_host_key"),
+        ("ssh-proxy-session-auth-key", *auth_key, "proxy_auth_key.pub"),
+    ]
+    return SessionExtraResources(
+        volumes=[
+            ExtraVolume(
+                name=volume_name,
+                secret=SecretAsVolume(secretName=secret_name, items=[SecretAsVolumeItem(key=key, path=file_name)]),
+            )
+            for volume_name, secret_name, key, file_name in files
+        ],
+        volume_mounts=[
+            ExtraVolumeMount(
+                name=volume_name,
+                mountPath=(ssh_dir / file_name).as_posix(),
+                subPath=file_name,
+                readOnly=True,
+            )
+            for volume_name, _, _, file_name in files
+        ],
+    )
 
 
 async def fully_determine_resource_pool(
