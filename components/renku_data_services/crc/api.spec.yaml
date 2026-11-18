@@ -2618,6 +2618,7 @@ components:
           $ref: "#/components/schemas/KubernetesStorageClassName"
         display_name:
           type: string
+          minLength: 3
           example: Azure Files (SMB)
         min_size:
           $ref: "#/components/schemas/MinStorageSize"
@@ -2635,6 +2636,7 @@ components:
       properties:
         display_name:
           type: string
+          minLength: 3
           example: Azure Files (SMB)
         min_size:
           $ref: "#/components/schemas/MinStorageSize"

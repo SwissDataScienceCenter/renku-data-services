@@ -2327,9 +2327,13 @@ class StorageFlavorRepository:
             sf_orm.display_name = patch.display_name
         if patch.min_size_bytes is not None:
             sf_orm.min_size = patch.min_size_bytes
-        if patch.admin_documentation is not None:
+        if patch.admin_documentation == "":
+            sf_orm.admin_documentation = None
+        elif patch.admin_documentation is not None:
             sf_orm.admin_documentation = patch.admin_documentation
-        if patch.documentation is not None:
+        if patch.documentation == "":
+            sf_orm.documentation = None
+        elif patch.documentation is not None:
             sf_orm.documentation = patch.documentation
 
         await session.flush()
