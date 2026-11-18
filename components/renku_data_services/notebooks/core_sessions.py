@@ -1108,7 +1108,6 @@ async def start_session(
     resource_class_id = launch_request.resource_class_id or launcher.resource_class_id
 
     cluster = await nb_config.k8s_v2_client.cluster_by_class_id(resource_class_id, user)
-    logger.info(f">>>>>> Cluster: {cluster.id}")
 
     server_name = renku_2_make_server_name(
         user=user,

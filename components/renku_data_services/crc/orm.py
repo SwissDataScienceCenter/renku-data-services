@@ -29,7 +29,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.connected_services import orm as cs_schemas
 from renku_data_services.crc import models
-from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
+from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol, SshSettings
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.resource_usage.model import Credit
@@ -333,6 +333,21 @@ class ClusterORM(BaseORM):
             service_account_name=self.service_account_name,
             id=ClusterId(self.id),
             session_ingress_use_default_cluster_tls_cert=self.session_ingress_use_default_cluster_tls_cert,
+            ssh_settings=self.__dump_ssh_settiongs(),
+        )
+
+    def __dump_ssh_settiongs(self) -> SshSettings | None:
+        return (
+            SshSettings(
+                target_host=self.ssh_target_host,
+                target_port=self.ssh_target_port or 22,
+                username=self.ssh_username or "renku",
+                public_host_key=self.ssh_public_host_key or "",
+                session_secret_name=self.ssh_session_secret_name or "",
+                auth_key_secret_name="",
+            )
+            if self.ssh_target_host is not None
+            else None
         )
 
     @classmethod
