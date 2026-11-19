@@ -260,7 +260,7 @@ async def migrate_groups_make_all_public(dm: DependencyManager) -> None:
                     relationship_filter=RelationshipFilter(
                         resource_type=ResourceType.group.value,
                         optional_relation=_Relation.group_platform.value,
-                    )
+                    ),
                 )
             )
             all_group_ids: set[str] = set()
@@ -327,7 +327,7 @@ async def migrate_user_namespaces_make_all_public(dm: DependencyManager) -> None
                     relationship_filter=RelationshipFilter(
                         resource_type=ResourceType.user_namespace.value,
                         optional_relation=_Relation.user_namespace_platform.value,
-                    )
+                    ),
                 )
             )
             all_user_namespace_ids: set[str] = set()
