@@ -27,6 +27,7 @@ class SessionAuthorize:
         fingerprint = fingerprint_ssh_public_key(public_key)
         logger.debug(f"Authorize public key for ssh access: {fingerprint}")
         user_id = await self.__ssh_key_repo.get_user_id_by_fingerprint(fingerprint) if fingerprint else None
+        logger.debug(f"Found user for public key: {user_id}")
         if user_id is None:
             # NOTE: malformed and unknown keys are both a plain "no", so the proxy has one failure branch.
             raise errors.MissingResourceError(message="No registered SSH key matches the provided key.")
@@ -36,18 +37,22 @@ class SessionAuthorize:
                 K8sObjectFilter(gvk=AMALTHEA_SESSION_GVK, name=session_id, user_id=user_id)
             )
         ]
+        logger.debug(f"Found sessions: {len(sessions)}")
         if not sessions:
             raise errors.MissingResourceError(message="The session does not exist or is not accessible.")
 
+        logger.debug(f"Returning data for {sessions[0]}")
         return await self.__session_data(sessions[0], session_id)
 
     async def __session_data(self, session: K8sObject, session_id: str) -> SshSessionData:
         """Point the proxy at the remote cluster's ssh service if the session runs on one."""
         if session.cluster == DEFAULT_K8S_CLUSTER:
+            logger.debug(f"Return session data for default cluster: {session_id}")
             return SshSessionData.default(session_id)
 
         cluster = await self.__cluster_repo.select(session.cluster)
         if cluster.ssh_settings is None:
+            logger.debug(f"Cluster ({session.cluster}) without ssh settings, return default settings")
             return SshSessionData.default(session_id)
 
         ssh_settings = cluster.ssh_settings
