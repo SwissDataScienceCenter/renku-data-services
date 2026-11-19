@@ -481,9 +481,11 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "use_insecure_cipher": True,
             "disable_hashcheck": True,
             "ask_password": True,
-            "path_override": True,
+            # Changes the path used by commands run on the remote host
+            "path_override": False,
             "set_modtime": True,
-            "shell_type": True,
+            # Changes how commands run on the remote host are built
+            "shell_type": False,
             "hashes": True,
             # Command, not validated
             "md5sum_command": False,
@@ -501,7 +503,8 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "xxh128sum_command": False,
             "skip_links": True,
             "subsystem": True,
-            "server_command": True,
+            # Command run on the remote host
+            "server_command": False,
             "use_fstat": True,
             "disable_concurrent_reads": True,
             "disable_concurrent_writes": True,
@@ -510,7 +513,8 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "concurrency": True,
             "connections": True,
             "multithread_upload": True,
-            "set_env": True,
+            # Environment variables for commands run on the remote host
+            "set_env": False,
             "ciphers": True,
             "key_exchange": True,
             "macs": True,

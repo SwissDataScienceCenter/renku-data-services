@@ -65,22 +65,56 @@ def __patch_schema_s3_endpoint_required(spec: list[dict[str, Any]]) -> None:
       configurations without a provider.
     """
     s3 = find_storage(spec, "s3")
-    endpoint_idx, endpoint = next((i, o) for i, o in enumerate(s3["Options"]) if o["Name"] == "endpoint")
-    provider_option = next(o for o in s3["Options"] if o["Name"] == "provider")
+    endpoint_idx: int | None = None
+    endpoint: dict[str, Any] | None = None
+    provider_option: dict[str, Any] | None = None
+    for idx, option in enumerate(s3["Options"]):
+        if endpoint is None and option["Name"] == "endpoint":
+            endpoint_idx = idx
+            endpoint = option
+        elif provider_option is None and option["Name"] == "provider":
+            provider_option = option
+    if endpoint_idx is None or endpoint is None:
+        raise errors.ValidationError(message="'endpoint' option not found in the 's3' storage schema.")
+    if provider_option is None:
+        raise errors.ValidationError(message="'provider' option not found in the 's3' storage schema.")
 
-    providers_with_endpoint = [p for p in endpoint["Provider"].split(",") if p]
-    providers_with_examples = {
-        p for example in endpoint.get("Examples") or [] for p in (example.get("Provider") or "").split(",") if p
-    }
-    all_providers = [e["Value"] for e in provider_option.get("Examples") or []]
-    required_for = {p for p in providers_with_endpoint if p != "AWS" and p not in providers_with_examples}
+    providers_with_endpoint: list[str] = []
+    for provider in endpoint["Provider"].split(","):
+        if provider:
+            providers_with_endpoint.append(provider)
 
-    endpoint["Provider"] = ",".join(p for p in providers_with_endpoint if p not in required_for)
+    providers_with_examples: set[str] = set()
+    for example in endpoint.get("Examples") or []:
+        for provider in (example.get("Provider") or "").split(","):
+            if provider:
+                providers_with_examples.add(provider)
+
+    all_providers: list[str] = []
+    for example in provider_option.get("Examples") or []:
+        all_providers.append(example["Value"])
+
+    required_for: set[str] = set()
+    for provider in providers_with_endpoint:
+        if provider != "AWS" and provider not in providers_with_examples:
+            required_for.add(provider)
+
+    optional_for: list[str] = []
+    for provider in providers_with_endpoint:
+        if provider not in required_for:
+            optional_for.append(provider)
+
+    excluded_from_required: list[str] = []
+    for provider in all_providers:
+        if provider not in required_for:
+            excluded_from_required.append(provider)
+
+    endpoint["Provider"] = ",".join(optional_for)
 
     required_endpoint = deepcopy(endpoint)
     required_endpoint.update(
         {
-            "Provider": "!" + ",".join(p for p in all_providers if p not in required_for),
+            "Provider": "!" + ",".join(excluded_from_required),
             "Required": True,
             "Examples": None,
         }
