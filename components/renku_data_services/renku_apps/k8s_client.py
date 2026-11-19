@@ -180,6 +180,7 @@ class RenkuAppsK8sClient:
             resource_class,
             project,
             labels=labels,
+            work_dir=work_dir,
             volumes=[r.volume for r in dc_resources],
             volume_mounts=[r.volume_mount for r in dc_resources],
             affinity=affinity,
@@ -420,6 +421,7 @@ def _build_app_deployment_manifest(
     resource_class: ResourceClass | None,
     project: Project,
     labels: dict[str, str],
+    work_dir: PurePosixPath,
     volumes: list[dict[str, Any]],
     volume_mounts: list[dict[str, Any]],
     affinity: dict[str, Any] | None,
@@ -452,6 +454,7 @@ def _build_app_deployment_manifest(
     env = {var.name: var.value or "" for var in session_launcher.env_variables or []}
     env["RENKU_SESSION_IP"] = "0.0.0.0"  # nosec B104
     env["RENKU_SESSION_PORT"] = str(environment.port)
+    env["RENKU_WORKING_DIR"] = work_dir.as_posix()
     container["env"] = [{"name": name, "value": value} for name, value in env.items()]
     if environment.command:
         container["command"] = environment.command
