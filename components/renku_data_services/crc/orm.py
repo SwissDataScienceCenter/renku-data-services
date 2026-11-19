@@ -344,7 +344,7 @@ class ClusterORM(BaseORM):
                 username=self.ssh_username or "renku",
                 public_host_key=self.ssh_public_host_key or "",
                 session_secret_name=self.ssh_session_secret_name or "",
-                auth_key_secret_name="renku-ssh-identities",
+                auth_key_secret_name="renku-ssh-identities", # nosec B106
             )
             if self.ssh_target_host is not None
             else None

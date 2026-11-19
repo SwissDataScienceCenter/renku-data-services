@@ -10,7 +10,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.ssh_proxy import apispec
-from renku_data_services.ssh_proxy.core import SessionAuthorize
+from renku_data_services.ssh_proxy.core import SSHSessionAuthorize
 
 logger = logging.getLogger(__file__)
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__file__)
 class SSHProxyBP(CustomBlueprint):
     """Internal endpoints consumed by the Renku SSH proxy."""
 
-    authorizer: SessionAuthorize
+    authorizer: SSHSessionAuthorize
 
     def authorize(self) -> BlueprintFactoryResponse:
         """Authorize a connection from an SSH public key and a session id."""

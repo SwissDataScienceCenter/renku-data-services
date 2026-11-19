@@ -14,7 +14,7 @@ from renku_data_services.users.db import SSHKeyRepository
 logger = logging.getLogger(__file__)
 
 
-class SessionAuthorize:
+class SSHSessionAuthorize:
     """Provides methods to check ssh access to sessions."""
 
     def __init__(self, ssh_key_repo: SSHKeyRepository, k8s_client: K8sClient, cluster_repo: ClusterRepository) -> None:

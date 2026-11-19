@@ -8,7 +8,6 @@ from renku_data_services.secrets import apispec
 from renku_data_services.secrets.blueprints import K8sSecretsBP
 from renku_data_services.secrets_storage_api.dependencies import DependencyManager
 from renku_data_services.ssh_proxy.blueprints import SSHProxyBP
-from renku_data_services.ssh_proxy.core import SessionAuthorize
 
 
 def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
@@ -26,9 +25,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     ssh_proxy = SSHProxyBP(
         name="ssh_proxy",
         url_prefix=url_prefix,
-        authorizer=SessionAuthorize(
-            ssh_key_repo=dm.ssh_key_repo, k8s_client=dm.k8s_client, cluster_repo=dm.cluster_repo
-        ),
+        authorizer=dm.ssh_authorize,
     )
     misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=dm.config.spec, version=dm.config.version)
     app.blueprint([secrets_storage.blueprint(), ssh_proxy.blueprint(), misc.blueprint()])
