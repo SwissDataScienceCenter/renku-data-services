@@ -6,9 +6,10 @@ from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
 
 import renku_data_services.base_models as base_models
-from renku_data_services.base_api.auth import authenticate
+from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors.errors import ValidationError
 from renku_data_services.repositories import apispec, models
@@ -66,7 +67,13 @@ class RepositoriesBP(CustomBlueprint):
             if r.connection
             else None
         )
-        prov = apispec.ProviderData(id=r.provider.id, name=r.provider.name, url=r.provider.url) if r.provider else None
+        prov = (
+            apispec.ProviderData(
+                id=r.provider.id, name=r.provider.name, url=r.provider.url, kind=apispec.ProviderKind(r.provider.kind)
+            )
+            if r.provider
+            else None
+        )
         meta = (
             apispec.Metadata(
                 git_url=r.metadata.git_url,
@@ -78,15 +85,56 @@ class RepositoriesBP(CustomBlueprint):
             if r.metadata and r.metadata != "Unmodified"
             else None
         )
-        error_code: apispec.ErrorCode | None
+        error_code: apispec.RepositoryErrorCode | None
         match r.error:
             case GitUrlError() as e:
-                error_code = apispec.ErrorCode[e.value]
+                error_code = apispec.RepositoryErrorCode[e.value]
             case models.RepositoryMetadataError() as e:
-                error_code = apispec.ErrorCode[e.value]
+                error_code = apispec.RepositoryErrorCode[e.value]
             case None:
                 error_code = None
 
         return apispec.RepositoryProviderData(
             status=status, connection=conn, provider=prov, metadata=meta, error_code=error_code
         )
+
+    def get_repository_permissions(self) -> BlueprintFactoryResponse:
+        """Get detailed permissions from a repository hosted on GitHub."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate_query(query=apispec.RepositoryPermissionsParams)
+        @extract_if_none_match
+        async def _get_repository_permissions(
+            _: Request,
+            user: base_models.APIUser,
+            query: apispec.RepositoryPermissionsParams,
+            etag: str | None,
+        ) -> JSONResponse | HTTPResponse:
+            repository_url = query.url
+            result = await self.git_repositories_repo.get_repository_permissions(
+                repository_url=repository_url, user=user, etag=etag
+            )
+            if result.permissions == "Unmodified":
+                return HTTPResponse(status=304)
+
+            response: apispec.RepositoryPermissions
+            if result.permissions is None or result.error is not None:
+                error_code: apispec.RepositoryErrorCode | None
+                match result.error:
+                    case GitUrlError() as e:
+                        error_code = apispec.RepositoryErrorCode[e.value]
+                    case models.RepositoryMetadataError() as e:
+                        error_code = apispec.RepositoryErrorCode[e.value]
+                    case _:
+                        error_code = apispec.RepositoryErrorCode.metadata_unknown
+                response = apispec.RepositoryPermissions(error_code=error_code)
+            else:
+                response = apispec.RepositoryPermissions(
+                    permissions=apispec.Permissions(integration_access=result.permissions.integration_access)
+                )
+
+            headers = {"ETag": result.permissions.etag} if result.permissions and result.permissions.etag else None
+            return validated_json(apispec.RepositoryPermissions, response, headers=headers)
+
+        return "/repository/permissions", ["GET"], _get_repository_permissions
