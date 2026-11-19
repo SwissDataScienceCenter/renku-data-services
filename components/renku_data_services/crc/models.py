@@ -386,7 +386,9 @@ class SshSettings:
     username: str
     public_host_key: str
     session_secret_name: str
-    auth_key_secret_name: str
+    """The name of a k8s secret at the remote cluster holding host key and auth key."""
+    auth_key_secret_name: str = "renku-ssh-identities"  # nosec B106
+    """The name of a k8s secret that stores private keys per cluster."""
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
