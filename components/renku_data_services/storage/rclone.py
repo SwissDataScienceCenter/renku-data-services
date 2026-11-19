@@ -160,7 +160,10 @@ class RCloneValidator:
             "opt": {"recurse": False, "noModTime": True, "noMimeType": True},
             # Handle SFTP retries, see https://github.com/SwissDataScienceCenter/renku-data-services/issues/893
             "_config": {"LowLevelRetries": 1, "Retries": 1, "ConnectTimeout": "10s", "Timeout": "30s"},
-            "remote": source_path,
+            # The remote is relative to the root of the fs and is not cleaned up by rclone like a CLI path
+            # (e.g. `temp:/bucket/path`) would be. A leading slash makes bucket based backends like S3
+            # see an empty bucket name, so we strip it.
+            "remote": source_path.lstrip("/"),
         }
         url = f"http://127.0.0.1:{self._port}/operations/list"
         try:

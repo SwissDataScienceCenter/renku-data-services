@@ -9952,43 +9952,6 @@
         }),
         dict({
           'advanced': True,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            Override path used by SSH shell commands.
-            
-            This allows checksum calculation when SFTP and SSH paths are
-            different. This issue affects among others Synology NAS boxes.
-            
-            E.g. if shared folders can be found in directories representing volumes:
-            
-                rclone sync /home/local/directory remote:/directory --sftp-path-override /volume2/directory
-            
-            E.g. if home directory can be found in a shared folder called "home":
-            
-                rclone sync /home/local/directory remote:/home/directory --sftp-path-override /volume1/homes/USER/directory
-            	
-            To specify only the path to the SFTP remote's root, and allow rclone to add any relative subpaths automatically (including unwrapping/decrypting remotes as necessary), add the '@' character to the beginning of the path.
-            
-            E.g. the first example above could be rewritten as:
-            
-            	rclone sync /home/local/directory remote:/directory --sftp-path-override @/volume2
-            	
-            Note that when using this method with Synology "home" folders, the full "/homes/USER" path should be specified instead of "/home".
-            
-            E.g. the second example above should be rewritten as:
-            
-            	rclone sync /home/local/directory remote:/homes/USER/directory --sftp-path-override @/volume1
-          ''',
-          'ispassword': False,
-          'name': 'path_override',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': True,
           'default': 33554434.0,
           'default_str': 'Slash,Dot',
           'exclusive': False,
@@ -10014,40 +9977,6 @@
           'required': False,
           'sensitive': False,
           'type': 'bool',
-        }),
-        dict({
-          'advanced': True,
-          'default': '',
-          'default_str': '',
-          'examples': list([
-            dict({
-              'help': 'No shell access',
-              'value': 'none',
-            }),
-            dict({
-              'help': 'Unix shell',
-              'value': 'unix',
-            }),
-            dict({
-              'help': 'PowerShell',
-              'value': 'powershell',
-            }),
-            dict({
-              'help': 'Windows Command Prompt',
-              'value': 'cmd',
-            }),
-          ]),
-          'exclusive': False,
-          'help': '''
-            The type of SSH shell on remote server, if any.
-            
-            Leave blank for autodetect.
-          ''',
-          'ispassword': False,
-          'name': 'shell_type',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
         }),
         dict({
           'advanced': True,
@@ -10090,31 +10019,6 @@
           'help': 'Specifies the SSH2 subsystem on the remote host.',
           'ispassword': False,
           'name': 'subsystem',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': True,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            Specifies the path or command to run a sftp server on the remote host.
-            
-            The subsystem option is ignored when server_command is defined.
-            
-            If adding server_command to the configuration file please note that 
-            it should not be enclosed in quotes, since that will make rclone fail.
-            
-            A working example is:
-            
-                [remote_name]
-                type = sftp
-                server_command = sudo /usr/libexec/openssh/sftp-server
-          ''',
-          'ispassword': False,
-          'name': 'server_command',
           'required': False,
           'sensitive': False,
           'type': 'string',
@@ -10321,37 +10225,6 @@
           'required': False,
           'sensitive': False,
           'type': 'int',
-        }),
-        dict({
-          'advanced': True,
-          'default': list([
-          ]),
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            Environment variables to pass to sftp and commands
-            
-            Set environment variables in the form:
-            
-                VAR=value
-            
-            to be passed to the sftp client and to any commands run (eg md5sum).
-            
-            Pass multiple variables space separated, eg
-            
-                VAR1=value VAR2=value
-            
-            and pass variables with spaces in quotes, eg
-            
-                "VAR3=value with space" "VAR4=value with space" VAR5=nospacehere
-            
-  
-          ''',
-          'ispassword': False,
-          'name': 'set_env',
-          'required': False,
-          'sensitive': False,
-          'type': 'SpaceSepList',
         }),
         dict({
           'advanced': True,

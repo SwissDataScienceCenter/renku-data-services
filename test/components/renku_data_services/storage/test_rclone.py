@@ -190,6 +190,8 @@ def test_rclone_convert(input: dict[str, Any], expected: dict[str, Any]) -> None
     [
         # Public AWS open data bucket, accessible anonymously.
         ({"type": "s3", "provider": "AWS"}, "giab/", True),
+        # A leading slash, as used for global data connectors, must not be treated as an empty bucket name.
+        ({"type": "s3", "provider": "AWS"}, "/giab/", True),
         ({"type": "s3", "provider": "AWS"}, "does_not_exist_at_all/", False),
     ],
 )

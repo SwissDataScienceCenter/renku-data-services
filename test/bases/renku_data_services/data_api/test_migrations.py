@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 import sqlalchemy as sa
 from alembic.script import ScriptDirectory
-from authzed.api.v1 import ReadRelationshipsRequest, RelationshipFilter
+from authzed.api.v1 import Consistency, ReadRelationshipsRequest, RelationshipFilter
 from sanic_testing.testing import SanicASGITestClient
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
@@ -859,7 +859,12 @@ async def _seed_resource_pool_authz_migration_data(
 
 
 async def _read_resource_pool_relationships(authz: Any) -> list[Any]:
-    request = ReadRelationshipsRequest(relationship_filter=RelationshipFilter(resource_type=ResourceType.resource_pool))
+    # The migration writes the relationships in several batches. Without full consistency SpiceDB may serve the
+    # read from a cached revision that only includes the first batch(es).
+    request = ReadRelationshipsRequest(
+        consistency=Consistency(fully_consistent=True),
+        relationship_filter=RelationshipFilter(resource_type=ResourceType.resource_pool),
+    )
     return [resp async for resp in authz.client.ReadRelationships(request)]
 
 
