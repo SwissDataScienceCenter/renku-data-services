@@ -25,6 +25,7 @@ class SessionAuthorize:
     async def authorize_session(self, public_key: str, session_id: str) -> SshSessionData:
         """Authorize a session name."""
         fingerprint = fingerprint_ssh_public_key(public_key)
+        logger.debug(f"Authorize public key for ssh access: {fingerprint}")
         user_id = await self.__ssh_key_repo.get_user_id_by_fingerprint(fingerprint) if fingerprint else None
         if user_id is None:
             # NOTE: malformed and unknown keys are both a plain "no", so the proxy has one failure branch.
