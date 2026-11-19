@@ -39,8 +39,7 @@
 			"version": "1.24"
 		},
 		"./rclone": {
-			"rclone_repository": "https://github.com/SwissDataScienceCenter/rclone.git",
-			"rclone_ref": "v1.71.2+renku-1"
+			"rclone_ref": "v1.76.0"
 		},
 		"./fix-yarnpkg": {}
 	},
