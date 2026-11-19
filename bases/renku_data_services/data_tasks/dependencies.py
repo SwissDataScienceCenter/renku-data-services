@@ -33,6 +33,10 @@ from renku_data_services.resource_usage.core import (
     ResourceUsageService,
 )
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.resource_usage.metering import (
+    OpenMeterClient,
+    ResourceUsageMetering,
+)
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.tasks import SessionTasks
@@ -138,12 +142,16 @@ class DependencyManager:
         )
 
         resource_requests_repo = ResourceRequestsRepo(cfg.db.async_session_maker)
-        resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
+        metering_client: ResourceUsageMetering | None = None
+        if cfg.openmeter.enabled:
+            metering_client = OpenMeterClient(cfg.openmeter)
+        resource_usage_service = ResourceUsageService(repo=resource_requests_repo, metering_client=metering_client)
 
         resource_requests_recorder: ResourcesRequestRecorder
         if cfg.enable_resource_request_tracking:
             resource_requests_recorder = DefaultResourcesRequestRecorder(
-                repo=resource_requests_repo, fetch=ResourceRequestsFetch(k8s_client)
+                repo=resource_requests_repo,
+                fetch=ResourceRequestsFetch(k8s_client),
             )
         else:
             logger.warning("Resource request tracking is disabled!")

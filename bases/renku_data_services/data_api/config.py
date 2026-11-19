@@ -20,6 +20,7 @@ from renku_data_services.db_config.config import DBConfig
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.persisted_logs.config import PersistedLogsConfig
 from renku_data_services.renku_apps.config import AppsConfig
+from renku_data_services.resource_usage.config import OpenMeterConfig
 from renku_data_services.secrets.config import PublicSecretsConfig
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.solr.solr_client import SolrClientConfig
@@ -56,6 +57,7 @@ class Config:
     persisted_logs: PersistedLogsConfig
     project_storage_config: ProjectStorageConfig
     ssh_proxy_config: SshProxyConfig
+    openmeter: OpenMeterConfig
 
     @classmethod
     def from_env(cls, db: DBConfig | None = None) -> Self:
@@ -110,4 +112,5 @@ class Config:
             persisted_logs=PersistedLogsConfig.from_env(namespace=k8s_namespace),
             project_storage_config=ProjectStorageConfig.from_env(),
             ssh_proxy_config=SshProxyConfig.from_env(),
+            openmeter=OpenMeterConfig.from_env(),
         )
