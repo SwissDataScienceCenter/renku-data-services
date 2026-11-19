@@ -2090,7 +2090,7 @@ async def test_session_launcher_environment_build_with_ai_agents(
             "builder_variant": "python",
             "frontend_variant": "vscodium",
             "environment_image_source": "build",
-            "ai_agents": ["claude", "pi"],
+            "ai_agents": ["pi", "claude", "pi"],
         },
     )
     launcher_id = session_launcher["id"]
@@ -2114,6 +2114,9 @@ async def test_session_launcher_environment_build_with_ai_agents(
 
     build_parameters = await patch_build_parameters({"ai_agents": ["codex"]})
     assert build_parameters["ai_agents"] == ["codex"]
+
+    build_parameters = await patch_build_parameters({"ai_agents": ["pi", "claude", "pi", "claude"]})
+    assert build_parameters["ai_agents"] == ["claude", "pi"]
 
     build_parameters = await patch_build_parameters({"ai_agents": None})
     assert "ai_agents" not in build_parameters
@@ -2152,7 +2155,7 @@ async def test_patch_session_launcher_from_global_environment_to_build_with_ai_a
     )
 
     assert res.status_code == 200, res.text
-    assert res.json["environment"]["build_parameters"]["ai_agents"] == ["codex", "claude"]
+    assert res.json["environment"]["build_parameters"]["ai_agents"] == ["claude", "codex"]
 
 
 @pytest.mark.asyncio

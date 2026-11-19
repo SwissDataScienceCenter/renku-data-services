@@ -76,7 +76,7 @@ def validate_unsaved_build_parameters(
     if environment.ai_agents is None or len(environment.ai_agents) == 0:
         ai_agents = None
     else:
-        ai_agents = [agent.value for agent in environment.ai_agents]
+        ai_agents = sorted({agent.value for agent in environment.ai_agents})
 
     return models.UnsavedBuildParameters(
         repository=environment.repository,
@@ -126,7 +126,7 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
         if "ai_agents" in environment.model_fields_set:
             ai_agents = RESET
     else:
-        ai_agents = [agent.value for agent in environment.ai_agents]
+        ai_agents = sorted({agent.value for agent in environment.ai_agents})
 
     return models.BuildParametersPatch(
         repository=environment.repository,
