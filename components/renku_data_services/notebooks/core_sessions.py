@@ -933,16 +933,12 @@ async def get_mount_work_dir(
     return storage_mount, work_dir
 
 
-def ssh_proxy_session_extras(
-    ssh_config: SshProxyConfig, storage_mount: PurePosixPath, build_parameters: BuildParameters | None
-) -> SessionExtraResources:
+def ssh_proxy_session_extras(ssh_config: SshProxyConfig, storage_mount: PurePosixPath) -> SessionExtraResources:
     """Volumes and mounts delivering the proxy-to-session keys to a session.
 
     Only ssh frontends are reached by the proxy; every other session must not get the keys.
     The two secrets are created once by the Helm keygen job; data-services only mounts them here.
     """
-    if session_has_http_frontend(build_parameters):
-        return SessionExtraResources()
     if not ssh_config.enabled:
         return SessionExtraResources()
 
@@ -1119,9 +1115,8 @@ async def start_session(
     )
 
     # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
-    session_extras = session_extras.concat(
-        ssh_proxy_session_extras(ssh_proxy_config, storage_mount, launcher.environment.build_parameters)
-    )
+    if not session_has_http_frontend(launcher.environment.build_parameters):
+        session_extras = session_extras.concat(ssh_proxy_session_extras(ssh_proxy_config, storage_mount))
 
     # Data connectors
     session_extras = session_extras.concat(
@@ -1179,13 +1174,6 @@ async def start_session(
     service_account_name = cluster_settings.service_account_name
 
     ui_path = f"{ingress_config.url_path}/{environment.default_url.lstrip('/')}" if session_type.is_interactive else ""
-    if (
-        launcher.environment.build_parameters
-        and launcher.environment.build_parameters.frontend_variant.lower() == "ssh"
-    ):
-        ui_path = f"ssh://{server_name}@{ssh_proxy_config.hostname}"
-        if ssh_proxy_config.port != 22:
-            ui_path += f":{ssh_proxy_config.port}"
 
     # Annotations
     annotations: dict[str, str] = {
@@ -1422,7 +1410,6 @@ async def patch_session(
     resource_requests_repo: ResourceRequestsRepo,
     project_storage_repo: ProjectStorageRepository,
     authz: Authz,
-    cluster_repo: ClusterRepository,
     ssh_proxy_config: SshProxyConfig,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
@@ -1515,10 +1502,6 @@ async def patch_session(
         labels["renku.io/preemptible"] = str(rc.preemptible).lower()
 
     launcher = await session_repo.get_launcher(user, session.launcher_id)
-    if launcher.environment.build_parameters:
-        labels["renku.io/frontend-variant"] = launcher.environment.build_parameters.frontend_variant
-    else:
-        labels.pop("renku.io/frontend-variant", None)
 
     if not patch.metadata:
         patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
@@ -1589,40 +1572,8 @@ async def patch_session(
     )
 
     # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
-    session_extras = session_extras.concat(
-        ssh_proxy_session_extras(ssh_proxy_config, storage_mount, launcher.environment.build_parameters)
-    )
-
-    cluster_settings: ClusterSettings
-    try:
-        cluster_settings = await cluster_repo.select(cluster.id)
-    except errors.MissingResourceError:
-        # Fallback to global, main cluster parameters
-        cluster_settings = nb_config.local_cluster_settings()
-    ingress_config = SessionIngress(server_name=server_name, cluster_settings=cluster_settings)
-    has_http_frontend = session_has_http_frontend(launcher.environment.build_parameters)
-    # Handle ingress and authentication
-    if session_type.is_interactive and has_http_frontend:
-        patch.spec.ingress = ingress_config.get_k8s_ingress()
-        authentication, auth_secret = await _get_authentication(
-            request, user, launcher, nb_config, server_name, ingress_config
-        )
-        if not authentication or not auth_secret:
-            raise errors.ProgrammingError(
-                message="Cannot define the authentication specification when patching an interactive session "
-                "with HTTP frontend."
-            )
-        patch.spec.authentication = authentication
-        if auth_secret:
-            session_extras = session_extras.concat(
-                SessionExtraResources(
-                    secrets=[auth_secret],
-                    volumes=[auth_secret.volume] if auth_secret.volume else [],
-                )
-            )
-    else:
-        patch.spec.ingress = RESET
-        patch.spec.authentication = RESET
+    if session.likely_ssh():
+        session_extras = session_extras.concat(ssh_proxy_session_extras(ssh_proxy_config, storage_mount))
 
     # Data connectors: skip
     # TODO: How can we patch data connectors? Should we even patch them?

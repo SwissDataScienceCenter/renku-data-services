@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_valid
 from pydantic.types import HashableItemType
 from ulid import ULID
 
+from renku_data_services.app_config.config import SshProxyConfig
 from renku_data_services.base_models.core import RESET, ResetType
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
@@ -84,6 +85,7 @@ from renku_data_services.notebooks.cr_amalthea_session import Type as Authentica
 from renku_data_services.notebooks.cr_amalthea_session import Type1 as CodeRepositoryType
 from renku_data_services.notebooks.cr_amalthea_session import Type3 as Type
 from renku_data_services.notebooks.cr_base import BaseCRD
+from renku_data_services.session.models import FrontendVariant
 
 
 class Metadata(BaseModel):
@@ -285,7 +287,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             )
         return int(self.metadata.annotations["renku.io/resource_class_id"])
 
-    def as_apispec(self) -> apispec.SessionResponse:
+    def as_apispec(self, ssh_config: SshProxyConfig) -> apispec.SessionResponse:
         """Convert the manifest into a form ready to be serialized and sent in a HTTP response."""
         if self.status is None:
             raise errors.ProgrammingError(
@@ -304,7 +306,11 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             )
 
         url = self.base_url()
-        if url is None:
+        if url is None and ssh_config.enabled and self.likely_ssh():
+            url = f"ssh://{self.metadata.name}@{ssh_config.hostname}"
+            if ssh_config.port != 22:
+                url += f":{ssh_config.port}"
+        elif url is None:
             url = "None"
 
         ready_containers = 0
@@ -396,8 +402,8 @@ class AmaltheaSessionV1Alpha1(_ASModel):
 
     def base_url(self) -> str | None:
         """Get the URL of the session, excluding the default URL from the session launcher."""
-        if self.spec.session.urlPath.startswith("ssh://"):
-            return self.spec.session.urlPath
+        if self.likely_ssh():
+            return None
 
         if self.status.url and len(self.status.url) > 0:
             return self.status.url
@@ -414,6 +420,33 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         fragment = None
         url = str(urlunparse((scheme, host, path, params, query, fragment)))
         return url
+
+    def _frontend_variant(self) -> FrontendVariant | None:
+        """Returns the frontend variant from the label of the session, None means the label is missing.
+
+        Not all sessions have the frontend variant label, if the label is missing we cannot tell what
+        is the frontend variant - in this case we return None.
+        If we cannot validate the frontend variant we return also None.
+        """
+        variant = self.metadata.labels.get("renku.io/frontend-variant")
+        if variant is None:
+            return None
+        try:
+            return FrontendVariant(variant)
+        except ValueError:
+            return None
+
+    def likely_ssh(self) -> bool:
+        """In the current setup we cannot be 100% certain the session is using SSH.
+
+        This is our best guess.
+        """
+        return (
+            self._frontend_variant() == FrontendVariant.ssh
+            and self.spec.sessionType == SessionType.Interactive
+            and self.spec.ingress is None
+            and self.spec.authentication is None
+        )
 
     def external_url(self) -> str | None:
         """Get the URL of the session for external access.
