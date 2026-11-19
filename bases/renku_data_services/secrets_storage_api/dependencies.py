@@ -16,6 +16,7 @@ from renku_data_services.k8s.clients import (
 )
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
 from renku_data_services.k8s.db import K8sDbCache
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.resource_usage.core import K8sClient
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets_storage_api.config import Config
@@ -54,11 +55,14 @@ class DependencyManager:
         config = Config.from_env()
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
         default_kubeconfig = KubeConfigEnv()
+        k8s_db_cache = K8sDbCache(session_maker=config.db.async_session_maker)
         client = K8sClusterClientsPool(
             lambda: get_clusters(
                 kube_conf_root_dir=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
                 default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_repo,
+                cache=k8s_db_cache,
+                kinds_to_cache=[AMALTHEA_SESSION_GVK],
             )
         )
         secret_client = K8sSecretClient(client)
@@ -70,7 +74,6 @@ class DependencyManager:
             authenticator = KeycloakAuthenticator.new(config.keycloak)
 
         ssh_key_repo = SSHKeyRepository(session_maker=config.db.async_session_maker)
-        k8s_db_cache = K8sDbCache(session_maker=config.db.async_session_maker)
         ssh_authorize = SSHSessionAuthorize(ssh_key_repo=ssh_key_repo, k8s_client=client, cluster_repo=cluster_repo)
 
         return cls(
