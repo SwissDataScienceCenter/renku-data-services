@@ -617,7 +617,9 @@ async def test_get_token_with_internal_token(
         first_name=regular_user.first_name,
         last_name=regular_user.last_name,
     )
-    internal_access_token = app_manager_instance.internal_token_mint.create_access_token(user=user, scope="test_scope")
+    internal_access_token = app_manager_instance.internal_token_mint.create_access_token(
+        user=user, scope="test_scope api:integrations:tokens"
+    )
     headers = {"Authorization": f"Bearer {internal_access_token}"}
     connection = await create_oauth2_connection("provider_1")
     connection_id = connection["id"]
