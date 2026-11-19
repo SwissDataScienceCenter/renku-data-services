@@ -256,10 +256,11 @@ async def migrate_groups_make_all_public(dm: DependencyManager) -> None:
         try:
             all_groups = dm.authz.client.ReadRelationships(
                 ReadRelationshipsRequest(
+                    consistency=Consistency(fully_consistent=True),
                     relationship_filter=RelationshipFilter(
                         resource_type=ResourceType.group.value,
                         optional_relation=_Relation.group_platform.value,
-                    )
+                    ),
                 )
             )
             all_group_ids: set[str] = set()
@@ -270,6 +271,7 @@ async def migrate_groups_make_all_public(dm: DependencyManager) -> None:
 
             public_groups = dm.authz.client.LookupResources(
                 LookupResourcesRequest(
+                    consistency=Consistency(fully_consistent=True),
                     resource_object_type=ResourceType.group.value,
                     permission=Scope.READ.value,
                     subject=SubjectReference(object=_AuthzConverter.anonymous_user()),
@@ -321,10 +323,11 @@ async def migrate_user_namespaces_make_all_public(dm: DependencyManager) -> None
         try:
             all_user_namespaces = dm.authz.client.ReadRelationships(
                 ReadRelationshipsRequest(
+                    consistency=Consistency(fully_consistent=True),
                     relationship_filter=RelationshipFilter(
                         resource_type=ResourceType.user_namespace.value,
                         optional_relation=_Relation.user_namespace_platform.value,
-                    )
+                    ),
                 )
             )
             all_user_namespace_ids: set[str] = set()
@@ -335,6 +338,7 @@ async def migrate_user_namespaces_make_all_public(dm: DependencyManager) -> None
 
             public_user_namespaces = dm.authz.client.LookupResources(
                 LookupResourcesRequest(
+                    consistency=Consistency(fully_consistent=True),
                     resource_object_type=ResourceType.user_namespace.value,
                     permission=Scope.READ.value,
                     subject=SubjectReference(object=_AuthzConverter.anonymous_user()),

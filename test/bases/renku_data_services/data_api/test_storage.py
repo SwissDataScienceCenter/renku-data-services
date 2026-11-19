@@ -208,13 +208,12 @@ async def test_storage_schema_patches(storage_test_client, snapshot) -> None:
     assert pwd.get("sensitive")
 
     # ensure that the endpoint is required for custom s3 storage
-    endpoints = [
-        o
-        for o in s3["options"]
-        if o["name"] == "endpoint" and o["provider"].startswith("!AWS,ArvanCloud,IBMCOS,IDrive,IONOS,")
-    ]
-    assert endpoints
+    endpoints = [o for o in s3["options"] if o["name"] == "endpoint" and o.get("provider", "").startswith("!AWS,")]
+    assert len(endpoints) == 1
     assert all(e.get("required") for e in endpoints)
+    excluded_providers = endpoints[0]["provider"].lstrip("!").split(",")
+    assert "Other" not in excluded_providers
+    assert "Switch" in excluded_providers
 
     # check custom webdav storage is added
     assert any(s["prefix"] == "polybox" for s in schema)

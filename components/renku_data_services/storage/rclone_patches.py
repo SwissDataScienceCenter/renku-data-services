@@ -56,14 +56,70 @@ def __patch_schema_sensitive(spec: list[dict[str, Any]]) -> None:
 
 
 def __patch_schema_s3_endpoint_required(spec: list[dict[str, Any]]) -> None:
-    """Make endpoint required for 'Other' provider."""
-    for storage in spec:
-        if storage["Prefix"] == "s3":
-            for option in storage["Options"]:
-                if option["Name"] == "endpoint" and option["Provider"].startswith(
-                    "!AWS,ArvanCloud,IBMCOS,IDrive,IONOS,"
-                ):
-                    option["Required"] = True
+    """Make endpoint required for 'Other' and other custom S3 providers.
+
+    RClone has a single, optional 'endpoint' option for S3. We split it in two:
+    - the original option, kept optional, for AWS and for the providers for which rclone knows the endpoints
+      (i.e. which have endpoint examples).
+    - a required copy which applies to all the other providers (e.g. 'Other', 'Minio', 'Ceph') and to
+      configurations without a provider.
+    """
+    s3 = find_storage(spec, "s3")
+    endpoint_idx: int | None = None
+    endpoint: dict[str, Any] | None = None
+    provider_option: dict[str, Any] | None = None
+    for idx, option in enumerate(s3["Options"]):
+        if endpoint is None and option["Name"] == "endpoint":
+            endpoint_idx = idx
+            endpoint = option
+        elif provider_option is None and option["Name"] == "provider":
+            provider_option = option
+    if endpoint_idx is None or endpoint is None:
+        raise errors.ValidationError(message="'endpoint' option not found in the 's3' storage schema.")
+    if provider_option is None:
+        raise errors.ValidationError(message="'provider' option not found in the 's3' storage schema.")
+
+    providers_with_endpoint: list[str] = []
+    for provider in endpoint["Provider"].split(","):
+        if provider:
+            providers_with_endpoint.append(provider)
+
+    providers_with_examples: set[str] = set()
+    for example in endpoint.get("Examples") or []:
+        for provider in (example.get("Provider") or "").split(","):
+            if provider:
+                providers_with_examples.add(provider)
+
+    all_providers: list[str] = []
+    for example in provider_option.get("Examples") or []:
+        all_providers.append(example["Value"])
+
+    required_for: set[str] = set()
+    for provider in providers_with_endpoint:
+        if provider != "AWS" and provider not in providers_with_examples:
+            required_for.add(provider)
+
+    optional_for: list[str] = []
+    for provider in providers_with_endpoint:
+        if provider not in required_for:
+            optional_for.append(provider)
+
+    excluded_from_required: list[str] = []
+    for provider in all_providers:
+        if provider not in required_for:
+            excluded_from_required.append(provider)
+
+    endpoint["Provider"] = ",".join(optional_for)
+
+    required_endpoint = deepcopy(endpoint)
+    required_endpoint.update(
+        {
+            "Provider": "!" + ",".join(excluded_from_required),
+            "Required": True,
+            "Examples": None,
+        }
+    )
+    s3["Options"].insert(endpoint_idx + 1, required_endpoint)
 
 
 def __patch_schema_add_switch_provider(spec: list[dict[str, Any]]) -> None:
@@ -96,8 +152,9 @@ def __patch_schema_add_switch_provider(spec: list[dict[str, Any]]) -> None:
             "Type": "string",
         }
     )
+    # Exclude Switch from the catch-all (required) endpoint added by __patch_schema_s3_endpoint_required
     existing_endpoint_spec = next(
-        o for o in s3["Options"] if o["Name"] == "endpoint" and o["Provider"].startswith("!AWS,")
+        o for o in s3["Options"] if o["Name"] == "endpoint" and o.get("Provider", "").startswith("!AWS,")
     )
     existing_endpoint_spec["Provider"] += ",Switch"
 

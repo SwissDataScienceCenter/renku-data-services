@@ -23,6 +23,8 @@ class StorageConfig:
 STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
     # "alias" refers to other rclone configs
     "alias": StorageConfig(allowed=False),
+    # "archive" refers to other rclone configs
+    "archive": StorageConfig(allowed=False),
     # Allow azureblob
     "azureblob": StorageConfig(
         allowed=True,
@@ -34,6 +36,7 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "tenant": True,
             "client_id": True,
             "client_secret": True,
+            "connection_string": True,
             # Path to a local file
             "client_certificate_path": False,
             # Related to above option
@@ -56,8 +59,11 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "upload_concurrency": True,
             "copy_cutoff": True,
             "copy_concurrency": True,
+            "copy_total_concurrency": True,
             "use_copy_blob": True,
             "list_chunk": True,
+            "use_arrow_list": True,
+            "list_parallelism": True,
             "access_tier": True,
             "archive_tier_delete": True,
             "disable_checksum": True,
@@ -69,6 +75,8 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "no_check_container": True,
             "no_head_object": True,
             "delete_snapshots": True,
+            "hns": True,
+            "decompress": True,
             "description": True,
         },
     ),
@@ -94,6 +102,10 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
     "doi": StorageConfig(
         allowed=True, options={"doi": True, "provider": True, "doi_resolver_api_url": True, "description": True}
     ),
+    # Not validated
+    "dosya": StorageConfig(allowed=False),
+    # Not validated
+    "drime": StorageConfig(allowed=False),
     # Allow drive
     "drive": StorageConfig(
         allowed=True,
@@ -147,6 +159,7 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "metadata_owner": True,
             "metadata_permissions": True,
             "metadata_labels": True,
+            "metadata_enforce_expansive_access": True,
             "encoding": True,
             "env_auth": True,
             "description": True,
@@ -164,8 +177,11 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "client_credentials": True,
             "chunk_size": True,
             "impersonate": True,
+            "impersonate_admin": True,
             "shared_files": True,
             "shared_folders": True,
+            "skip_shared_folders": True,
+            "skip_unowned_folders": True,
             "pacer_min_sleep": True,
             "encoding": True,
             "root_namespace": True,
@@ -185,6 +201,8 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
     "filefabric": StorageConfig(allowed=False),
     # Not validated
     "filelu": StorageConfig(allowed=False),
+    # Not validated
+    "filen": StorageConfig(allowed=False),
     # Not validated
     "filescom": StorageConfig(allowed=False),
     # Allow ftp
@@ -230,6 +248,8 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
     "hdfs": StorageConfig(allowed=False),
     # Not validated
     "hidrive": StorageConfig(allowed=False),
+    # Not validated
+    "huaweidrive": StorageConfig(allowed=False),
     # Allow http
     "http": StorageConfig(
         allowed=True,
@@ -238,6 +258,8 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "headers": True,
             "no_slash": True,
             "no_head": True,
+            "no_head_size": True,
+            "no_head_time": True,
             "no_escape": True,
             "description": True,
         },
@@ -249,7 +271,11 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
     # Not validated
     "internetarchive": StorageConfig(allowed=False),
     # Not validated
+    "internxt": StorageConfig(allowed=False),
+    # Not validated
     "jottacloud": StorageConfig(allowed=False),
+    # Not validated
+    "kdrive": StorageConfig(allowed=False),
     # Not validated
     "koofr": StorageConfig(allowed=False),
     # Not validated
@@ -282,6 +308,8 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "root_folder_id": True,
             "access_scopes": True,
             "tenant": True,
+            "tenant_url": True,
+            "tenant_api_version": True,
             "disable_site_permission": True,
             "expose_onenote_files": True,
             "server_side_across_configs": True,
@@ -319,6 +347,7 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "password": True,
             "mailbox_password": True,
             "2fa": True,
+            "otp_secret_key": True,
             "client_uid": True,
             "client_access_token": True,
             "client_refresh_token": True,
@@ -345,6 +374,10 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "env_auth": True,
             "access_key_id": True,
             "secret_access_key": True,
+            "role_arn": True,
+            "role_session_name": True,
+            "role_session_duration": True,
+            "role_external_id": True,
             "region": True,
             "endpoint": True,
             "location_constraint": True,
@@ -378,6 +411,7 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "list_chunk": True,
             "list_version": True,
             "list_url_encode": True,
+            "list_versions_oldest_first": True,
             "no_check_bucket": True,
             "no_head": True,
             "no_head_object": True,
@@ -402,15 +436,26 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "use_multipart_uploads": True,
             "use_x_id": True,
             "sign_accept_encoding": True,
+            "use_data_integrity_protections": True,
             "directory_bucket": True,
             "sdk_log_mode": True,
             "ibm_api_key": True,
             "ibm_resource_instance_id": True,
+            "ibm_iam_endpoint": True,
+            "object_lock_mode": True,
+            "object_lock_retain_until_date": True,
+            "object_lock_legal_hold_status": True,
+            "bypass_governance_retention": True,
+            "bucket_object_lock_enabled": True,
+            "object_lock_set_after_upload": True,
+            "object_lock_supported": True,
             "description": True,
         },
     ),
     # Not validated
     "seafile": StorageConfig(allowed=False),
+    # Not validated
+    "shade": StorageConfig(allowed=False),
     # Allow sftp
     "sftp": StorageConfig(
         allowed=True,
@@ -429,13 +474,18 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "pubkey_file": False,
             # Path to a local file
             "known_hosts_file": False,
+            "host_keys": True,
+            # Writes the host key back to the local rclone config file
+            "pin_host_key": False,
             "key_use_agent": True,
             "use_insecure_cipher": True,
             "disable_hashcheck": True,
             "ask_password": True,
-            "path_override": True,
+            # Changes the path used by commands run on the remote host
+            "path_override": False,
             "set_modtime": True,
-            "shell_type": True,
+            # Changes how commands run on the remote host are built
+            "shell_type": False,
             "hashes": True,
             # Command, not validated
             "md5sum_command": False,
@@ -453,7 +503,8 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "xxh128sum_command": False,
             "skip_links": True,
             "subsystem": True,
-            "server_command": True,
+            # Command run on the remote host
+            "server_command": False,
             "use_fstat": True,
             "disable_concurrent_reads": True,
             "disable_concurrent_writes": True,
@@ -461,7 +512,9 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "chunk_size": True,
             "concurrency": True,
             "connections": True,
-            "set_env": True,
+            "multithread_upload": True,
+            # Environment variables for commands run on the remote host
+            "set_env": False,
             "ciphers": True,
             "key_exchange": True,
             "macs": True,
@@ -471,6 +524,7 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "socks_proxy": True,
             "http_proxy": True,
             "copy_is_hardlink": True,
+            "encoding": True,
             "description": True,
         },
     ),
@@ -492,8 +546,6 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
     "ulozto": StorageConfig(allowed=False),
     # "union" refers to other rclone configs
     "union": StorageConfig(allowed=False),
-    # Not validated
-    "uptobox": StorageConfig(allowed=False),
     # Allow webdav
     "webdav": StorageConfig(
         allowed=True,
