@@ -25,6 +25,7 @@ from renku_data_services.migrations.core import downgrade_migrations_for_app, ge
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.users import orm as user_schemas
 from renku_data_services.users.models import UserInfo
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 
 @pytest.mark.asyncio
@@ -997,3 +998,62 @@ async def test_migration_to_20076b29e3b8(app_manager_instance: DependencyManager
             )
         ).one()
     assert row._tuple() == (1.5, 2, 20, 1, 0)
+
+
+@pytest.mark.asyncio
+async def test_migration_to_eb976e4ecf40(
+    app_manager_instance: DependencyManager,
+    sanic_client_no_migrations: SanicASGITestClient,
+    user_headers: dict[str, Any],
+    admin_user: UserInfo,
+    regular_user: UserInfo,
+) -> None:
+    """Test."""
+
+    # NOTE: '9fbed1a9c79f' is the down revision of 'eb976e4ecf40'
+    run_migrations_for_app("common", "9fbed1a9c79f")
+
+    # This forces the users database table to be populated
+    _, res = await sanic_client_no_migrations.get("/api/data/user", headers=user_headers)
+    assert res.status_code == 200, res.text
+
+    # NOTE: The following SQL definitions should be valid as of '9fbed1a9c79f'.
+
+    project_visibility = sa.Enum("public", "private", name="visibility")
+    project_table = sa.Table(
+        "projects",
+        sa.MetaData(schema="projects"),
+        sa.Column("id", ULIDType(), primary_key=True),
+        sa.Column("name", sa.String(99)),
+        sa.Column("visibility", project_visibility),
+        sa.Column("created_by_id", sa.String()),
+        sa.Column("creation_date", sa.DateTime(timezone=True)),
+        sa.Column("updated_at", sa.DateTime(timezone=True)),
+    )
+
+    async def insert_project(session: AsyncSession, **payload: dict[str, Any]):
+        if "id" not in payload:
+            payload["id"] = ULID()
+        if "name" not in payload:
+            payload["name"] = "My project"
+        if "visibility" not in payload:
+            payload["visibility"] = "private"
+        if "created_by_id" not in payload:
+            payload["created_by_id"] = regular_user.id
+        if "creation_date" not in payload:
+            payload["creation_date"] = datetime.now(UTC)
+        if "updated_at" not in payload:
+            payload["updated_at"] = payload["creation_date"]
+        stmt = project_table.insert().values(**payload).returning(project_table)
+        insert_result = await session.execute(stmt)
+        project = insert_result.one()
+        return project.id
+
+    # TODO
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        await _generate_user_namespaces(session)
+
+        project_id = await insert_project(session)
+        # assert project is None
+
+    run_migrations_for_app("common", "eb976e4ecf40")
