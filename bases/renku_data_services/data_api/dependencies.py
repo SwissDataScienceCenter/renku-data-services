@@ -93,6 +93,7 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
+from renku_data_services.ssh_proxy.core import SSHSessionAuthorize
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
@@ -167,6 +168,7 @@ class DependencyManager:
     apps_repo: RenkuAppsRepository | None
     user_preferences_repo: UserPreferencesRepository
     ssh_key_repo: SSHKeyRepository
+    ssh_authorize: SSHSessionAuthorize
     kc_user_repo: KcUserRepo
     low_level_user_secrets_repo: LowLevelUserSecretsRepo
     user_secrets_repo: UserSecretsRepo
@@ -446,6 +448,7 @@ class DependencyManager:
             user_preferences_config=config.user_preferences,
         )
         ssh_key_repo = SSHKeyRepository(session_maker=config.db.async_session_maker)
+        ssh_authorize = SSHSessionAuthorize(ssh_key_repo, client, cluster_repo)
         low_level_user_secrets_repo = LowLevelUserSecretsRepo(
             session_maker=config.db.async_session_maker,
         )
@@ -561,6 +564,7 @@ class DependencyManager:
             apps_repo=apps_repo,
             user_preferences_repo=user_preferences_repo,
             ssh_key_repo=ssh_key_repo,
+            ssh_authorize=ssh_authorize,
             kc_user_repo=kc_user_repo,
             user_secrets_repo=user_secrets_repo,
             connected_services_repo=connected_services_repo,

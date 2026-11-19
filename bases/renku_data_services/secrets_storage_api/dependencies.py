@@ -19,6 +19,7 @@ from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.resource_usage.core import K8sClient
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets_storage_api.config import Config
+from renku_data_services.ssh_proxy.core import SSHSessionAuthorize
 from renku_data_services.users.db import SSHKeyRepository
 
 
@@ -30,6 +31,7 @@ class DependencyManager:
     config: Config
     secret_client: SecretClient
     ssh_key_repo: SSHKeyRepository
+    ssh_authorize: SSHSessionAuthorize
     k8s_db_cache: K8sDbCache
     k8s_client: K8sClient
     cluster_repo: ClusterRepository
@@ -69,12 +71,14 @@ class DependencyManager:
 
         ssh_key_repo = SSHKeyRepository(session_maker=config.db.async_session_maker)
         k8s_db_cache = K8sDbCache(session_maker=config.db.async_session_maker)
+        ssh_authorize = SSHSessionAuthorize(ssh_key_repo=ssh_key_repo, k8s_client=client, cluster_repo=cluster_repo)
 
         return cls(
             config=config,
             authenticator=authenticator,
             secret_client=secret_client,
             ssh_key_repo=ssh_key_repo,
+            ssh_authorize=ssh_authorize,
             k8s_db_cache=k8s_db_cache,
             k8s_client=client,
             cluster_repo=cluster_repo,

@@ -16,7 +16,7 @@ from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret, SecretKind
-from renku_data_services.ssh_proxy.core import SessionAuthorize
+from renku_data_services.ssh_proxy.core import SSHSessionAuthorize
 from renku_data_services.ssh_proxy.model import SshSessionData
 from renku_data_services.users import apispec, models
 from renku_data_services.users.core import (
@@ -315,7 +315,7 @@ class SSHKeysBP(CustomBlueprint):
 
     ssh_key_repo: SSHKeyRepository
     authenticator: base_models.Authenticator
-    ssh_authorize: SessionAuthorize
+    ssh_authorize: SSHSessionAuthorize
 
     def authorize(self) -> BlueprintFactoryResponse:
         """Authorize a session name."""
