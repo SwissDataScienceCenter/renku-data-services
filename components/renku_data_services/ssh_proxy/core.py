@@ -31,12 +31,10 @@ class SSHSessionAuthorize:
         if user_id is None:
             # NOTE: malformed and unknown keys are both a plain "no", so the proxy has one failure branch.
             raise errors.MissingResourceError(message="No registered SSH key matches the provided key.")
-        sessions = [
-            obj
-            async for obj in self.__k8s_client.list(
-                K8sObjectFilter(gvk=AMALTHEA_SESSION_GVK, name=session_id, user_id=user_id)
-            )
-        ]
+
+        session_filter = K8sObjectFilter(gvk=AMALTHEA_SESSION_GVK, name=session_id, user_id=user_id)
+        logger.debug(f"Search sessions: {session_filter}")
+        sessions = [obj async for obj in self.__k8s_client.list(session_filter)]
         logger.debug(f"Found sessions: {len(sessions)}")
         if not sessions:
             raise errors.MissingResourceError(message="The session does not exist or is not accessible.")
