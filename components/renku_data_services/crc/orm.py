@@ -69,7 +69,7 @@ class UserORM(BaseORM):
 
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
-    no_default_access: Mapped[bool] = mapped_column(default=False, insert_default=False)
+    no_default_access: Mapped[bool] = mapped_column(default=False)
     resource_pools: Mapped[list[ResourcePoolORM]] = relationship(
         secondary=resource_pools_users,
         back_populates="users",
