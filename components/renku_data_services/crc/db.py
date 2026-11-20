@@ -2482,3 +2482,21 @@ class StorageQuotaRepository:
         await session.flush()
         await session.refresh(sq_orm)
         return sq_orm.dump()
+
+    async def delete_storage_quota(
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        storage_quota_id: ULID,
+    ) -> None:
+        """Delete a storage quota from the database."""
+        if user.id is None or not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+        sq_orm = await self._get_storage_quota_or_none_orm(
+            session=session, user=user, storage_quota_id=storage_quota_id
+        )
+        if sq_orm is None:
+            return None
+        await session.delete(sq_orm)
+        await session.flush()
+        return None
