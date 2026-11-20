@@ -1051,6 +1051,7 @@ components:
       description: A description for the resource
       type: string
       maxLength: 500
+      nullable: true
     BuildParameters:
       description: Build parameters
       allOf:

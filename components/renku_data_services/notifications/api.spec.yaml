@@ -214,6 +214,7 @@ components:
         fingerprint:
           type: string
           description: A unique fingerprint identifying this alert
+          nullable: true
     AlertsGetQuery:
       description: Query parameters for getting alerts
       type: object
