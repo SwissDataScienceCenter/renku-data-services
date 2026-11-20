@@ -197,6 +197,41 @@ async def test_get_storage_quota_etag_depends_on_storage_flavor(
     assert result.get("etag") != old_etag
 
 
+@pytest.mark.asyncio
+async def test_get_storage_quota_resources_all_free(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    regular_user: UserInfo,
+    create_resource_pool,
+    create_storage_flavor,
+    create_storage_quota,
+) -> None:
+    rp = await create_resource_pool(admin=True, public=False)
+    rp_id = rp["id"]
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp_id}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": regular_user.id, "role": "viewer"}],
+    )
+
+    sf = await create_storage_flavor()
+    sf_id = sf["id"]
+
+    sq = await create_storage_quota(resource_pool_id=rp_id, storage_flavor_id=sf_id)
+    sq_id = sq["id"]
+
+    _, res = await sanic_client.get(f"/api/data/storage_quotas/{sq_id}/resources", headers=user_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    result = res.json
+    assert result.get("id") == sq_id
+    assert result.get("allocated_size") == 0
+    assert result.get("requested_size") == 0
+    assert result.get("free_size") == sq["total_size"]
+
+
 # @pytest.mark.asyncio
 # async def test_get_storage_flavor_not_modified(
 #     sanic_client: SanicASGITestClient, admin_headers: dict[str, str], insert_storage_flavor

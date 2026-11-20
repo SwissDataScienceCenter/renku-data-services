@@ -1161,3 +1161,19 @@ class StorageQuotasBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/storage_quotas/<storage_quota_id:ulid>", ["DELETE"], _delete
+
+    def get_one_resources(self) -> BlueprintFactoryResponse:
+        """Get a report of free and used resources of a storage quota."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_one_resources(
+            _: Request, user: base_models.APIUser, storage_quota_id: ULID
+        ) -> JSONResponse | HTTPResponse:
+            async with self.session_maker() as session, session.begin():
+                resources = await self.storage_quota_repo.get_storage_quota_resources(
+                    session=session, user=user, storage_quota_id=storage_quota_id
+                )
+            return validated_json(apispec.StorageQuotaResources, resources)
+
+        return "/storage_quotas/<storage_quota_id:ulid>/resources", ["GET"], _get_one_resources
