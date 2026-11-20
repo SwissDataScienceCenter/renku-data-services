@@ -112,14 +112,68 @@ ALLOWED_SLOW_ENDPOINTS = [
     ("/oauth2/providers", "POST"),
 ]
 
-# NOTE: Request bodies are validated by pydantic in lax mode, which coerces types (e.g. `0` -> `False` for
-# booleans, `False` -> `0` for integers). Schemathesis' negative data generation sends such values and
-# expects them to be rejected. Until body validation is made strict, we skip negative_data_rejection for
-# the endpoints where this has been observed.
+# NOTE: Request bodies are validated by pydantic in lax mode, which accepts data that violates the API spec:
+# - explicit `null` for optional fields that are not nullable (generated models use `X | None = None`)
+# - type coercion for booleans, integers and numbers (e.g. `0` -> `False`, `False` -> `0`, `"5"` -> `5`)
+# - integers (unix timestamps) for date-time strings
+# Schemathesis' negative data generation sends such values and expects them to be rejected. Until body
+# validation is made strict, we skip negative_data_rejection for every endpoint whose JSON request body
+# contains at least one such field. Endpoints with sessions/notebooks/apps prefixes are excluded anyway.
 LAX_BODY_VALIDATION_ENDPOINTS = [
     ("/clusters", "POST"),
-    ("/environments", "POST"),
+    ("/clusters/{cluster_id}", "PUT"),
+    ("/clusters/{cluster_id}", "PATCH"),
     ("/resource_flavors", "POST"),
+    ("/resource_flavors/{resource_flavor_id}", "PATCH"),
+    ("/resource_pools", "POST"),
+    ("/resource_pools/{resource_pool_id}", "PUT"),
+    ("/resource_pools/{resource_pool_id}", "PATCH"),
+    ("/resource_pools/{resource_pool_id}/classes", "POST"),
+    ("/resource_pools/{resource_pool_id}/classes/{class_id}", "PUT"),
+    ("/resource_pools/{resource_pool_id}/classes/{class_id}", "PATCH"),
+    ("/resource_pools/{resource_pool_id}/users", "POST"),
+    ("/resource_pools/{resource_pool_id}/users", "PUT"),
+    ("/resource_pools/{resource_pool_id}/quota", "PUT"),
+    ("/resource_pools/{resource_pool_id}/quota", "PATCH"),
+    ("/users/{user_id}/resource_pools", "POST"),
+    ("/users/{user_id}/resource_pools", "PUT"),
+    ("/storage_schema/validate", "POST"),
+    ("/storage_schema/test_connection", "POST"),
+    ("/storage_schema/obscure", "POST"),
+    ("/storage", "POST"),
+    ("/storage/allow", "POST"),
+    ("/storage/allow/{project_id}", "PATCH"),
+    ("/storage/{storage_id}", "PATCH"),
+    ("/user/secrets", "POST"),
+    ("/user/secrets/{secret_id}", "PATCH"),
+    ("/projects", "POST"),
+    ("/projects/{project_id}", "PATCH"),
+    ("/renku_v1_projects/{v1_id}/migrations", "POST"),
+    ("/projects/{project_id}/copies", "POST"),
+    ("/session_secret_slots", "POST"),
+    ("/session_secret_slots/{slot_id}", "PATCH"),
+    ("/groups/{group_slug}", "PATCH"),
+    ("/environments", "POST"),
+    ("/environments/{environment_id}", "PATCH"),
+    ("/session_launchers", "POST"),
+    ("/session_launchers/{launcher_id}", "PATCH"),
+    ("/builds/{build_id}", "PATCH"),
+    ("/oauth2/providers", "POST"),
+    ("/oauth2/providers/{provider_id}", "PATCH"),
+    ("/platform/config", "PATCH"),
+    ("/platform/authorization_config", "PATCH"),
+    ("/platform/redirects/{source_url}", "PATCH"),
+    ("/data_connectors", "POST"),
+    ("/data_connectors/global", "POST"),
+    ("/data_connectors/{data_connector_id}", "PATCH"),
+    ("/deposits", "POST"),
+    ("/deposits/{deposit_id}", "PATCH"),
+    ("/alerts", "POST"),
+    ("/alerts/{alert_id}", "PATCH"),
+    ("/webhooks/alertmanager", "POST"),
+    ("/capacity-reservations", "POST"),
+    ("/resource_pools/{resource_pool_id}/limits", "PUT"),
+    ("/resource_pools/{resource_pool_id}/classes/{class_id}/cost", "PUT"),
 ]
 
 # TODO: RE-enable schemathesis when CI setup for notebooks / sessions / apps is ready
