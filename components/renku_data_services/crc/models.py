@@ -19,7 +19,7 @@ from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import ResourceType
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sPatch, K8sResourceQuota
-from renku_data_services.utils.etag import compute_etag_from_timestamp
+from renku_data_services.utils.etag import compute_etag_from_fields, compute_etag_from_timestamp
 
 
 class ResourcesProtocol(Protocol):
@@ -721,3 +721,64 @@ class StorageFlavorPatch:
     min_size_bytes: ByteSize | None
     admin_documentation: str | None
     documentation: str | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedStorageQuota:
+    """Unsaved storage quota."""
+
+    resource_pool_id: int
+    storage_flavor_id: ULID
+    total_size_bytes: ByteSize
+    max_size_bytes: ByteSize
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class StorageQuota(UnsavedStorageQuota):
+    """Storage quota.
+
+    Storage quota represents allocated resources for self-provisioned storage.
+    """
+
+    id: ULID
+    storage_flavor: StorageFlavor
+    creation_date: datetime
+    updated_at: datetime
+
+    @property
+    def storage_flavor_display_name(self) -> str:
+        """Display name of the used storage flavor."""
+        return self.storage_flavor.display_name
+
+    @property
+    def storage_flavor_min_size(self) -> int:
+        """Minimum size from the used storage flavor."""
+        return self.storage_flavor.min_size
+
+    @property
+    def storage_flavor_documentation(self) -> str | None:
+        """Minimum size from the used storage flavor."""
+        return self.storage_flavor.documentation
+
+    @property
+    def total_size(self) -> int:
+        """Total size (GiB) of the quota."""
+        return int(self.total_size_bytes.to_gibi())
+
+    @property
+    def max_size(self) -> int:
+        """Maximum size (GiB) per storage in the quota."""
+        return int(self.max_size_bytes.to_gibi())
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this storage class instance."""
+        return compute_etag_from_fields(self.updated_at, self.storage_flavor.etag)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class StorageQuotaPatch:
+    """Model for changes requested on a storage quota."""
+
+    total_size_bytes: ByteSize | None
+    max_size_bytes: ByteSize | None
