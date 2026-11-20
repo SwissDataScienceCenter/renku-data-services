@@ -129,7 +129,7 @@ class CapacityReservationK8sClient:
         )
         await self.__client.patch(meta, {"spec": {"replicas": replicas}})
 
-    async def list_placeholder_deployments(self) -> AsyncGenerator[K8sObject, None]:
+    async def list_placeholder_deployments(self) -> AsyncGenerator[K8sObject]:
         """List all capacity-placeholder deployments across all clusters."""
         async for obj in self.__client.list(
             K8sObjectFilter(
@@ -139,7 +139,7 @@ class CapacityReservationK8sClient:
         ):
             yield obj
 
-    async def list_sessions(self) -> AsyncGenerator[dict, None]:
+    async def list_sessions(self) -> AsyncGenerator[dict]:
         """List all non-hibernated AmaltheaSession objects across all clusters, yielding relevant fields as dicts."""
         async for s in self.__client.list(K8sObjectFilter(gvk=AMALTHEA_SESSION_GVK)):
             session = AmaltheaSessionV1Alpha1.model_validate(s.manifest)

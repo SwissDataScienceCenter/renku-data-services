@@ -1087,6 +1087,7 @@ components:
       description: A description for the resource
       type: string
       maxLength: 500
+      nullable: true
     KeywordsList:
       description: Project keywords
       type: array

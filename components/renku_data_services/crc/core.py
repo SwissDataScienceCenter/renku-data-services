@@ -9,6 +9,7 @@ from ulid import ULID
 from renku_data_services.base_models import RESET, ResetType
 from renku_data_services.crc import apispec, models
 from renku_data_services.errors import errors
+from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.utils.core import get_effective_quota
 
@@ -347,7 +348,7 @@ def validate_resource_pool_post(
         default=body.default,
         public=body.public,
         remote=remote,
-        cluster_id=ULID.from_str(body.cluster_id) if body.cluster_id else None,
+        cluster_id=ClusterId(ULID.from_str(body.cluster_id)) if body.cluster_id else None,
         platform=platform,
     )
 
@@ -453,7 +454,7 @@ def validate_resource_pool_put_or_patch(
         default=body.default,
         public=body.public,
         remote=remote,
-        cluster_id=ULID.from_str(body.cluster_id) if body.cluster_id else None,
+        cluster_id=ClusterId(ULID.from_str(body.cluster_id)) if body.cluster_id else None,
         platform=platform,
         cpu_limit_factor=cpu_limit_factorrr,
     )

@@ -56,7 +56,7 @@ class GitLabAdapter(GitProviderAdapter):
         """Compute the metadata API URL for a git repository."""
         path = urlparse(repository_url).path
         path = path.removeprefix("/").removesuffix(".git")
-        return urljoin(self.api_url, f"projects/{quote(path, safe="")}")
+        return urljoin(self.api_url, f"projects/{quote(path, safe='')}")
 
     def api_validate_repository_response(
         self, response: Response, is_anonymous: bool = False

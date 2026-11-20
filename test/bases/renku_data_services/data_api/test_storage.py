@@ -1040,7 +1040,7 @@ async def test_get_all_storage_allow(
 ) -> None:
     project = await create_project(sanic_client, "Test Project")
     project_id = project["id"]
-    slug = f"{project["namespace"]}/{project["slug"]}"
+    slug = f"{project['namespace']}/{project['slug']}"
 
     payload = {"project_ref": {"slug": slug}, "max_size": 10}
     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)

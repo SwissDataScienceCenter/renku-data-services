@@ -2,7 +2,7 @@
 
 import functools
 from collections.abc import Awaitable, Callable
-from typing import Concatenate, ParamSpec, Protocol, TypeVar, cast
+from typing import Concatenate, Protocol, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,18 +36,13 @@ class WithSearchUpdateRepo(Protocol):
         ...
 
 
-_P = ParamSpec("_P")
-_T = TypeVar("_T")
-_WithSearchUpdateRepo = TypeVar("_WithSearchUpdateRepo", bound=WithSearchUpdateRepo)
-
-
-def update_search_document(
-    f: Callable[Concatenate[_WithSearchUpdateRepo, _P], Awaitable[_T]],
-) -> Callable[Concatenate[_WithSearchUpdateRepo, _P], Awaitable[_T]]:
+def update_search_document[WithSearchUpdateRepoT: WithSearchUpdateRepo, **P, T](
+    f: Callable[Concatenate[WithSearchUpdateRepoT, P], Awaitable[T]],
+) -> Callable[Concatenate[WithSearchUpdateRepoT, P], Awaitable[T]]:
     """Calls the wrapped function and updates the search_update table with corresponding data."""
 
     @functools.wraps(f)
-    async def func_wrapper(self: _WithSearchUpdateRepo, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+    async def func_wrapper(self: WithSearchUpdateRepoT, *args: P.args, **kwargs: P.kwargs) -> T:
         session = kwargs.get("session")
         if not isinstance(session, AsyncSession):
             raise errors.ProgrammingError(

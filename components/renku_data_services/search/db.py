@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable
 from datetime import datetime
 from textwrap import dedent
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -183,7 +183,7 @@ class SearchUpdatesRepo:
             el = result.first()
             if el is None:
                 raise Exception(f"Inserting {entity} did not result in returning an id.")
-            return cast(ULID, ULID.from_str(el.id))  # huh? mypy wants this cast
+            return ULID.from_str(el.id)
 
     async def insert(self, entity: Entity, started_at: datetime | None) -> ULID:
         """Insert a entity document into the staging table.
@@ -213,7 +213,7 @@ class SearchUpdatesRepo:
             el = result.first()
             if el is None:
                 raise Exception(f"Inserting {entity} did not result in returning an id.")
-            return cast(ULID, ULID.from_str(el.id))
+            return ULID.from_str(el.id)
 
     async def clear_all(self) -> None:
         """Clears the staging table of all data."""

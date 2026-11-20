@@ -24,7 +24,7 @@ from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.db import UserRepo
 
 
-def _get_stmt(requested_by: APIUser) -> Select[tuple[SecretORM]]:
+def _get_stmt(requested_by: APIUser) -> Select[SecretORM]:
     return (
         select(SecretORM)
         .where(SecretORM.user_id == requested_by.id)
@@ -58,7 +58,7 @@ class LowLevelUserSecretsRepo:
 
     async def get_all_secrets_batched(
         self, requested_by: InternalServiceAdmin, batch_size: int = 100
-    ) -> AsyncGenerator[Sequence[tuple[Secret, str]], None]:
+    ) -> AsyncGenerator[Sequence[tuple[Secret, str]]]:
         """Get secrets in batches.
 
         Only for internal use.
@@ -207,6 +207,8 @@ class UserSecretsRepo:
                 expiration_timestamp=secret.expiration_timestamp,
                 default_filename=default_filename,
             )
+            secret_orm.session_secrets = []
+            secret_orm.data_connector_secrets = []
             session.add(secret_orm)
 
             try:

@@ -5,7 +5,6 @@ import string
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
-from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import ColumnElement, ColumnExpressionArgument, Select, and_, case, delete, func, or_, select
@@ -56,7 +55,7 @@ from renku_data_services.utils.core import with_db_transaction
 
 def _build_launcher_data_connector_select(
     launcher_id: ULID,
-) -> Select[tuple[schemas.DataConnectorToProjectLinkORM, str]]:
+) -> Select[schemas.DataConnectorToProjectLinkORM, str]:
     """Build a SELECT statement for a launcher's data connectors and their effective access policies."""
 
     launcher_policy = SessionLauncherDataConnectorORM.policy
@@ -416,6 +415,7 @@ class DataConnectorRepository:
             if isinstance(data_connector, models.UnsavedGlobalDataConnector)
             else None,
         )
+        data_connector_orm.old_slugs = []
         if ns is not None:
             data_connector_slug = ns_schemas.EntitySlugORM.create_data_connector_slug(
                 slug,
@@ -535,7 +535,7 @@ class DataConnectorRepository:
             # NOTE: changing the visibility requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
         if patch.namespace is not None and patch.namespace != old_data_connector_parent:
-            # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission # noqa E501
+            # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
         if patch.slug is not None and patch.slug != old_data_connector.slug:
             # NOTE: changing the slug requires the user to be owner which means they should have DELETE permission
@@ -1291,7 +1291,7 @@ class DataConnectorSecretRepository:
         )
 
         async with self.session_maker() as session:
-            stmt: Select[tuple[schemas.DataConnectorORM, bool]]
+            stmt: Select[schemas.DataConnectorORM, bool]
             if launcher_id is None:
                 stmt = (
                     select(
@@ -1442,6 +1442,8 @@ class DataConnectorSecretRepository:
                         kind=SecretKind.storage,
                         expiration_timestamp=expiration_timestamp,
                     )
+                    secret_orm.session_secrets = []
+                    secret_orm.data_connector_secrets = []
                     data_connector_secret_orm = schemas.DataConnectorSecretORM(
                         name=name,
                         user_id=user.id,
@@ -1472,12 +1474,9 @@ class DataConnectorSecretRepository:
             await session.execute(stmt)
 
 
-_T = TypeVar("_T", int, schemas.DataConnectorORM)
-
-
-def _filter_by_namespace_slug(
-    stmt: Select[tuple[_T]], namespace: ProjectPath | NamespacePath, slug: DataConnectorSlug | None = None
-) -> Select[tuple[_T]]:
+def _filter_by_namespace_slug[T: (int, schemas.DataConnectorORM)](
+    stmt: Select[T], namespace: ProjectPath | NamespacePath, slug: DataConnectorSlug | None = None
+) -> Select[T]:
     """Filters a select query on data connectors to a given namespace.
 
     If the data connector slug is given we try to match 1 single data connector.
@@ -1547,7 +1546,7 @@ def _filter_by_namespace_slug(
 
 def _old_data_connector_slug_queries(
     path: DataConnectorInProjectPath | DataConnectorPath,
-) -> list[Select[tuple[schemas.DataConnectorORM]]]:
+) -> list[Select[schemas.DataConnectorORM]]:
     """Prepare queries that return data connector IDs based on a full data connector path."""
 
     def _dc_old_ns_is(slug: NamespaceSlug) -> ColumnExpressionArgument[bool]:
@@ -1594,7 +1593,7 @@ def _old_data_connector_slug_queries(
             ns_schemas.EntitySlugORM.slug == slug.value.lower(),
         )
 
-    def _dc_in_project(path: DataConnectorInProjectPath) -> list[Select[tuple[schemas.DataConnectorORM]]]:
+    def _dc_in_project(path: DataConnectorInProjectPath) -> list[Select[schemas.DataConnectorORM]]:
         """This finds all combinations of old/new slugs for user/group, project and data connector.
 
         It excludes the combination of new/new/new.
@@ -1621,7 +1620,7 @@ def _old_data_connector_slug_queries(
             result.append(stmt)
         return result
 
-    def _dc_in_user_or_group(path: DataConnectorPath) -> list[Select[tuple[schemas.DataConnectorORM]]]:
+    def _dc_in_user_or_group(path: DataConnectorPath) -> list[Select[schemas.DataConnectorORM]]:
         old_ns_old_slug = (
             select(schemas.DataConnectorORM).where(_dc_old_ns_is(path.first)).where(_dc_old_slug_is(path.second))
         )

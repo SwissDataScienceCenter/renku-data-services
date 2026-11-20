@@ -401,6 +401,17 @@ paths:
             type: integer
             minimum: 1
             maximum: 2147483647
+        - in: query
+          description: Filter for resource classes based on the provided name as a prefix. Omitting this parameter returns all classes.
+          name: user_resource_params
+          style: form
+          explode: true
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              name:
+                $ref: "#/components/schemas/Name"
       responses:
         "200":
           description: The resource pool definition
@@ -1229,17 +1240,6 @@ paths:
           required: true
           schema:
             type: string
-        - in: query
-          description: Filter for resource classes based on the provided name as a prefix. Omitting this parameter returns all classes.
-          name: user_resource_params
-          style: form
-          explode: true
-          schema:
-            type: object
-            additionalProperties: false
-            properties:
-              name:
-                $ref: "#/components/schemas/Name"
       responses:
         "200":
           description: The resource pools that the user has access to

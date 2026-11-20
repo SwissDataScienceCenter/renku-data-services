@@ -254,7 +254,7 @@ async def sanic_app_no_migrations(app_manager: DependencyManager, users: list[Us
 
 
 @pytest_asyncio.fixture(scope="session")
-async def sanic_client_no_migrations(sanic_app_no_migrations: Sanic) -> AsyncGenerator[SanicASGITestClient, None]:
+async def sanic_client_no_migrations(sanic_app_no_migrations: Sanic) -> AsyncGenerator[SanicASGITestClient]:
     async with SanicReusableASGITestClient(sanic_app_no_migrations) as client:
         yield client
 
@@ -874,7 +874,7 @@ async def valid_resource_class_payload() -> dict[str, Any]:
 @pytest_asyncio.fixture
 async def secrets_sanic_client(
     secrets_storage_app_manager: SecretsDependencyManager, users: list[UserInfo]
-) -> AsyncGenerator[SanicASGITestClient, None]:
+) -> AsyncGenerator[SanicASGITestClient]:
     app = Sanic(secrets_storage_app_manager.config.app_name)
     app = register_secrets_handlers(app, secrets_storage_app_manager)
     async with SanicReusableASGITestClient(app) as client:

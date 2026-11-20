@@ -7,7 +7,7 @@ import random
 import string
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-from typing import Concatenate, ParamSpec, Protocol, TypeVar
+from typing import Concatenate, Protocol
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import ColumnElement, Select, delete, distinct, func, or_, select, update
@@ -100,7 +100,7 @@ class ProjectRepository:
             total_elements = results[1] or 0
             return [p.dump() for p in projects_orm], total_elements
 
-    async def get_all_projects(self, requested_by: base_models.APIUser) -> AsyncGenerator[models.Project, None]:
+    async def get_all_projects(self, requested_by: base_models.APIUser) -> AsyncGenerator[models.Project]:
         """Get all projects from the database when reprovisioning."""
         if not requested_by.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
@@ -297,6 +297,7 @@ class ProjectRepository:
             template_id=project.template_id,
             secrets_mount_directory=project.secrets_mount_directory or constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR,
         )
+        project_orm.old_slugs = []
         project_slug = ns_schemas.EntitySlugORM.create_project_slug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
         session.add(project_orm)
@@ -465,11 +466,7 @@ class ProjectRepository:
         return permissions
 
 
-_P = ParamSpec("_P")
-_T = TypeVar("_T")
-
-
-def _filter_projects_by_namespace_slug(statement: Select[tuple[_T]], namespace: str) -> Select[tuple[_T]]:
+def _filter_projects_by_namespace_slug[T](statement: Select[T], namespace: str) -> Select[T]:
     """Filters a select query on projects to a given namespace."""
     return statement.where(
         schemas.ProjectORM.slug.has(
@@ -480,9 +477,9 @@ def _filter_projects_by_namespace_slug(statement: Select[tuple[_T]], namespace: 
     )
 
 
-def _project_exists(
-    f: Callable[Concatenate[ProjectMemberRepository, base_models.APIUser, ULID, _P], Awaitable[_T]],
-) -> Callable[Concatenate[ProjectMemberRepository, base_models.APIUser, ULID, _P], Awaitable[_T]]:
+def _project_exists[**P, T](
+    f: Callable[Concatenate[ProjectMemberRepository, base_models.APIUser, ULID, P], Awaitable[T]],
+) -> Callable[Concatenate[ProjectMemberRepository, base_models.APIUser, ULID, P], Awaitable[T]]:
     """Checks if the project exists when adding or modifying project members."""
 
     @functools.wraps(f)
@@ -490,9 +487,9 @@ def _project_exists(
         self: ProjectMemberRepository,
         user: base_models.APIUser,
         project_id: ULID,
-        *args: _P.args,
-        **kwargs: _P.kwargs,
-    ) -> _T:
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> T:
         session = kwargs.get("session")
         if not isinstance(session, AsyncSession):
             raise errors.ProgrammingError(
@@ -903,6 +900,8 @@ class ProjectSessionSecretRepository:
                         encrypted_key=encrypted_key,
                         kind=SecretKind.general,
                     )
+                    secret_orm.session_secrets = []
+                    secret_orm.data_connector_secrets = []
                     session_launcher_secret_orm = schemas.SessionSecretORM(
                         secret_slot_id=secret_update.secret_slot_id,
                         secret_id=secret_orm.id,
@@ -954,7 +953,7 @@ class ProjectMigrationRepository:
     async def get_project_migrations(
         self,
         user: base_models.APIUser,
-    ) -> AsyncGenerator[models.ProjectMigrationInfo, None]:
+    ) -> AsyncGenerator[models.ProjectMigrationInfo]:
         """Get all project migrations from the database."""
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 

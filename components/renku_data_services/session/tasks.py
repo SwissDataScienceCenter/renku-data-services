@@ -34,7 +34,7 @@ class SessionTasks:
                 logger.error(f"Failed to create global environment with image {env.container_image} because {err}")
 
     @staticmethod
-    def _get_default_session_environments() -> Generator[UnsavedEnvironment, None, None]:
+    def _get_default_session_environments() -> Generator[UnsavedEnvironment]:
         """Generates the default list of session environments."""
         prefix = "ghcr.io/swissdatasciencecenter/renku"
         package_variants = ["basic", "datascience"]

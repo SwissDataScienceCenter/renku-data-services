@@ -866,6 +866,7 @@ components:
       description: A description for the resource
       type: string
       maxLength: 500
+      nullable: true
     Keyword:
       description: A single keyword
       type: string

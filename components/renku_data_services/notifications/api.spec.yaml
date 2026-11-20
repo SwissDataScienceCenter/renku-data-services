@@ -124,6 +124,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - alerts
 components:
@@ -214,6 +216,7 @@ components:
         fingerprint:
           type: string
           description: A unique fingerprint identifying this alert
+          nullable: true
     AlertsGetQuery:
       description: Query parameters for getting alerts
       type: object

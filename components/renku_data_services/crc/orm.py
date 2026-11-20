@@ -69,7 +69,7 @@ class UserORM(BaseORM):
 
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
-    no_default_access: Mapped[bool] = mapped_column(default=False, insert_default=False)
+    no_default_access: Mapped[bool] = mapped_column(default=False)
     resource_pools: Mapped[list[ResourcePoolORM]] = relationship(
         secondary=resource_pools_users,
         back_populates="users",
@@ -81,7 +81,7 @@ class UserORM(BaseORM):
     @classmethod
     def load(cls, user: base_models.User) -> UserORM:
         """Create an ORM object from a user model."""
-        return cls(keycloak_id=user.keycloak_id, no_default_access=user.no_default_access)
+        return cls(keycloak_id=user.keycloak_id, no_default_access=user.no_default_access, resource_pools=[])
 
     def dump(self) -> base_models.User:
         """Create a user model from the ORM object."""
@@ -405,7 +405,9 @@ class ResourcePoolORM(BaseORM):
 
     # NOTE: we reuse the "build_platform" enum type here
     platform: Mapped[models.RuntimePlatform] = mapped_column(
-        Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=literal("linux_amd64")
+        Enum(models.RuntimePlatform, name="build_platform", schema=None),
+        default=None,
+        server_default=literal("linux_amd64"),
     )
 
     cpu_limit_factor: Mapped[Optional[float]] = mapped_column("cpu_limit_factor", Float, default=None, nullable=True)
@@ -434,6 +436,7 @@ class ResourcePoolORM(BaseORM):
         return cls(
             name=new_resource_pool.name,
             quota=quota.id if quota else None,
+            users=[],
             classes=classes,
             idle_threshold=new_resource_pool.idle_threshold,
             hibernation_threshold=new_resource_pool.hibernation_threshold,

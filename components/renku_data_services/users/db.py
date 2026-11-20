@@ -88,7 +88,8 @@ class DbUsernameResolver(UsernameResolver, Protocol):
             )
             ret: dict[str, str] = {}
             for slug, id in result:
-                ret.update({slug: id})
+                if id is not None:
+                    ret.update({slug: id})
 
             return ret
 
@@ -206,7 +207,7 @@ class UserRepo(DbUsernameResolver):
 
             return [user.dump() for user in users if user.namespace is not None]
 
-    async def get_all_users(self, requested_by: base_models.APIUser) -> AsyncGenerator[UserInfo, None]:
+    async def get_all_users(self, requested_by: base_models.APIUser) -> AsyncGenerator[UserInfo]:
         """Get all users when reprovisioning."""
         if not requested_by.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
@@ -397,9 +398,11 @@ class UsersSync:
             session, user_slug=slug, retry_enumerate=5, retry_random=True
         )
         slug = base_models.Slug.from_name(namespace)
+        new_namespace = NamespaceORM(slug=slug.value, user_id=user.id)
+        new_namespace.old_namespaces = []
         new_user = UserORM(
             keycloak_id=user.id,
-            namespace=NamespaceORM(slug=slug.value, user_id=user.id),
+            namespace=new_namespace,
             email=user.email,
             first_name=user.first_name,
             last_name=user.last_name,

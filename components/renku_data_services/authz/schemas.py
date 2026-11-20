@@ -5,7 +5,6 @@ These are applied through alembic migrations in the common migrations folder.
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import cast
 
 from authzed.api.v1 import (
     DeleteRelationshipsRequest,
@@ -394,7 +393,7 @@ def generate_v4(public_project_ids: Iterable[str]) -> AuthzSchemaMigration:
     all_users_sub = SubjectReference(object=_AuthzConverter.all_users())
     anon_users_sub = SubjectReference(object=_AuthzConverter.anonymous_users())
     for project_id in public_project_ids:
-        project_res = _AuthzConverter.project(cast(ULID, ULID.from_str(project_id)))
+        project_res = _AuthzConverter.project(ULID.from_str(project_id))
         all_users_are_viewers = Relationship(
             resource=project_res,
             relation=_Relation.public_viewer.value,

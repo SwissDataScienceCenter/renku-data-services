@@ -25,7 +25,7 @@ class K8sDbCache:
         self.__session_maker = session_maker
 
     @staticmethod
-    def __get_where_clauses(_filter: K8sObjectFilter) -> Select[tuple[K8sObjectORM]]:
+    def __get_where_clauses(_filter: K8sObjectFilter) -> Select[K8sObjectORM]:
         stmt = select(K8sObjectORM)
         if _filter.name is not None:
             stmt = stmt.where(K8sObjectORM.name == _filter.name)

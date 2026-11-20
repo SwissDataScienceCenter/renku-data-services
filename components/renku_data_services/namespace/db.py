@@ -155,7 +155,7 @@ class GroupRepository:
             n_total_elements = result.scalar() or 0
             return [g.dump() for g in groups_orm], n_total_elements
 
-    async def get_all_groups(self, requested_by: base_models.APIUser) -> AsyncGenerator[models.Group, None]:
+    async def get_all_groups(self, requested_by: base_models.APIUser) -> AsyncGenerator[models.Group]:
         """Get all groups when reprovisioning."""
         if not requested_by.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
@@ -397,6 +397,7 @@ class GroupRepository:
         )
         session.add(group)
         ns = schemas.NamespaceORM(slug=payload.slug.lower(), group_id=group.id)
+        ns.old_namespaces = []
         session.add(ns)
         try:
             await session.flush()
@@ -460,7 +461,7 @@ class GroupRepository:
             if not kinds or models.NamespaceKind.project in kinds:
                 project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, scope)
 
-            queries: list[tuple[Select[tuple[Any]], int]] = [
+            queries: list[tuple[Select[Any], int]] = [
                 (
                     select(schemas.NamespaceORM)
                     .where(schemas.NamespaceORM.user_id.in_(user_ids))
@@ -490,7 +491,7 @@ class GroupRepository:
                         )
             return output, len(group_ids) + len(user_ids) + len(project_ids)
 
-    async def _get_user_namespaces(self) -> AsyncGenerator[user_models.UserInfo, None]:
+    async def _get_user_namespaces(self) -> AsyncGenerator[user_models.UserInfo]:
         """Lists all user namespaces without regard for authorization or permissions, used for migrations."""
         async with self.session_maker() as session, session.begin():
             namespaces = await session.stream_scalars(
@@ -862,6 +863,7 @@ class GroupRepository:
         namespace = await self._create_user_namespace_slug(session, user_slug, retry_enumerate, retry_random)
         slug = base_models.Slug.from_name(namespace)
         ns = schemas.NamespaceORM(slug.value, user_id=user_id)
+        ns.old_namespaces = []
         session.add(ns)
         await session.flush()
         await session.refresh(ns)

@@ -2,7 +2,6 @@
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import cast
 
 from pydantic import BaseModel, ConfigDict, Field
 from ulid import ULID
@@ -103,7 +102,7 @@ class KnativeService(_KnativeService):
             raise errors.ProgrammingError(
                 message=f"The app with name {self.metadata.name} is missing its launcher-id label"
             )
-        return cast(ULID, ULID.from_str(self.metadata.labels["renku.io/launcher-id"]))
+        return ULID.from_str(self.metadata.labels["renku.io/launcher-id"])
 
     @property
     def project_id(self) -> ULID:
@@ -112,4 +111,4 @@ class KnativeService(_KnativeService):
             raise errors.ProgrammingError(
                 message=f"The app with name {self.metadata.name} is missing its project-id label"
             )
-        return cast(ULID, ULID.from_str(self.metadata.labels["renku.io/project-id"]))
+        return ULID.from_str(self.metadata.labels["renku.io/project-id"])

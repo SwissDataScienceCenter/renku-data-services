@@ -12,7 +12,7 @@ from renku_data_services.metrics.core import StagingMetricsService
 
 
 @pytest_asyncio.fixture
-async def sanic_metrics_client(monkeypatch, app_manager, sanic_client) -> AsyncGenerator[SanicASGITestClient, None]:
+async def sanic_metrics_client(monkeypatch, app_manager, sanic_client) -> AsyncGenerator[SanicASGITestClient]:
     monkeypatch.setenv("POSTHOG_ENABLED", "true")
 
     # NOTE: Replace the `project_created` and `session_launcher_created` methods with actual implementations to store
