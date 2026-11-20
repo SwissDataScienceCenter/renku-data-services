@@ -3,7 +3,7 @@
 from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Concatenate, NoReturn, ParamSpec, TypeVar, cast
+from typing import Any, Concatenate, NoReturn, cast
 
 from pydantic import BaseModel
 from sanic import Request, json
@@ -46,15 +46,11 @@ class MiscBP(CustomBlueprint):
         return "/version", ["GET"], _get_version
 
 
-_T = TypeVar("_T")
-_P = ParamSpec("_P")
-
-
-def validate_db_ids(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Coroutine[Any, Any, _T]]:
+def validate_db_ids[**P, T](f: Callable[P, Awaitable[T]]) -> Callable[P, Coroutine[Any, Any, T]]:
     """Decorator for a Sanic handler that errors out if passed in IDs are outside of the valid range for postgres."""
 
     @wraps(f)
-    async def decorated_function(*args: _P.args, **kwargs: _P.kwargs) -> _T:
+    async def decorated_function(*args: P.args, **kwargs: P.kwargs) -> T:
         resource_pool_id = cast(int | None, kwargs.get("resource_pool_id"))
         class_id = cast(int | None, kwargs.get("class_id"))
         min_val = 1  # postgres primary keys start at 1
@@ -73,11 +69,11 @@ def validate_db_ids(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Coroutine[An
     return decorated_function
 
 
-def validate_query(
+def validate_query[**P, T](
     query: type[BaseModel],
 ) -> Callable[
-    [Callable[Concatenate[Request, _P], Awaitable[_T]]],
-    Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
+    [Callable[Concatenate[Request, P], Awaitable[T]]],
+    Callable[Concatenate[Request, P], Coroutine[Any, Any, T]],
 ]:
     """Decorator for sanic query parameter validation.
 
@@ -85,10 +81,10 @@ def validate_query(
     """
 
     def decorator(
-        f: Callable[Concatenate[Request, _P], Awaitable[_T]],
-    ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
+        f: Callable[Concatenate[Request, P], Awaitable[T]],
+    ) -> Callable[Concatenate[Request, P], Coroutine[Any, Any, T]]:
         @wraps(f)
-        async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        async def decorated_function(request: Request, *args: P.args, **kwargs: P.kwargs) -> T:
             try:
                 return await validate(query=query)(f)(request, *args, **kwargs)
             except KeyError as err:

@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from enum import StrEnum
 from hashlib import md5
-from typing import Any, TypeAlias
+from typing import Any
 
 from box.box import Box
 
@@ -80,8 +80,8 @@ def _make_server_name_prefix(safe_username: str, submission_id: SubmissionId | N
     return prefix
 
 
-JsonPatch: TypeAlias = list[dict[str, Any]]
-MergePatch: TypeAlias = dict[str, Any]
+type JsonPatch = list[dict[str, Any]]
+type MergePatch = dict[str, Any]
 
 
 class PatchKind(StrEnum):

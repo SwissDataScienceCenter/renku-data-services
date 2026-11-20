@@ -88,7 +88,8 @@ class DbUsernameResolver(UsernameResolver, Protocol):
             )
             ret: dict[str, str] = {}
             for slug, id in result:
-                ret.update({slug: id})
+                if id is not None:
+                    ret.update({slug: id})
 
             return ret
 
@@ -206,7 +207,7 @@ class UserRepo(DbUsernameResolver):
 
             return [user.dump() for user in users if user.namespace is not None]
 
-    async def get_all_users(self, requested_by: base_models.APIUser) -> AsyncGenerator[UserInfo, None]:
+    async def get_all_users(self, requested_by: base_models.APIUser) -> AsyncGenerator[UserInfo]:
         """Get all users when reprovisioning."""
         if not requested_by.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")

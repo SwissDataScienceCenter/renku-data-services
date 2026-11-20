@@ -4,22 +4,19 @@ import asyncio
 import re
 from collections.abc import Callable, Coroutine
 from functools import wraps
-from typing import Any, Concatenate, ParamSpec, TypeVar, cast
+from typing import Any, Concatenate, cast
 
 from sanic import Request
 
 from renku_data_services import errors
-from renku_data_services.base_models import AnyAPIUser, APIUser, Authenticator
-
-_T = TypeVar("_T")
-_P = ParamSpec("_P")
+from renku_data_services.base_models import APIUser, Authenticator
 
 
-def authenticate(
+def authenticate[AnyAPIUser: APIUser, **P, T](
     authenticator: Authenticator,
 ) -> Callable[
-    [Callable[Concatenate[Request, AnyAPIUser, _P], Coroutine[Any, Any, _T]]],
-    Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
+    [Callable[Concatenate[Request, AnyAPIUser, P], Coroutine[Any, Any, T]]],
+    Callable[Concatenate[Request, P], Coroutine[Any, Any, T]],
 ]:
     """Decorator for a Sanic handler that adds the APIUser model to the context.
 
@@ -27,10 +24,10 @@ def authenticate(
     """
 
     def decorator(
-        f: Callable[Concatenate[Request, AnyAPIUser, _P], Coroutine[Any, Any, _T]],
-    ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
+        f: Callable[Concatenate[Request, AnyAPIUser, P], Coroutine[Any, Any, T]],
+    ) -> Callable[Concatenate[Request, P], Coroutine[Any, Any, T]]:
         @wraps(f)
-        async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        async def decorated_function(request: Request, *args: P.args, **kwargs: P.kwargs) -> T:
             token = request.headers.get(authenticator.token_field)
             user = await authenticator.authenticate(token or "", request)
             response = await f(request, user, *args, **kwargs)
@@ -41,20 +38,20 @@ def authenticate(
     return decorator
 
 
-def authenticate_2(
+def authenticate_2[AnyAPIUser: APIUser, **P, T](
     authenticator1: Authenticator,
     authenticator2: Authenticator,
 ) -> Callable[
-    [Callable[Concatenate[Request, AnyAPIUser, AnyAPIUser, _P], Coroutine[Any, Any, _T]]],
-    Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
+    [Callable[Concatenate[Request, AnyAPIUser, AnyAPIUser, P], Coroutine[Any, Any, T]]],
+    Callable[Concatenate[Request, P], Coroutine[Any, Any, T]],
 ]:
     """Decorator for a Sanic handler that adds the APIUser when another authentication has already been done."""
 
     def decorator(
-        f: Callable[Concatenate[Request, AnyAPIUser, AnyAPIUser, _P], Coroutine[Any, Any, _T]],
-    ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
+        f: Callable[Concatenate[Request, AnyAPIUser, AnyAPIUser, P], Coroutine[Any, Any, T]],
+    ) -> Callable[Concatenate[Request, P], Coroutine[Any, Any, T]]:
         @wraps(f)
-        async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        async def decorated_function(request: Request, *args: P.args, **kwargs: P.kwargs) -> T:
             token1 = request.headers.get(authenticator1.token_field)
             token2 = request.headers.get(authenticator2.token_field)
             user1: AnyAPIUser
@@ -71,14 +68,14 @@ def authenticate_2(
     return decorator
 
 
-def validate_path_user_id(
-    f: Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
-) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
+def validate_path_user_id[**P, T](
+    f: Callable[Concatenate[Request, P], Coroutine[Any, Any, T]],
+) -> Callable[Concatenate[Request, P], Coroutine[Any, Any, T]]:
     """Decorator for a Sanic handler that validates the user_id or member_id path parameter."""
     _path_user_id_regex = re.compile(r"^[A-Za-z0-9]{1}[A-Za-z0-9-]+$")
 
     @wraps(f)
-    async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+    async def decorated_function(request: Request, *args: P.args, **kwargs: P.kwargs) -> T:
         user_id: str | None = cast(str | None, kwargs.get("user_id"))
         member_id: str | None = cast(str | None, kwargs.get("member_id"))
         if user_id and member_id:
@@ -104,13 +101,13 @@ def validate_path_user_id(
     return decorated_function
 
 
-def only_admins(
-    f: Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
-) -> Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]:
+def only_admins[**P, T](
+    f: Callable[Concatenate[Request, APIUser, P], Coroutine[Any, Any, T]],
+) -> Callable[Concatenate[Request, APIUser, P], Coroutine[Any, Any, T]]:
     """Decorator for a Sanic handler that errors out if the user is not an admin."""
 
     @wraps(f)
-    async def decorated_function(request: Request, user: APIUser, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+    async def decorated_function(request: Request, user: APIUser, *args: P.args, **kwargs: P.kwargs) -> T:
         if user is None or user.access_token is None:
             raise errors.UnauthorizedError(
                 message="Please provide valid access credentials in the Authorization header."
@@ -125,14 +122,14 @@ def only_admins(
     return decorated_function
 
 
-def only_authenticated(f: Callable[_P, Coroutine[Any, Any, _T]]) -> Callable[_P, Coroutine[Any, Any, _T]]:
+def only_authenticated[**P, T](f: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, Coroutine[Any, Any, T]]:
     """Decorator that errors out if the user is not authenticated.
 
     It looks for APIUser in the named or unnamed parameters.
     """
 
     @wraps(f)
-    async def decorated_function(*args: _P.args, **kwargs: _P.kwargs) -> _T:
+    async def decorated_function(*args: P.args, **kwargs: P.kwargs) -> T:
         api_user = None
         if "requested_by" in kwargs and isinstance(kwargs["requested_by"], APIUser):
             api_user = kwargs["requested_by"]
@@ -158,11 +155,11 @@ def only_authenticated(f: Callable[_P, Coroutine[Any, Any, _T]]) -> Callable[_P,
     return decorated_function
 
 
-def require_role(
+def require_role[**P, T](
     role: str,
 ) -> Callable[
-    [Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]],
-    Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
+    [Callable[Concatenate[Request, APIUser, P], Coroutine[Any, Any, T]]],
+    Callable[Concatenate[Request, APIUser, P], Coroutine[Any, Any, T]],
 ]:
     """Decorator for a Sanic handler that errors out if the user does not have the specified role.
 
@@ -171,10 +168,10 @@ def require_role(
     """
 
     def decorator(
-        f: Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
-    ) -> Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]:
+        f: Callable[Concatenate[Request, APIUser, P], Coroutine[Any, Any, T]],
+    ) -> Callable[Concatenate[Request, APIUser, P], Coroutine[Any, Any, T]]:
         @wraps(f)
-        async def decorated_function(request: Request, user: APIUser, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        async def decorated_function(request: Request, user: APIUser, *args: P.args, **kwargs: P.kwargs) -> T:
             if user is None or user.access_token is None:
                 raise errors.UnauthorizedError(
                     message="Please provide valid access credentials in the Authorization header."

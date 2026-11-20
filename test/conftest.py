@@ -96,7 +96,7 @@ def free_port() -> int:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def authz_setup(monkeysession) -> AsyncGenerator[None, None]:
+async def authz_setup(monkeysession) -> AsyncGenerator[None]:
     port = free_port()
     proc = subprocess.Popen(
         [
@@ -122,7 +122,7 @@ async def authz_setup(monkeysession) -> AsyncGenerator[None, None]:
 
 
 @pytest_asyncio.fixture
-async def db_instance(monkeysession, worker_id, app_manager, event_loop) -> AsyncGenerator[DBConfig, None]:
+async def db_instance(monkeysession, worker_id, app_manager, event_loop) -> AsyncGenerator[DBConfig]:
     db_name = "R_" + str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
     host = os.getenv("DB_HOST", "127.0.0.1")
@@ -234,7 +234,7 @@ async def app_manager(
     kubeconfig_path: Path,
     builds_enabled,
     apps_enabled,
-) -> AsyncGenerator[DependencyManager, None]:
+) -> AsyncGenerator[DependencyManager]:
     monkeysession.setenv("DUMMY_STORES", "true")
     monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
     monkeysession.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
@@ -263,7 +263,7 @@ async def app_manager(
 
 
 @pytest_asyncio.fixture
-async def app_manager_instance(app_manager, db_instance, authz_instance) -> AsyncGenerator[DependencyManager, None]:
+async def app_manager_instance(app_manager, db_instance, authz_instance) -> AsyncGenerator[DependencyManager]:
     app_manager.metrics.reset_mock()
     yield app_manager
 
@@ -532,7 +532,7 @@ def kubeconfig_path(monkeysession, disable_cluster_creation, tmpdir_factory):
 @pytest.fixture(scope="session")
 def cluster(
     cluster_name, kubeconfig_path: Path, monkeysession, disable_cluster_creation, builds_enabled
-) -> Generator[KindCluster, None]:
+) -> Generator[KindCluster]:
     # NOTE: The config_name of the cluster has to match the name of the
     # kubeconfig file in the K8S_CONFIGS_ROOT folder
     monkeysession.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())

@@ -738,7 +738,7 @@ class Order(SegmentBase):
 
     def render(self) -> str:
         """Renders the string version of this query part."""
-        return f"sort:{self.fields.mk_string(",", lambda e: e.render())}"
+        return f"sort:{self.fields.mk_string(',', lambda e: e.render())}"
 
     def append(self, other: Self) -> Self:
         """Append the field list of `other` to this."""

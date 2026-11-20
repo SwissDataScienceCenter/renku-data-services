@@ -1297,7 +1297,7 @@ async def test_project_copy_includes_session_launchers_with_permissions(
         "policy": "excluded",
     }
     _, res = await sanic_client.patch(
-        f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
+        f"/api/data/session_launchers/{launcher['id']}/data_connectors",
         headers=user_headers,
         json=[patch_dc_policy],
     )
@@ -1308,7 +1308,7 @@ async def test_project_copy_includes_session_launchers_with_permissions(
         "policy": "excluded",
     }
     _, res = await sanic_client.patch(
-        f"/api/data/session_launchers/{launcher["id"]}/secrets",
+        f"/api/data/session_launchers/{launcher['id']}/secrets",
         headers=user_headers,
         json=[patch_sc_policy],
     )
@@ -1324,12 +1324,12 @@ async def test_project_copy_includes_session_launchers_with_permissions(
     launchers = res.json
 
     for launcher in launchers:
-        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=user_headers)
         assert res.status_code == 200, res.text
         launcher_orm = res.json
         assert launcher_orm["is_restricted"]
 
-        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}/secrets", headers=user_headers)
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}/secrets", headers=user_headers)
         assert res.status_code == 200, res.text
         secret_slot_policies = res.json
         assert len(secret_slot_policies) > 0
@@ -1337,7 +1337,7 @@ async def test_project_copy_includes_session_launchers_with_permissions(
             assert secret_slot_policy["policy"] == "excluded"
 
         _, res = await sanic_client.get(
-            f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=user_headers
+            f"/api/data/session_launchers/{launcher['id']}/data_connectors", headers=user_headers
         )
         assert res.status_code == 200, res.text
         dc_policies = res.json

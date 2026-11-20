@@ -6,14 +6,14 @@ from dataclasses import dataclass
 from sanic import Request
 
 from renku_data_services.base_models.core import (
-    AnyAPIUser,
+    APIUser,
     Authenticator,
 )
 from renku_data_services.errors import errors
 
 
 @dataclass(frozen=True, kw_only=True)
-class ChainedAuthenticator(Authenticator[AnyAPIUser]):
+class ChainedAuthenticator[AnyAPIUser: APIUser](Authenticator[AnyAPIUser]):
     """Chain authenticators until a user is authenticated or all authenticators are tried."""
 
     token_field: str = "__not_used__"

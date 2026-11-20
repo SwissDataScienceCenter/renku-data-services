@@ -7,7 +7,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
-from typing import Any, ClassVar, Never, Optional, Protocol, Self, TypeVar, overload
+from typing import Any, ClassVar, Never, Optional, Protocol, Self, overload
 
 from pydantic_core import PydanticSerializationUnexpectedValue, core_schema
 from sanic import Request
@@ -404,10 +404,7 @@ class DataConnectorInProjectPath(__NamespaceCommonMixin):
         return cls(NamespaceSlug(slugs[0]), ProjectSlug(slugs[1]), DataConnectorSlug(slugs[2]))
 
 
-AnyAPIUser = TypeVar("AnyAPIUser", bound=APIUser, covariant=True)
-
-
-class Authenticator(Protocol[AnyAPIUser]):
+class Authenticator[AnyAPIUser: APIUser](Protocol):
     """Interface for authenticating users."""
 
     token_field: str

@@ -6,7 +6,7 @@ import ssl
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from json import JSONDecodeError
-from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast
+from typing import Any, Concatenate, Protocol, cast
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -29,7 +29,7 @@ def get_ssl_context() -> ssl.SSLContext:
     return context
 
 
-def merge_api_specs(*args: list[dict[str, Any]]) -> dict[str, Any]:
+def merge_api_specs(*args: dict[str, Any]) -> dict[str, Any]:
     """Merges API spec files into a single one."""
     if any(not isinstance(arg, dict) for arg in args):
         raise errors.ConfigurationError(message="API Spec isn't of type 'dict'")
@@ -44,11 +44,11 @@ def merge_api_specs(*args: list[dict[str, Any]]) -> dict[str, Any]:
         return merged_spec
     merged_spec = args[0]
     if len(args) == 1:
-        return cast(dict[str, Any], merged_spec)
+        return merged_spec
     for to_merge in args[1:]:
         merger.merge(merged_spec, to_merge)
 
-    return cast(dict[str, Any], merged_spec)
+    return merged_spec
 
 
 class WithSessionMaker(Protocol):
@@ -59,18 +59,13 @@ class WithSessionMaker(Protocol):
         ...
 
 
-_P = ParamSpec("_P")
-_T = TypeVar("_T")
-_WithSessionMaker = TypeVar("_WithSessionMaker", bound=WithSessionMaker)
-
-
-def with_db_transaction(
-    f: Callable[Concatenate[_WithSessionMaker, _P], Awaitable[_T]],
-) -> Callable[Concatenate[_WithSessionMaker, _P], Awaitable[_T]]:
+def with_db_transaction[WithSessionMakerT: WithSessionMaker, **P, T](
+    f: Callable[Concatenate[WithSessionMakerT, P], Awaitable[T]],
+) -> Callable[Concatenate[WithSessionMakerT, P], Awaitable[T]]:
     """Initializes a transaction and commits it on successful exit of the wrapped function."""
 
     @functools.wraps(f)
-    async def transaction_wrapper(self: _WithSessionMaker, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+    async def transaction_wrapper(self: WithSessionMakerT, *args: P.args, **kwargs: P.kwargs) -> T:
         session_kwarg = kwargs.get("session")
         if "session" in kwargs and session_kwarg is not None and not isinstance(session_kwarg, AsyncSession):
             raise errors.ProgrammingError(
@@ -92,13 +87,13 @@ def with_db_transaction(
     return transaction_wrapper
 
 
-def with_db_session(
-    f: Callable[Concatenate[_WithSessionMaker, _P], Awaitable[_T]],
-) -> Callable[Concatenate[_WithSessionMaker, _P], Awaitable[_T]]:
+def with_db_session[WithSessionMakerT: WithSessionMaker, **P, T](
+    f: Callable[Concatenate[WithSessionMakerT, P], Awaitable[T]],
+) -> Callable[Concatenate[WithSessionMakerT, P], Awaitable[T]]:
     """Initializes a session (but not a transaction)."""
 
     @functools.wraps(f)
-    async def session_wrapper(self: _WithSessionMaker, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+    async def session_wrapper(self: WithSessionMakerT, *args: P.args, **kwargs: P.kwargs) -> T:
         session_kwarg = kwargs.get("session")
         if "session" in kwargs and session_kwarg is not None and not isinstance(session_kwarg, AsyncSession):
             raise errors.ProgrammingError(

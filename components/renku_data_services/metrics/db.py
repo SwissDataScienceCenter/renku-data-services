@@ -24,7 +24,7 @@ class MetricsRepository:
         async with self.session_maker() as session, session.begin():
             session.add(metric_orm)
 
-    async def get_unprocessed_metrics(self) -> AsyncGenerator[MetricsORM, None]:
+    async def get_unprocessed_metrics(self) -> AsyncGenerator[MetricsORM]:
         """Get unprocessed metrics events from the staging table."""
         async with self.session_maker() as session:
             result = await session.stream_scalars(select(MetricsORM))

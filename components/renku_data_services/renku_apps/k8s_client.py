@@ -306,7 +306,7 @@ class RenkuAppsK8sClient:
         )
         await self.__client.delete(meta)
 
-    async def list_app_deployments(self, project_id: ULID | None = None) -> AsyncGenerator[AppRuntimeState, None]:
+    async def list_app_deployments(self, project_id: ULID | None = None) -> AsyncGenerator[AppRuntimeState]:
         """List all app deployments."""
         cluster = await self.__client.cluster_by_id(self.__cluster_id)
         obj_filter = K8sObjectFilter(

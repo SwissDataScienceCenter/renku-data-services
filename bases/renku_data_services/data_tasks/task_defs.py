@@ -55,7 +55,7 @@ async def send_metrics_to_posthog(dm: DependencyManager) -> None:
     from posthog import Posthog
 
     posthog = Posthog(
-        api_key=dm.config.posthog.api_key,
+        project_api_key=dm.config.posthog.api_key,
         host=dm.config.posthog.host,
         sync_mode=True,
         super_properties={"environment": dm.config.posthog.environment},
@@ -69,7 +69,7 @@ async def send_metrics_to_posthog(dm: DependencyManager) -> None:
             async for metric in metrics:
                 try:
                     if metric.event == MetricsEvent.identify_user.value:
-                        posthog.identify(
+                        posthog.set(
                             distinct_id=metric.anonymous_user_id,
                             timestamp=metric.timestamp,
                             properties=metric.metadata_ or {},

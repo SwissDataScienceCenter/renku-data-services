@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
-from typing import Any, ClassVar, Concatenate, Literal, ParamSpec, Protocol, TypeVar, cast, overload
+from typing import Any, ClassVar, Concatenate, Literal, Protocol, cast, overload
 
 from authzed.api.v1 import (
     AsyncClient,
@@ -77,12 +77,6 @@ from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpda
 logger = logging.getLogger(__name__)
 
 
-_ID = TypeVar("_ID", bound="str | ULID | int")
-
-
-_P = ParamSpec("_P")
-
-
 class WithAuthz(Protocol):
     """Protocol for a class that has a authorization database client as property."""
 
@@ -90,31 +84,6 @@ class WithAuthz(Protocol):
     def authz(self) -> "Authz":
         """Returns the authorization database client."""
         ...
-
-
-_AuthzChangeFuncResult = TypeVar(
-    "_AuthzChangeFuncResult",
-    bound=Project
-    | ProjectUpdate
-    | DeletedProject
-    | Group
-    | DeletedGroup
-    | UserInfoUpdate
-    | list[UserInfo]
-    | UserInfo
-    | DeletedUser
-    | DataConnector
-    | GlobalDataConnector
-    | DataConnectorUpdate
-    | DeletedDataConnector
-    | DataConnectorToProjectLink
-    | ResourcePool
-    | DeletedResourcePool
-    | ResourcePoolMembershipChange
-    | None,
-)
-_T = TypeVar("_T")
-_WithAuthz = TypeVar("_WithAuthz", bound=WithAuthz)
 
 
 @dataclass
@@ -278,10 +247,10 @@ class _AuthzConverter:
 
     @overload
     @staticmethod
-    def to_object(resource_type: ResourceType, resource_id: _ID) -> ObjectReference: ...
+    def to_object[ID: str | ULID | int](resource_type: ResourceType, resource_id: ID) -> ObjectReference: ...
 
     @staticmethod
-    def to_object(resource_type: ResourceType, resource_id: _ID) -> ObjectReference:
+    def to_object[ID: str | ULID | int](resource_type: ResourceType, resource_id: ID) -> ObjectReference:
         """Convert a resource type and ID to an Authzed ObjectReference."""
         match (resource_type, resource_id):
             case (ResourceType.project, sid) if isinstance(sid, ULID):
@@ -305,21 +274,19 @@ class _AuthzConverter:
         )
 
 
-def _is_allowed_on_resource(
+def _is_allowed_on_resource[**P, T](
     operation: Scope, resource_type: ResourceType
 ) -> Callable[
-    [Callable[Concatenate["Authz", base_models.APIUser, _P], Awaitable[_T]]],
-    Callable[Concatenate["Authz", base_models.APIUser, _P], Awaitable[_T]],
+    [Callable[Concatenate["Authz", base_models.APIUser, P], Awaitable[T]]],
+    Callable[Concatenate["Authz", base_models.APIUser, P], Awaitable[T]],
 ]:
     """A decorator that checks if the operation on a specific resource type is allowed or not."""
 
     def decorator(
-        f: Callable[Concatenate["Authz", base_models.APIUser, _P], Awaitable[_T]],
-    ) -> Callable[Concatenate["Authz", base_models.APIUser, _P], Awaitable[_T]]:
+        f: Callable[Concatenate["Authz", base_models.APIUser, P], Awaitable[T]],
+    ) -> Callable[Concatenate["Authz", base_models.APIUser, P], Awaitable[T]]:
         @wraps(f)
-        async def decorated_function(
-            self: "Authz", user: base_models.APIUser, *args: _P.args, **kwargs: _P.kwargs
-        ) -> _T:
+        async def decorated_function(self: "Authz", user: base_models.APIUser, *args: P.args, **kwargs: P.kwargs) -> T:
             if isinstance(user, base_models.InternalServiceAdmin):
                 return await f(self, user, *args, **kwargs)
             if not isinstance(user, base_models.APIUser):
@@ -377,26 +344,26 @@ def _is_allowed_on_resource(
     return decorator
 
 
-def _is_allowed(
+def _is_allowed[ID: str | ULID | int, **P, T](
     operation: Scope,
 ) -> Callable[
-    [Callable[Concatenate["Authz", base_models.APIUser, ResourceType, _ID, _P], Awaitable[_T]]],
-    Callable[Concatenate["Authz", base_models.APIUser, ResourceType, _ID, _P], Awaitable[_T]],
+    [Callable[Concatenate["Authz", base_models.APIUser, ResourceType, ID, P], Awaitable[T]]],
+    Callable[Concatenate["Authz", base_models.APIUser, ResourceType, ID, P], Awaitable[T]],
 ]:
     """A decorator that checks if the operation on a resource is allowed or not."""
 
     def decorator(
-        f: Callable[Concatenate["Authz", base_models.APIUser, ResourceType, _ID, _P], Awaitable[_T]],
-    ) -> Callable[Concatenate["Authz", base_models.APIUser, ResourceType, _ID, _P], Awaitable[_T]]:
+        f: Callable[Concatenate["Authz", base_models.APIUser, ResourceType, ID, P], Awaitable[T]],
+    ) -> Callable[Concatenate["Authz", base_models.APIUser, ResourceType, ID, P], Awaitable[T]]:
         @wraps(f)
         async def decorated_function(
             self: "Authz",
             user: base_models.APIUser,
             resource_type: ResourceType,
-            resource_id: _ID,
-            *args: _P.args,
-            **kwargs: _P.kwargs,
-        ) -> _T:
+            resource_id: ID,
+            *args: P.args,
+            **kwargs: P.kwargs,
+        ) -> T:
             if isinstance(user, base_models.InternalServiceAdmin):
                 return await f(self, user, resource_type, resource_id, *args, **kwargs)
             allowed, zed_token = await self._has_permission(user, resource_type, resource_id, operation)
@@ -492,12 +459,12 @@ class Authz:
     ) -> tuple[bool, ZedToken | None]: ...
 
     @overload
-    async def _has_permission(
-        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID | None, scope: Scope
+    async def _has_permission[ID: str | ULID | int](
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: ID | None, scope: Scope
     ) -> tuple[bool, ZedToken | None]: ...
 
-    async def _has_permission(
-        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID | None, scope: Scope
+    async def _has_permission[ID: str | ULID | int](
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: ID | None, scope: Scope
     ) -> tuple[bool, ZedToken | None]:
         """Checks whether the provided user has a specific permission on the specific resource."""
         if not resource_id:
@@ -576,12 +543,12 @@ class Authz:
     ) -> bool: ...
 
     @overload
-    async def has_permission(
-        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID, scope: Scope
+    async def has_permission[ID: str | ULID | int](
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: ID, scope: Scope
     ) -> bool: ...
 
-    async def has_permission(
-        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: _ID, scope: Scope
+    async def has_permission[ID: str | ULID | int](
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: ID, scope: Scope
     ) -> bool:
         """Checks whether the provided user has a specific permission on the specific resource."""
         res, _ = await self._has_permission(user, resource_type, resource_id, scope)
@@ -684,11 +651,11 @@ class Authz:
         return resource_ids
 
     @_is_allowed(Scope.READ)  # The scope on the resource that allows the user to perform this check in the first place
-    async def users_with_permission(
+    async def users_with_permission[ID: str | ULID | int](
         self,
         user: base_models.APIUser,
         resource_type: ResourceType,
-        resource_id: _ID,
+        resource_id: ID,
         scope: Scope,  # The scope that the users should be allowed to exercise on the resource
         *,
         zed_token: ZedToken | None = None,
@@ -753,7 +720,7 @@ class Authz:
 
     async def get_all_members(
         self, resource_type: ResourceType, *, zed_token: ZedToken | None = None
-    ) -> AsyncGenerator[Member, None]:
+    ) -> AsyncGenerator[Member]:
         """Get all users that are members of a specific resource."""
         members = self._get_members_helper(resource_type, resource_id=None, zed_token=zed_token)
         async for member in members:
@@ -781,7 +748,7 @@ class Authz:
         role: Role | None = None,
         *,
         zed_token: ZedToken | None = None,
-    ) -> AsyncGenerator[Member, None]:
+    ) -> AsyncGenerator[Member]:
         """Get all users that are members of a resource, if role is None then all roles are retrieved."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         sub_filter = SubjectFilter(subject_type=ResourceType.user.value)
@@ -833,7 +800,7 @@ class Authz:
         group_id: str,
         *,
         zed_token: ZedToken | None = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[str]:
         """Get all resource pools that a group has access to."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         rel_filter = RelationshipFilter(
@@ -848,18 +815,41 @@ class Authz:
             yield response.relationship.resource.object_id
 
     @staticmethod
-    def authz_change(
+    def authz_change[
+        WithAuthzT: WithAuthz,
+        **P,
+        AuthzChangeFuncResult: (
+            Project
+            | ProjectUpdate
+            | DeletedProject
+            | Group
+            | DeletedGroup
+            | UserInfoUpdate
+            | list[UserInfo]
+            | UserInfo
+            | DeletedUser
+            | DataConnector
+            | GlobalDataConnector
+            | DataConnectorUpdate
+            | DeletedDataConnector
+            | DataConnectorToProjectLink
+            | ResourcePool
+            | DeletedResourcePool
+            | ResourcePoolMembershipChange
+            | None
+        ),
+    ](
         op: AuthzOperation, resource: ResourceType
     ) -> Callable[
-        [Callable[Concatenate[_WithAuthz, _P], Awaitable[_AuthzChangeFuncResult]]],
-        Callable[Concatenate[_WithAuthz, _P], Awaitable[_AuthzChangeFuncResult]],
+        [Callable[Concatenate[WithAuthzT, P], Awaitable[AuthzChangeFuncResult]]],
+        Callable[Concatenate[WithAuthzT, P], Awaitable[AuthzChangeFuncResult]],
     ]:
         """A decorator that updates the authorization database for different types of operations."""
 
         def decorator(
-            f: Callable[Concatenate[_WithAuthz, _P], Awaitable[_AuthzChangeFuncResult]],
-        ) -> Callable[Concatenate[_WithAuthz, _P], Awaitable[_AuthzChangeFuncResult]]:
-            def _extract_user_from_args(*args: _P.args, **kwargs: _P.kwargs) -> base_models.APIUser:
+            f: Callable[Concatenate[WithAuthzT, P], Awaitable[AuthzChangeFuncResult]],
+        ) -> Callable[Concatenate[WithAuthzT, P], Awaitable[AuthzChangeFuncResult]]:
+            def _extract_user_from_args(*args: P.args, **kwargs: P.kwargs) -> base_models.APIUser:
                 if len(args) == 0:
                     user_kwarg = kwargs.get("user")
                     requested_by_kwarg = kwargs.get("requested_by")
@@ -887,12 +877,12 @@ class Authz:
                 return potential_user
 
             async def _get_authz_change(
-                db_repo: _WithAuthz,
+                db_repo: WithAuthzT,
                 operation: AuthzOperation,
                 resource: ResourceType,
-                result: _AuthzChangeFuncResult,
-                *func_args: _P.args,
-                **func_kwargs: _P.kwargs,
+                result: AuthzChangeFuncResult,
+                *func_args: P.args,
+                **func_kwargs: P.kwargs,
             ) -> _AuthzChange:
                 authz_change = _AuthzChange()
                 match operation, resource:
@@ -1006,8 +996,8 @@ class Authz:
 
             @wraps(f)
             async def decorated_function(
-                db_repo: _WithAuthz, *args: _P.args, **kwargs: _P.kwargs
-            ) -> _AuthzChangeFuncResult:
+                db_repo: WithAuthzT, *args: P.args, **kwargs: P.kwargs
+            ) -> AuthzChangeFuncResult:
                 # NOTE: db_repo is the "self" of the project postgres DB repository method that this function decorates.
                 # I did not call it "self" here to avoid confusion with the self of the Authz class,
                 # even though this is a static method.
@@ -1124,7 +1114,7 @@ class Authz:
                 subject_type=ResourceType.project.value, optional_subject_id=str(deleted_project.id)
             )
         )
-        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+        responses = self.client.ReadRelationships(
             ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
         )
         async for response in responses:

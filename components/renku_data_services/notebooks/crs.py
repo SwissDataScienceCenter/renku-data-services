@@ -268,7 +268,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             raise errors.ProgrammingError(
                 message=f"The session with name {self.metadata.name} is missing its project_id annotation"
             )
-        return cast(ULID, ULID.from_str(self.metadata.annotations["renku.io/project_id"]))
+        return ULID.from_str(self.metadata.annotations["renku.io/project_id"])
 
     @property
     def launcher_id(self) -> ULID:
@@ -277,7 +277,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             raise errors.ProgrammingError(
                 message=f"The session with name {self.metadata.name} is missing its launcher_id annotation"
             )
-        return cast(ULID, ULID.from_str(self.metadata.annotations["renku.io/launcher_id"]))
+        return ULID.from_str(self.metadata.annotations["renku.io/launcher_id"])
 
     def resource_class_id(self) -> int:
         """Get the resource class from the annotations."""

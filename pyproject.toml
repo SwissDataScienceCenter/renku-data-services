@@ -115,6 +115,7 @@ syrupy = "^6.1.1"
 ruamel-yaml = "^0.19.1"
 datamodel-code-generator = "^0.92.0"
 pytest-testmon = "^2.3.0"
+types-python-dateutil = "^2.9.0.20261116"
 
 [build-system]
 requires = ["poetry-core"]
@@ -122,7 +123,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py313"
 output-format = "full"
 include = ["*.py", "*.pyi"]
 exclude = [
@@ -171,7 +172,10 @@ ignore = [
   "E226",
   "E231",
   "UP007",
-  "UP038",
+  # UP045 was split out of UP007 (ignored above), keep allowing Optional[...]
+  "UP045",
+  # StrEnum changes str()/format() behaviour compared to (str, Enum)
+  "UP042",
 ]
 
 [tool.ruff.lint.per-file-ignores]
