@@ -1,5 +1,7 @@
 """Setting up remote clusters."""
 
+from typing import Final
+
 from box import Box
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
@@ -13,6 +15,8 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sSecret
 
 logger = logging.getLogger(__file__)
+
+auth_key_secret_name: Final[str] = "renku-ssh-indentities"
 
 
 class RemoteClusterSetup:
@@ -33,14 +37,10 @@ class RemoteClusterSetup:
 
         logger.debug(f"Setting up remote cluster from settings: {model}")
         remote_cluster = await self.__repo.insert(user, model)
-        kpair = (
-            await self.enable_ssh_remote_cluster(model.ssh_settings, remote_cluster.id) if model.ssh_settings else None
-        )
+        kpair = await self.enable_ssh_remote_cluster(remote_cluster.id) if model.ssh_settings else None
         return remote_cluster, kpair
 
-    async def enable_ssh_remote_cluster(
-        self, ssh_settings: models.SshSettings, remote_cluster_id: ClusterId
-    ) -> models.SshKeyPair:
+    async def enable_ssh_remote_cluster(self, remote_cluster_id: ClusterId) -> models.SshKeyPair:
         """Enable ssh for the remote cluster.
 
         It generates a ssh keypair that will be used to connect to the
@@ -48,7 +48,7 @@ class RemoteClusterSetup:
         public part to their authorized keys file.
 
         The keypair is stored in the secret named by
-        `ssh_settings.auth_key_secret_name` in the namespace of the
+        `auth_key_secret_name` in the namespace of the
         local (default) cluster. An existing secret is overwritten. The
         generated keypair is returned so that the public part can be
         handed to the remote cluster.
@@ -56,7 +56,7 @@ class RemoteClusterSetup:
         cluster = await self.__k8s_client.cluster_by_id(DEFAULT_K8S_CLUSTER)
         namespace = cluster.namespace
         kpair = generate_ssh_keypair("main-renku")
-        secret_name = ssh_settings.auth_key_secret_name
+        secret_name = auth_key_secret_name
         string_data = {
             str(remote_cluster_id): kpair.private_part,
         }

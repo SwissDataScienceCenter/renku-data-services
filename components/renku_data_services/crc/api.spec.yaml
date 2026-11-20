@@ -1413,14 +1413,11 @@ components:
           type: string
         public_host_key:
           type: string
-        session_secret_name:
-          type: string
       required:
         - target_host
         - target_port
         - username
         - public_host_key
-        - session_secret_name
     ClusterPatch:
       type: object
       additionalProperties: false
