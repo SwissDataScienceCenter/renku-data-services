@@ -22,6 +22,7 @@ from renku_data_services.base_api.etag import extract_if_none_match, if_match_re
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
+from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage import apispec, models
 from renku_data_services.storage.core import (
@@ -376,6 +377,7 @@ class ProjectStorageBP(CustomBlueprint):
 class ProjectStorageV2BP(CustomBlueprint):
     """Handlers for project storages v2."""
 
+    k8s_client: NotebookK8sClient
     project_storage_v2_repo: ProjectStorageV2Repository
     authenticator: base_models.Authenticator
     session_maker: Callable[..., AsyncSession]
@@ -438,7 +440,12 @@ class ProjectStorageV2BP(CustomBlueprint):
             patch = validate_project_storage_v2_patch(body=body)
             async with self.session_maker() as session, session.begin():
                 storage = await self.project_storage_v2_repo.update_project_storage(
-                    session=session, user=user, storage_id=storage_id, patch=patch, etag=etag
+                    k8s_client=self.k8s_client,
+                    session=session,
+                    user=user,
+                    storage_id=storage_id,
+                    patch=patch,
+                    etag=etag,
                 )
             return validated_json(apispec.ProjectStorageV2, storage)
 
@@ -456,7 +463,7 @@ class ProjectStorageV2BP(CustomBlueprint):
         ) -> HTTPResponse:
             async with self.session_maker() as session, session.begin():
                 await self.project_storage_v2_repo.delete_project_storage(
-                    session=session, user=user, storage_id=storage_id
+                    k8s_client=self.k8s_client, session=session, user=user, storage_id=storage_id
                 )
             return HTTPResponse(status=204)
 
