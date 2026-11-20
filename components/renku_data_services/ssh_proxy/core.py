@@ -60,5 +60,5 @@ class SSHSessionAuthorize:
             target_port=ssh_settings.target_port,
             target_user=session_id,
             host_key_pub=ssh_settings.public_host_key,
-            auth_key_priv=str(cluster.id),
+            auth_key_priv=f"renku-ssh-identities/{cluster.id}",
         )
