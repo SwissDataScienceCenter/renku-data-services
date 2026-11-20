@@ -43,6 +43,7 @@ from renku_data_services.crc.models import (
     ResourcePoolMemberIdentifier,
 )
 from renku_data_services.crc.remote_cluster import RemoteClusterSetup
+from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
 
@@ -972,7 +973,7 @@ class ClustersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _handler(_request: Request, user: base_models.APIUser, cluster_id: ULID) -> HTTPResponse:
-            await self.repo.delete(user, cluster_id)
+            await self.remote_cluster_setup.delete_remote_cluster(user, ClusterId(cluster_id))
 
             return HTTPResponse(status=204)
 

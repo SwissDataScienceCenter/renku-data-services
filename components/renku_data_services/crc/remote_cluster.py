@@ -49,9 +49,34 @@ class RemoteClusterSetup:
 
         model = model.with_auth_key_fingerprint(pfp)
         remote_cluster = await self.__repo.insert(user, model)
-        await self.enable_ssh_remote_cluster(remote_cluster.id, kpair)
+        try:
+            await self.enable_ssh_remote_cluster(remote_cluster.id, kpair)
+        except Exception:
+            # Without the stored private key the cluster can't be used; remove it so the request can be retried
+            logger.error(f"Storing the ssh key for remote cluster {remote_cluster.id} failed, removing the cluster")
+            await self.__repo.delete(user, remote_cluster.id)
+            raise
 
         return remote_cluster, kpair
+
+    async def delete_remote_cluster(self, user: APIUser, cluster_id: ClusterId) -> None:
+        """Delete a remote cluster and remove its ssh private key from the identities secret.
+
+        The key is removed before the cluster, so that if removing it
+        fails the cluster is still there and the request can be retried.
+        """
+        if not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        try:
+            cluster = await self.__repo.select(cluster_id)
+        except errors.MissingResourceError:
+            return
+
+        if cluster.ssh_settings is not None:
+            await self.__remove_auth_key(cluster_id)
+
+        await self.__repo.delete(user, cluster_id)
 
     async def enable_ssh_remote_cluster(self, remote_cluster_id: ClusterId, kpair: models.SshKeyPair) -> None:
         """Enable ssh for the remote cluster.
@@ -66,13 +91,33 @@ class RemoteClusterSetup:
         generated keypair is returned so that the public part can be
         handed to the remote cluster.
         """
-        cluster = await self.__k8s_client.cluster_by_id(DEFAULT_K8S_CLUSTER)
-        namespace = cluster.namespace
-        secret_name = auth_key_secret_name
         string_data = {
             str(remote_cluster_id): kpair.private_part,
         }
-        secret = K8sSecret(
+        secret = await self.__identities_secret(string_data)
+
+        existing = await self.__k8s_client.get(secret)
+        if existing is None:
+            await self.__k8s_client.create(secret, refresh=False)
+        else:
+            # A merge patch on stringData replaces the keys in data
+            await self.__k8s_client.patch(secret, {"stringData": string_data})
+
+    async def __remove_auth_key(self, cluster_id: ClusterId) -> None:
+        """Remove the ssh private key of the given cluster from the identities secret."""
+        secret = await self.__identities_secret()
+        existing = await self.__k8s_client.get(secret)
+        if existing is None or str(cluster_id) not in existing.manifest.get("data", {}):
+            return
+        # A merge patch with a null value removes the key
+        await self.__k8s_client.patch(secret, {"data": {str(cluster_id): None}})
+
+    async def __identities_secret(self, string_data: dict[str, str] | None = None) -> K8sSecret:
+        """The secret in the local cluster holding one ssh private key per remote cluster id."""
+        cluster = await self.__k8s_client.cluster_by_id(DEFAULT_K8S_CLUSTER)
+        namespace = cluster.namespace
+        secret_name = auth_key_secret_name
+        return K8sSecret(
             name=secret_name,
             namespace=namespace,
             cluster=cluster.id,
@@ -82,17 +127,10 @@ class RemoteClusterSetup:
                     # Opaque: the ssh-auth type requires a single `ssh-privatekey` entry,
                     # but this secret holds one private key per remote cluster id
                     "type": "Opaque",
-                    "stringData": string_data,
+                    "stringData": string_data or {},
                 }
             ),
         )
-
-        existing = await self.__k8s_client.get(secret)
-        if existing is None:
-            await self.__k8s_client.create(secret, refresh=False)
-        else:
-            # A merge patch on stringData replaces the keys in data
-            await self.__k8s_client.patch(secret, {"stringData": string_data})
 
 
 def generate_ssh_keypair(comment: str | None = None) -> models.SshKeyPair:
