@@ -17,7 +17,7 @@ from uuid import uuid4
 
 from sqlalchemy import NullPool, delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import contains_eager, selectinload
 from sqlalchemy.sql import Select, or_
 from ulid import ULID
 
@@ -46,7 +46,7 @@ from renku_data_services.crc.models import (
     SavedClusterSettings,
     SessionProtocol,
 )
-from renku_data_services.crc.orm import ClusterORM
+from renku_data_services.crc.orm import ClusterORM, ClusterSshSettingsORM
 from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
@@ -1876,6 +1876,18 @@ class ClusterRepository:
     """Repository for cluster configurations."""
 
     session_maker: Callable[..., AsyncSession]
+
+    async def find_by_fingerprint(self, pk_fingerprint: str) -> SavedClusterSettings | None:
+        """Looks up a cluster using the fingerprint of its public key."""
+        async with self.session_maker() as session:
+            stmt = (
+                select(ClusterORM)
+                .join(ClusterORM.ssh_settings)
+                .where(ClusterSshSettingsORM.public_host_key_fingerprint == pk_fingerprint)
+                .options(contains_eager(ClusterORM.ssh_settings))
+            )
+            cluster = (await session.scalars(stmt)).one_or_none()
+            return cluster.dump() if cluster else None
 
     async def select_all(self, cluster_id: ULID | None = None) -> AsyncGenerator[SavedClusterSettings, Any]:
         """Get cluster configurations from the database."""

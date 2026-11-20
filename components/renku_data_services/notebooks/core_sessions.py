@@ -54,6 +54,7 @@ from renku_data_services.notebooks.api.amalthea_patches.init_containers import u
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
+from renku_data_services.notebooks.constants import REMOTE_SSH_SESSION_SECRET_NAME
 from renku_data_services.notebooks.cr_amalthea_session import PersistentVolumeClaim
 from renku_data_services.notebooks.crs import (
     AmaltheaMetadata,
@@ -964,8 +965,9 @@ def ssh_proxy_session_extras(
         auth_key = (ssh_config.proxy_auth_key_secret_name, ssh_config.proxy_auth_key_secret_key)
     else:
         logger.info(f"SSH Settings: {ssh_settings}")
-        host_key = (ssh_settings.session_secret_name, "ssh_host_ed25519_key")
-        auth_key = ("renku-ssh-session-keys", "authorized_keys")
+        secret_name = REMOTE_SSH_SESSION_SECRET_NAME
+        host_key = (secret_name, "ssh_host_ed25519_key")
+        auth_key = (secret_name, "authorized_keys")
 
     ssh_dir = storage_mount / ".ssh"
     # (volume name, secret name, key in the secret, file name in the session's .ssh directory)

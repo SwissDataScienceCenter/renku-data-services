@@ -22,6 +22,32 @@ class SSHSessionAuthorize:
         self.__k8s_client = k8s_client
         self.__cluster_repo = cluster_repo
 
+    async def authorize_cluster(self, public_key: str, session_id: str) -> SshSessionData:
+        """Authorize a session name coming from a remote cluster."""
+
+        fp = fingerprint_ssh_public_key(public_key)
+        if fp is None:
+            raise errors.ValidationError(message=f"Fingerprint could not be derived from pub key: {public_key}")
+
+        cluster = await self.__cluster_repo.find_by_fingerprint(fp)
+        if cluster is None:
+            logger.debug(f"No cluster found for fingerprint: {fp}")
+            raise errors.MissingResourceError(message="The cluster does not exist.")
+        logger.debug(f"Found cluster by pub key {fp}: {cluster.id}")
+
+        session_filter = K8sObjectFilter(gvk=AMALTHEA_SESSION_GVK, name=session_id)
+        logger.debug(f"Search sessions: {session_filter}")
+        sessions = [obj async for obj in self.__k8s_client.list(session_filter)]
+        logger.debug(f"Found sessions: {len(sessions)}")
+        if not sessions:
+            raise errors.MissingResourceError(
+                message=f"The session '{session_id}' does not exist or is not accessible."
+            )
+
+        # For the remote cluster, we just return "default settings" as it already knows
+        # how to connect to its own sessions.
+        return SshSessionData.default(session_id)
+
     async def authorize_session(self, public_key: str, session_id: str) -> SshSessionData:
         """Authorize a session name."""
         fingerprint = fingerprint_ssh_public_key(public_key)

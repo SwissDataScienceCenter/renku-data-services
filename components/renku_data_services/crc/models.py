@@ -17,6 +17,7 @@ from renku_data_services.base_models import ResetType
 from renku_data_services.base_models.core import ResourceType
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sPatch, K8sResourceQuota
+from renku_data_services.users.core import fingerprint_ssh_public_key
 
 
 class ResourcesProtocol(Protocol):
@@ -385,10 +386,22 @@ class SshSettings:
     target_port: int
     username: str
     public_host_key: str
-    session_secret_name: str
-    """The name of a k8s secret at the remote cluster holding host key and auth key."""
-    auth_key_secret_name: str = "renku-ssh-identities"  # nosec B106
-    """The name of a k8s secret that stores private keys per cluster."""
+    """The literal public key part of the host key the remote ssh proxy identifies itself with."""
+    public_host_key_fingerprint: str
+
+    @classmethod
+    def create(cls, target_host: str, target_port: int, username: str, public_host_key: str) -> Self:
+        """Create ssh settings, deriving the fingerprint from the given public host key."""
+        fp = fingerprint_ssh_public_key(public_host_key)
+        if fp is None:
+            raise errors.ValidationError(message=f"fingerprint could not be derived from pub key: {public_host_key}")
+        return cls(
+            target_host=target_host,
+            target_port=target_port,
+            username=username,
+            public_host_key=public_host_key,
+            public_host_key_fingerprint=fp,
+        )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
