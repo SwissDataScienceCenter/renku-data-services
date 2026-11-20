@@ -49,5 +49,5 @@ class SearchUpdatesORM(BaseORM):
     payload: Mapped[dict[str, Any]] = mapped_column("payload", JSONVariant, nullable=False)
     """The SOLR document of the entity as JSON."""
 
-    state: Mapped[RecordState] = mapped_column("state", Enum(RecordState), nullable=True, init=False)
+    state: Mapped[RecordState] = mapped_column("state", Enum(RecordState, schema=None), nullable=True, init=False)
     """State for marking rows."""

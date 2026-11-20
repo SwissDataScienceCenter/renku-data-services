@@ -8,9 +8,30 @@ import pytest_asyncio
 import schemathesis
 from hypothesis import HealthCheck, settings
 from sanic_testing.testing import SanicASGITestClient
-from schemathesis.checks import ALL_CHECKS
-from schemathesis.hooks import HookContext
-from schemathesis.specs.openapi.schemas import BaseOpenAPISchema
+from schemathesis import GenerationMode, HookContext
+from schemathesis.checks import (
+    content_type_conformance,
+    ignored_auth,
+    negative_data_rejection,
+    not_a_server_error,
+    response_headers_conformance,
+    response_schema_conformance,
+    status_code_conformance,
+)
+from schemathesis.config import SchemathesisConfig
+from schemathesis.specs.openapi.schemas import OpenApiSchema
+
+# NOTE: These are the checks that were part of ALL_CHECKS in schemathesis 3.x. Schemathesis 4 runs
+# additional checks by default (e.g. positive_data_acceptance, use_after_free), so we list them explicitly.
+CHECKS = [
+    not_a_server_error,
+    status_code_conformance,
+    content_type_conformance,
+    response_headers_conformance,
+    response_schema_conformance,
+    negative_data_rejection,
+    ignored_auth,
+]
 
 
 class _RequestsStatistics(list):
@@ -35,7 +56,7 @@ async def requests_statistics():
 
 
 @pytest_asyncio.fixture
-async def apispec(sanic_client: SanicASGITestClient) -> BaseOpenAPISchema:
+async def apispec(sanic_client: SanicASGITestClient) -> OpenApiSchema:
     _, res = await sanic_client.get("/api/data/spec.json")
     assert res.status_code == 200
     schema = res.json
@@ -43,7 +64,10 @@ async def apispec(sanic_client: SanicASGITestClient) -> BaseOpenAPISchema:
     # and some of these can break the header normalization that httpx library uses to send requests.
     # See https://github.com/schemathesis/schemathesis/issues/1142
     schema["security"] = []
-    return schemathesis.from_dict(schema)
+    config = SchemathesisConfig()
+    config.projects.default.generation.update(modes=list(GenerationMode))
+    config.output.sanitization.update(enabled=False)
+    return schemathesis.openapi.from_dict(schema, config=config)
 
 
 # Same issue as for "security" for the "If-Match" header.
@@ -79,11 +103,7 @@ def filter_query(context: HookContext, query: dict[str, str] | None) -> bool:
     return query is None or ("" not in query and "" not in query.values())
 
 
-schema = schemathesis.from_pytest_fixture(
-    "apispec",
-    data_generation_methods=schemathesis.DataGenerationMethod.all(),
-    sanitize_output=False,
-)
+schema = schemathesis.pytest.from_fixture("apispec")
 
 ALLOWED_SLOW_ENDPOINTS = [
     ("/user/secrets", "POST"),  # encryption of secrets is a costly operation
@@ -98,7 +118,7 @@ EXCLUDE_PATH_PREFIXES = ["/sessions", "/notebooks", "/apps"]
 
 @pytest.mark.schemathesis
 @pytest.mark.asyncio
-@schema.parametrize(validate_schema=True)
+@schema.parametrize()
 @settings(max_examples=5, suppress_health_check=[HealthCheck.filter_too_much, HealthCheck.data_too_large])
 async def test_api_schemathesis(
     case: schemathesis.Case,
@@ -109,20 +129,20 @@ async def test_api_schemathesis(
     for exclude_prefix in EXCLUDE_PATH_PREFIXES:
         if case.path.startswith(exclude_prefix):
             return
-    req_kwargs = case.as_requests_kwargs(headers=admin_headers)
+    req_kwargs = case.as_transport_kwargs(headers=admin_headers)
     _, res = await sanic_client_with_solr.request(**req_kwargs)
     res.request.uri = str(res.url)
 
     if all(slow[0] != case.path or slow[1] != case.method for slow in ALLOWED_SLOW_ENDPOINTS):
         requests_statistics.append(res.elapsed)
 
-    checks = ALL_CHECKS
+    checks = CHECKS
     if req_kwargs.get("method") == "DELETE" and res.status_code == 204:
         # schemathesis does not currently allow accepting status 204 for negative data, so we ignore that check
-        checks = tuple(c for c in checks if c.__name__ != "negative_data_rejection")
+        checks = [c for c in checks if c is not negative_data_rejection]
 
     if req_kwargs.get("url") == "/api/data/repository" and res.status_code == 200:
         # schemathesis constructs invalid negative cases affecting the /repositories endpoint
-        checks = tuple(c for c in checks if c.__name__ != "negative_data_rejection")
+        checks = [c for c in checks if c is not negative_data_rejection]
 
     case.validate_response(res, checks=checks)

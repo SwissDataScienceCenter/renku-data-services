@@ -405,7 +405,9 @@ class ResourcePoolORM(BaseORM):
 
     # NOTE: we reuse the "build_platform" enum type here
     platform: Mapped[models.RuntimePlatform] = mapped_column(
-        Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=literal("linux_amd64")
+        Enum(models.RuntimePlatform, name="build_platform", schema=None),
+        default=None,
+        server_default=literal("linux_amd64"),
     )
 
     cpu_limit_factor: Mapped[Optional[float]] = mapped_column("cpu_limit_factor", Float, default=None, nullable=True)

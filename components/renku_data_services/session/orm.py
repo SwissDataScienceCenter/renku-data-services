@@ -276,7 +276,7 @@ class BuildPlatformORM(BaseORM):
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
 
     platform: Mapped[models.Platform] = mapped_column(
-        "platform", Enum(models.Platform, name="build_platform"), nullable=False
+        "platform", Enum(models.Platform, name="build_platform", schema=None), nullable=False
     )
 
     build_parameters_id: Mapped[ULID] = mapped_column(

@@ -68,16 +68,12 @@ settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        policy = asyncio.get_event_loop_policy()
-        loop = policy.new_event_loop()
-    yield loop
-    print("closing event loop")
-    loop.close()
+@pytest_asyncio.fixture(scope="session")
+async def event_loop() -> asyncio.AbstractEventLoop:
+    # NOTE: pytest-asyncio >= 1.0 does not allow overriding the event loop with an "event_loop" fixture anymore.
+    # All tests and fixtures run in a single session-scoped loop (see asyncio_default_*_loop_scope in pyproject.toml).
+    # This fixture exposes that loop for code that needs a reference to it (e.g. to run async cleanup in finalizers).
+    return asyncio.get_running_loop()
 
 
 @pytest_asyncio.fixture(scope="session")
