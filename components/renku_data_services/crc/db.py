@@ -1385,7 +1385,7 @@ class MemberRepository(_Base):
         res = await session.execute(stmt)
         user = res.scalars().first()
         if user is None:
-            user = schemas.UserORM(keycloak_id=keycloak_id)
+            user = schemas.UserORM(keycloak_id=keycloak_id, resource_pools=[])
             session.add(user)
         stmt_rp = (
             select(schemas.ResourcePoolORM)
@@ -1516,7 +1516,9 @@ class MemberRepository(_Base):
             users_to_add_exist = res_usr.scalars().all()
             user_ids_to_add_exist = [i.keycloak_id for i in users_to_add_exist]
             users_to_add_missing = [
-                schemas.UserORM(keycloak_id=user_id) for user_id in user_ids if user_id not in user_ids_to_add_exist
+                schemas.UserORM(keycloak_id=user_id, resource_pools=[])
+                for user_id in user_ids
+                if user_id not in user_ids_to_add_exist
             ]
             if append:
                 rp_user_ids = {rp.id for rp in rp.users}
@@ -1817,7 +1819,7 @@ class MemberRepository(_Base):
             res = await session.execute(stmt)
             user: Optional[schemas.UserORM] = res.scalars().first()
             if not user:
-                user = schemas.UserORM(keycloak_id=keycloak_id)
+                user = schemas.UserORM(keycloak_id=keycloak_id, resource_pools=[])
                 session.add(user)
             allowed_updates = {"no_default_access"}
             if not set(kwargs.keys()).issubset(allowed_updates):

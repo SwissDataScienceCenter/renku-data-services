@@ -7,6 +7,7 @@ from sanic.response import JSONResponse
 
 import renku_data_services.base_models as base_models
 import renku_data_services.search.core as core
+from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.auth import authenticate, only_admins
@@ -20,6 +21,9 @@ from renku_data_services.search.user_query_parser import QueryParser
 from renku_data_services.solr.solr_client import SolrClientConfig
 
 logger = logging.getLogger(__name__)
+
+# Solr parses the 'start' (offset) parameter as a 32-bit signed integer
+_MAX_SOLR_OFFSET = 2**31 - 1
 
 
 @dataclass(kw_only=True)
@@ -81,6 +85,8 @@ class SearchBP(CustomBlueprint):
         async def _query(_: Request, user: base_models.APIUser, query: SearchQuery) -> HTTPResponse | JSONResponse:
             per_page = query.per_page
             offset = (query.page - 1) * per_page
+            if offset > _MAX_SOLR_OFFSET:
+                raise errors.ValidationError(message=f"The requested page {query.page} is out of range.")
             uq = await QueryParser.parse(query.q)
             logger.debug(f"Running search query: {query}")
 

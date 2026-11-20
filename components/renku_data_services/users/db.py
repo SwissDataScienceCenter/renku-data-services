@@ -398,9 +398,11 @@ class UsersSync:
             session, user_slug=slug, retry_enumerate=5, retry_random=True
         )
         slug = base_models.Slug.from_name(namespace)
+        new_namespace = NamespaceORM(slug=slug.value, user_id=user.id)
+        new_namespace.old_namespaces = []
         new_user = UserORM(
             keycloak_id=user.id,
-            namespace=NamespaceORM(slug=slug.value, user_id=user.id),
+            namespace=new_namespace,
             email=user.email,
             first_name=user.first_name,
             last_name=user.last_name,

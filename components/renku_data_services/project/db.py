@@ -297,6 +297,7 @@ class ProjectRepository:
             template_id=project.template_id,
             secrets_mount_directory=project.secrets_mount_directory or constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR,
         )
+        project_orm.old_slugs = []
         project_slug = ns_schemas.EntitySlugORM.create_project_slug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
         session.add(project_orm)
@@ -899,6 +900,8 @@ class ProjectSessionSecretRepository:
                         encrypted_key=encrypted_key,
                         kind=SecretKind.general,
                     )
+                    secret_orm.session_secrets = []
+                    secret_orm.data_connector_secrets = []
                     session_launcher_secret_orm = schemas.SessionSecretORM(
                         secret_slot_id=secret_update.secret_slot_id,
                         secret_id=secret_orm.id,

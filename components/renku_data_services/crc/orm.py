@@ -81,7 +81,7 @@ class UserORM(BaseORM):
     @classmethod
     def load(cls, user: base_models.User) -> UserORM:
         """Create an ORM object from a user model."""
-        return cls(keycloak_id=user.keycloak_id, no_default_access=user.no_default_access)
+        return cls(keycloak_id=user.keycloak_id, no_default_access=user.no_default_access, resource_pools=[])
 
     def dump(self) -> base_models.User:
         """Create a user model from the ORM object."""
@@ -436,6 +436,7 @@ class ResourcePoolORM(BaseORM):
         return cls(
             name=new_resource_pool.name,
             quota=quota.id if quota else None,
+            users=[],
             classes=classes,
             idle_threshold=new_resource_pool.idle_threshold,
             hibernation_threshold=new_resource_pool.hibernation_threshold,

@@ -207,6 +207,8 @@ class UserSecretsRepo:
                 expiration_timestamp=secret.expiration_timestamp,
                 default_filename=default_filename,
             )
+            secret_orm.session_secrets = []
+            secret_orm.data_connector_secrets = []
             session.add(secret_orm)
 
             try:

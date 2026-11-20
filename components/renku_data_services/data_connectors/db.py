@@ -415,6 +415,7 @@ class DataConnectorRepository:
             if isinstance(data_connector, models.UnsavedGlobalDataConnector)
             else None,
         )
+        data_connector_orm.old_slugs = []
         if ns is not None:
             data_connector_slug = ns_schemas.EntitySlugORM.create_data_connector_slug(
                 slug,
@@ -1441,6 +1442,8 @@ class DataConnectorSecretRepository:
                         kind=SecretKind.storage,
                         expiration_timestamp=expiration_timestamp,
                     )
+                    secret_orm.session_secrets = []
+                    secret_orm.data_connector_secrets = []
                     data_connector_secret_orm = schemas.DataConnectorSecretORM(
                         name=name,
                         user_id=user.id,

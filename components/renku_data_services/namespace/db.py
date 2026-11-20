@@ -397,6 +397,7 @@ class GroupRepository:
         )
         session.add(group)
         ns = schemas.NamespaceORM(slug=payload.slug.lower(), group_id=group.id)
+        ns.old_namespaces = []
         session.add(ns)
         try:
             await session.flush()
@@ -862,6 +863,7 @@ class GroupRepository:
         namespace = await self._create_user_namespace_slug(session, user_slug, retry_enumerate, retry_random)
         slug = base_models.Slug.from_name(namespace)
         ns = schemas.NamespaceORM(slug.value, user_id=user_id)
+        ns.old_namespaces = []
         session.add(ns)
         await session.flush()
         await session.refresh(ns)
