@@ -1143,3 +1143,21 @@ class StorageQuotasBP(CustomBlueprint):
             return validated_json(apispec.StorageQuota, storage_quota)
 
         return "/storage_quotas/<storage_quota_id:ulid>", ["PATCH"], _patch
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Delete a storage quota."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _delete(
+            _: Request,
+            user: base_models.APIUser,
+            storage_quota_id: ULID,
+        ) -> HTTPResponse:
+            async with self.session_maker() as session, session.begin():
+                await self.storage_quota_repo.delete_storage_quota(
+                    session=session, user=user, storage_quota_id=storage_quota_id
+                )
+            return HTTPResponse(status=204)
+
+        return "/storage_quotas/<storage_quota_id:ulid>", ["DELETE"], _delete
