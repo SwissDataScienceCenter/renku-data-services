@@ -782,3 +782,30 @@ class StorageQuotaPatch:
 
     total_size_bytes: ByteSize | None
     max_size_bytes: ByteSize | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class StorageQuotaResources:
+    """Model for reporting resource consumption of a storage quota."""
+
+    id: ULID
+    """The ID of the storage quota."""
+
+    allocated_size_bytes: ByteSize
+    requested_size_bytes: ByteSize
+    free_size_bytes: ByteSize
+
+    @property
+    def allocated_size(self) -> int:
+        """Allocated size (GiB) of the quota."""
+        return int(self.allocated_size_bytes.to_gibi())
+
+    @property
+    def requested_size(self) -> int:
+        """Requested size (GiB) of the quota."""
+        return int(self.requested_size_bytes.to_gibi())
+
+    @property
+    def free_size(self) -> int:
+        """Free size (GiB) of the quota."""
+        return int(self.free_size_bytes.to_gibi())

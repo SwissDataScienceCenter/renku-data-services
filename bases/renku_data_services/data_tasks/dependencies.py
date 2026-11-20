@@ -7,7 +7,13 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 from renku_data_services.capacity_reservation.k8s_client import CapacityReservationK8sClient
 from renku_data_services.capacity_reservation.tasks import CapacityReservationTasks
-from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolQueryRepository
+from renku_data_services.crc.db import (
+    ClusterRepository,
+    QuotaRepository,
+    ResourcePoolQueryRepository,
+    StorageFlavorRepository,
+    StorageQuotaRepository,
+)
 from renku_data_services.data_tasks.config import Config
 from renku_data_services.k8s.clients import (
     DummyPriorityClassClient,
@@ -36,6 +42,8 @@ from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.tasks import SessionTasks
+from renku_data_services.storage.db import ProjectStorageV2Repository
+from renku_data_services.storage.storage_sync import ProjectStorageK8sClient, ProjectStorageSyncHanlder
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
@@ -66,6 +74,7 @@ class DependencyManager:
     persisted_logs_collector: PersistedLogsCollector
     quota_repo: QuotaRepository
     resource_pool_query_repo: ResourcePoolQueryRepository
+    project_storage_sync_hanlder: ProjectStorageSyncHanlder
 
     @classmethod
     def from_env(cls, cfg: Config | None = None) -> "DependencyManager":
@@ -175,6 +184,22 @@ class DependencyManager:
             session_maker=cfg.db.async_session_maker,
         )
 
+        storage_flavor_repo = StorageFlavorRepository()
+        storage_quota_repo = StorageQuotaRepository(
+            storage_flavor_repo=storage_flavor_repo,
+            authz=authz,
+        )
+        project_storage_v2_repo = ProjectStorageV2Repository(
+            session_maker=cfg.db.async_session_maker,
+            storage_quota_repo=storage_quota_repo,
+            authz=authz,
+        )
+        project_storage_sync_hanlder = ProjectStorageSyncHanlder(
+            k8s_client=ProjectStorageK8sClient(client=k8s_client),
+            project_storage_v2_repo=project_storage_v2_repo,
+            session_maker=cfg.db.async_session_maker,
+        )
+
         return cls(
             config=cfg,
             search_updates_repo=search_updates_repo,
@@ -194,4 +219,5 @@ class DependencyManager:
             persisted_logs_collector=persisted_logs_collector,
             quota_repo=quota_repo,
             resource_pool_query_repo=resource_pool_query_repo,
+            project_storage_sync_hanlder=project_storage_sync_hanlder,
         )
