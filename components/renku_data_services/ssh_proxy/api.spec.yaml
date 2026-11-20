@@ -22,8 +22,12 @@ paths:
             schema:
               $ref: "#/components/schemas/SessionAuthorizeRequest"
       responses:
-        "204":
+        "200":
           description: Authorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionAuthorizeResponse"
         "404":
           description: The key is unknown or malformed, or the session does not exist or is not owned by the key's user
           content:
@@ -35,6 +39,24 @@ paths:
       tags: [ssh]
 components:
   schemas:
+    SessionAuthorizeResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        target_host:
+          type: string
+        target_port:
+          type: integer
+        target_user:
+          type: string
+        host_key_pub:
+          type: string
+        auth_key_priv:
+          type: string
+      required:
+        - target_host
+        - target_port
+        - target_user
     SessionAuthorizeRequest:
       type: object
       additionalProperties: false

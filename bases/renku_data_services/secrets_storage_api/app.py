@@ -25,8 +25,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     ssh_proxy = SSHProxyBP(
         name="ssh_proxy",
         url_prefix=url_prefix,
-        ssh_key_repo=dm.ssh_key_repo,
-        k8s_db_cache=dm.k8s_db_cache,
+        authorizer=dm.ssh_authorize,
     )
     misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=dm.config.spec, version=dm.config.version)
     app.blueprint([secrets_storage.blueprint(), ssh_proxy.blueprint(), misc.blueprint()])

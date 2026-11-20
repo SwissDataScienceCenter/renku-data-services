@@ -679,6 +679,15 @@ def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:
         session_tls_secret_name=body.session_tls_secret_name,
         session_storage_class=body.session_storage_class,
         service_account_name=body.service_account_name,
+        ssh_settings=models.SshSettings.create(
+            target_host=body.ssh_settings.target_host,
+            target_port=body.ssh_settings.target_port,
+            username=body.ssh_settings.username,
+            public_host_key=body.ssh_settings.public_host_key,
+            public_auth_key_fingerprint="",
+        )
+        if body.ssh_settings
+        else None,
     )
 
 

@@ -40,6 +40,7 @@ from renku_data_services.crc.db import (
     ResourceFlavorRepository,
     ResourcePoolRepository,
 )
+from renku_data_services.crc.remote_cluster import RemoteClusterSetup
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -92,6 +93,7 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
+from renku_data_services.ssh_proxy.core import SSHSessionAuthorize
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
@@ -166,6 +168,7 @@ class DependencyManager:
     apps_repo: RenkuAppsRepository | None
     user_preferences_repo: UserPreferencesRepository
     ssh_key_repo: SSHKeyRepository
+    ssh_authorize: SSHSessionAuthorize
     kc_user_repo: KcUserRepo
     low_level_user_secrets_repo: LowLevelUserSecretsRepo
     user_secrets_repo: UserSecretsRepo
@@ -177,6 +180,7 @@ class DependencyManager:
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
     cluster_repo: ClusterRepository
+    remote_cluster_setup: RemoteClusterSetup
     data_source_repo: DataSourceRepository
     image_check_repo: ImageCheckRepository
     metrics_repo: MetricsRepository
@@ -329,6 +333,7 @@ class DependencyManager:
         )
         job_client = DepositUploadJobClient(client)
         secret_client = K8sSecretClient(client)
+        remote_cluster_setup = RemoteClusterSetup(cluster_repo, client)
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
@@ -443,6 +448,7 @@ class DependencyManager:
             user_preferences_config=config.user_preferences,
         )
         ssh_key_repo = SSHKeyRepository(session_maker=config.db.async_session_maker)
+        ssh_authorize = SSHSessionAuthorize(ssh_key_repo, client, cluster_repo)
         low_level_user_secrets_repo = LowLevelUserSecretsRepo(
             session_maker=config.db.async_session_maker,
         )
@@ -558,6 +564,7 @@ class DependencyManager:
             apps_repo=apps_repo,
             user_preferences_repo=user_preferences_repo,
             ssh_key_repo=ssh_key_repo,
+            ssh_authorize=ssh_authorize,
             kc_user_repo=kc_user_repo,
             user_secrets_repo=user_secrets_repo,
             connected_services_repo=connected_services_repo,
@@ -566,6 +573,7 @@ class DependencyManager:
             data_connector_repo=data_connector_repo,
             data_connector_secret_repo=data_connector_secret_repo,
             cluster_repo=cluster_repo,
+            remote_cluster_setup=remote_cluster_setup,
             data_source_repo=data_source_repo,
             image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,
