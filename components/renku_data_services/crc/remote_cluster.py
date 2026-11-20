@@ -16,7 +16,7 @@ from renku_data_services.k8s.models import K8sSecret
 
 logger = logging.getLogger(__file__)
 
-auth_key_secret_name: Final[str] = "renku-ssh-indentities"
+auth_key_secret_name: Final[str] = "renku-ssh-identities"
 
 
 class RemoteClusterSetup:
@@ -67,7 +67,9 @@ class RemoteClusterSetup:
             manifest=Box(
                 {
                     "metadata": {"name": secret_name, "namespace": namespace},
-                    "type": "kubernetes.io/ssh-auth",
+                    # Opaque: the ssh-auth type requires a single `ssh-privatekey` entry,
+                    # but this secret holds one private key per remote cluster id
+                    "type": "Opaque",
                     "stringData": string_data,
                 }
             ),
