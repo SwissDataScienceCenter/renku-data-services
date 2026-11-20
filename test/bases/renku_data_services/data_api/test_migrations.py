@@ -4,7 +4,8 @@ import random
 import string
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any, cast
+from pathlib import PurePosixPath
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 import pytest
@@ -19,13 +20,14 @@ from sqlalchemy.sql import bindparam
 from ulid import ULID
 
 from renku_data_services import errors
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import ResourceType, Slug
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import downgrade_migrations_for_app, get_alembic_config, run_migrations_for_app
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.users import orm as user_schemas
 from renku_data_services.users.models import UserInfo
-from renku_data_services.utils.sqlalchemy import ULIDType
+from renku_data_services.utils.sqlalchemy import ByteSizeType, PurePosixPathType, ULIDType
 
 
 @pytest.mark.asyncio
@@ -1001,12 +1003,18 @@ async def test_migration_to_20076b29e3b8(app_manager_instance: DependencyManager
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["empty", "existing"])
 async def test_migration_to_eb976e4ecf40(
     app_manager_instance: DependencyManager,
     sanic_client_no_migrations: SanicASGITestClient,
     user_headers: dict[str, Any],
+    member_1_headers: dict[str, Any],
+    member_2_headers: dict[str, Any],
     admin_user: UserInfo,
     regular_user: UserInfo,
+    member_1_user: UserInfo,
+    member_2_user: UserInfo,
+    case: Literal["empty" | "existing"],
 ) -> None:
     """Test."""
 
@@ -1015,6 +1023,10 @@ async def test_migration_to_eb976e4ecf40(
 
     # This forces the users database table to be populated
     _, res = await sanic_client_no_migrations.get("/api/data/user", headers=user_headers)
+    assert res.status_code == 200, res.text
+    _, res = await sanic_client_no_migrations.get("/api/data/user", headers=member_1_headers)
+    assert res.status_code == 200, res.text
+    _, res = await sanic_client_no_migrations.get("/api/data/user", headers=member_2_headers)
     assert res.status_code == 200, res.text
 
     # NOTE: The following SQL definitions should be valid as of '9fbed1a9c79f'.
@@ -1031,7 +1043,7 @@ async def test_migration_to_eb976e4ecf40(
         sa.Column("updated_at", sa.DateTime(timezone=True)),
     )
 
-    async def insert_project(session: AsyncSession, **payload: dict[str, Any]):
+    async def insert_project(session: AsyncSession, **payload: dict[str, Any]) -> ULID:
         if "id" not in payload:
             payload["id"] = ULID()
         if "name" not in payload:
@@ -1049,11 +1061,136 @@ async def test_migration_to_eb976e4ecf40(
         project = insert_result.one()
         return project.id
 
-    # TODO
+    project_storage_allow_table = sa.Table(
+        "project_storage_allow",
+        sa.MetaData(schema="storage"),
+        sa.Column("project_id", ULIDType(), primary_key=True),
+        sa.Column("max_size", ByteSizeType()),
+        sa.Column("updated_at", sa.DateTime(timezone=True)),
+    )
+
+    async def insert_project_storage_allow(session: AsyncSession, project_id: ULID, **payload: dict[str, Any]) -> ULID:
+        if "max_size" not in payload:
+            payload["max_size"] = ByteSize.from_gibi(64)
+        if "updated_at" not in payload:
+            payload["updated_at"] = datetime.now(UTC)
+        stmt = (
+            project_storage_allow_table.insert()
+            .values(project_id=project_id, **payload)
+            .returning(project_storage_allow_table)
+        )
+        insert_result = await session.execute(stmt)
+        allow = insert_result.one()
+        return allow.project_id
+
+    project_storage_table = sa.Table(
+        "project_storage",
+        sa.MetaData(schema="storage"),
+        sa.Column("id", ULIDType(), primary_key=True),
+        sa.Column("project_id", ULIDType()),
+        sa.Column("storage_class", sa.String(253)),
+        sa.Column("size_limit", ByteSizeType()),
+        sa.Column("target_path", PurePosixPathType()),
+        sa.Column("created_by_id", sa.String()),
+        sa.Column("creation_date", sa.DateTime(timezone=True)),
+        sa.Column("updated_at", sa.DateTime(timezone=True)),
+    )
+
+    async def insert_project_storage(session: AsyncSession, project_id: ULID, **payload: dict[str, Any]) -> ULID:
+        if "storage_class" not in payload:
+            payload["storage_class"] = "test-storage-class"
+        if "size_limit" not in payload:
+            payload["size_limit"] = ByteSize.from_gibi(32)
+        if "target_path" not in payload:
+            payload["target_path"] = PurePosixPath("store")
+        if "created_by_id" not in payload:
+            payload["created_by_id"] = regular_user.id
+        if "creation_date" not in payload:
+            payload["creation_date"] = datetime.now(UTC)
+        if "updated_at" not in payload:
+            payload["updated_at"] = payload["creation_date"]
+        stmt = project_storage_table.insert().values(project_id=project_id, **payload).returning(project_storage_table)
+        insert_result = await session.execute(stmt)
+        storage = insert_result.one()
+        return storage.id
+
+    project_storages_v2_table = sa.Table(
+        "project_storages_v2",
+        sa.MetaData(schema="storage"),
+        sa.Column("id", ULIDType(), primary_key=True),
+        sa.Column("project_id", ULIDType()),
+        sa.Column("storage_quota_id", ULIDType()),
+        sa.Column("requested_size", ByteSizeType()),
+        sa.Column("actual_size", ByteSizeType()),
+        sa.Column("target_path", PurePosixPathType()),
+        sa.Column("k8s_pvc_name", sa.String()),
+        sa.Column("k8s_pvc_status", sa.String()),
+        sa.Column("created_by_id", sa.String()),
+        sa.Column("creation_date", sa.DateTime(timezone=True)),
+        sa.Column("updated_at", sa.DateTime(timezone=True)),
+    )
+
     async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         await _generate_user_namespaces(session)
-
-        project_id = await insert_project(session)
-        # assert project is None
+        if case == "existing":
+            # Create a first project storage
+            project_id_a = await insert_project(session)
+            await insert_project_storage_allow(session, project_id_a)
+            storage_id_a = await insert_project_storage(session, project_id_a, size_limit=ByteSize.from_gibi(16))
+            # Create a second project storage
+            project_id_b = await insert_project(session, created_by_id=member_1_user.id)
+            await insert_project_storage_allow(session, project_id_b)
+            storage_id_b = await insert_project_storage(
+                session, project_id_b, target_path="hello", created_by_id=member_1_user.id
+            )
+            # Create a third project storage
+            project_id_c = await insert_project(session, created_by_id=member_2_user.id)
+            await insert_project_storage_allow(session, project_id_c)
+            storage_id_c = await insert_project_storage(
+                session, project_id_c, storage_class="special-storage", created_by_id=member_2_user.id
+            )
 
     run_migrations_for_app("common", "eb976e4ecf40")
+
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        stmt = project_storages_v2_table.select()
+        res = await session.execute(stmt)
+        new_storages = res.all()
+        match case:
+            case "empty":
+                assert len(new_storages) == 0
+            case "existing":
+                assert len(new_storages) == 3
+                # Check the first project storage
+                new_storage_a = next(filter(lambda s: s.id == storage_id_a, new_storages), None)
+                assert new_storage_a is not None
+                assert new_storage_a.id == storage_id_a
+                assert new_storage_a.project_id == project_id_a
+                assert new_storage_a.requested_size == ByteSize.from_gibi(16)
+                assert new_storage_a.actual_size is None
+                assert new_storage_a.target_path == PurePosixPath("store")
+                assert new_storage_a.k8s_pvc_name == f"pv-{project_id_a}-0".lower()
+                assert new_storage_a.k8s_pvc_status is None
+                assert new_storage_a.created_by_id == regular_user.id
+                # Check the second project storage
+                new_storage_b = next(filter(lambda s: s.id == storage_id_b, new_storages), None)
+                assert new_storage_b is not None
+                assert new_storage_b.id == storage_id_b
+                assert new_storage_b.project_id == project_id_b
+                assert new_storage_b.requested_size == ByteSize.from_gibi(32)
+                assert new_storage_b.actual_size is None
+                assert new_storage_b.target_path == PurePosixPath("hello")
+                assert new_storage_b.k8s_pvc_name == f"pv-{project_id_b}-0".lower()
+                assert new_storage_b.k8s_pvc_status is None
+                assert new_storage_b.created_by_id == member_1_user.id
+                # Check the third project storage
+                new_storage_c = next(filter(lambda s: s.id == storage_id_c, new_storages), None)
+                assert new_storage_c is not None
+                assert new_storage_c.id == storage_id_c
+                assert new_storage_c.project_id == project_id_c
+                assert new_storage_c.requested_size == ByteSize.from_gibi(32)
+                assert new_storage_c.actual_size is None
+                assert new_storage_c.target_path == PurePosixPath("store")
+                assert new_storage_c.k8s_pvc_name == f"pv-{project_id_c}-0".lower()
+                assert new_storage_c.k8s_pvc_status is None
+                assert new_storage_c.created_by_id == member_2_user.id
