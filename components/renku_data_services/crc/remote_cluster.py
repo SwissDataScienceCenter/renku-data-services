@@ -10,9 +10,11 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ClusterRepository
+from renku_data_services.errors import errors
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sSecret
+from renku_data_services.users.core import fingerprint_ssh_public_key
 
 logger = logging.getLogger(__file__)
 
@@ -36,11 +38,22 @@ class RemoteClusterSetup:
         """
 
         logger.debug(f"Setting up remote cluster from settings: {model}")
+        if model.ssh_settings is None:
+            remote_cluster = await self.__repo.insert(user, model)
+            return (remote_cluster, None)
+
+        kpair = generate_ssh_keypair("main-renku")
+        pfp = fingerprint_ssh_public_key(kpair.public_part)
+        if pfp is None:
+            raise errors.ProgrammingError(message="Can't derive fingerprint from generated openssh key")
+
+        model = model.with_auth_key_fingerprint(pfp)
         remote_cluster = await self.__repo.insert(user, model)
-        kpair = await self.enable_ssh_remote_cluster(remote_cluster.id) if model.ssh_settings else None
+        await self.enable_ssh_remote_cluster(remote_cluster.id, kpair)
+
         return remote_cluster, kpair
 
-    async def enable_ssh_remote_cluster(self, remote_cluster_id: ClusterId) -> models.SshKeyPair:
+    async def enable_ssh_remote_cluster(self, remote_cluster_id: ClusterId, kpair: models.SshKeyPair) -> None:
         """Enable ssh for the remote cluster.
 
         It generates a ssh keypair that will be used to connect to the
@@ -55,7 +68,6 @@ class RemoteClusterSetup:
         """
         cluster = await self.__k8s_client.cluster_by_id(DEFAULT_K8S_CLUSTER)
         namespace = cluster.namespace
-        kpair = generate_ssh_keypair("main-renku")
         secret_name = auth_key_secret_name
         string_data = {
             str(remote_cluster_id): kpair.private_part,
@@ -81,8 +93,6 @@ class RemoteClusterSetup:
         else:
             # A merge patch on stringData replaces the keys in data
             await self.__k8s_client.patch(secret, {"stringData": string_data})
-
-        return kpair
 
 
 def generate_ssh_keypair(comment: str | None = None) -> models.SshKeyPair:

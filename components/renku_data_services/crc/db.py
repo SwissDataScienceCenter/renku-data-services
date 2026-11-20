@@ -1878,12 +1878,12 @@ class ClusterRepository:
     session_maker: Callable[..., AsyncSession]
 
     async def find_by_fingerprint(self, pk_fingerprint: str) -> SavedClusterSettings | None:
-        """Looks up a cluster using the fingerprint of its public key."""
+        """Looks up a cluster using the fingerprint of the public key used to authenticate at its ssh proxy."""
         async with self.session_maker() as session:
             stmt = (
                 select(ClusterORM)
                 .join(ClusterORM.ssh_settings)
-                .where(ClusterSshSettingsORM.public_host_key_fingerprint == pk_fingerprint)
+                .where(ClusterSshSettingsORM.public_auth_key_fingerprint == pk_fingerprint)
                 .options(contains_eager(ClusterORM.ssh_settings))
             )
             cluster = (await session.scalars(stmt)).one_or_none()

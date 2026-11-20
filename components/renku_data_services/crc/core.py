@@ -684,6 +684,7 @@ def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:
             target_port=body.ssh_settings.target_port,
             username=body.ssh_settings.username,
             public_host_key=body.ssh_settings.public_host_key,
+            public_auth_key_fingerprint="",
         )
         if body.ssh_settings
         else None,
