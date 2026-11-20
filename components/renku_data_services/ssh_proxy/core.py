@@ -3,6 +3,7 @@
 from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.crc.db import ClusterRepository
+from renku_data_services.crc.remote_cluster import auth_key_secret_name
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.models import K8sObject, K8sObjectFilter
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
@@ -86,5 +87,5 @@ class SSHSessionAuthorize:
             target_port=ssh_settings.target_port,
             target_user=session_id,
             host_key_pub=ssh_settings.public_host_key,
-            auth_key_priv=f"renku-ssh-identities/{cluster.id}",
+            auth_key_priv=f"{auth_key_secret_name}/{cluster.id}",
         )
