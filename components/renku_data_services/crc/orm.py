@@ -298,6 +298,9 @@ class ClusterSshSettingsORM(BaseORM):
 
     username: Mapped[str] = mapped_column(String())
 
+    public_auth_key_fingerprint: Mapped[str] = mapped_column(String(), index=True, unique=True)
+    """The public part of the key used to authenticate to the remote proxy."""
+
     def dump(self) -> SshSettings:
         """Dumps the orm data into a model class."""
         return SshSettings(
@@ -306,6 +309,7 @@ class ClusterSshSettingsORM(BaseORM):
             username=self.username,
             public_host_key=self.public_host_key,
             public_host_key_fingerprint=self.public_host_key_fingerprint,
+            public_auth_key_fingerprint=self.public_auth_key_fingerprint,
         )
 
     @classmethod
@@ -317,6 +321,7 @@ class ClusterSshSettingsORM(BaseORM):
             username=m.username,
             public_host_key=m.public_host_key,
             public_host_key_fingerprint=m.public_host_key_fingerprint,
+            public_auth_key_fingerprint=m.public_auth_key_fingerprint,
         )
 
 

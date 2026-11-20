@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from enum import StrEnum
 from math import ceil
 from typing import Any, Final, Optional, Protocol, Self
@@ -388,9 +388,13 @@ class SshSettings:
     public_host_key: str
     """The literal public key part of the host key the remote ssh proxy identifies itself with."""
     public_host_key_fingerprint: str
+    public_auth_key_fingerprint: str
+    """The public part of the key used to authenticate at the remote proxy."""
 
     @classmethod
-    def create(cls, target_host: str, target_port: int, username: str, public_host_key: str) -> Self:
+    def create(
+        cls, target_host: str, target_port: int, username: str, public_host_key: str, public_auth_key_fingerprint: str
+    ) -> Self:
         """Create ssh settings, deriving the fingerprint from the given public host key."""
         fp = fingerprint_ssh_public_key(public_host_key)
         if fp is None:
@@ -401,6 +405,7 @@ class SshSettings:
             username=username,
             public_host_key=public_host_key,
             public_host_key_fingerprint=fp,
+            public_auth_key_fingerprint=public_auth_key_fingerprint,
         )
 
 
@@ -421,6 +426,15 @@ class ClusterSettings:
     service_account_name: str | None = None
     session_ingress_use_default_cluster_tls_cert: bool = False
     ssh_settings: SshSettings | None = None
+
+    def with_auth_key_fingerprint(self, fp: str) -> Self:
+        """Return a new instance with the ssh auth key fingerprint set.
+
+        If no ssh settings are present, the instance is returned unchanged.
+        """
+        if self.ssh_settings is None:
+            return self
+        return replace(self, ssh_settings=replace(self.ssh_settings, public_auth_key_fingerprint=fp))
 
     def to_cluster_patch(self) -> ClusterPatch:
         """Convert to ClusterPatch."""
