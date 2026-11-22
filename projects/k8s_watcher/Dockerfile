@@ -1,4 +1,4 @@
-FROM python:3.13-bookworm AS builder
+FROM python:3.15-bookworm AS builder
 ARG DEV_BUILD=false
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
@@ -26,7 +26,7 @@ RUN if $DEV_BUILD ; then \
 RUN /home/renku/.local/bin/poetry -C projects/k8s_watcher build-project -f wheel --custom-temp-path=/tmp
 RUN env/bin/pip --no-cache-dir install projects/k8s_watcher/dist/*.whl
 
-FROM python:3.13-slim-bookworm
+FROM python:3.15-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 RUN apt-get update && apt-get install -y \
