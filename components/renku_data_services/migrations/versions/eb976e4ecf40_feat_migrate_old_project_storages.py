@@ -36,9 +36,9 @@ def upgrade() -> None:
     )
 
     connection = op.get_bind()
-    stmt = old_storages_table.select()
-    res = connection.execute(stmt)
-    old_storages = res.all()
+    old_storages_stmt = old_storages_table.select()
+    old_storages_res = connection.execute(old_storages_stmt)
+    old_storages = old_storages_res.all()
     # Do nothing if there are no entries in the storage.project_storage database table.
     if not old_storages:
         return
@@ -54,16 +54,16 @@ def upgrade() -> None:
 
     # Create the resource pool for the migrated storage
     rp_name = "Project storage migration pool"
-    stmt = (
+    rp_stmt = (
         rp_table.select()
         .where(rp_table.c.name == rp_name)
         .where(rp_table.c.default == False)
         .where(rp_table.c.public == False)
     )
-    res = connection.execute(stmt)
-    resource_pool = res.one_or_none()
+    rp_res = connection.execute(rp_stmt)
+    resource_pool = rp_res.one_or_none()
     if resource_pool is None:
-        stmt = (
+        insert_rp_stmt = (
             rp_table.insert()
             .values(
                 name=rp_name,
@@ -72,8 +72,8 @@ def upgrade() -> None:
             )
             .returning(rp_table)
         )
-        insert_result = connection.execute(stmt)
-        resource_pool = insert_result.one()
+        insert_rp_result = connection.execute(insert_rp_stmt)
+        resource_pool = insert_rp_result.one()
 
     sf_table = sa.Table(
         "storage_flavors",
@@ -120,7 +120,7 @@ def upgrade() -> None:
         # Create the storage flavor for the migrated storage
         storage_flavor = storage_flavors.get(old_storage.storage_class)
         if storage_flavor is None:
-            stmt = (
+            insert_sf_stmt = (
                 sf_table.insert()
                 .values(
                     k8s_storage_class_name=old_storage.storage_class,
@@ -130,14 +130,14 @@ def upgrade() -> None:
                 )
                 .returning(sf_table)
             )
-            insert_result = connection.execute(stmt)
-            storage_flavor = insert_result.one()
+            insert_sf_result = connection.execute(insert_sf_stmt)
+            storage_flavor = insert_sf_result.one()
             storage_flavors[old_storage.storage_class] = storage_flavor
 
         # Create the storage quota for the migrated storage
         storage_quota = storage_quotas.get(str(storage_flavor.id))
         if storage_quota is None:
-            stmt = (
+            insert_sq_stmt = (
                 sq_table.insert()
                 .values(
                     resource_pool_id=resource_pool.id,
@@ -147,13 +147,13 @@ def upgrade() -> None:
                 )
                 .returning(sq_table)
             )
-            insert_result = connection.execute(stmt)
-            storage_quota = insert_result.one()
+            insert_sq_result = connection.execute(insert_sq_stmt)
+            storage_quota = insert_sq_result.one()
             storage_quotas[str(storage_flavor.id)] = storage_quota
 
         # Create the new project storage for the migrated storage
         pvc_name = f"pv-{old_storage.project_id}-0".lower()  # NOTE: this should map to the correct PVC
-        stmt = (
+        insert_storage_v2_stmt = (
             project_storages_v2_table.insert()
             .values(
                 id=old_storage.id,  # NOTE: keep the ID of the project storage
@@ -168,7 +168,7 @@ def upgrade() -> None:
             )
             .returning(project_storages_v2_table)
         )
-        connection.execute(stmt)
+        connection.execute(insert_storage_v2_stmt)
 
 
 def downgrade() -> None:
