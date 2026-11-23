@@ -5,6 +5,7 @@ import uuid
 from collections.abc import AsyncIterable, AsyncIterator
 from datetime import UTC, datetime, timedelta
 
+import pytest
 import pytest_asyncio
 from box import Box
 from sanic import Sanic
@@ -271,6 +272,26 @@ async def test_deadline_not_ready_is_alive(client_factory, app_manager_instance)
     async with client as c:
         _, response = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
     assert response.json["alive"] is True
+
+
+@pytest.mark.parametrize(
+    ("status", "alive"),
+    [
+        ({}, True),
+        ({"state": "Starting"}, True),
+        ({"state": "Failed"}, False),
+        ({"state": "Succeeded"}, False),
+    ],
+    ids=["no-status", "unknown-state", "failed", "succeeded"],
+)
+async def test_deadline_alive_for_unlisted_and_terminal_states(client_factory, app_manager_instance, status, alive):
+    cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
+    session = session_object(str(uuid.uuid4()), **status)
+    await cache.upsert(session)
+    client, _ = client_factory(session)
+    async with client as c:
+        _, response = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
+    assert response.json["alive"] is alive
 
 
 async def test_deadline_returns_404_when_the_session_is_gone(client_factory, app_manager_instance):
