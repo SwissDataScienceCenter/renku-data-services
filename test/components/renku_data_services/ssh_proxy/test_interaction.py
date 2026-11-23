@@ -235,6 +235,14 @@ async def test_deadline_without_a_touch_reports_a_null_idle_age(client_factory, 
     assert response.json["seconds_since_last_interaction"] is None
 
 
+async def test_touch_without_role_is_403(client_factory):
+    client, k8s = client_factory(None)
+    async with client as c:
+        _, response = await c.post(URL.format(session_id=MISSING_ID), headers=user_token_headers())
+    assert response.status_code == 403
+    assert k8s.patches == []
+
+
 async def test_deadline_hibernated_is_not_alive(client_factory, app_manager_instance):
     cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
     session = session_object(str(uuid.uuid4()), state="Hibernated")
@@ -248,6 +256,16 @@ async def test_deadline_hibernated_is_not_alive(client_factory, app_manager_inst
 async def test_deadline_running_degraded_is_alive(client_factory, app_manager_instance):
     cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
     session = session_object(str(uuid.uuid4()), state="RunningDegraded")
+    await cache.upsert(session)
+    client, _ = client_factory(session)
+    async with client as c:
+        _, response = await c.get(URL.format(session_id=SESSION_ID), headers=role_headers())
+    assert response.json["alive"] is True
+
+
+async def test_deadline_not_ready_is_alive(client_factory, app_manager_instance):
+    cache = K8sDbCache(session_maker=app_manager_instance.config.db.async_session_maker)
+    session = session_object(str(uuid.uuid4()), state="NotReady")
     await cache.upsert(session)
     client, _ = client_factory(session)
     async with client as c:

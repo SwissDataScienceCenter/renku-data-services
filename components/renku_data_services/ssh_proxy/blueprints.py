@@ -116,7 +116,9 @@ class SSHSessionInteractionBP(CustomBlueprint):
             interaction = _parse_timestamp(culling.get("lastInteraction"))
             remaining = None if deadline is None else max(0, int((deadline - now).total_seconds()))
             since_input = None if interaction is None else max(0, int((now - interaction).total_seconds()))
-            alive = status.get("state") in ("Running", "RunningDegraded")
+            # Only a terminal session is not alive: a readiness blip must not stop the
+            # proxy's per-connection timer, and a future state must not either.
+            alive = status.get("state") not in ("Hibernated", "Failed", "Succeeded")
             return json(
                 {
                     "seconds_until_hibernate": remaining,
