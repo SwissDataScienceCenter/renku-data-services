@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession
@@ -16,6 +16,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_api.pagination import PaginationRequest
+from renku_data_services.base_models import RESET
 from renku_data_services.crc import orm as rp_schemas
 from renku_data_services.crc.db import StorageQuotaRepository
 from renku_data_services.k8s.constants import ClusterId
@@ -883,7 +884,7 @@ class ProjectStorageV2Repository:
                         name=locked_orm.k8s_pvc_name, namespace=namespace, cluster_id=cluster.id
                     )
                     new_size_str = f"{patch.requested_size_bytes.to_gibi()}Gi"
-                    k8s_pvc_patch = {"spec": {"resources": {"requests": {"storage": new_size_str}}}}
+                    k8s_pvc_patch: dict[str, Any] = {"spec": {"resources": {"requests": {"storage": new_size_str}}}}
                     pvc = await k8s_client.patch_persistent_volume_claim_v2(meta, k8s_pvc_patch)
                     locked_orm.k8s_pvc_status = pvc.get_status()
                 locked_orm.requested_size = patch.requested_size_bytes
@@ -896,10 +897,64 @@ class ProjectStorageV2Repository:
 
         if patch.unsafe_project_id is not None and patch.unsafe_project_id != storage_orm.project_id:
             storage_orm.project_id = patch.unsafe_project_id
-            logger.info("update_project_storage(): before flush")
             await session.flush()
             await session.refresh(storage_orm)
-            logger.info("update_project_storage(): after flush")
+            # NOTE: Update the PVC after flushing: if the `project_id` foreign key does not exist,
+            # the transaction is aborted before we patch the annotations in Kubernetes
+            if storage_orm.k8s_pvc_name:
+                meta = K8sPersistentVolumeClaimV2.meta(
+                    name=storage_orm.k8s_pvc_name, namespace=namespace, cluster_id=cluster.id
+                )
+                k8s_pvc_patch = {
+                    "metadata": {
+                        "annotations": {
+                            "renku.io/project_id": str(storage_orm.project_id),
+                        },
+                    }
+                }
+                pvc = await k8s_client.patch_persistent_volume_claim_v2(meta, k8s_pvc_patch)
+
+        if patch.unsafe_storage_quota_id is not None and patch.unsafe_storage_quota_id != storage_orm.storage_quota_id:
+            # Chech that we do not move across clusters
+            new_sq_orm = await self._get_storage_quota_and_resource_pool_without_authz_or_none_orm(
+                session=session, storage_quota_id=patch.unsafe_storage_quota_id
+            )
+            if new_sq_orm is None:
+                raise errors.ProgrammingError(
+                    message=f"Storage quota with ID '{patch.unsafe_storage_quota_id}' does not exist."
+                )
+            new_rp_orm = new_sq_orm.resource_pool
+            new_cluster_id = ClusterId(new_rp_orm.cluster_id) if new_rp_orm.cluster_id is not None else None
+            new_cluster = await k8s_client.cluster_by_id(cluster_id=new_cluster_id)
+            if new_cluster.id != cluster.id:
+                raise errors.ValidationError(
+                    message="The storage with ID '{storage_id}' cannot be moved to a different cluster "
+                    f"({str(cluster.id)} -> {str(new_cluster.id)})."
+                )
+
+            storage_orm.storage_quota_id = patch.unsafe_storage_quota_id
+            await session.flush()
+            await session.refresh(storage_orm)
+            # NOTE: Update the PVC after flushing: if the `storage_quota_id` foreign key does not exist,
+            # the transaction is aborted before we patch the annotations in Kubernetes
+            if storage_orm.k8s_pvc_name:
+                meta = K8sPersistentVolumeClaimV2.meta(
+                    name=storage_orm.k8s_pvc_name, namespace=namespace, cluster_id=cluster.id
+                )
+                k8s_pvc_patch = {
+                    "metadata": {
+                        "annotations": {
+                            "renku.io/resource_pool_id": str(rp_orm.id),
+                            "renku.io/storage_quota_id": str(sq_orm.id),
+                        },
+                    }
+                }
+                pvc = await k8s_client.patch_persistent_volume_claim_v2(meta, k8s_pvc_patch)
+
+        if patch.unsafe_k8s_pvc_name is not None and patch.unsafe_k8s_pvc_name != storage_orm.k8s_pvc_name:
+            storage_orm.k8s_pvc_name = patch.unsafe_k8s_pvc_name if patch.unsafe_k8s_pvc_name is not RESET else None
+            storage_orm.actual_size = None
+            storage_orm.k8s_pvc_status = None
 
         await session.flush()
         await session.refresh(storage_orm)

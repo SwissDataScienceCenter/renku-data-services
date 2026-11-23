@@ -13,6 +13,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import (
     authenticate,
+    only_admins,
     only_authenticated,
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -214,6 +215,6 @@ class ProjectStorageV2BP(CustomBlueprint):
                     patch=patch,
                     etag=etag,
                 )
-            return validated_json(apispec.ProjectStorageV2, storage)
+            return validated_json(apispec.ProjectStorage, storage)
 
         return "/storages/<storage_id:ulid>/admin", ["PATCH"], _admin_patch
