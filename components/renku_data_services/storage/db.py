@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from ulid import ULID
 
 from renku_data_services import base_models, errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_api.pagination import PaginationRequest
@@ -31,6 +32,8 @@ from renku_data_services.utils.core import with_db_session, with_db_transaction
 
 if TYPE_CHECKING:
     from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectStorageRepository:
@@ -819,6 +822,7 @@ class ProjectStorageV2Repository:
                 message="You do not have the required permissions to update storage "
                 f"from project '{storage_orm.project_id}'."
             )
+        # TODO: check unsafe updates
 
         current_etag = storage_orm.dump().etag
         if current_etag != etag:
@@ -889,6 +893,13 @@ class ProjectStorageV2Repository:
 
         if patch.mount_path is not None:
             storage_orm.mount_path = patch.mount_path
+
+        if patch.unsafe_project_id is not None and patch.unsafe_project_id != storage_orm.project_id:
+            storage_orm.project_id = patch.unsafe_project_id
+            logger.info("update_project_storage(): before flush")
+            await session.flush()
+            await session.refresh(storage_orm)
+            logger.info("update_project_storage(): after flush")
 
         await session.flush()
         await session.refresh(storage_orm)

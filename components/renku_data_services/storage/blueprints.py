@@ -194,7 +194,7 @@ class ProjectStorageV2BP(CustomBlueprint):
         """Update a project storage with an unsafe operation."""
 
         @authenticate(self.authenticator)
-        @only_authenticated
+        @only_admins
         @if_match_required
         @validate(json=apispec.ProjectStorageAdminPatchV2)
         async def _admin_patch(
@@ -204,17 +204,16 @@ class ProjectStorageV2BP(CustomBlueprint):
             body: apispec.ProjectStorageAdminPatchV2,
             etag: str,
         ) -> HTTPResponse:
-            _patch = validate_project_storage_v2_admin_patch(body=body)
-            # async with self.session_maker() as session, session.begin():
-            #     storage = await self.project_storage_v2_repo.update_project_storage(
-            #         k8s_client=self.k8s_client,
-            #         session=session,
-            #         user=user,
-            #         storage_id=storage_id,
-            #         patch=patch,
-            #         etag=etag,
-            #     )
-            # return validated_json(apispec.ProjectStorageV2, storage)
-            raise NotImplementedError()
+            patch = validate_project_storage_v2_admin_patch(body=body)
+            async with self.session_maker() as session, session.begin():
+                storage = await self.project_storage_v2_repo.update_project_storage(
+                    k8s_client=self.k8s_client,
+                    session=session,
+                    user=user,
+                    storage_id=storage_id,
+                    patch=patch,
+                    etag=etag,
+                )
+            return validated_json(apispec.ProjectStorageV2, storage)
 
         return "/storages/<storage_id:ulid>/admin", ["PATCH"], _admin_patch

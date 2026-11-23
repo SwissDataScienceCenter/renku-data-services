@@ -199,12 +199,7 @@ class ProjectStorageV2Patch:
 
     requested_size_bytes: ByteSize | None
     mount_path: PurePosixPath | None
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class ProjectStorageV2AdminPatch:
-    """Model for unsafe changes requested on a project storage."""
-
-    project_id: ULID | None
-    storage_quota_id: ULID | None
-    k8s_pvc_name: str | ResetType | None
+    # Unsafe fields below: changing them requires an admin user
+    unsafe_project_id: ULID | None = None
+    unsafe_storage_quota_id: ULID | None = None
+    unsafe_k8s_pvc_name: str | ResetType | None = None

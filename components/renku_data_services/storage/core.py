@@ -70,7 +70,7 @@ def validate_project_storage_v2_patch(body: apispec.ProjectStoragePatch) -> mode
 
 def validate_project_storage_v2_admin_patch(
     body: apispec.ProjectStorageAdminPatchV2,
-) -> models.ProjectStorageV2AdminPatch:
+) -> models.ProjectStorageV2Patch:
     """Validate a patch of a project storage (unsafe, admin-only)."""
     project_id = ULID.from_str(body.project_id) if body.project_id else None
     storage_quota_id = ULID.from_str(body.storage_quota_id) if body.storage_quota_id else None
@@ -82,8 +82,10 @@ def validate_project_storage_v2_admin_patch(
             k8s_pvc_name = RESET
         case _:
             k8s_pvc_name = body.k8s_pvc_name
-    return models.ProjectStorageV2AdminPatch(
-        project_id=project_id,
-        storage_quota_id=storage_quota_id,
-        k8s_pvc_name=k8s_pvc_name,
+    return models.ProjectStorageV2Patch(
+        requested_size_bytes=None,
+        mount_path=None,
+        unsafe_project_id=project_id,
+        unsafe_storage_quota_id=storage_quota_id,
+        unsafe_k8s_pvc_name=k8s_pvc_name,
     )
