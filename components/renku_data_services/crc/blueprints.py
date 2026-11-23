@@ -36,7 +36,12 @@ from renku_data_services.crc.db import (
     ResourcePoolMemberResult,
     ResourcePoolRepository,
 )
-from renku_data_services.crc.models import MemberType, ResourceFlavor, ResourcePoolMemberIdentifier
+from renku_data_services.crc.models import (
+    MemberType,
+    ResourceFlavor,
+    ResourcePool,
+    ResourcePoolMemberIdentifier,
+)
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
 
@@ -65,7 +70,7 @@ class ResourcePoolsBP(CustomBlueprint):
             request: Request, user: base_models.APIUser, query: apispec.ResourcePoolsParams
         ) -> HTTPResponse:
             rps = await self.rp_repo.filter_resource_pools(api_user=user, **query.model_dump())
-            return validated_json(apispec.ResourcePoolsWithIdFiltered, rps)
+            return validated_json(apispec.ResourcePoolsWithIdFiltered, [self._dump_resource_pool(rp) for rp in rps])
 
         return "/resource_pools", ["GET"], _get_all
 
@@ -159,9 +164,29 @@ class ResourcePoolsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get(_: Request, user: base_models.APIUser, group_slug: Slug) -> HTTPResponse:
             rps = await self.member_repo.get_group_resource_pools(user, group_slug)
-            return validated_json(apispec.ResourcePoolsWithIdFiltered, rps)
+            return validated_json(apispec.ResourcePoolsWithIdFiltered, [self._dump_resource_pool(rp) for rp in rps])
 
         return "/groups/<group_slug:renku_slug>/resource_pools", ["GET"], _get
+
+    @staticmethod
+    def _dump_resource_pool(rp: ResourcePool) -> dict[str, Any]:
+        """Dumps a resource pool for filtered (non-admin) API responses."""
+        return dict(
+            quota=rp.quota,
+            classes=rp.classes,
+            name=rp.name,
+            id=rp.id,
+            public=rp.public,
+            default=rp.default,
+            remote=rp.remote,
+            idle_threshold=rp.idle_threshold,
+            hibernation_threshold=rp.hibernation_threshold,
+            hibernation_warning_period=rp.hibernation_warning_period,
+            cluster_id=rp.cluster.id if rp.cluster is not None else None,
+            platform=rp.platform,
+            credits_used=rp.credits_used,
+            cpu_limit_factor=rp.cpu_limit_factor,
+        )
 
 
 @dataclass(kw_only=True)
