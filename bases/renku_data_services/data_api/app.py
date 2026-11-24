@@ -36,6 +36,7 @@ from renku_data_services.search.blueprints import SearchBP
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
+from renku_data_services.session_runners.blueprints import UserSessionRunnersBP
 from renku_data_services.storage.blueprints import ProjectStorageBP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, SSHKeysBP, UserPreferencesBP, UserSecretsBP
 
@@ -235,6 +236,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         session_repo=dm.session_repo,
         user_repo=dm.kc_user_repo,
         git_repositories_repo=dm.git_repositories_repo,
+        user_session_runners_repo=dm.user_session_runners_repo,
         builds_config=dm.config.builds,
         internal_token_mint=dm.internal_token_mint,
         resource_usage_service=dm.resource_usage_service,
@@ -326,6 +328,15 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         if dm.config.persisted_logs.enabled
         else None
     )
+    session_runners = UserSessionRunnersBP(
+        name="session_runners",
+        url_prefix=url_prefix,
+        runners_repo=dm.user_session_runners_repo,
+        authenticator=dm.authenticator,
+        internal_authenticator=dm.internal_authenticator,
+        internal_token_mint=dm.internal_token_mint,
+        session_maker=dm.config.db.async_session_maker,
+    )
     internal_authentication = InternalAuthenticationBP(
         name="internal_authentication",
         url_prefix=url_prefix,
@@ -374,6 +385,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             resource_usage.blueprint(),
             internal_authentication.blueprint(),
             project_storage.blueprint(),
+            session_runners.blueprint(),
         ]
     )
     if builds is not None:
