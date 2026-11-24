@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import os
 from os import environ
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import sentry_sdk
 from sanic import Request, Sanic
@@ -99,6 +99,31 @@ def create_app() -> Sanic:
                     return None
             return event
 
+        def filter_tx(
+            event: "sentry_sdk._types.Event", hint: "sentry_sdk._types.Hint"
+        ) -> "sentry_sdk._types.Event | None":
+            headers = cast(dict[str, Any], event.get("request", {}).get("headers", {}))
+            renku_service_header_value = headers.get("renku-service")
+            if renku_service_header_value == "renku-ui-server":
+                # This request is coming from renku-ui-server, reduce sample rate
+                dynamic_sampling_context = cast(
+                    dict[str, Any], event.get("contexts", {}).get("trace", {}).get("dynamic_sampling_context")
+                )
+                if dynamic_sampling_context:
+                    try:
+                        old_sample_rate = float(cast(str, dynamic_sampling_context.get("sample_rate")))
+                        sample_rate = old_sample_rate / 1_000
+                        sample_rand = float(cast(str, dynamic_sampling_context.get("sample_rand")))
+                        sampled = sample_rand < sample_rate
+                        dynamic_sampling_context["sample_rate"] = sample_rate
+                        dynamic_sampling_context["sampled"] = sampled
+                        if not sampled:
+                            return None
+                    except ValueError:
+                        pass
+
+            return event
+
         @app.before_server_start
         async def setup_sentry(_: Sanic) -> None:
             sentry_sdk.init(
@@ -112,6 +137,7 @@ def create_app() -> Sanic:
                 ],
                 enable_tracing=dependency_manager.config.sentry.sample_rate > 0,
                 traces_sample_rate=dependency_manager.config.sentry.sample_rate,
+                before_send_transaction=filter_tx,
                 before_send=filter_error,
                 in_app_include=["renku_data_services"],
             )
