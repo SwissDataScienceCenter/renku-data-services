@@ -40,6 +40,7 @@ from renku_data_services.crc.models import (
     ResourceClass,
     ResourcePool,
     SessionProtocol,
+    SshSettings,
 )
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -935,7 +936,7 @@ async def get_mount_work_dir(
 
 
 def ssh_proxy_session_extras(
-    ssh_config: SshProxyConfig, storage_mount: PurePosixPath, cluster_settings: ClusterSettings
+    ssh_config: SshProxyConfig, storage_mount: PurePosixPath, ssh_settings: SshSettings | None
 ) -> SessionExtraResources:
     """Volumes and mounts delivering the proxy-to-session keys to a session.
 
@@ -958,7 +959,6 @@ def ssh_proxy_session_extras(
         )
 
     # Only the source of the two keys differs between the local cluster and remote clusters
-    ssh_settings = cluster_settings.ssh_settings
     if ssh_settings is None:
         logger.info("SSH Settings is NONE, using defaults for local cluster")
         host_key = (ssh_config.session_host_key_secret_name, ssh_config.session_host_key_secret_key)
@@ -1141,9 +1141,8 @@ async def start_session(
 
     # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
     if not session_has_http_frontend(launcher.environment.build_parameters):
-        session_extras = session_extras.concat(
-            ssh_proxy_session_extras(ssh_proxy_config, storage_mount, resource_pool.cluster or cluster_settings)
-        )
+        ssh_settings = resource_pool.cluster.ssh_settings if resource_pool.cluster else cluster_settings.ssh_settings
+        session_extras = session_extras.concat(ssh_proxy_session_extras(ssh_proxy_config, storage_mount, ssh_settings))
 
     # Data connectors
     session_extras = session_extras.concat(
@@ -1607,7 +1606,7 @@ async def patch_session(
             cluster_settings = nb_config.local_cluster_settings()
 
         session_extras = session_extras.concat(
-            ssh_proxy_session_extras(ssh_proxy_config, storage_mount, cluster_settings)
+            ssh_proxy_session_extras(ssh_proxy_config, storage_mount, cluster_settings.ssh_settings)
         )
 
     # Data connectors: skip
