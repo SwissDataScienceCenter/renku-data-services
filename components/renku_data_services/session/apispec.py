@@ -65,6 +65,12 @@ class BuildPlatform(StrEnum):
     linux_arm64 = "linux/arm64"
 
 
+class AIAgent(StrEnum):
+    pi = "pi"
+    claude = "claude"
+    codex = "codex"
+
+
 class EnvironmentKind(StrEnum):
     GLOBAL = "GLOBAL"
     CUSTOM = "CUSTOM"
@@ -377,6 +383,11 @@ class BuildParameters(BaseAPISpec):
     context_dir: str | None = Field(
         None, description="The relative path to a folder", max_length=500, min_length=1
     )
+    ai_agents: list[AIAgent] | None = Field(
+        None,
+        description="The AI coding agents to install in the built environment. When not set, the agents requested by the repository's project.toml are installed.",
+        examples=[["pi", "claude", "codex"]],
+    )
 
 
 class BuildParametersPatch(BaseAPISpec):
@@ -398,6 +409,11 @@ class BuildParametersPatch(BaseAPISpec):
     )
     context_dir: str | None = Field(
         None, description="The relative path to a folder", max_length=500
+    )
+    ai_agents: list[AIAgent] | None = Field(
+        None,
+        description="The AI coding agents to install in the built environment. When not set, the agents requested by the repository's project.toml are installed.",
+        examples=[["pi", "claude", "codex"]],
     )
 
 
