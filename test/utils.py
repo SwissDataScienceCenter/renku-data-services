@@ -402,8 +402,6 @@ class TestDependencyManager(DependencyManager):
             session_maker=config.db.async_session_maker, cluster_repo=cluster_repo
         )
         occurrence_repo = OccurrenceRepository(session_maker=config.db.async_session_maker)
-        resource_requests_repo = ResourceRequestsRepo(session_maker=config.db.async_session_maker)
-        resource_usage_service = ResourceUsageService(resource_requests_repo)
         session_logs_repo = AmaltheaSessionPersistedLogsReadRepository(authz=authz)
         build_logs_repo = ImageBuildPersistedLogsReadRepository(
             authz=authz,

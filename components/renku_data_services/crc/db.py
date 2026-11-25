@@ -51,6 +51,7 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.resource_usage.model import UserQuota
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
 
@@ -211,6 +212,20 @@ class ResourcePoolQueryRepository:
         self.resource_usage_service = resource_usage_service
         self.resource_requests_repo = resource_requests_repo
 
+    async def _get_user_quota(self, resource_pool_id: int, user_id: str) -> UserQuota | None:
+        """Get the quota of a user, or None if it cannot be determined.
+
+        NOTE: Listing resource pools must keep working when the metering service is unavailable,
+        the quota is enforced again when a session is launched or resumed.
+        """
+        if self.resource_usage_service is None:
+            return None
+        try:
+            return await self.resource_usage_service.get_user_quota(resource_pool_id, user_id)
+        except errors.ThirdPartyAPIError as e:
+            logger.error(f"Error querying the user quota for resource pool {resource_pool_id}: {e}")
+            return None
+
     async def get_quota_ids(self) -> list[tuple[str, ClusterId]]:
         """Get the quota and cluster of every resource pool that has a quota."""
         async with self.session_maker() as session:
@@ -356,16 +371,16 @@ class ResourcePoolQueryRepository:
             for rp in res.scalars().all():
                 quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id())
                 credits_used = None
-                usage = None
                 remaining_quota = None
                 enforcement_enabled = any([c.quota_enforced for c in rp.classes])
                 # TODO: Enable resource usage reporting broadly when the resource usage
                 # tracking / queries are more performant.
                 if self.resource_usage_service and api_user.is_authenticated and enforcement_enabled:
-                    usage = await self.resource_usage_service.get_current_usage_with_limits(rp.id, api_user.id)
-                    remaining_quota = self.resource_usage_service.get_remaining_quota(usage)
-                    if usage:
-                        credits_used = usage.user_usage  # NOTE: maybe remaining credits is more relevant
+                    assert api_user.id is not None
+                    user_quota = await self._get_user_quota(rp.id, api_user.id)
+                    if user_quota is not None:
+                        credits_used = user_quota.weekly_usage
+                        remaining_quota = user_quota.remaining
 
                 rp_model = rp.dump(quota, criteria, credits_used)
 
@@ -375,15 +390,13 @@ class ResourcePoolQueryRepository:
                         resource_class_cost = await self.resource_requests_repo.find_resource_class_costs(
                             rp.id, resource_class.id
                         )
-                        usage_hours_remaining, usage_hours_total = self.resource_usage_service.calculate_usage_hours(
-                            resource_class_cost,
-                            usage,
-                            remaining_quota,
+                        usage_hours_remaining, usage_hours_reset_at = self.resource_usage_service.calculate_usage_hours(
+                            resource_class_cost, remaining_quota
                         )
                         updated_class = replace(
                             resource_class,
                             usage_hours_remaining=usage_hours_remaining,
-                            usage_hours_total=usage_hours_total,
+                            usage_hours_reset_at=usage_hours_reset_at,
                         )
                         updated_classes.append(updated_class)
 

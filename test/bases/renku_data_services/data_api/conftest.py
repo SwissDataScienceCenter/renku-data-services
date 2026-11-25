@@ -48,7 +48,16 @@ from test.bases.renku_data_services.data_api.utils import (
     setup_amalthea,
 )
 from test.bases.renku_data_services.data_tasks.test_sync import get_kc_users
+from test.components.renku_data_services.resource_usage.helper import FakeMetering
 from test.utils import SanicReusableASGITestClient, TestDependencyManager
+
+
+@pytest.fixture
+def fake_metering(app_manager_instance: DependencyManager, monkeypatch: pytest.MonkeyPatch) -> FakeMetering:
+    """Replace the metering service (OpenMeter) with an in-memory fake."""
+    metering = FakeMetering()
+    monkeypatch.setattr(app_manager_instance.resource_usage_service, "_metering_client", metering)
+    return metering
 
 
 @pytest_asyncio.fixture(scope="session")

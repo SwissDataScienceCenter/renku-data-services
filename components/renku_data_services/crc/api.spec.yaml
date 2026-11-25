@@ -1747,8 +1747,8 @@ components:
               type: boolean
             usage_hours_remaining:
               $ref: "#/components/schemas/UsageHoursRemaining"
-            usage_hours_total:
-              $ref: "#/components/schemas/UsageHoursTotal"
+            usage_hours_reset_at:
+              $ref: "#/components/schemas/UsageHoursResetAt"
       example:
         name: "resource class"
         default: true
@@ -2393,11 +2393,14 @@ components:
       description: Number of resource hours remaining for the user
       example: 3.141
       minimum: 0
-    UsageHoursTotal:
-      type: number
-      format: double
-      description: Total number of resource hours available to the user
-      example: 10
+    UsageHoursResetAt:
+      type: string
+      format: date-time
+      description: |
+        When the remaining resource hours are next replenished, i.e. when the limit that currently
+        constrains the user (the weekly per-user limit or the resource pool balance) resets.
+        Not set if that limit never resets.
+      example: "2026-11-23T00:00:00Z"
       minimum: 0
       default: null
     CreditsUsed:

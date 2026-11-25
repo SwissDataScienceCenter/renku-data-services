@@ -1,6 +1,6 @@
 import json
 from copy import deepcopy
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -11,10 +11,10 @@ from ulid import ULID
 
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
-from renku_data_services.resource_usage.model import Credit, ResourceClassCost
+from renku_data_services.resource_usage.model import Credit, ResourceClassCost, next_week_start
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_client, create_rp
-from test.components.renku_data_services.resource_usage.helper import make_resources_request
+from test.components.renku_data_services.resource_usage.helper import FakeMetering
 from test.utils import KindCluster
 
 
@@ -2005,7 +2005,19 @@ async def test_resource_pool_visibility_toggle(
 
 @pytest.mark.asyncio
 @pytest.mark.xdist_group("sessions")
-@pytest.mark.parametrize("total_limit,user_limit", [(1000, 200), (200, 1000), (200, 0), (0, 200)])
+@pytest.mark.parametrize(
+    "total_limit,user_limit,expected_hours,binding_limit",
+    [
+        # The user limit is lower: 200 - 50 used = 150 credits = 3 hours, until next week
+        (1000, 200, 3.0, "user"),
+        # The pool limit is lower: 200 - 50 used = 150 credits = 3 hours, until the pool period ends
+        (200, 1000, 3.0, "pool"),
+        # A user limit of zero means no allowance
+        (200, 0, 0.0, "user"),
+        # A pool limit of zero means no allowance
+        (0, 200, 0.0, "pool"),
+    ],
+)
 async def test_resource_pools_quota_with_partial_usage(
     sanic_client,
     admin_headers,
@@ -2014,8 +2026,11 @@ async def test_resource_pools_quota_with_partial_usage(
     valid_resource_pool_payload,
     cluster,
     app_manager_instance,
+    fake_metering: FakeMetering,
     total_limit,
     user_limit,
+    expected_hours,
+    binding_limit,
 ) -> None:
     """Test resource pools endpoint returns correct credits_used and usage_hours_remaining."""
     payload = valid_resource_pool_payload.copy()
@@ -2047,26 +2062,12 @@ async def test_resource_pools_quota_with_partial_usage(
     cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(50))
     await repo.set_resource_class_costs(cost)
 
-    # Set user limits
+    # Set the weekly user limit and the total pool limit
     await repo.set_user_limits(resource_pool_id, Credit.from_int(user_limit))
+    fake_metering.pool_limits[resource_pool_id] = Credit.from_int(total_limit)
 
-    # Insert resource usage data for the current week (partial usage: 50 credits = 1 hour)
-    current_time = datetime.now(UTC)
-    # NOTE: Other days won't work because the endpoint calculates usage based on the current week (Monday to Sunday)
-    monday = current_time - timedelta(days=current_time.weekday())
-    monday = monday.replace(hour=12, minute=0, second=0, microsecond=0)
-
-    one_hour_usage = timedelta(hours=1)
-    usage_record = make_resources_request(
-        date=monday,
-        interval=one_hour_usage,
-        cpu_request=1.0,
-        memory_request="2048Mi",
-        resource_class_id=class_id,
-        resource_pool_id=resource_pool_id,
-        user_id=regular_user.id,
-    )
-    await repo.insert_one(usage_record)
+    # The user has used 50 credits (1 hour) this week
+    fake_metering.add_usage(resource_pool_id, regular_user.id, 50)
 
     _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
     assert res.status_code == 200
@@ -2080,10 +2081,10 @@ async def test_resource_pools_quota_with_partial_usage(
 
     resource_class = resource_pool["classes"][0]
 
-    # usage_hours_remaining should be 3 hours which is 75 percent of the total 4 hours available
-    assert resource_class["usage_hours_remaining"] == 3.0
-    # usage_hours_total should be 4 hours (200 credits total limit / 50 credits per hour)
-    assert resource_class["usage_hours_total"] == 4.0
+    assert resource_class["usage_hours_remaining"] == expected_hours
+    expected_reset_at = next_week_start() if binding_limit == "user" else fake_metering.period_end
+    assert datetime.fromisoformat(resource_class["usage_hours_reset_at"]) == expected_reset_at
+    assert "usage_hours_total" not in resource_class
 
 
 @pytest.mark.asyncio
@@ -2096,6 +2097,7 @@ async def test_resource_pools_quota_with_no_usage(
     valid_resource_pool_payload: dict[str, Any],
     cluster: KindCluster,
     app_manager_instance,
+    fake_metering: FakeMetering,
 ) -> None:
     """Test resource pools endpoint returns correct usage_hours_remaining when user has no usage."""
     payload = valid_resource_pool_payload.copy()
@@ -2110,6 +2112,7 @@ async def test_resource_pools_quota_with_no_usage(
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": True,
         }
     ]
     payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
@@ -2138,15 +2141,14 @@ async def test_resource_pools_quota_with_no_usage(
     resource_pool = next((p for p in res.json if p["id"] == resource_pool_id), None)
     assert resource_pool is not None, "Resource pool not found in response"
 
-    # credits_used should not exist in the response since it's None
-    assert "credits_used" not in resource_pool
+    # credits_used should be 0 since the user has no usage
+    assert resource_pool["credits_used"] == 0
 
     resource_class = resource_pool["classes"][0]
 
     # usage_hours_remaining should be full quota: 200/50 = 4.0 hours
     assert resource_class["usage_hours_remaining"] == 4.0
-    # usage_hours_total should be 4 hours (200 credits total limit / 50 credits per hour)
-    assert resource_class["usage_hours_total"] == 4.0
+    assert datetime.fromisoformat(resource_class["usage_hours_reset_at"]) == next_week_start()
 
 
 @pytest.mark.asyncio
@@ -2221,6 +2223,7 @@ async def test_resource_pools_quota_exceeded(
     valid_resource_pool_payload: dict[str, Any],
     cluster: KindCluster,
     app_manager_instance,
+    fake_metering: FakeMetering,
 ) -> None:
     """Test resource pools endpoint returns correct values when quota is exceeded."""
     payload = valid_resource_pool_payload.copy()
@@ -2255,22 +2258,8 @@ async def test_resource_pools_quota_exceeded(
     # Set user limits
     await repo.set_user_limits(resource_pool_id, Credit.from_int(100))
 
-    # Insert usage that exceeds quota: 3 hours = 150 credits > 100 limit
-    current_time = datetime.now(UTC)
-    monday = current_time - timedelta(days=current_time.weekday())
-    monday = monday.replace(hour=12, minute=0, second=0, microsecond=0)
-
-    three_hour_usage = timedelta(hours=3)
-    usage_record = make_resources_request(
-        date=monday,
-        interval=three_hour_usage,
-        cpu_request=1.0,
-        memory_request="2048Mi",
-        resource_class_id=class_id,
-        resource_pool_id=resource_pool_id,
-        user_id=regular_user.id,
-    )
-    await repo.insert_one(usage_record)
+    # Usage that exceeds the quota: 3 hours = 150 credits > 100 limit
+    fake_metering.add_usage(resource_pool_id, regular_user.id, 150)
 
     _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
     assert res.status_code == 200
@@ -2286,8 +2275,7 @@ async def test_resource_pools_quota_exceeded(
 
     # usage_hours_remaining should be 0 (quota exceeded)
     assert resource_class["usage_hours_remaining"] == 0.0
-    # usage_hours_total should be 2.0 hours (50 credits/hour * 2 hours = 100 credits limit)
-    assert resource_class["usage_hours_total"] == 2.0
+    assert datetime.fromisoformat(resource_class["usage_hours_reset_at"]) == next_week_start()
 
 
 @pytest.mark.asyncio
@@ -2362,6 +2350,7 @@ async def test_resource_pools_quota_with_no_limits(
     valid_resource_pool_payload: dict[str, Any],
     cluster: KindCluster,
     app_manager_instance,
+    fake_metering: FakeMetering,
 ) -> None:
     """Test resource pools endpoint returns null for usage_hours_remaining when no limits are set."""
     payload = valid_resource_pool_payload.copy()
@@ -2393,22 +2382,8 @@ async def test_resource_pools_quota_with_no_limits(
     cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(50))
     await repo.set_resource_class_costs(cost)
 
-    # Insert some usage
-    current_time = datetime.now(UTC)
-    monday = current_time - timedelta(days=current_time.weekday())
-    monday = monday.replace(hour=12, minute=0, second=0, microsecond=0)
-
-    one_hour_usage = timedelta(hours=1)
-    usage_record = make_resources_request(
-        date=monday,
-        interval=one_hour_usage,
-        cpu_request=1.0,
-        memory_request="2048Mi",
-        resource_class_id=class_id,
-        resource_pool_id=resource_pool_id,
-        user_id=regular_user.id,
-    )
-    await repo.insert_one(usage_record)
+    # The user has used 50 credits (1 hour) this week
+    fake_metering.add_usage(resource_pool_id, regular_user.id, 50)
 
     _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
     assert res.status_code == 200
@@ -2424,8 +2399,7 @@ async def test_resource_pools_quota_with_no_limits(
 
     # usage_hours_remaining should not exist in the response since it's None
     assert "usage_hours_remaining" not in resource_class
-    # usage_hours_total should not exist in the response since it's None
-    assert "usage_hours_total" not in resource_class
+    assert "usage_hours_reset_at" not in resource_class
 
 
 @pytest.mark.asyncio
@@ -2486,6 +2460,7 @@ async def test_resource_pools_quota_with_no_costs(
     valid_resource_pool_payload: dict[str, Any],
     cluster: KindCluster,
     app_manager_instance,
+    fake_metering: FakeMetering,
 ) -> None:
     """Test resource pools endpoint returns null for usage_hours_remaining when no costs are defined."""
     payload = valid_resource_pool_payload.copy()
@@ -2509,29 +2484,14 @@ async def test_resource_pools_quota_with_no_costs(
     assert res.status_code == 201
     created_pool = res.json
     resource_pool_id = created_pool["id"]
-    class_id = created_pool["classes"][0]["id"]
 
     repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
 
     # Set user limits but NO costs
     await repo.set_user_limits(resource_pool_id, Credit.from_int(200))
 
-    # Insert some usage (though without costs it won't be calculated properly)
-    current_time = datetime.now(UTC)
-    monday = current_time - timedelta(days=current_time.weekday())
-    monday = monday.replace(hour=12, minute=0, second=0, microsecond=0)
-
-    one_hour_usage = timedelta(hours=1)
-    usage_record = make_resources_request(
-        date=monday,
-        interval=one_hour_usage,
-        cpu_request=1.0,
-        memory_request="2048Mi",
-        resource_class_id=class_id,
-        resource_pool_id=resource_pool_id,
-        user_id=regular_user.id,
-    )
-    await repo.insert_one(usage_record)
+    # The user has used 50 credits (1 hour) this week
+    fake_metering.add_usage(resource_pool_id, regular_user.id, 50)
 
     _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
     assert res.status_code == 200
@@ -2540,15 +2500,14 @@ async def test_resource_pools_quota_with_no_costs(
     resource_pool = next((p for p in res.json if p["id"] == resource_pool_id), None)
     assert resource_pool is not None, "Resource pool not found in response"
 
-    # credits_used should be 0
-    assert resource_pool["credits_used"] == 0
+    # credits_used is reported even if the classes have no cost
+    assert resource_pool["credits_used"] == 50
 
     resource_class = resource_pool["classes"][0]
 
     # usage_hours_remaining should not exist in the response since it's None
     assert "usage_hours_remaining" not in resource_class
-    # usage_hours_total should not exist in the response since it's None
-    assert "usage_hours_total" not in resource_class
+    assert "usage_hours_reset_at" not in resource_class
 
 
 @pytest.mark.asyncio

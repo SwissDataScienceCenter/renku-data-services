@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from functools import total_ordering
 from typing import Any, cast
 
 from dateutil.parser import parse as parse_datetime
@@ -12,6 +13,7 @@ from kubernetes.utils.quantity import parse_quantity
 from ulid import ULID
 
 from renku_data_services.crc.models import GpuKind
+from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.models import K8sObject
 
@@ -385,6 +387,7 @@ class ResourceDataFacade:
         return result
 
 
+@total_ordering
 @dataclass(frozen=True)
 class Credit:
     """A normalized number for counting usage and balances on resources."""
@@ -392,17 +395,56 @@ class Credit:
     value: int
 
     def __add__(self, other: Credit) -> Credit:
+        if self.is_unlimited() or other.is_unlimited():
+            return self.unlimited()
         return Credit(self.value + other.value)
 
-    def __mult__(self, f: float) -> Credit:
+    def __sub__(self, other: Credit) -> Credit:
+        if self.is_unlimited():
+            return self.unlimited()
+        if self.value == 0:
+            return self.zero()
+        if other.value >= self.value or other.is_unlimited():
+            return self.zero()
+        return Credit(self.value - other.value)
+
+    def __mul__(self, f: float) -> Credit:
+        if f < 0:
+            raise ValueError("Cannot multiply credits by a negative number")
+        if self.is_unlimited():
+            return self.unlimited()
         return Credit(round(self.value * f))
 
     def __str__(self) -> str:
         return str(self.value)
 
-    def __min__(self, other: Credit) -> Credit:
-        """Return the minimum of two credits."""
-        return self if other.is_unlimited() or self.value < other.value and not self.is_unlimited() else other
+    def __lt__(self, other: Any) -> bool:
+        if isinstance(other, int):
+            return self < Credit.from_int(other)
+        if isinstance(other, float):
+            return self < Credit.from_float(other)
+        if not isinstance(other, Credit):
+            raise ValueError(f"Cannot compare Credit with {type(other)}")
+        if self.is_unlimited():
+            return False
+        if other.is_unlimited():
+            return True
+        return self.value < other.value
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, int):
+            return self == Credit.from_int(other)
+        if isinstance(other, float):
+            return self == Credit.from_float(other)
+        if not isinstance(other, Credit):
+            return False
+        if self.is_unlimited() and other.is_unlimited():
+            return True
+        return self.value == other.value
+
+    def __hash__(self) -> int:
+        # NOTE: All negative values mean unlimited and compare equal, so they must hash equally too.
+        return hash(-1 if self.is_unlimited() else self.value)
 
     @classmethod
     def from_int(cls, n: int) -> Credit:
@@ -466,12 +508,55 @@ class ResourceUsageQuery:
 
 
 @dataclass(frozen=True)
+class CreditUsage:
+    """An amount of credits over a period of time."""
+
+    value: Credit
+    start: datetime
+    end: datetime
+
+    def __post_init__(self) -> None:
+        if not self.end >= self.start:
+            raise errors.ValidationError(message="The start date of credit usage cannot be after the end date.")
+
+
+@dataclass(frozen=True)
+class CreditBalance:
+    """The balance available to consume for a resource pool."""
+
+    value: Credit
+    expiry: datetime | None
+    """The date at which the credit expires or resets, None if it never does (e.g. it is unlimited)."""
+
+
+@dataclass(frozen=True)
+class UserQuota:
+    """The quota of a user in a resource pool."""
+
+    remaining: CreditBalance | None
+    """What the user has left and when it resets, None if there is no limit."""
+    weekly_usage: Credit
+    """What the user has used in the current calendar week."""
+
+
+def week_start(current_time: datetime | None = None) -> datetime:
+    """Start of the calendar week (Monday 00:00 UTC) that contains the given time, or now if not given."""
+    now = current_time.astimezone(UTC) if current_time is not None else datetime.now(UTC)
+    return now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=now.weekday())
+
+
+def next_week_start(current_time: datetime | None = None) -> datetime:
+    """Start of the calendar week after the one that contains the given time, when weekly limits reset."""
+    return week_start(current_time) + timedelta(days=7)
+
+
+@dataclass(frozen=True)
 class ResourcePoolLimits:
     """Limits for a resource pool."""
 
     pool_id: int
-    total_limit: Credit
-    user_limit: Credit
+    total_limit: CreditBalance
+    user_limit: CreditBalance
 
 
 @dataclass(frozen=True)
