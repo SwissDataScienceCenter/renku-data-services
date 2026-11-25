@@ -1437,6 +1437,16 @@ async def patch_session(
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
     if session is None:
         raise errors.MissingResourceError(message=f"The session with ID {session_id} does not exist")
+    if set(body.model_dump(exclude_none=True)) == {"lastInteraction"}:
+        # A keepalive ping needs no re-render: write only the culling timestamp.
+        ping_patch = AmaltheaSessionV1Alpha1Patch(
+            spec=AmaltheaSessionV1Alpha1SpecPatch(
+                culling=get_culling_patch(
+                    user, None, nb_config, body.lastInteraction, SessionType.from_amalthea(session.spec.sessionType)
+                )
+            )
+        )
+        return await nb_config.k8s_v2_client.patch_session(session_id, user.id, ping_patch.to_rfc7386())
     cluster = await nb_config.k8s_v2_client.cluster_by_class_id(session.resource_class_id(), user)
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())

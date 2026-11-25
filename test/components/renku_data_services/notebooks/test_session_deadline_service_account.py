@@ -5,7 +5,7 @@ import json
 import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock
 
 import pytest
 from sanic import Sanic
@@ -97,11 +97,14 @@ class FakeK8sV2Client:
         assert self.session is not None
         return self.session
 
+    async def cluster_by_class_id(self, class_id: int | None, api_user) -> SimpleNamespace:
+        return SimpleNamespace(id="default", namespace="default")
+
 
 def make_client(session: AmaltheaSessionV1Alpha1 | None) -> tuple[SanicReusableASGITestClient, NotebooksNewBP, FakeK8sV2Client]:
     k8s = FakeK8sV2Client(session)
     mocks = {
-        field.name: Mock()
+        field.name: AsyncMock()
         for field in dataclasses.fields(NotebooksNewBP)
         if field.name
         not in (
@@ -231,3 +234,31 @@ async def test_patch_role_unknown_session_is_404():
         _, response = await c.patch(MISSING_URL, headers=role_headers(), json={"lastInteraction": "now"})
     assert response.status_code == 404
     assert k8s.patches == []
+
+
+async def test_patch_owner_now_skips_the_rerender(ssh_session):
+    """A deadline-only patch is one merge patch, not a full session re-render."""
+    client, bp, k8s = make_client(ssh_session)
+    async with client as c:
+        _, response = await c.patch(SESSION_URL, headers=user_headers(), json={"lastInteraction": "now"})
+
+    assert response.status_code == 200
+    assert len(k8s.patches) == 1
+    safe_username, patch = k8s.patches[0]
+    assert safe_username == OWNER_ID
+    assert set(patch["spec"]) == {"culling"}
+    assert set(patch["spec"]["culling"]) == {"lastInteraction"}
+    bp.project_repo.get_project.assert_not_called()
+    bp.session_repo.get_all_session_secrets_from_launcher.assert_not_called()
+    bp.data_connector_secret_repo.get_data_connectors_with_secrets.assert_not_called()
+
+
+async def test_patch_owner_hibernate_still_patches_hibernated(ssh_session):
+    client, _, k8s = make_client(ssh_session)
+    async with client as c:
+        _, response = await c.patch(SESSION_URL, headers=user_headers(), json={"state": "hibernated"})
+
+    assert response.status_code == 200
+    assert len(k8s.patches) == 1
+    _, patch = k8s.patches[0]
+    assert patch["spec"]["hibernated"] is True
