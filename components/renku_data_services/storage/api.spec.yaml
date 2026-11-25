@@ -424,6 +424,7 @@ components:
     ProjectStoragesGetQuery:
       description: Query parameters for filtering project storages
       type: object
+      additionalProperties: false
       properties:
         project_id:
           $ref: "#/components/schemas/Ulid"
