@@ -15,6 +15,7 @@ For the latter case, try to find out as much as possible:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from typing import final
 
 import httpx
@@ -34,6 +35,11 @@ from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDock
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.oci.models import Platform
 from renku_data_services.notebooks.oci.utils import get_image_platforms
+from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.repositories.models import Metadata as RepoMetadata
+from renku_data_services.session.config import BuildsConfig
+from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.models import BuildStatus, SessionLauncher
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +54,9 @@ class CheckResult:
     response_code: int
     image_provider: ImageProvider | None = None
     token: str | None = field(default=None, repr=False)
-    error: errors.UnauthorizedError | None = None
+    error: (
+        errors.UnauthorizedError | errors.ValidationError | errors.ProgrammingError | errors.ForbiddenError | None
+    ) = None
 
     def __str__(self) -> str:
         token = "***" if self.token else "None"
@@ -91,15 +99,82 @@ class ImageCheckRepository:
     def __init__(
         self,
         nb_config: NotebooksConfig,
+        builds_config: BuildsConfig,
+        git_repositories_repo: GitRepositoriesRepository,
+        session_repo: SessionRepository,
         connected_services_repo: ConnectedServicesRepository,
         oauth_client_factory: OAuthHttpClientFactory,
     ) -> None:
         self.nb_config = nb_config
+        self.builds_config = builds_config
+        self.git_repositories_repo = git_repositories_repo
+        self.session_repo = session_repo
         self.connected_services_repo = connected_services_repo
         self.oauth_client_factory = oauth_client_factory
 
-    async def check_image(self, user: APIUser, gitlab_user: APIUser | None, image: Image) -> CheckResult:
-        """Check access to the given image and provide image and access details."""
+    async def check_built_image_accessibility(self, user: APIUser, launcher: SessionLauncher) -> None:
+        """Checks whether a user has access to the image from the given launcher."""
+
+        environment = launcher.environment
+        image = launcher.environment.container_image
+
+        assert self.builds_config.build_output_private_image_prefix is not None and image.startswith(
+            self.builds_config.build_output_private_image_prefix
+        )
+
+        builds = await self.session_repo.get_environment_builds(user=user, environment_id=environment.id)
+
+        latest_successful_build = None
+        for build in builds:
+            if build.status == BuildStatus.succeeded:
+                latest_successful_build = build
+                break
+
+        if latest_successful_build is None:
+            raise errors.ValidationError(message="Successful build not found")
+        elif latest_successful_build.result is None:
+            raise errors.ValidationError(
+                message=f"Cannot get source repository for image {image}. You may need to rebuild it."
+            )
+        elif latest_successful_build.result.image != image:
+            raise errors.ProgrammingError(
+                message=(
+                    f"Cannot get source repository for image {image}: the build history is not consistent with the"
+                    " current image. You may need to rebuild it."
+                )
+            )
+
+        repository_url = latest_successful_build.result.repository_url
+        repo_data = await self.git_repositories_repo.get_repository(repository_url=repository_url, user=user, etag=None)
+
+        if repo_data.is_error:
+            raise errors.ValidationError(message="There was an issue accessing repo information")
+
+        if isinstance(repo_data.metadata, RepoMetadata) and not repo_data.metadata.pull_permission:
+            raise errors.ForbiddenError(
+                message=(f"You do not have pull access to the code repository {repository_url} used for this session.")
+            )
+
+    async def check_image(self, user: APIUser, image_src: SessionLauncher | Image) -> CheckResult:
+        """Check access to the image from the given launcher or image and provide image and access details."""
+
+        if isinstance(image_src, SessionLauncher):
+            # image can be "image:unknown-at-the-moment" which is returned until the first
+            # successful build however users can force a session start although it will fail
+            if image_src.environment.container_image == "image:unknown-at-the-moment":
+                return CheckResult(
+                    accessible=False,
+                    platforms=None,
+                    response_code=422,
+                    image_provider=None,
+                    token=None,
+                    error=errors.ValidationError(message="Image not built"),
+                )
+
+            image = Image.from_path(image_src.environment.container_image)
+        else:
+            image = image_src
+
         reg_api: ImageRepoDockerAPI = image.repo_api()  # public images
         unauth_error: errors.UnauthorizedError | None = None
         image_provider = await self.connected_services_repo.get_provider_for_image(user, image)
@@ -117,9 +192,6 @@ class ImageCheckRepository:
                     message=f"OAuth error when getting repo client for image: {image}"
                 )
                 unauth_error.__cause__ = e
-        elif gitlab_user and gitlab_user.access_token and image.hostname == self.nb_config.git.registry:
-            logger.debug(f"Using internal gitlab at {self.nb_config.git.registry}")
-            reg_api = reg_api.with_oauth2_token(gitlab_user.access_token)
 
         try:
             response = await reg_api.image_check(image, include_manifest=True)
@@ -157,3 +229,36 @@ class ImageCheckRepository:
             token=reg_api.oauth2_token,
             error=unauth_error,
         )
+
+    async def image_workdir(self, user: APIUser, image_src: SessionLauncher | Image) -> PurePosixPath | None:
+        """Check access to the image from the given launcher or image and get the working directory."""
+
+        if isinstance(image_src, SessionLauncher):
+            # image can be "image:unknown-at-the-moment" which is returned until the first
+            # successful build however users can force a session start although it will fail
+            if image_src.environment.container_image == "image:unknown-at-the-moment":
+                return PurePosixPath("/home/renku/work")
+            image = Image.from_path(image_src.environment.container_image)
+        else:
+            image = image_src
+
+        reg_api: ImageRepoDockerAPI = image.repo_api()  # public images
+        unauth_error: errors.UnauthorizedError | None = None
+        image_provider = await self.connected_services_repo.get_provider_for_image(user, image)
+        if image_provider is not None:
+            try:
+                reg_api = await self.connected_services_repo.get_image_repo_client(image_provider)
+            except errors.UnauthorizedError as e:
+                logger.info(f"Error getting image repo client for image {image}: {e}")
+                unauth_error = e
+            except OAuthError as e:
+                logger.info(f"Error getting image repo client for image {image}: {e}")
+                unauth_error = errors.UnauthorizedError(
+                    message=f"OAuth error when getting repo client for image: {image}"
+                )
+                unauth_error.__cause__ = e
+
+        try:
+            return await reg_api.image_workdir(image)
+        except httpx.HTTPError:
+            return None

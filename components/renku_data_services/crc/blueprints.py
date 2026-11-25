@@ -1,7 +1,10 @@
 """Compute resource control (CRC) app."""
 
 import asyncio
+from collections.abc import Sequence
+from contextlib import suppress
 from dataclasses import dataclass
+from typing import Any
 
 from sanic import HTTPResponse, Request, empty, json
 from sanic_ext import validate
@@ -12,18 +15,33 @@ from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_db_ids, validate_query
+from renku_data_services.base_models.core import Slug
 from renku_data_services.base_models.validation import validated_json
-from renku_data_services.crc import apispec, models
+from renku_data_services.crc import apispec
 from renku_data_services.crc.core import (
     validate_cluster,
     validate_cluster_patch,
     validate_quota_put_patch,
     validate_resource_class,
     validate_resource_class_patch_or_put,
+    validate_resource_flavor,
+    validate_resource_flavor_patch,
     validate_resource_pool_post,
     validate_resource_pool_put_or_patch,
 )
-from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
+from renku_data_services.crc.db import (
+    ClusterRepository,
+    MemberRepository,
+    ResourceFlavorRepository,
+    ResourcePoolMemberResult,
+    ResourcePoolRepository,
+)
+from renku_data_services.crc.models import (
+    MemberType,
+    ResourceFlavor,
+    ResourcePool,
+    ResourcePoolMemberIdentifier,
+)
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
 
@@ -33,9 +51,15 @@ class ResourcePoolsBP(CustomBlueprint):
     """Handlers for manipulating resource pools."""
 
     rp_repo: ResourcePoolRepository
-    user_repo: UserRepository
+    member_repo: MemberRepository
     cluster_repo: ClusterRepository
+    flavor_repo: ResourceFlavorRepository
     authenticator: base_models.Authenticator
+
+    async def _resolve_flavors(self, classes: Sequence[apispec.ResourceClass]) -> dict[str, ResourceFlavor]:
+        """Load every resource flavor that the given resource class bodies link to."""
+        ids = {cls.resource_flavor_id for cls in classes if cls.resource_flavor_id is not None}
+        return {i: await self.flavor_repo.get_flavor(ULID.from_str(i)) for i in ids}
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all resource pools."""
@@ -46,7 +70,7 @@ class ResourcePoolsBP(CustomBlueprint):
             request: Request, user: base_models.APIUser, query: apispec.ResourcePoolsParams
         ) -> HTTPResponse:
             rps = await self.rp_repo.filter_resource_pools(api_user=user, **query.model_dump())
-            return validated_json(apispec.ResourcePoolsWithIdFiltered, rps)
+            return validated_json(apispec.ResourcePoolsWithIdFiltered, [self._dump_resource_pool(rp) for rp in rps])
 
         return "/resource_pools", ["GET"], _get_all
 
@@ -57,7 +81,8 @@ class ResourcePoolsBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourcePool)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourcePool) -> HTTPResponse:
-            new_resource_pool = validate_resource_pool_post(body=body)
+            flavors = await self._resolve_flavors(body.classes)
+            new_resource_pool = validate_resource_pool_post(body=body, flavors=flavors)
             res = await self.rp_repo.insert_resource_pool(api_user=user, new_resource_pool=new_resource_pool)
             return validated_json(apispec.ResourcePoolWithId, res, status=201)
 
@@ -72,13 +97,7 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _get_one(
             request: Request, user: base_models.APIUser, resource_pool_id: int, query: apispec.UserResourceParams
         ) -> HTTPResponse:
-            rps: list[models.ResourcePool]
-            rps = await self.rp_repo.get_resource_pools(api_user=user, id=resource_pool_id, name=query.name)
-            if len(rps) < 1:
-                raise errors.MissingResourceError(
-                    message=f"The resource pool with id {resource_pool_id} cannot be found."
-                )
-            rp = rps[0]
+            rp = await self.rp_repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id, name=query.name)
             return validated_json(apispec.ResourcePoolWithId, rp)
 
         return "/resource_pools/<resource_pool_id>", ["GET"], _get_one
@@ -105,7 +124,13 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPut
         ) -> HTTPResponse:
-            put = validate_resource_pool_put_or_patch(body=body, method="PUT")
+            existing = await self.rp_repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
+            put = validate_resource_pool_put_or_patch(
+                body=body,
+                method="PUT",
+                existing_pool_kind=existing.remote.kind if existing.remote else None,
+                existing_classes=existing.classes,
+            )
             rp = await self.rp_repo.update_resource_pool(api_user=user, resource_pool_id=resource_pool_id, update=put)
             return validated_json(apispec.ResourcePoolWithId, rp)
 
@@ -121,18 +146,54 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPatch
         ) -> HTTPResponse:
-            patch = validate_resource_pool_put_or_patch(body=body, method="PATCH")
+            existing = await self.rp_repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
+            patch = validate_resource_pool_put_or_patch(
+                body=body,
+                method="PATCH",
+                existing_pool_kind=existing.remote.kind if existing.remote else None,
+                existing_classes=existing.classes,
+            )
             rp = await self.rp_repo.update_resource_pool(api_user=user, resource_pool_id=resource_pool_id, update=patch)
             return validated_json(apispec.ResourcePoolWithId, rp)
 
         return "/resource_pools/<resource_pool_id>", ["PATCH"], _patch
+
+    def get_group_rp(self) -> BlueprintFactoryResponse:
+        """Get all resource pools that a specific group has access to."""
+
+        @authenticate(self.authenticator)
+        async def _get(_: Request, user: base_models.APIUser, group_slug: Slug) -> HTTPResponse:
+            rps = await self.member_repo.get_group_resource_pools(user, group_slug)
+            return validated_json(apispec.ResourcePoolsWithIdFiltered, [self._dump_resource_pool(rp) for rp in rps])
+
+        return "/groups/<group_slug:renku_slug>/resource_pools", ["GET"], _get
+
+    @staticmethod
+    def _dump_resource_pool(rp: ResourcePool) -> dict[str, Any]:
+        """Dumps a resource pool for filtered (non-admin) API responses."""
+        return dict(
+            quota=rp.quota,
+            classes=rp.classes,
+            name=rp.name,
+            id=rp.id,
+            public=rp.public,
+            default=rp.default,
+            remote=rp.remote,
+            idle_threshold=rp.idle_threshold,
+            hibernation_threshold=rp.hibernation_threshold,
+            hibernation_warning_period=rp.hibernation_warning_period,
+            cluster_id=rp.cluster.id if rp.cluster is not None else None,
+            platform=rp.platform,
+            credits_used=rp.credits_used,
+            cpu_limit_factor=rp.cpu_limit_factor,
+        )
 
 
 @dataclass(kw_only=True)
 class ResourcePoolUsersBP(CustomBlueprint):
     """Handlers for dealing with the users of individual resource pools."""
 
-    repo: UserRepository
+    repo: MemberRepository
     kc_user_repo: KcUserRepo
     authenticator: base_models.Authenticator
 
@@ -252,11 +313,274 @@ class ResourcePoolUsersBP(CustomBlueprint):
 
 
 @dataclass(kw_only=True)
+class ResourcePoolMembersBP(CustomBlueprint):
+    """Handlers for dealing with polymorphic members of individual resource pools."""
+
+    repo: MemberRepository
+    authenticator: base_models.Authenticator
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get all members of a specific resource pool."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        async def _get_all(_: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
+            members = await self.repo.get_resource_pool_members(user, resource_pool_id)
+            return validated_json(
+                apispec.PoolMembersResponse,
+                [self._dump_member_response(m) for m in members],
+            )
+
+        return "/resource_pools/<resource_pool_id>/members", ["GET"], _get_all
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Add members to a specific resource pool."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        @validate(json=apispec.PoolMembers)
+        async def _post(
+            _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolMembers
+        ) -> HTTPResponse:
+            return await self._put_post(user, resource_pool_id, body, post=True)
+
+        return "/resource_pools/<resource_pool_id>/members", ["POST"], _post
+
+    def put(self) -> BlueprintFactoryResponse:
+        """Set the members of a specific resource pool."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        @validate(json=apispec.PoolMembers)
+        async def _put(
+            _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolMembers
+        ) -> HTTPResponse:
+            return await self._put_post(user, resource_pool_id, body, post=False)
+
+        return "/resource_pools/<resource_pool_id>/members", ["PUT"], _put
+
+    async def _put_post(
+        self, user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolMembers, post: bool = True
+    ) -> HTTPResponse:
+        identifiers = self._to_identifiers(body)
+        members = await self.repo.update_resource_pool_members(user, resource_pool_id, identifiers, append=post)
+        return validated_json(
+            apispec.PoolMembersResponse,
+            [self._dump_member_response(m) for m in members],
+            status=201 if post else 200,
+        )
+
+    def get(self) -> BlueprintFactoryResponse:
+        """Check if a specific member belongs to a resource pool."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        async def _get(
+            _: Request, user: base_models.APIUser, resource_pool_id: int, member_type: str, member_id: str
+        ) -> HTTPResponse:
+            members = await self.repo.get_resource_pool_members(user, resource_pool_id)
+            for m in members:
+                if m.member_type.value == member_type and m.member_id == member_id:
+                    payload = self._dump_member_response(m)
+                    match member_type:
+                        case "user":
+                            return validated_json(apispec.PoolMemberUserResponse, payload)
+                        case "group":
+                            return validated_json(apispec.PoolMemberGroupResponse, payload)
+                        case "project":
+                            return validated_json(apispec.PoolMemberProjectResponse, payload)
+                        case _:
+                            raise errors.ValidationError(message=f"Invalid member type: {member_type}")
+            raise errors.MissingResourceError(
+                message=f"The member with type {member_type} and id {member_id} does not belong to the resource pool."
+            )
+
+        return "/resource_pools/<resource_pool_id>/members/<member_type>/<member_id>", ["GET"], _get
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Remove a specific member from a resource pool."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        async def _delete(
+            _: Request, user: base_models.APIUser, resource_pool_id: int, member_type: str, member_id: str
+        ) -> HTTPResponse:
+            try:
+                mt = MemberType(member_type)
+            except ValueError as e:
+                raise errors.ValidationError(
+                    message=f"Invalid member_type {member_type!r}; expected one of {[m.value for m in MemberType]}"
+                ) from e
+            identifier = ResourcePoolMemberIdentifier(
+                member_id=member_id,
+                member_type=mt,
+            )
+            with suppress(errors.MissingResourceError):
+                await self.repo.revoke_resource_pool_members(
+                    api_user=user,
+                    resource_pool_id=resource_pool_id,
+                    members=[identifier],
+                )
+            return HTTPResponse(status=204)
+
+        return "/resource_pools/<resource_pool_id>/members/<member_type>/<member_id>", ["DELETE"], _delete
+
+    @staticmethod
+    def _to_identifiers(body: apispec.PoolMembers) -> list[ResourcePoolMemberIdentifier]:
+        identifiers: list[ResourcePoolMemberIdentifier] = []
+        for item in body.root:
+            match item:
+                case apispec.PoolMemberUser():
+                    identifiers.append(
+                        ResourcePoolMemberIdentifier(
+                            member_id=item.id,
+                            member_type=MemberType.USER,
+                            role=item.role.value,
+                        )
+                    )
+                case apispec.PoolMemberGroup():
+                    identifiers.append(
+                        ResourcePoolMemberIdentifier(
+                            member_id=item.id,
+                            member_type=MemberType.GROUP,
+                            role=item.role.value,
+                        )
+                    )
+                case apispec.PoolMemberProject():
+                    identifiers.append(
+                        ResourcePoolMemberIdentifier(
+                            member_id=item.id,
+                            member_type=MemberType.PROJECT,
+                            role=item.role.value,
+                        )
+                    )
+        return identifiers
+
+    @staticmethod
+    def _dump_member_response(m: ResourcePoolMemberResult) -> dict[str, Any]:
+        """Serialize a member result for GET responses."""
+        result: dict[str, Any] = {
+            "member_type": m.member_type.value,
+            "id": m.member_id,
+            "role": m.role,
+        }
+        match m.member_type:
+            case MemberType.USER:
+                result["email"] = m.email or ""
+            case MemberType.PROJECT:
+                result["namespace"] = m.namespace or ""
+                result["name"] = m.name or ""
+            case MemberType.GROUP:
+                result["slug"] = m.slug or ""
+                result["name"] = m.name or ""
+        return result
+
+
+@dataclass(kw_only=True)
+class ResourceFlavorsBP(CustomBlueprint):
+    """Handlers for dealing with resource flavors."""
+
+    repo: ResourceFlavorRepository
+    authenticator: base_models.Authenticator
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get all resource flavors."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_query(query=apispec.ResourceFlavorParams)
+        async def _get_all(_: Request, user: base_models.APIUser, query: apispec.ResourceFlavorParams) -> HTTPResponse:
+            res = await self.repo.get_flavors(name=query.name)
+            return validated_json(apispec.ResourceFlavorsList, res)
+
+        return "/resource_flavors", ["GET"], _get_all
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Create a new resource flavor."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.ResourceFlavorPost)
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourceFlavorPost) -> HTTPResponse:
+            flavor = validate_resource_flavor(body)
+            res = await self.repo.insert_flavor(api_user=user, new_flavor=flavor)
+            return validated_json(apispec.ResourceFlavor, res, 201)
+
+        return "/resource_flavors", ["POST"], _post
+
+    def get(self) -> BlueprintFactoryResponse:
+        """Get a specific resource flavor."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _get(_: Request, user: base_models.APIUser, resource_flavor_id: ULID) -> HTTPResponse:
+            res = await self.repo.get_flavor(resource_flavor_id)
+            return validated_json(apispec.ResourceFlavor, res)
+
+        return "/resource_flavors/<resource_flavor_id:ulid>", ["GET"], _get
+
+    def get_resource_classes(self) -> BlueprintFactoryResponse:
+        """Get the resource classes linked to a resource flavor."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _get_resource_classes(
+            _: Request, user: base_models.APIUser, resource_flavor_id: ULID
+        ) -> HTTPResponse:
+            res = await self.repo.get_flavor_resource_classes(resource_flavor_id)
+            return validated_json(apispec.LinkedResourceClassesList, res)
+
+        return (
+            "/resource_flavors/<resource_flavor_id:ulid>/resource_classes",
+            ["GET"],
+            _get_resource_classes,
+        )
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Partially update a resource flavor."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.ResourceFlavorPatch)
+        async def _patch(
+            _: Request, user: base_models.APIUser, body: apispec.ResourceFlavorPatch, resource_flavor_id: ULID
+        ) -> HTTPResponse:
+            patch = validate_resource_flavor_patch(body)
+            res = await self.repo.update_flavor(api_user=user, flavor_id=resource_flavor_id, update=patch)
+            return validated_json(apispec.ResourceFlavor, res)
+
+        return "/resource_flavors/<resource_flavor_id:ulid>", ["PATCH"], _patch
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Remove a resource flavor."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _delete(_: Request, user: base_models.APIUser, resource_flavor_id: ULID) -> HTTPResponse:
+            await self.repo.delete_flavor(api_user=user, flavor_id=resource_flavor_id)
+            return HTTPResponse(status=204)
+
+        return "/resource_flavors/<resource_flavor_id:ulid>", ["DELETE"], _delete
+
+
+@dataclass(kw_only=True)
 class ClassesBP(CustomBlueprint):
     """Handlers for dealing with resource classes of an individual resource pool."""
 
     repo: ResourcePoolRepository
+    flavor_repo: ResourceFlavorRepository
     authenticator: base_models.Authenticator
+
+    async def _resolve_flavor(self, body: apispec.ResourceClass) -> ResourceFlavor | None:
+        """Load the flavor a resource class body links to, if it links to one."""
+        if body.resource_flavor_id is None:
+            return None
+        return await self.flavor_repo.get_flavor(ULID.from_str(body.resource_flavor_id))
 
     def get_all(self) -> BlueprintFactoryResponse:
         """Get the classes of a specific resource pool."""
@@ -282,7 +606,10 @@ class ClassesBP(CustomBlueprint):
         async def _post(
             _: Request, user: base_models.APIUser, body: apispec.ResourceClass, resource_pool_id: int
         ) -> HTTPResponse:
-            cls = validate_resource_class(body=body)
+            pool = await self.repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
+            pool_kind = pool.remote.kind if pool.remote else None
+            flavor = await self._resolve_flavor(body)
+            cls = validate_resource_class(body=body, pool_kind=pool_kind, flavor=flavor)
             res = await self.repo.insert_resource_class(
                 api_user=user, new_resource_class=cls, resource_pool_id=resource_pool_id
             )
@@ -339,14 +666,21 @@ class ClassesBP(CustomBlueprint):
         @validate_db_ids
         @validate(json=apispec.ResourceClass)
         async def _put(
-            _: Request, user: base_models.APIUser, body: apispec.ResourceClass, resource_pool_id: int, class_id: int
+            _: Request,
+            user: base_models.APIUser,
+            body: apispec.ResourceClass,
+            resource_pool_id: int,
+            class_id: int,
         ) -> HTTPResponse:
-            put = validate_resource_class_patch_or_put(body=body, method="PUT")
+            pool = await self.repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
+            pool_kind = pool.remote.kind if pool.remote else None
+            put = validate_resource_class_patch_or_put(body=body, method="PUT", existing_kind=pool_kind)
             rc = await self.repo.update_resource_class(
                 api_user=user,
                 resource_pool_id=resource_pool_id,
                 resource_class_id=class_id,
                 update=put,
+                pool_kind=pool_kind,
             )
             return validated_json(apispec.ResourceClassWithId, rc)
 
@@ -366,12 +700,15 @@ class ClassesBP(CustomBlueprint):
             resource_pool_id: int,
             class_id: int,
         ) -> HTTPResponse:
-            patch = validate_resource_class_patch_or_put(body=body, method="PATCH")
+            pool = await self.repo.get_resource_pool(api_user=user, resource_pool_id=resource_pool_id)
+            pool_kind = pool.remote.kind if pool.remote else None
+            patch = validate_resource_class_patch_or_put(body=body, method="PATCH", existing_kind=pool_kind)
             rc = await self.repo.update_resource_class(
                 api_user=user,
                 resource_pool_id=resource_pool_id,
                 resource_class_id=class_id,
                 update=patch,
+                pool_kind=pool_kind,
             )
             return validated_json(apispec.ResourceClassWithId, rc)
 
@@ -491,7 +828,7 @@ class QuotaBP(CustomBlueprint):
 class UserResourcePoolsBP(CustomBlueprint):
     """Handlers for dealing with the resource pools of a specific user."""
 
-    repo: UserRepository
+    repo: MemberRepository
     kc_user_repo: KcUserRepo
     authenticator: base_models.Authenticator
 

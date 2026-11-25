@@ -28,7 +28,7 @@ from test.components.renku_data_services.resource_usage import test_db
 interval = timedelta(seconds=600)
 
 
-class TestResourceRequestsFetch(ResourceRequestsFetchProto):
+class ResourceRequestsFetcher(ResourceRequestsFetchProto):
     def __init__(self, data: list[ResourcesRequest]) -> None:
         self.data = data
 
@@ -46,7 +46,7 @@ class TestResourceRequestsFetch(ResourceRequestsFetchProto):
 async def test_record_empty_resource_requests(app_manager_instance: DependencyManager) -> None:
     run_migrations_for_app("common")
 
-    fetch = TestResourceRequestsFetch([])
+    fetch = ResourceRequestsFetcher([])
     repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
     recorder = DefaultResourcesRequestRecorder(repo, fetch)
     await recorder.record_resource_requests(interval)
@@ -122,7 +122,7 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
         ),
     ]
 
-    fetch = TestResourceRequestsFetch(data)
+    fetch = ResourceRequestsFetcher(data)
     recorder = DefaultResourcesRequestRecorder(repo, fetch)
     await recorder.record_resource_requests(interval)
     all = [item async for item in repo.find_all()]

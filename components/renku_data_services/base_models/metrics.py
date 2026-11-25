@@ -3,10 +3,13 @@
 from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import sha1
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.users.models import UserInfo
+
+if TYPE_CHECKING:
+    from renku_data_services.notebooks.models import LauncherType
 
 
 class MetricsEvent(StrEnum):
@@ -28,6 +31,7 @@ class MetricsEvent(StrEnum):
     session_stopped = "session_stopped"
     user_requested_session_launch = "user_requested_session_launch"
     user_requested_session_resume = "user_requested_session_resume"
+    session_job_terminated = "session_job_terminated"
 
 
 type MetricsMetadata = dict[str, str | int | bool]
@@ -96,7 +100,11 @@ class MetricsService(Protocol):
         ...
 
     async def session_launcher_created(
-        self, user: APIUser, environment_kind: str, environment_image_source: str
+        self,
+        user: APIUser,
+        environment_kind: str,
+        environment_image_source: str,
+        session_type: "LauncherType",
     ) -> None:
         """Send session launcher created event to metrics."""
         ...
@@ -139,6 +147,10 @@ class MetricsService(Protocol):
 
     async def user_requested_session_resume(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send event about user requesting session resume."""
+        ...
+
+    async def session_job_terminated(self, user: APIUser, metadata: MetricsMetadata) -> None:
+        """Send job (non-interactive session) termination event."""
         ...
 
 

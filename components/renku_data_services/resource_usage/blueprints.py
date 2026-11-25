@@ -1,7 +1,6 @@
 """Blueprint for resource usage."""
 
 from dataclasses import dataclass
-from datetime import date, datetime
 
 from sanic import HTTPResponse, Request, empty
 from sanic.response import JSONResponse
@@ -12,6 +11,7 @@ from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import CustomBlueprint
 from renku_data_services.base_api.misc import BlueprintFactoryResponse, validate_db_ids
 from renku_data_services.base_models.validation import validated_json
+from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.resource_usage import apispec, model
 from renku_data_services.resource_usage.core import (
     ResourceUsageService,
@@ -27,6 +27,7 @@ class ResourceUsageBP(CustomBlueprint):
 
     rr_repo: ResourceRequestsRepo
     rr_svc: ResourceUsageService
+    rp_repo: ResourcePoolRepository
     authenticator: base_models.Authenticator
 
     def put_pool_limits(self) -> BlueprintFactoryResponse:
@@ -138,20 +139,32 @@ class ResourceUsageBP(CustomBlueprint):
     def get_pool_usage(self) -> BlueprintFactoryResponse:
         """Get usage of a pool."""
 
-        def extract_date(req: Request, name: str) -> date | None:
-            datestr = req.args.get(name)
-            return datetime.strptime(datestr, "%Y-%m-%d") if datestr is not None else None
-
         @authenticate(self.authenticator)
         @validate_db_ids
-        async def _get(req: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
-            start_date = extract_date(req, "start_date")
-            end_date = extract_date(req, "end_date")
+        @validate(query=apispec.ResourcePoolsResourcePoolIdUsageGetParametersQuery)
+        async def _get(
+            req: Request,
+            user: base_models.APIUser,
+            resource_pool_id: int,
+            query: apispec.ResourcePoolsResourcePoolIdUsageGetParametersQuery,
+        ) -> HTTPResponse:
+            start_date = query.start_date
+            end_date = query.end_date
+            requested_by = query.user_id
+            requested_by = str(requested_by) if requested_by else user.id
+            if requested_by != user.id and (user.access_token is None or not user.is_admin):
+                raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+            rp = await self.rp_repo.get_resource_pool(user, resource_pool_id)
+            enforcement_enabled = any([c.quota_enforced for c in rp.classes])
+
             result: model.ResourcePoolUsage | None = None
-            if start_date:
-                result = await self.rr_svc.get_for_date(resource_pool_id, user.id or "", start_date, end_date)
+            if not enforcement_enabled:
+                result = None
+            elif start_date:
+                result = await self.rr_svc.get_for_date(resource_pool_id, requested_by or "", start_date, end_date)
             else:
-                result = await self.rr_svc.get_running_week(resource_pool_id, user.id or "")
+                result = await self.rr_svc.get_running_week(resource_pool_id, requested_by or "")
             if result:
                 output = apispec.ResourcePoolUsage(
                     total_usage=apispec.ResourceUsageSummary(
@@ -171,6 +184,8 @@ class ResourceUsageBP(CustomBlueprint):
                     output,
                 )
             else:
-                raise errors.MissingResourceError()
+                raise errors.MissingResourceError(
+                    message=f"Usage tracking for resource pool ID {resource_pool_id} is not available"
+                )
 
         return "/resource_pools/<resource_pool_id>/usage", ["GET"], _get

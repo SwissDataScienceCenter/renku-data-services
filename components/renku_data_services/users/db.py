@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import secrets
 from abc import abstractmethod
-from collections.abc import AsyncGenerator, Callable, Mapping
+from collections.abc import AsyncGenerator, Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from ulid import ULID
 
 from renku_data_services import base_models
 from renku_data_services.app_config import logging
@@ -31,6 +33,8 @@ from renku_data_services.users.models import (
     DeletedUser,
     KeycloakAdminEvent,
     PinnedProjects,
+    SSHKey,
+    UnsavedSSHKey,
     UnsavedUserInfo,
     UserInfo,
     UserInfoFieldUpdate,
@@ -38,7 +42,13 @@ from renku_data_services.users.models import (
     UserPatch,
     UserPreferences,
 )
-from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserMetricsORM, UserORM, UserPreferencesORM
+from renku_data_services.users.orm import (
+    LastKeycloakEventTimestamp,
+    SSHKeyORM,
+    UserMetricsORM,
+    UserORM,
+    UserPreferencesORM,
+)
 from renku_data_services.utils.core import with_db_transaction
 from renku_data_services.utils.cryptography import (
     decrypt_string,
@@ -46,6 +56,7 @@ from renku_data_services.utils.cryptography import (
     encrypt_string,
     generate_random_encryption_key,
 )
+from renku_data_services.utils.sqlalchemy import get_postgres_error_code
 
 logger = logging.getLogger(__name__)
 
@@ -120,16 +131,33 @@ class UserRepo(DbUsernameResolver):
         )
         return result.new
 
-    async def get_user(self, id: str) -> UserInfo | None:
+    @with_db_transaction
+    async def get_user(self, id: str, session: AsyncSession | None = None) -> UserInfo | None:
         """Get a specific user from the database."""
-        async with self.session_maker() as session:
-            result = await session.scalars(select(UserORM).where(UserORM.keycloak_id == id))
-            user = result.one_or_none()
-            if user is None:
-                return None
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
+        result = await session.scalars(select(UserORM).where(UserORM.keycloak_id == id))
+        user = result.one_or_none()
+        if user is None:
+            return None
+        if user.namespace is None:
+            raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
+        return user.namespace.dump_user()
+
+    @with_db_transaction
+    async def get_users_by_ids(self, ids: Collection[str], session: AsyncSession | None = None) -> list[UserInfo]:
+        """Get users by their keycloak IDs."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
+
+        result = await session.scalars(select(UserORM).where(UserORM.keycloak_id.in_(ids)))
+        users = result.all()
+
+        for user in users:
             if user.namespace is None:
-                raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
-            return user.namespace.dump_user()
+                raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {user.keycloak_id}.")
+
+        return [user.dump() for user in users if user.namespace is not None]
 
     async def get_or_create_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
         """Get a specific user from the database and create it potentially if it does not exist.
@@ -141,7 +169,13 @@ class UserRepo(DbUsernameResolver):
         async with self.session_maker() as session, session.begin():
             user = await self.get_user(id=id)
             if not user and id == requested_by.id:
-                return await self._add_api_user(requested_by)
+                user = await self._add_api_user(requested_by)
+            if not user:
+                return None
+            # If the user is not admin or they are not requesting their own info we hide some fields
+            strip_sensitive_info = requested_by.id != user.id and not requested_by.is_admin
+            if strip_sensitive_info:
+                user = user.redact_email()
             return user
 
     @only_authenticated
@@ -251,6 +285,62 @@ class UserRepo(DbUsernameResolver):
         doubly_encrypted_value = encrypt_string(secret_svc_encryption_key, requested_by.id, encrypted_value.decode())
         encrypted_key = encrypt_rsa(secret_service_public_key, secret_svc_encryption_key)
         return doubly_encrypted_value, encrypted_key
+
+
+class SSHKeyRepository:
+    """An adapter for accessing user SSH public keys."""
+
+    def __init__(self, session_maker: Callable[..., AsyncSession]) -> None:
+        self.session_maker = session_maker
+
+    @only_authenticated
+    async def get_ssh_keys(self, requested_by: APIUser) -> list[SSHKey]:
+        """Get all SSH keys registered by a user."""
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(SSHKeyORM).where(SSHKeyORM.user_id == requested_by.id).order_by(SSHKeyORM.created_at)
+            )
+            return [key.dump() for key in result]
+
+    @only_authenticated
+    async def get_ssh_key(self, requested_by: APIUser, key_id: ULID) -> SSHKey:
+        """Get a single SSH key registered by a user."""
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(SSHKeyORM).where(SSHKeyORM.id == key_id, SSHKeyORM.user_id == requested_by.id)
+            )
+            key = result.one_or_none()
+            if key is None:
+                raise errors.MissingResourceError(message=f"The SSH key with id {key_id} does not exist.")
+            return key.dump()
+
+    @only_authenticated
+    async def insert_ssh_key(self, requested_by: APIUser, ssh_key: UnsavedSSHKey) -> SSHKey:
+        """Add a new SSH key for a user."""
+        async with self.session_maker() as session, session.begin():
+            orm = SSHKeyORM.load(ssh_key, cast(str, requested_by.id))
+            session.add(orm)
+            try:
+                await session.flush()
+            except IntegrityError as err:
+                # Only the unique fingerprint constraint means "already registered"; re-raise anything else
+                # (e.g. an FK failure) so it is not misreported as a duplicate key.
+                if get_postgres_error_code(err) == "23505":
+                    raise errors.ConflictError(message="This SSH key is already registered.") from err
+                raise
+            return orm.dump()
+
+    @only_authenticated
+    async def delete_ssh_key(self, requested_by: APIUser, key_id: ULID) -> None:
+        """Delete an SSH key registered by a user."""
+        async with self.session_maker() as session, session.begin():
+            await session.execute(delete(SSHKeyORM).where(SSHKeyORM.id == key_id, SSHKeyORM.user_id == requested_by.id))
+
+    async def get_user_id_by_fingerprint(self, fingerprint: str) -> str | None:
+        """Resolve the owner of an SSH key by fingerprint. For internal use only."""
+        async with self.session_maker() as session:
+            res = await session.scalar(select(SSHKeyORM.user_id).where(SSHKeyORM.fingerprint == fingerprint))
+            return res
 
 
 class UsersSync:

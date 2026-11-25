@@ -358,7 +358,7 @@ async def test_result_is_sorted_by_creation_date(create_project, sanic_client, u
 
 
 @pytest.mark.asyncio
-async def test_delete_project(create_project, sanic_client, user_headers, app_manager) -> None:
+async def test_delete_project(create_project, sanic_client, user_headers, app_manager, cluster) -> None:
     await app_manager.search_updates_repo.clear_all()
 
     # Create some projects
@@ -1274,6 +1274,79 @@ async def test_project_copy_includes_session_launchers(
 
 
 @pytest.mark.asyncio
+async def test_project_copy_includes_session_launchers_with_permissions(
+    sanic_client,
+    user_headers,
+    regular_user,
+    create_project,
+    create_session_environment,
+    create_session_launcher,
+    create_project_copy,
+    create_data_connector_and_link_project,
+    create_session_secret_slot,
+) -> None:
+    project = await create_project(sanic_client, "Project")
+    project_id = project["id"]
+    environment = await create_session_environment("Some environment")
+    _, link = await create_data_connector_and_link_project("Data connector", project_id=project_id)
+    secret_slot = await create_session_secret_slot("secret-slot", project_id=project_id)
+    launcher = await create_session_launcher("Launcher", project_id, environment={"id": environment["id"]})
+
+    patch_dc_policy = {
+        "data_connector_link_id": link["id"],
+        "policy": "excluded",
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
+        headers=user_headers,
+        json=[patch_dc_policy],
+    )
+    assert res.status_code == 200, res.text
+
+    patch_sc_policy = {
+        "secret_slot_id": secret_slot["id"],
+        "policy": "excluded",
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher["id"]}/secrets",
+        headers=user_headers,
+        json=[patch_sc_policy],
+    )
+    assert res.status_code == 200, res.text
+
+    copy_project = await create_project_copy(
+        sanic_client, project_id, regular_user.namespace.path.serialize(), "Copy Project"
+    )
+
+    project_id = copy_project["id"]
+    _, res = await sanic_client.get(f"/api/data/projects/{project_id}/session_launchers", headers=user_headers)
+    assert res.status_code == 200, res.text
+    launchers = res.json
+
+    for launcher in launchers:
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+        assert res.status_code == 200, res.text
+        launcher_orm = res.json
+        assert launcher_orm["is_restricted"]
+
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}/secrets", headers=user_headers)
+        assert res.status_code == 200, res.text
+        secret_slot_policies = res.json
+        assert len(secret_slot_policies) > 0
+        for secret_slot_policy in secret_slot_policies:
+            assert secret_slot_policy["policy"] == "excluded"
+
+        _, res = await sanic_client.get(
+            f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=user_headers
+        )
+        assert res.status_code == 200, res.text
+        dc_policies = res.json
+        assert len(dc_policies) > 0
+        for dc_policy in dc_policies:
+            assert dc_policy["policy"] == "excluded"
+
+
+@pytest.mark.asyncio
 async def test_project_copy_creates_new_custom_environment_instance(
     sanic_client,
     user_headers,
@@ -1367,6 +1440,7 @@ async def test_project_copy_creates_new_build_and_environment_instances(
             "builder_variant": "python",
             "frontend_variant": "vscodium",
             "environment_image_source": "build",
+            "ai_agents": ["claude", "pi"],
         },
         resource_class_id=resource_pool["classes"][0]["id"],
         disk_storage=42,
@@ -1418,6 +1492,7 @@ async def test_project_copy_creates_new_build_and_environment_instances(
     assert response.status_code == 200, response.text
     copy_build_parameters = response.json[0]["environment"]["build_parameters"]
     assert copy_build_parameters["repository"] == "new_repo"
+    assert copy_build_parameters["ai_agents"] == ["claude", "pi"]
 
 
 @pytest.mark.asyncio
@@ -1468,10 +1543,8 @@ async def test_project_copy_includes_public_data_connector_links_owned_by_others
     dc2 = await create_data_connector("dc2", member_1_user, member_1_headers, visibility="public")
     assert "id" in dc1
     assert "id" in dc2
-    link1_res = await link_data_connector(project_id, dc1["id"], user_headers)
-    link2_res = await link_data_connector(project_id, dc2["id"], user_headers)
-    link1 = link1_res.json
-    link2 = link2_res.json
+    link1 = await link_data_connector(project_id, dc1["id"])
+    link2 = await link_data_connector(project_id, dc2["id"])
 
     copy_project = await create_project_copy(
         sanic_client,
@@ -1489,7 +1562,7 @@ async def test_project_copy_includes_public_data_connector_links_owned_by_others
     assert {d["data_connector_id"] for d in data_connector_links} == {dc1["id"], dc2["id"]}
     assert data_connector_links[0]["project_id"] == data_connector_links[1]["project_id"] == project_copy_id
     # NOTE: Check that new data connector links are created
-    assert {d["id"] for d in data_connector_links} != {link1["id"], link2["id"]}
+    assert {d["id"] for d in data_connector_links} != {link1.id, link2.id}
 
 
 @pytest.mark.asyncio

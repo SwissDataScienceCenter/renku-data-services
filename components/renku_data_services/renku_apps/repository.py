@@ -1,0 +1,160 @@
+"""Repository for Renku apps backed by Knative Services in k8s."""
+
+from ulid import ULID
+
+import renku_data_services.base_models as base_models
+from renku_data_services import errors
+from renku_data_services.app_config import logging
+from renku_data_services.authz.authz import Authz, ResourceType
+from renku_data_services.authz.models import Scope, Visibility
+from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.models import ResourceClass
+from renku_data_services.data_connectors.db import DataConnectorSecretRepository
+from renku_data_services.project.db import ProjectRepository
+from renku_data_services.renku_apps.core import build_app, select_mountable_connectors
+from renku_data_services.renku_apps.k8s_client import RenkuAppsK8sClient
+from renku_data_services.renku_apps.models import App
+from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.models import app_launcher_project_visibility_is_valid
+from renku_data_services.storage.rclone import RCloneValidator
+
+logger = logging.getLogger(__name__)
+
+
+def _app_not_found_message(app_name: str) -> str:
+    """Build the message for a missing or inaccessible app."""
+    return f"App with name '{app_name}' does not exist or you do not have access to it."
+
+
+class RenkuAppsRepository:
+    """Use-case-focused API for Renku apps, dispatching to k8s rather than SQL."""
+
+    def __init__(
+        self,
+        authz: Authz,
+        session_repo: SessionRepository,
+        rp_repo: ResourcePoolRepository,
+        project_repo: ProjectRepository,
+        k8s_client: RenkuAppsK8sClient,
+        dc_secret_repo: DataConnectorSecretRepository,
+        validator: RCloneValidator,
+    ) -> None:
+        self.authz = authz
+        self.session_repo = session_repo
+        self.rp_repo = rp_repo
+        self.project_repo = project_repo
+        self.k8s_client = k8s_client
+        self.dc_secret_repo = dc_secret_repo
+        self.validator = validator
+
+    async def create_app(self, user: base_models.APIUser, launcher_id: ULID) -> App:
+        """Launch a new app from a session launcher."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        launcher = await self.session_repo.get_launcher(user, launcher_id)
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, launcher.project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{launcher.project_id}' does not exist or you do not have access to it."
+            )
+
+        resource_class: ResourceClass | None = None
+        if launcher.resource_class_id is not None:
+            resource_class = await self.rp_repo.get_resource_class(user, launcher.resource_class_id)
+
+        project = await self.project_repo.get_project(user, launcher.project_id)
+
+        if not app_launcher_project_visibility_is_valid(
+            launcher.launcher_type, project_is_public=project.visibility == Visibility.PUBLIC
+        ):
+            raise errors.ValidationError(
+                message=f"App '{launcher.name}' cannot be started because project "
+                f"'{project.slug}' is not public. Make the project public to start its app."
+            )
+
+        if await self.k8s_client.get_app_deployment_for_project(launcher.project_id) is not None:
+            raise errors.ConflictError(message=f"An app already exists for project '{launcher.project_id}'.")
+
+        data_connectors = await select_mountable_connectors(launcher.project_id, self.dc_secret_repo, self.validator)
+        runtime_state = await self.k8s_client.create_app_deployment(launcher, resource_class, project, data_connectors)
+        return build_app(launcher, runtime_state)
+
+    async def get_app(self, user: base_models.APIUser, app_name: str) -> App:
+        """Retrieve an app by its name."""
+        runtime_state = await self.k8s_client.get_app_deployment(app_name)
+        if runtime_state is None:
+            raise errors.MissingResourceError(message=_app_not_found_message(app_name))
+
+        launcher = await self.session_repo.get_launcher(user, runtime_state.launcher_id)
+        return build_app(launcher, runtime_state)
+
+    async def get_app_logs(
+        self, user: base_models.APIUser, app_name: str, max_log_lines: int | None = None
+    ) -> dict[str, str]:
+        """Read the logs of an app; only users who can write to its project may see them."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        runtime_state = await self.k8s_client.get_app_deployment(app_name)
+        if runtime_state is None:
+            raise errors.MissingResourceError(message=_app_not_found_message(app_name))
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, runtime_state.project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(message=_app_not_found_message(app_name))
+
+        return await self.k8s_client.get_app_logs(app_name, max_log_lines)
+
+    async def delete_app(self, user: base_models.APIUser, app_name: str) -> None:
+        """Delete an app by its name."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        runtime_state = await self.k8s_client.get_app_deployment(app_name)
+        if runtime_state is None:
+            logger.info(f"App with name {app_name} was not found.")
+            return None
+
+        launcher = await self.session_repo.get_launcher(user, runtime_state.launcher_id)
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, launcher.project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(message=_app_not_found_message(app_name))
+
+        await self.k8s_client.delete_app_deployment(app_name)
+        logger.info(f"App with name {app_name} has been deleted.")
+        return None
+
+    async def delete_app_for_launcher_id(self, launcher_id: ULID) -> None:
+        """Delete the app deployment backing the given launcher, if one exists."""
+        runtime_state = await self.k8s_client.get_app_deployment_for_launcher(launcher_id)
+        if runtime_state is None:
+            return None
+        await self.k8s_client.delete_app_deployment(runtime_state.name)
+        logger.info(f"App with name {runtime_state.name} was deleted along with its launcher {launcher_id}.")
+        return None
+
+    async def delete_apps_for_project(self, project_id: ULID) -> None:
+        """Delete every app belonging to the given project (e.g. when it becomes private or is deleted)."""
+        app_names = [state.name async for state in self.k8s_client.list_app_deployments(project_id)]
+        for app_name in app_names:
+            await self.k8s_client.delete_app_deployment(app_name)
+            logger.info(f"App with name {app_name} was deleted as part of cleaning up project {project_id}.")
+
+    async def list_apps(self, user: base_models.APIUser, project_id: ULID | None = None) -> list[App]:
+        """List all apps, optionally filtered by project."""
+
+        # TODO: without a project_id this scans every app, costing a DB and an authz call each.
+        apps: list[App] = []
+        async for runtime_state in self.k8s_client.list_app_deployments(project_id):
+            try:
+                launcher = await self.session_repo.get_launcher(user, runtime_state.launcher_id)
+            except errors.MissingResourceError:
+                logger.warning(
+                    f"Launcher with id '{runtime_state.launcher_id}' for app '{runtime_state.name}' was not found."
+                )
+                continue
+            apps.append(build_app(launcher, runtime_state))
+        return apps

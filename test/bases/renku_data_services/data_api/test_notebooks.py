@@ -3,16 +3,28 @@
 import asyncio
 from collections.abc import AsyncIterator, Generator
 from contextlib import suppress
+from datetime import datetime
+from pathlib import PurePosixPath
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from kr8s import NotFoundError
 from sanic_testing.testing import SanicASGITestClient
+from ulid import ULID
 
+from renku_data_services.base_models import AnonymousAPIUser
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.dependencies import DependencyManager
-from renku_data_services.notebooks.crs import AmaltheaSessionSpec, AmaltheaSessionV1Alpha1, Resources, Session
+from renku_data_services.notebooks.core_sessions import get_mount_work_dir
+from renku_data_services.notebooks.crs import (
+    AmaltheaSessionSpec,
+    AmaltheaSessionV1Alpha1,
+    Resources,
+    Session,
+    Type,
+)
+from renku_data_services.session.models import Environment, EnvironmentImageSource, EnvironmentKind, Member
 
 
 @pytest.fixture
@@ -73,7 +85,11 @@ async def amalthea_session(
     session = AmaltheaSessionV1Alpha1(
         metadata=dict(
             name=server_name,
-            labels={"renku.io/safe-username": regular_user_api_user.id, "renku.io/userId": regular_user_api_user.id},
+            labels={
+                "renku.io/safe-username": regular_user_api_user.id,
+                "renku.io/userId": regular_user_api_user.id,
+                "renku.io/session-type": "interactive",
+            },
             annotations={
                 "renku.io/resource_class_id": str(rc["id"]),
                 "renku.io/project_id": proj["id"],
@@ -185,6 +201,7 @@ async def test_user_server_list(
     assert res.status_code == 200, res.text
     assert len(res.json) == 1
     assert res.json[0]["name"] == amalthea_session.metadata.name
+    assert res.json[0]["session_type"] == "interactive"
 
 
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
@@ -303,3 +320,185 @@ async def test_start_server(
     _, res = await sanic_client.delete(f"/api/data/sessions/{server_name}", headers=authenticated_user_headers)
 
     assert res.status_code == 204, res.text
+
+
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+@pytest.mark.sessions
+@pytest.mark.asyncio
+async def test_not_found_server(
+    sanic_client: SanicASGITestClient,
+    authenticated_user_headers: dict[str, str],
+    notebooks_fixtures,
+):
+    server_name = "unknown_server"
+
+    _, res = await sanic_client.get(f"/api/data/sessions/{server_name}", headers=authenticated_user_headers)
+
+    assert res.status_code == 404, res.text
+
+
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+@pytest.mark.sessions
+@pytest.mark.asyncio
+async def test_start_server_remote_readiness_probe(
+    sanic_client: SanicASGITestClient,
+    authenticated_user_headers,
+    notebooks_fixtures,
+    create_session_launcher,
+    create_project,
+    renku_image,
+    create_resource_pool,
+    app_manager_instance: DependencyManager,
+    regular_user_api_user: APIUser,
+    admin_headers: dict[str, str],
+):
+    """Remote interactive sessions should use an HTTP readiness probe."""
+    # Create an OAuth2 provider required for a remote resource pool.
+    provider_payload = {
+        "id": "test-provider-for-remote-session-notebooks",
+        "kind": "gitlab",
+        "client_id": "test-client-id",
+        "display_name": "Test Provider",
+        "scope": "api",
+        "url": "https://example.org",
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=provider_payload)
+    assert res.status_code == 201, res.text
+
+    # Create a private resource pool and patch it to be remote.
+    rp = await create_resource_pool(admin=True, public=False)
+    patch = {
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": provider_payload["id"],
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    }
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+
+    proj = await create_project(sanic_client, "proj1")
+    env = {
+        "environment_kind": "CUSTOM",
+        "name": "Test",
+        "container_image": renku_image,
+        "environment_image_source": "image",
+    }
+    launcher = await create_session_launcher("launcher_name", proj["id"], **{"environment": env})
+    data = {"launcher_id": launcher["id"], "resource_class_id": rp["classes"][0]["id"]}
+    cookies = {app_manager_instance.config.nb_config.session_id_cookie_name: "session_id"}
+
+    # Use admin headers so the user can access the private remote pool.
+    _, res = await sanic_client.post("/api/data/sessions/", json=data, headers=admin_headers, cookies=cookies)
+    assert res.status_code == 201, res.text
+
+    server_name: str = res.json["name"]
+
+    # Fetch the created session from k8s and verify the readiness probe.
+    # NOTE: The session is created under the admin user's namespace (safe_username="admin").
+    session = await app_manager_instance.config.nb_config.k8s_v2_client.get_session(server_name, "admin")
+    assert session.spec.session.readinessProbe.type == Type.http
+
+    # Cleanup.
+    _, res = await sanic_client.delete(f"/api/data/sessions/{server_name}", headers=admin_headers)
+    assert res.status_code == 204, res.text
+
+
+def create_test_environment(
+    container_image: str, work_dir: PurePosixPath | None = None, mount_dir: PurePosixPath | None = None
+) -> Environment:
+    return Environment(
+        name="test",
+        container_image=container_image,
+        default_url="test",
+        id=ULID(),
+        environment_image_source=EnvironmentImageSource.image,
+        port=8888,
+        uid=1000,
+        gid=1000,
+        environment_kind=EnvironmentKind.CUSTOM,
+        creation_date=datetime.now(),
+        created_by=Member(id="id"),
+        build_parameters=None,
+        build_parameters_id=None,
+        mount_directory=mount_dir,
+        working_directory=work_dir,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "environment,expected_mount_dir,expected_work_dir",
+    [
+        (
+            create_test_environment("busybox:1.38"),
+            PurePosixPath("/work"),
+            PurePosixPath("/"),
+        ),
+        (
+            create_test_environment("ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3"),
+            # The default work dir in the buildpack images is /workspace so we mount there
+            PurePosixPath("/workspace/work"),
+            PurePosixPath("/workspace"),
+        ),
+        (
+            # If we set only the work dir on the environment that should be used
+            create_test_environment(
+                "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3",
+                work_dir=PurePosixPath("/home/renku/work"),
+            ),
+            PurePosixPath("/home/renku/work/work"),
+            PurePosixPath("/home/renku/work"),
+        ),
+        (
+            # If we set the work and mount dir on the environment that should be used
+            create_test_environment(
+                "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3",
+                mount_dir=PurePosixPath("/home/renku/work"),
+                work_dir=PurePosixPath("/home/renku/work"),
+            ),
+            PurePosixPath("/home/renku/work"),
+            PurePosixPath("/home/renku/work"),
+        ),
+        (
+            # If the work dir is not inside the mount dir, the work dir will be set to the mount dir
+            create_test_environment(
+                "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3",
+                mount_dir=PurePosixPath("/home/renku/mount"),
+                work_dir=PurePosixPath("/home/renku/work"),
+            ),
+            PurePosixPath("/home/renku/mount"),
+            PurePosixPath("/home/renku/work"),
+        ),
+        (
+            create_test_environment(
+                "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3",
+                mount_dir=PurePosixPath("/home/renku/mount"),
+            ),
+            PurePosixPath("/home/renku/mount"),
+            PurePosixPath("/workspace"),
+        ),
+        (
+            # If you try to mount on / we move it to /work to preven users from wiping out the whole image
+            create_test_environment(
+                "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.17.3",
+                mount_dir=PurePosixPath("/"),
+            ),
+            PurePosixPath("/work"),
+            PurePosixPath("/workspace"),
+        ),
+    ],
+)
+async def test_mount_workdir(
+    environment: Environment,
+    expected_mount_dir: PurePosixPath,
+    expected_work_dir: PurePosixPath,
+    app_manager_instance: DependencyManager,
+    sanic_client: SanicASGITestClient,
+) -> None:
+    mount_dir, work_dir = await get_mount_work_dir(
+        AnonymousAPIUser(id="anon-user"), environment, app_manager_instance.image_check_repo
+    )
+    assert mount_dir == expected_mount_dir
+    assert work_dir == expected_work_dir

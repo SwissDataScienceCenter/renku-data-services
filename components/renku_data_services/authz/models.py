@@ -1,16 +1,13 @@
 """Models for authorization."""
 
 from dataclasses import dataclass
-from enum import Enum
-from typing import TYPE_CHECKING
+from enum import Enum, StrEnum
 
 from ulid import ULID
 
+from renku_data_services.base_models.core import ResourceType
 from renku_data_services.errors import errors
 from renku_data_services.namespace.apispec import GroupRole
-
-if TYPE_CHECKING:
-    from renku_data_services.base_models.core import ResourceType
 
 
 class Role(Enum):
@@ -19,6 +16,7 @@ class Role(Enum):
     OWNER = "owner"
     VIEWER = "viewer"
     EDITOR = "editor"
+    PROHIBITED = "prohibited"
 
     @classmethod
     def from_group_role(cls, role: GroupRole) -> "Role":
@@ -46,6 +44,13 @@ class Role(Enum):
                 raise errors.ProgrammingError(message=f"Could not convert role {self} into a group role")
 
 
+class PlatformRole(StrEnum):
+    """Roles specific to the platform resource in Authzed."""
+
+    project_creator = "project_creator"
+    group_creator = "group_creator"
+
+
 class Scope(Enum):
     """Types of permissions - i.e. scope."""
 
@@ -61,6 +66,8 @@ class Scope(Enum):
     EXCLUSIVE_EDITOR = "exclusive_editor"
     EXCLUSIVE_OWNER = "exclusive_owner"
     DIRECT_MEMBER = "direct_member"
+    CREATE_GROUPS = "create_groups"
+    CREATE_PROJECTS = "create_projects"
 
 
 @dataclass
@@ -72,14 +79,34 @@ class UnsavedMember:
 
     def with_group(self, group_id: ULID) -> "Member":
         """Turn to member with group."""
-        return Member(role=self.role, user_id=self.user_id, resource_id=group_id)
+        return Member(
+            role=self.role,
+            user_id=self.user_id,
+            resource_id=group_id,
+            resource_type=ResourceType.group,
+            subject_type=ResourceType.user,
+        )
+
+    def with_resource_pool(
+        self, resource_id: ULID | int, resource_type: ResourceType, subject_type: ResourceType
+    ) -> "Member":
+        """Turn to member with resource pool."""
+        return Member(
+            role=self.role,
+            user_id=self.user_id,
+            resource_id=resource_id,
+            resource_type=resource_type,
+            subject_type=subject_type,
+        )
 
 
 @dataclass
 class Member(UnsavedMember):
     """Member stored in the database."""
 
-    resource_id: ULID
+    resource_id: ULID | int
+    resource_type: ResourceType = ResourceType.group
+    subject_type: ResourceType = ResourceType.user
 
 
 class Change(Enum):
@@ -110,5 +137,5 @@ class CheckPermissionItem:
     """Represent a permission item to be checked by the authorization service."""
 
     resource_type: "ResourceType"
-    resource_id: str | ULID
+    resource_id: str | ULID | int
     scope: Scope

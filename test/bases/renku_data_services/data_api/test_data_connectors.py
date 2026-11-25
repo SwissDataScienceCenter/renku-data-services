@@ -1,6 +1,6 @@
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 import pytest
 from httpx import Response
@@ -10,34 +10,28 @@ from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import NamespacePath, ProjectPath
 from renku_data_services.data_connectors import core
 from renku_data_services.data_connectors.apispec import CloudStorageCorePost, GlobalDataConnectorPost
-from renku_data_services.data_connectors.doi.models import DOIMetadata
+from renku_data_services.data_connectors.doi.metadata import (
+    DOIProviders,
+    ParsedDOIMetadata,
+    _html_to_text,
+    get_metadata,
+)
+from renku_data_services.data_connectors.doi.models import (
+    DOIMetadata,
+    SchemaOrgDataset,
+    SchemaOrgDistribution,
+    SchemaOrgProvider,
+    SchemaOrgPublisher,
+)
+from renku_data_services.data_connectors.orm import DOI
 from renku_data_services.namespace.models import NamespaceKind
-from renku_data_services.storage.rclone import RCloneDOIMetadata, RCloneValidator
+from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.models import UserInfo
 from renku_data_services.utils.core import get_openbis_session_token_for_anonymous_user
 from test.bases.renku_data_services.data_api.utils import merge_headers
 
 if TYPE_CHECKING:
     from pytest import MonkeyPatch
-
-
-async def create_data_connector(
-    sanic_client: SanicASGITestClient, headers: dict[str, Any], namespace: str, slug: str, private: bool
-) -> Response:
-    storage_config = {
-        "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
-        "source_path": "giab",
-        "target_path": "giab",
-    }
-    payload = {
-        "name": slug,
-        "namespace": namespace,
-        "slug": slug,
-        "storage": storage_config,
-        "visibility": "private" if private else "public",
-    }
-    _, response = await sanic_client.post("/api/data/data_connectors", headers=headers, json=payload)
-    return cast(Response, response)
 
 
 @pytest.mark.asyncio
@@ -98,27 +92,33 @@ async def test_post_data_connector(
     assert response.json.get("id") == data_connector["id"]
 
 
+@pytest.fixture
+def zenodo_doi_metadata() -> ParsedDOIMetadata:
+    return ParsedDOIMetadata(
+        dataset=SchemaOrgDataset(
+            distribution=[],
+            name="SwissDataScienceCenter/renku-python: Version 0.7.2",
+            description="0.7.2 (2019-11-15) Bug Fixes ensure all Person instances have valid ids (85585d0), addresses #812",  # noqa: E501
+            publisher=SchemaOrgPublisher.model_validate({"@type": "Organization", "name": "Zenodo"}),
+            provider=SchemaOrgProvider.model_validate({"@type": "Organization", "name": "datacite"}),
+        ),
+        provider=DOIProviders.doi,
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "doi", ["10.5281/zenodo.2600782", "doi:10.5281/zenodo.2600782", "https://doi.org/10.5281/zenodo.2600782"]
 )
 async def test_post_global_data_connector(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch", doi: str
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    monkeypatch: "MonkeyPatch",
+    doi: str,
+    zenodo_doi_metadata: ParsedDOIMetadata,
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
-    metadata = RCloneDOIMetadata(
-        DOI="10.5281/zenodo.2600782",
-        URL="https://doi.org/10.5281/zenodo.2600782",
-        metadataURL="https://zenodo.org/api/records/3542869",
-        provider="zenodo",
-    )
-    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
-    zenodo_metadata = DOIMetadata(
-        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
-        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
-        keywords=[],
-    )
-    _mock_get_dataset_metadata(metadata=zenodo_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    _mock_get_doi_metadata(metadata=zenodo_doi_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
     payload = {
         "storage": {
@@ -161,24 +161,30 @@ async def test_post_global_data_connector(
     assert response.json.get("id") == data_connector["id"]
 
 
+@pytest.mark.skip("The Dataverse API is temporarily out of order.")
 @pytest.mark.asyncio
 async def test_post_global_data_connector_dataverse(
     sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch"
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
-    metadata = RCloneDOIMetadata(
-        DOI="10.7910/DVN/2SA6SN",
-        URL="https://doi.org/10.7910/DVN/2SA6SN",
-        metadataURL="https://dataverse.harvard.edu/api/datasets/:persistentId/?persistentId=doi%3A10.7910%2FDVN%2F2SA6SN",
-        provider="dataverse",
+    metadata = ParsedDOIMetadata(
+        dataset=SchemaOrgDataset(
+            distribution=[],
+            name="Dataset metadata of known Dataverse installations, August 2024",
+            description="<p>This dataset contains the metadata of the datasets published in 101 Dataverse "
+            "installations, information about the metadata blocks of 106 installations, and the lists of "
+            "pre-defined licenses or dataset terms that depositors can apply to datasets in the 88 installations "
+            'that were running versions of the Dataverse software that include the "multiple-license" feature.\n\n'
+            "<p>The data is useful for improving understandings about how certain Dataverse features and metadata "
+            "fields are used and for ...",
+            keywords="Computer and Information Science, dataset metadata, dataverse, metadata blocks",
+            publisher=SchemaOrgPublisher.model_validate({"@type": "Organization", "name": "Harvard Dataverse"}),
+            provider=SchemaOrgProvider.model_validate({"@type": "Organization", "name": "datacite"}),
+        ),
+        provider=DOIProviders.doi,
     )
+
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
-    dataverse_metadata = DOIMetadata(
-        name="Dataset metadata of known Dataverse installations, August 2024",
-        description="""<p>This dataset contains the metadata of the datasets published in 101 Dataverse installations, information about the metadata blocks of 106 installations, and the lists of pre-defined licenses or dataset terms that depositors can apply to datasets in the 88 installations that were running versions of the Dataverse software that include the "multiple-license" feature.\n\n<p>The data is useful for improving understandings about how certain Dataverse features and metadata fields are used and for learning about the quality of dataset and file-level metadata within and across Dataverse installations.\n\n<p><strong>How the metadata was downloaded</strong>\n<p>The dataset metadata and metadata block JSON files were downloaded from each installation between August 25 and August 30, 2024 using a "get_dataverse_installations_metadata" function in a collection of Python functions at <a href="https://github.com/jggautier/dataverse-scripts/blob/main/dataverse_repository_curation_assistant/dataverse_repository_curation_assistant_functions.py">https://github.com/jggautier/dataverse-scripts/blob/main/dataverse_repository_curation_assistant/dataverse_repository_curation_assistant_functions.py</a>.\n\n<p>In order to get the metadata from installations that require an installation account API token to use certain Dataverse software APIs, I created a CSV file with two columns: one column named "hostname" listing each installation URL for which I was able to create an account and another column named "apikey" listing my accounts\' API tokens. The Python script expects the CSV file and the listed API tokens to get metadata and other information from installations that require API tokens in order to use certain API endpoints.\n\n<p><strong>How the files are organized</strong>\n\n<pre>\n├── csv_files_with_metadata_from_most_known_dataverse_installations\n│\xa0\xa0 ├── author_2024.08.25-2024.08.30.csv\n│\xa0\xa0 ├── contributor_2024.08.25-2024.08.30.csv\n│\xa0\xa0 ├── data_source_2024.08.25-2024.08.30.csv\n│\xa0\xa0 ├── ...\n│\xa0\xa0 └── topic_classification_2024.08.25-2024.08.30.csv\n├── dataverse_json_metadata_from_each_known_dataverse_installation\n│\xa0\xa0 ├── Abacus_2024.08.26_15.52.42.zip\n│\xa0\xa0\xa0\xa0\xa0\xa0 ├── dataset_pids_Abacus_2024.08.26_15.52.42.csv\n│\xa0\xa0\xa0\xa0\xa0\xa0 ├── Dataverse_JSON_metadata_2024.08.26_15.52.42\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── hdl_11272.1_AB2_0AQZNT_v1.0(latest_version).json\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── ...\n│\xa0\xa0\xa0\xa0\xa0\xa0 ├── metadatablocks_v5.9\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── astrophysics_v5.9.json\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── biomedical_v5.9.json\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── citation_v5.9.json\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── ...\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── socialscience_v5.6.json\n│\xa0\xa0 ├── ACSS_Dataverse_2024.08.26_00.02.51.zip\n│\xa0\xa0 ├── ...\n│\xa0\xa0 └── Yale_Dataverse_2024.08.25_03.52.57.zip\n└── dataverse_installations_summary_2024.08.30.csv\n└── dataset_pids_from_most_known_dataverse_installations_2024.08.csv\n└── license_options_for_each_dataverse_installation_2024.08.28_14.42.54.csv\n└── metadatablocks_from_most_known_dataverse_installations_2024.08.30.csv\n\n</pre>\n\n<p>This dataset contains two directories and four CSV files not in a directory.\n<p>One directory, "csv_files_with_metadata_from_most_known_dataverse_installations", contains 20 CSV files that list the values of many of the metadata fields in the "Citation" metadata block and "Geospatial" metadata block of datasets in the 101 Dataverse installations. For example, author_2024.08.25-2024.08.30.csv contains the "Author" metadata for the latest versions of all published, non-deaccessioned datasets in 101 installations, with a column for each of the four child fields: author name, affiliation, identifier type, and identifier.\n<p>The other directory, "dataverse_json_metadata_from_each_known_dataverse_installation", contains 106 zip files, one zip file for each of the 106 Dataverse installations whose sites were functioning when I attempted to collect their metadata. Each zip file contains a directory with JSON files that have information about the installation\'s metadata fields, such as the field names and how they\'re organized. For installations that had published datasets, and I was able to use Dataverse APIs to download the dataset metadata, the zip file also contains:\n<ul>\n<li>A CSV file listing information about the datasets published in the installation, including a column to indicate if the Python script was able to download the Dataverse JSON metadata for each dataset.\n<li>A directory of JSON files that contain the metadata of the installation\'s published, non-deaccessioned dataset versions in the Dataverse JSON metadata schema.\n</ul>\n<p>The dataverse_installations_summary_2024.08.30.csv file contains information about each installation, including its name, URL, Dataverse software version, and counts of dataset metadata included and not included in this dataset.\n<p>The dataset_pids_from_most_known_dataverse_installations_2024.08.csv file contains the dataset PIDs of published datasets in 101 Dataverse installations, with a column to indicate if the Python script was able to download the dataset\'s metadata. It\'s a union of all "dataset_pids_....csv" files in each of the 101 zip files in the dataverse_json_metadata_from_each_known_dataverse_installation directory.\n<p>The license_options_for_each_dataverse_installation_2024.08.28_14.42.54.csv file contains information about the licenses and data use agreements that some installations let depositors choose when creating datasets. When I collected this data, 88 of the available 106 installations were running versions of the Dataverse software that allow depositors to choose a "predefined license or data use agreement" from a dropdown menu in the dataset deposit form. For more information about this Dataverse feature, see <a href="https://guides.dataverse.org/en/5.14/user/dataset-management.html#choosing-a-license">https://guides.dataverse.org/en/5.14/user/dataset-management.html#choosing-a-license</a>.\n<p>The metadatablocks_from_most_known_dataverse_installations_2024.08.30.csv file contains the metadata block names, field names, child field names (if the field is a compound field), display names, descriptions/tooltip text, and watermarks of fields in the 106 Dataverse installations\' metadata blocks. This file is useful for learning about the metadata fields and field structures used in each installation.\n\n<p><strong>Known errors</strong>\n<p>The metadata of a few datasets from several known and functioning installations could not be downloaded.\n<p>In some cases, this is because of download timeouts caused by the datasets\' relatively large metadata exports, which contain information about the datasets\' large number of versions and files.\n<p>In other cases, datasets were publicly findable but in unpublished or deaccessioned states that prevented me from downloading their metadata export.\n\n<p><strong>About metadata blocks</strong>\n<p>Read about the Dataverse software\'s metadata blocks system at <a href="http://guides.dataverse.org/en/latest/admin/metadatacustomization.html">http://guides.dataverse.org/en/6.3/admin/metadatacustomization.html</a>""",  # noqa E501
-        keywords=["dataset metadata", "dataverse", "metadata blocks"],
-    )
-    _mock_get_dataset_metadata(metadata=dataverse_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
     doi = "10.7910/DVN/2SA6SN"
     payload = {
@@ -244,22 +250,13 @@ async def test_post_global_data_connector_invalid_doi(
 
 @pytest.mark.asyncio
 async def test_post_global_data_connector_no_duplicates(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch"
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    monkeypatch: "MonkeyPatch",
+    zenodo_doi_metadata: ParsedDOIMetadata,
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
-    metadata = RCloneDOIMetadata(
-        DOI="10.5281/zenodo.2600782",
-        URL="https://doi.org/10.5281/zenodo.2600782",
-        metadataURL="https://zenodo.org/api/records/3542869",
-        provider="zenodo",
-    )
-    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
-    zenodo_metadata = DOIMetadata(
-        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
-        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
-        keywords=[],
-    )
-    _mock_get_dataset_metadata(metadata=zenodo_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    _mock_get_doi_metadata(metadata=zenodo_doi_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
     doi = "10.5281/zenodo.2600782"
     payload = {
@@ -344,7 +341,7 @@ async def test_post_data_connector_with_azure_url(
         "visibility": "public",
         "namespace": regular_user.namespace.path.serialize(),
         "storage": {
-            "storage_url": "azure://mycontainer/myfolder",
+            "storage_url": "azure://my-container/myfolder",
             "target_path": "my/target",
         },
         "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"],
@@ -361,7 +358,7 @@ async def test_post_data_connector_with_azure_url(
     assert data_connector.get("storage") is not None
     storage = data_connector["storage"]
     assert storage.get("storage_type") == "azureblob"
-    assert storage.get("source_path") == "mycontainer/myfolder"
+    assert storage.get("source_path") == "my-container/myfolder"
     assert storage.get("target_path") == "my/target"
     assert storage.get("readonly") is True
     assert data_connector.get("created_by") == "user"
@@ -445,20 +442,21 @@ async def test_post_data_connector_with_conflicting_slug(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("headers_and_error", [("unauthorized_headers", 401), ("member_1_headers", 403)])
+@pytest.mark.parametrize(
+    "headers_name,expected_status_code", [("unauthorized_headers", 401), ("member_1_headers", 403)]
+)
 async def test_post_data_connector_without_namespace_permission(
     # NOTE: dynamically requesting async fixtures with an already running event loop causes errors in pytest.
     # to prevent this, all used fixtures have to also be listed again, so they exist at test execution time and
     # are loaded from cache
     sanic_client: SanicASGITestClient,
     user_headers,
-    headers_and_error,
+    headers_name,
+    expected_status_code,
     unauthorized_headers,
     member_1_headers,
     request,
 ) -> None:
-    headers_name, status_code = headers_and_error
-
     _, response = await sanic_client.post(
         "/api/data/groups", headers=user_headers, json={"name": "My Group", "slug": "my-group"}
     )
@@ -477,9 +475,10 @@ async def test_post_data_connector_without_namespace_permission(
             "target_path": "my/target",
         },
     }
+
     _, response = await sanic_client.post("/api/data/data_connectors", headers=headers, json=payload)
 
-    assert response.status_code == status_code, response.text
+    assert response.status_code == expected_status_code, response.text
 
 
 @pytest.mark.asyncio
@@ -581,6 +580,17 @@ async def test_get_one_by_slug_data_connector(
     assert data_connector.get("name") == "A new data connector"
     assert data_connector.get("namespace") == "user.doe"
     assert data_connector.get("slug") == "a-new-data-connector"
+
+
+@pytest.mark.asyncio
+async def test_get_data_connector_by_doi_fails_if_not_found(sanic_client, user_headers) -> None:
+    non_existing_doi = "10.5281/zenodo.9999999"
+
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/search?doi={non_existing_doi}", headers=user_headers
+    )
+
+    assert response.status_code == 404, response.text
 
 
 @pytest.mark.asyncio
@@ -867,7 +877,7 @@ async def test_patch_data_connector_as_group_editor(
 
     headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
     patch = {
-        # Test that we do require DELETE permission when sending the current namepace
+        # Test that we do require DELETE permission when sending the current namespace
         "namespace": data_connector["namespace"],
         # Test that we do require DELETE permission when sending the current visibility
         "visibility": data_connector["visibility"],
@@ -941,21 +951,10 @@ async def test_patch_global_data_connector(
     user_headers: dict[str, str],
     admin_headers: dict[str, str],
     monkeypatch: "MonkeyPatch",
+    zenodo_doi_metadata: ParsedDOIMetadata,
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
-    metadata = RCloneDOIMetadata(
-        DOI="10.5281/zenodo.2600782",
-        URL="https://doi.org/10.5281/zenodo.2600782",
-        metadataURL="https://zenodo.org/api/records/3542869",
-        provider="zenodo",
-    )
-    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
-    zenodo_metadata = DOIMetadata(
-        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
-        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
-        keywords=[],
-    )
-    _mock_get_dataset_metadata(metadata=zenodo_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    _mock_get_doi_metadata(metadata=zenodo_doi_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
     doi = "10.5281/zenodo.2600782"
     payload = {
@@ -1023,21 +1022,10 @@ async def test_delete_global_data_connector(
     user_headers: dict[str, str],
     admin_headers: dict[str, str],
     monkeypatch: "MonkeyPatch",
+    zenodo_doi_metadata: ParsedDOIMetadata,
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
-    metadata = RCloneDOIMetadata(
-        DOI="10.5281/zenodo.2600782",
-        URL="https://doi.org/10.5281/zenodo.2600782",
-        metadataURL="https://zenodo.org/api/records/3542869",
-        provider="zenodo",
-    )
-    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
-    zenodo_metadata = DOIMetadata(
-        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
-        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
-        keywords=[],
-    )
-    _mock_get_dataset_metadata(metadata=zenodo_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    _mock_get_doi_metadata(metadata=zenodo_doi_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
     doi = "10.5281/zenodo.2600782"
     payload = {
@@ -1088,7 +1076,7 @@ async def test_get_data_connector_project_links_empty(
 
 
 @pytest.mark.asyncio
-async def test_post_data_connector_project_link(
+async def test_post_data_connector_project_links(
     sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
 ) -> None:
     data_connector = await create_data_connector("Data connector 1")
@@ -1425,7 +1413,7 @@ async def test_delete_data_connector_after_linking(
 
 @pytest.mark.asyncio
 async def test_delete_project_after_linking(
-    sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
+    sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers, cluster
 ) -> None:
     data_connector = await create_data_connector("Data connector 1")
     project = await create_project(sanic_client, "Project A")
@@ -2293,6 +2281,7 @@ async def test_move_data_connector(
     origin: DataConnectorTestCase,
     destination: DataConnectorTestCase,
     dc_visibility: Visibility,
+    create_data_connector,
 ) -> None:
     # Create origin namespace
     linked_project_id: str | None = None
@@ -2346,13 +2335,12 @@ async def test_move_data_connector(
             destination_id = response.json["id"]
 
     # Create the data connector
-    response = await create_data_connector(
-        sanic_client, member_1_headers, origin_path.serialize(), "dc1", private=dc_visibility == Visibility.PRIVATE
+    data_connector = await create_data_connector(
+        "dc1", headers=member_1_headers, namespace=origin_path.serialize(), visibility=dc_visibility.value
     )
-    assert response.status_code == 201, response.text
-    assert response.json["namespace"] == origin_path.serialize()
-    dc_id = response.json["id"]
-    dc_etag = response.json["etag"]
+    assert data_connector["namespace"] == origin_path.serialize()
+    dc_id = data_connector["id"]
+    dc_etag = data_connector["etag"]
 
     # Create a project to link the DC to if the origin is not project
     if not isinstance(origin_path, ProjectPath):
@@ -2381,7 +2369,7 @@ async def test_move_data_connector(
     assert response.json["namespace"] == destination_path.serialize()
     assert response.json["visibility"] == dc_visibility.value
 
-    # Check the data connector link remains unchaged after moving
+    # Check the data connector link remains unchanged after moving
     _, response = await sanic_client.get(
         f"/api/data/projects/{linked_project_id}/data_connector_links", headers=headers
     )
@@ -2424,21 +2412,19 @@ def test_description_cleanup() -> None:
     <p>Some more text...</p>
     """
 
-    description_text = core._html_to_text(description_html)
+    description_text = _html_to_text(description_html)
 
     expected = """A description\nSome more text..."""
     assert description_text == expected
 
 
-def _mock_get_doi_metadata(metadata: RCloneDOIMetadata, sanic_client: SanicASGITestClient, monkeypatch: "MonkeyPatch"):
+def _mock_get_doi_metadata(metadata: ParsedDOIMetadata, sanic_client: SanicASGITestClient, monkeypatch: "MonkeyPatch"):
     """Mock the RCloneValidator.get_doi_metadata method."""
 
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
-    validator = sanic_client.sanic_app.ctx._dependencies.r_clone_validator
-    _orig_get_doi_metadata = validator.get_doi_metadata
 
-    async def _mock_get_doi_metadata(*args, **kwargs) -> RCloneDOIMetadata:
-        doi_metadata = await _orig_get_doi_metadata(*args, **kwargs)
+    async def _mock_get_doi_metadata(doi: DOI) -> ParsedDOIMetadata:
+        doi_metadata = await get_metadata(doi)
         if doi_metadata is not None:
             assert doi_metadata == metadata
             return doi_metadata
@@ -2446,74 +2432,67 @@ def _mock_get_doi_metadata(metadata: RCloneDOIMetadata, sanic_client: SanicASGIT
         warnings.warn("Could not retrieve DOI metadata, returning saved one", stacklevel=2)
         return metadata
 
-    monkeypatch.setattr(validator, "get_doi_metadata", _mock_get_doi_metadata)
+    monkeypatch.setattr("renku_data_services.data_connectors.core.get_metadata", _mock_get_doi_metadata)
 
 
-def _mock_get_dataset_metadata(metadata: DOIMetadata, sanic_client: SanicASGITestClient, monkeypatch: "MonkeyPatch"):
-    """Mock the _get_dataset_metadata_invenio method."""
-
-    # The Zenodo API may be unresponsive, so we mock its response
-    from renku_data_services.data_connectors.doi import metadata as metadata_mod
-
-    _orig_get_dataset_metadata_invenio = metadata_mod._get_dataset_metadata_invenio
-    _orig_get_dataset_metadata_dataverse = metadata_mod._get_dataset_metadata_dataverse
-
-    def _mock_get_dataset_metadata(original_fn):
-        async def _mock(*args, **kwargs) -> DOIMetadata | None:
-            fetched_metadata = await original_fn(*args, **kwargs)
-            if fetched_metadata is not None:
-                assert fetched_metadata == metadata
-                return fetched_metadata
-
-            warnings.warn("Could not retrieve DOI metadata, returning saved one", stacklevel=2)
-            return metadata
-
-        return _mock
-
-    monkeypatch.setattr(
-        metadata_mod, "_get_dataset_metadata_invenio", _mock_get_dataset_metadata(_orig_get_dataset_metadata_invenio)
-    )
-    monkeypatch.setattr(
-        metadata_mod,
-        "_get_dataset_metadata_dataverse",
-        _mock_get_dataset_metadata(_orig_get_dataset_metadata_dataverse),
-    )
-
-
-def _mock_get_envidat_metadata(metadata: DOIMetadata, sanic_client: SanicASGITestClient, monkeypatch: "MonkeyPatch"):
-    """Mock the _get_envidat_metadata method."""
-
-    # The Evnidat API may be unresponsive, so we mock its response
-    from renku_data_services.data_connectors.doi import metadata as metadata_mod
-
-    _orig_get_envidat_metadata = metadata_mod._get_envidat_metadata
-
-    def _mock_get_envidat_metadata(original_fn):
-        async def _mock(*args, **kwargs) -> DOIMetadata | None:
-            fetched_metadata = await original_fn(*args, **kwargs)
-            if fetched_metadata is not None:
-                assert fetched_metadata == metadata
-                return fetched_metadata
-
-            warnings.warn("Could not retrieve DOI metadata, returning saved one", stacklevel=2)
-            return metadata
-
-        return _mock
-
-    monkeypatch.setattr(metadata_mod, "_get_envidat_metadata", _mock_get_envidat_metadata(_orig_get_envidat_metadata))
-    monkeypatch.setattr(
-        metadata_mod,
-        "_get_envidat_metadata",
-        _mock_get_envidat_metadata(_orig_get_envidat_metadata),
+@pytest.fixture
+def envidat_doi_metadata() -> ParsedDOIMetadata:
+    return ParsedDOIMetadata(
+        dataset=SchemaOrgDataset(
+            distribution=[
+                SchemaOrgDistribution.model_validate(
+                    {
+                        "@type": "DataDownload",
+                        "contentUrl": "https://envidat-doi.zhc-c.s3.cloud.switch.ch/?prefix=10.16904_12",
+                        "name": "S3 URI",
+                    }
+                ),
+                SchemaOrgDistribution.model_validate(
+                    {
+                        "@type": "DataDownload",
+                        "contentUrl": "https://envidat-doi.zhc-c.s3.cloud.switch.ch/10.16904_12/CH2014 REPORT.html",
+                        "name": "CH2014 REPORT",
+                    }
+                ),
+                SchemaOrgDistribution.model_validate(
+                    {
+                        "@type": "DataDownload",
+                        "contentUrl": "https://envidat-doi.zhc-c.s3.cloud.switch.ch/10.16904_12/Dataset.html",
+                        "name": "Dataset",
+                    }
+                ),
+                SchemaOrgDistribution.model_validate(
+                    {
+                        "@type": "DataDownload",
+                        "contentUrl": "https://envidat-doi.zhc-c.s3.cloud.switch.ch/10.16904_12/graubunden_input.tar.bz2",
+                        "name": "Graubunden input",
+                    }
+                ),
+                SchemaOrgDistribution.model_validate(
+                    {
+                        "@type": "DataDownload",
+                        "contentUrl": "https://envidat-doi.zhc-c.s3.cloud.switch.ch/10.16904_12/aare_input.tar.bz2",
+                        "name": "Aare input",
+                    }
+                ),
+            ],
+            name="Alpine3D simulations of future climate scenarios CH2014",
+            description="# Overview\r\n\r\nThe CH2014-Impacts initiative is a concerted national effort to describe impacts of climate change in Switzerland quantitatively, drawing on the scientific resources available in Switzerland today. The initiative links the recently developed Swiss Climate Change Scenarios CH2011 with an evolving base of quantitative impact models. The use of a common climate data set across disciplines and research groups sets a high standard of consistency and comparability of results. Impact s...",  # noqa: E501
+            keywords="CH2011, CH2014, CLIMATE CHANGE, SNOW DEPTH, SNOW WATER EQUIVALENT",
+            publisher=SchemaOrgPublisher.model_validate(
+                {"@id": "https://www.envidat.ch", "@type": "Organization", "name": "EnviDat"}
+            ),
+        ),
+        provider=DOIProviders.envidat_v1,
     )
 
 
 async def test_validate_envidat_data_connector(
-    envidat_metadata: DOIMetadata,
+    envidat_doi_metadata: DOIMetadata,
     sanic_client: SanicASGITestClient,
     monkeypatch: "MonkeyPatch",
 ) -> None:
-    _mock_get_envidat_metadata(envidat_metadata, sanic_client, monkeypatch)
+    _mock_get_doi_metadata(envidat_doi_metadata, sanic_client, monkeypatch)
     body = GlobalDataConnectorPost(
         storage=CloudStorageCorePost(
             storage_type="doi",
@@ -2528,7 +2507,7 @@ async def test_validate_envidat_data_connector(
     config = res.data_connector.storage.configuration
     assert config["type"] == "s3"
     assert config["provider"] == "Other"
-    assert config["endpoint"].find("zhdk.cloud.switch.ch") >= 0
+    assert config["endpoint"].find("zhc-c.s3.cloud.switch.ch") >= 0
     assert res.data_connector.storage.source_path == "/envidat-doi/10.16904_12"
     assert res.data_connector.doi is not None
     assert res.data_connector.publisher_url is not None
@@ -2546,10 +2525,10 @@ async def test_validate_envidat_data_connector(
 async def test_add_envidat_data_connector(
     sanic_client: SanicASGITestClient,
     user_headers: dict[str, str],
-    envidat_metadata: DOIMetadata,
+    envidat_doi_metadata: DOIMetadata,
     monkeypatch: "MonkeyPatch",
 ) -> None:
-    _mock_get_envidat_metadata(envidat_metadata, sanic_client, monkeypatch)
+    _mock_get_doi_metadata(envidat_doi_metadata, sanic_client, monkeypatch)
     payload = {
         "storage": {
             "configuration": {"type": "doi", "doi": "10.16904/12"},
@@ -2564,3 +2543,153 @@ async def test_add_envidat_data_connector(
     assert res.json.get("publisher_name") is not None
     assert res.json.get("publisher_name").lower() == "envidat"
     assert res.json.get("publisher_url") is not None
+
+
+@pytest.mark.asyncio
+async def test_data_connectors_with_matching_slugs_different_namespaces(
+    sanic_client,
+    member_1_user: UserInfo,
+    member_1_headers,
+) -> None:
+    # Create a public project
+    project_slug = "prj1"
+    user_slug = member_1_user.namespace.path.serialize()
+    dc_slug = "dc1"
+    payload = {
+        "name": project_slug,
+        "namespace": user_slug,
+        "slug": project_slug,
+        "visibility": "public",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Create a group
+    group_slug = "test1"
+    payload = {
+        "name": group_slug,
+        "slug": group_slug,
+        "description": "Group 1 Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Create a public data connector in the project
+    storage_config = {
+        "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+        "source_path": "giab",
+        "target_path": "giab",
+    }
+    dc_in_prj_namespace = f"{member_1_user.namespace.path.serialize()}/{project_slug}"
+    payload = {
+        "name": dc_slug,
+        "namespace": dc_in_prj_namespace,
+        "slug": dc_slug,
+        "storage": storage_config,
+        "visibility": "public",
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == dc_in_prj_namespace
+    project_dc_id = response.json["id"]
+
+    # Create a public data connector in the owner user namespace
+    payload = {
+        "name": dc_slug,
+        "namespace": user_slug,
+        "slug": dc_slug,
+        "storage": storage_config,
+        "visibility": "public",
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == user_slug
+    user_dc_id = response.json["id"]
+
+    # Create a public data connector in the group namespace
+    payload = {
+        "name": dc_slug,
+        "namespace": group_slug,
+        "slug": dc_slug,
+        "storage": storage_config,
+        "visibility": "public",
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == group_slug
+    group_dc_id = response.json["id"]
+
+    # Get the user dc by its slug
+    _, response = await sanic_client.get(f"/api/data/namespaces/{user_slug}/data_connectors/{dc_slug}")
+    assert response.status_code == 200, response.text
+    assert response.json["id"] == user_dc_id
+    # Get the project dc by its slug
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{user_slug}/projects/{project_slug}/data_connectors/{dc_slug}"
+    )
+    assert response.status_code == 200, response.text
+    assert response.json["id"] == project_dc_id
+    # Get the group dc by its slug
+    _, response = await sanic_client.get(f"/api/data/namespaces/{group_slug}/data_connectors/{dc_slug}")
+    assert response.status_code == 200, response.text
+    assert response.json["id"] == group_dc_id
+    # Check we can see the 3 data connectors
+    _, response = await sanic_client.get("/api/data/data_connectors")
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 3
+
+
+async def link_dc_project(
+    sanic_client: SanicASGITestClient, data_connector_id: str, project_id: str, headers: dict
+) -> Response:
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+    return response
+
+
+async def test_get_all_dc_links(
+    sanic_client: SanicASGITestClient,
+    regular_user: UserInfo,
+    member_1_user: UserInfo,
+    member_1_headers: dict,
+    user_headers: dict[str, str],
+    envidat_doi_metadata: ParsedDOIMetadata,
+    monkeypatch: "MonkeyPatch",
+    create_project,
+) -> None:
+    # Create projects
+    p1 = await create_project(sanic_client, name="p1", visibility="public")
+    p2 = await create_project(sanic_client, name="p2", visibility="private")
+    p3 = await create_project(sanic_client, name="p3", visibility="public")
+
+    # Create envidat DC
+    _mock_get_doi_metadata(envidat_doi_metadata, sanic_client, monkeypatch)
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": "10.16904/12"},
+            "source_path": "/",
+            "target_path": "/",
+            "readonly": True,
+        }
+    }
+    _, res = await sanic_client.post("/api/data/data_connectors/global", json=payload, headers=user_headers)
+    assert res.status_code == 201
+    dc_id = res.json["id"]
+
+    # Link dc to projects
+    await link_dc_project(sanic_client, dc_id, p1["id"], user_headers)
+    await link_dc_project(sanic_client, dc_id, p2["id"], user_headers)
+    await link_dc_project(sanic_client, dc_id, p3["id"], user_headers)
+
+    # Search for links
+    _, res = await sanic_client.get("/api/data/data_connector_links", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert len(res.json) == 3
+    # If anonymous users only the 2 links to public project are shown
+    _, res = await sanic_client.get("/api/data/data_connector_links")
+    assert res.status_code == 200, res.text
+    assert len(res.json) == 2
+    assert p2["id"] not in [i["id"] for i in res.json]

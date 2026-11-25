@@ -2,8 +2,10 @@
 
 from typing import Any
 
+import pytest
+
 from renku_data_services.storage.constants import STORAGE_CONFIG
-from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.storage.rclone import RCloneValidator, convert_rclone_configuration
 
 
 def test_validate_switch_s3_no_endpoint() -> None:
@@ -62,3 +64,114 @@ def test_storage_config_no_unknown() -> None:
     storage_types = set(storage.get("Prefix") for storage in spec)
     for key in STORAGE_CONFIG:
         assert key in storage_types, f"Unknown storage type {key} in STORAGE_CONFIG."
+
+
+@pytest.mark.parametrize(
+    "input, expected",
+    [
+        (
+            {
+                "pass": "<sensitive>",
+                "type": "polybox",
+                "user": "some-user",
+                "provider": "personal",
+            },
+            {
+                "pass": "<sensitive>",
+                "type": "webdav",
+                "user": "some-user",
+                "provider": "",
+                "vendor": "owncloud",
+                "url": "https://polybox.ethz.ch/remote.php/webdav/",
+            },
+        ),
+        (
+            {
+                "pass": "some-pwd",
+                "type": "polybox",
+                "provider": "shared",
+                "public_link": "https://polybox.ethz.ch/index.php/s/8NffJ3rFyHaVyyy",
+            },
+            {
+                "pass": "some-pwd",
+                "type": "webdav",
+                "provider": "",
+                "public_link": "https://polybox.ethz.ch/index.php/s/8NffJ3rFyHaVyyy",
+                "vendor": "owncloud",
+                "url": "https://polybox.ethz.ch/public.php/webdav/",
+                "user": "8NffJ3rFyHaVyyy",
+            },
+        ),
+        (
+            {
+                "pass": "some-pwd",
+                "type": "switchDrive",
+                "user": "some-user",
+                "provider": "personal",
+            },
+            {
+                "pass": "some-pwd",
+                "type": "webdav",
+                "user": "some-user",
+                "provider": "",
+                "vendor": "owncloud",
+                "url": "https://drive.switch.ch/remote.php/webdav/",
+            },
+        ),
+        (
+            {
+                "pass": "some-pwd",
+                "type": "switchDrive",
+                "provider": "shared",
+                "public_link": "https://drive.switch.ch/index.php/s/OPSd72zrs5JG666",
+            },
+            {
+                "pass": "some-pwd",
+                "type": "webdav",
+                "provider": "",
+                "public_link": "https://drive.switch.ch/index.php/s/OPSd72zrs5JG666",
+                "vendor": "owncloud",
+                "url": "https://drive.switch.ch/public.php/webdav/",
+                "user": "OPSd72zrs5JG666",
+            },
+        ),
+        (
+            {
+                "type": "s3",
+                "endpoint": "https://s3-zh.os.switch.ch",
+                "provider": "Switch",
+                "access_key_id": "access-key",
+                "secret_access_key": "secret-key",
+            },
+            {
+                "type": "s3",
+                "endpoint": "https://s3-zh.os.switch.ch",
+                "provider": "Other",
+                "access_key_id": "access-key",
+                "secret_access_key": "secret-key",
+            },
+        ),
+        (
+            {
+                "host": "openbis-eln-lims.ethz.ch",
+                "type": "openbis",
+                "session_token": "token",
+            },
+            {
+                "host": "openbis-eln-lims.ethz.ch",
+                "type": "sftp",
+                "session_token": "token",
+                "port": "2222",
+                "user": "?",
+                "override.low_level_retries": 1,
+            },
+        ),
+        (
+            {"type": "doi", "doi": "10.16904/envidat.790"},
+            {"type": "doi", "doi": "10.16904/envidat.790"},
+        ),
+    ],
+)
+def test_rclone_convert(input: dict[str, Any], expected: dict[str, Any]) -> None:
+    converted = convert_rclone_configuration(input)
+    assert converted == expected

@@ -1,6 +1,6 @@
 """Tests for connected services blueprints."""
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, quote, urlparse
 
 import pytest
@@ -8,10 +8,18 @@ import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
+from renku_data_services import base_models
+from renku_data_services.connected_services.apispec_base import CallbackParams
+from renku_data_services.connected_services.blueprints import OAuth2ClientsBP
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
+from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_client
-from test.utils import SanicReusableASGITestClient
+from test.utils import KindCluster, SanicReusableASGITestClient
+
+if TYPE_CHECKING:
+    from renku_data_services.data_api.dependencies import DependencyManager
 
 
 @pytest_asyncio.fixture
@@ -366,6 +374,130 @@ async def test_callback_oauth2_authorization_flow(
 
 
 @pytest.mark.asyncio
+async def test_callback_oauth2_authorization_flow_error_redirects_to_next_url(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_provider
+):
+    provider = await create_oauth2_provider("provider_1")
+    provider_id = provider["id"]
+
+    next_url = "https://example.org/my-ui/callback"
+    qs = f"next_url={quote(next_url)}"
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/providers/{provider_id}/authorize?{qs}", headers=user_headers
+    )
+    assert res.status_code == 302, res.text
+    location = urlparse(res.headers["location"])
+    state = parse_qs(location.query).get("state", [None])[0]
+    assert state
+
+    callback_qs = f"state={quote(state)}&error=access_denied&error_description={quote('User canceled')}"
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?{callback_qs}")
+
+    assert res.status_code == 302, res.text
+    redirect_location = urlparse(res.headers["location"])
+    assert f"{redirect_location.scheme}://{redirect_location.netloc}{redirect_location.path}" == next_url
+    redirected_query = parse_qs(redirect_location.query)
+    assert redirected_query.get("error", [None])[0] == "access_denied"
+    assert redirected_query.get("error_description", [None])[0] == "User canceled"
+    assert redirected_query.get("state", [None])[0] == state
+
+
+@pytest.mark.asyncio
+async def test_callback_oauth2_authorization_flow_error_preserves_next_url_query(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_provider
+):
+    provider = await create_oauth2_provider("provider_1")
+    provider_id = provider["id"]
+
+    next_url = "https://example.org/my-ui/callback?existing=1"
+    qs = f"next_url={quote(next_url)}"
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/providers/{provider_id}/authorize?{qs}", headers=user_headers
+    )
+    assert res.status_code == 302, res.text
+    location = urlparse(res.headers["location"])
+    state = parse_qs(location.query).get("state", [None])[0]
+    assert state
+
+    callback_qs = (
+        f"state={quote(state)}"
+        "&error=access_denied"
+        f"&error_description={quote('User canceled')}"
+        f"&error_uri={quote('https://example.org/oauth/errors/access_denied')}"
+    )
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?{callback_qs}")
+
+    assert res.status_code == 302, res.text
+    redirect_location = urlparse(res.headers["location"])
+    redirected_query = parse_qs(redirect_location.query)
+    assert redirected_query.get("existing", [None])[0] == "1"
+    assert redirected_query.get("error", [None])[0] == "access_denied"
+    assert redirected_query.get("error_description", [None])[0] == "User canceled"
+    assert redirected_query.get("error_uri", [None])[0] == "https://example.org/oauth/errors/access_denied"
+    assert redirected_query.get("state", [None])[0] == state
+
+
+@pytest.mark.asyncio
+async def test_callback_oauth2_authorization_flow_error_redirects_with_all_optional_params(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_provider
+):
+    provider = await create_oauth2_provider("provider_1")
+    provider_id = provider["id"]
+
+    next_url = "https://example.org/my-ui/callback"
+    qs = f"next_url={quote(next_url)}"
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/providers/{provider_id}/authorize?{qs}", headers=user_headers
+    )
+    assert res.status_code == 302, res.text
+    state = parse_qs(urlparse(res.headers["location"]).query).get("state", [None])[0]
+    assert state
+
+    callback_qs = (
+        f"state={quote(state)}"
+        "&error=access_denied"
+        f"&error_description={quote('User canceled')}"
+        f"&error_uri={quote('https://example.org/oauth/errors/access_denied')}"
+        "&code=auth-code-123"
+        "&iss=https%3A%2F%2Fissuer.example.org"
+    )
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?{callback_qs}")
+
+    assert res.status_code == 302, res.text
+    redirected_query = parse_qs(urlparse(res.headers["location"]).query)
+    assert redirected_query.get("state", [None])[0] == state
+    assert redirected_query.get("error", [None])[0] == "access_denied"
+    assert redirected_query.get("error_description", [None])[0] == "User canceled"
+    assert redirected_query.get("error_uri", [None])[0] == "https://example.org/oauth/errors/access_denied"
+    assert redirected_query.get("code", [None])[0] == "auth-code-123"
+    assert redirected_query.get("iss", [None])[0] == "https://issuer.example.org"
+
+
+def test_append_query_params_returns_original_url_when_no_allowed_values() -> None:
+    next_url = "https://example.org/my-ui/callback?existing=1"
+    params = CallbackParams(state="")
+
+    result = OAuth2ClientsBP._append_query_params(next_url, params)
+
+    assert result == next_url
+
+
+@pytest.mark.asyncio
+async def test_callback_oauth2_authorization_flow_error_without_pending_connection_forbidden(
+    oauth2_test_client: SanicASGITestClient,
+    sanic_client: SanicASGITestClient,
+):
+    _ = sanic_client
+    callback_qs = "state=missing-state&error=access_denied&error_description=No+pending+connection"
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?{callback_qs}")
+
+    assert res.status_code == 403, res.text
+
+
+@pytest.mark.asyncio
 async def test_get_account(oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection):
     connection = await create_oauth2_connection("provider_1")
     connection_id = connection["id"]
@@ -443,3 +575,220 @@ async def test_get_no_installations_ghcrio(
     assert res.json is not None
     installations_list = res.json
     assert len(installations_list) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_token(oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection):
+    connection = await create_oauth2_connection("provider_1")
+    connection_id = connection["id"]
+
+    _, response = await oauth2_test_client.get(
+        f"/api/data/oauth2/connections/{connection_id}/token", headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert isinstance(response.json, dict)
+    result = response.json
+    expected_keys = {
+        "access_token",
+        "expires_at",
+        "expires_at_iso",
+        "expires_in",
+    }
+    assert set(result.keys()) == expected_keys
+    assert result.get("access_token") == "ACCESS_TOKEN"
+    assert isinstance(result.get("expires_at"), int) and result["expires_at"] > 0
+    assert isinstance(result.get("expires_at_iso"), str) and result["expires_at_iso"] != ""
+    assert result.get("expires_in") == 3600
+
+
+@pytest.mark.asyncio
+async def test_get_token_with_internal_token(
+    oauth2_test_client: SanicASGITestClient,
+    app_manager_instance: "DependencyManager",
+    regular_user: UserInfo,
+    create_oauth2_connection,
+):
+    user = base_models.AuthenticatedAPIUser(
+        id=regular_user.id,
+        email=regular_user.email or "",
+        access_token="",
+        full_name=f"{regular_user.first_name} {regular_user.last_name}",
+        first_name=regular_user.first_name,
+        last_name=regular_user.last_name,
+    )
+    internal_access_token = app_manager_instance.internal_token_mint.create_access_token(user=user, scope="test_scope")
+    headers = {"Authorization": f"Bearer {internal_access_token}"}
+    connection = await create_oauth2_connection("provider_1")
+    connection_id = connection["id"]
+
+    _, response = await oauth2_test_client.get(f"/api/data/oauth2/connections/{connection_id}/token", headers=headers)
+
+    assert response.status_code == 200, response.text
+    assert isinstance(response.json, dict)
+    result = response.json
+    expected_keys = {
+        "access_token",
+        "expires_at",
+        "expires_at_iso",
+        "expires_in",
+    }
+    assert set(result.keys()) == expected_keys
+    assert result.get("access_token") == "ACCESS_TOKEN"
+    assert isinstance(result.get("expires_at"), int) and result["expires_at"] > 0
+    assert isinstance(result.get("expires_at_iso"), str) and result["expires_at_iso"] != ""
+    assert result.get("expires_in") == 3600
+
+
+# --- Integration Group Connected Services API Tests (E1-E2) ---
+
+
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+@pytest.mark.asyncio
+async def test_oauth_callback_adds_user_to_rp(
+    oauth2_test_client: SanicASGITestClient,
+    app_manager_instance: "DependencyManager",
+    admin_user: UserInfo,
+    regular_user: UserInfo,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    create_oauth2_provider,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+
+    provider = await create_oauth2_provider("hpc-auth")
+    provider_id = provider["id"]
+
+    # Admin creates a private RP linked to the provider
+    rp_payload = {
+        "name": "hpc-auth-rp",
+        "classes": [
+            {
+                "cpu": 1,
+                "memory": 10,
+                "gpu": 0,
+                "name": "class1",
+                "max_storage": 100,
+                "default_storage": 1,
+                "default": True,
+                "node_affinities": [],
+                "tolerations": [],
+            }
+        ],
+        "quota": {"cpu": 100, "memory": 100, "gpu": 0},
+        "default": False,
+        "public": False,
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": provider_id,
+            "api_url": "https://example.org",
+            "system_name": "sys",
+        },
+    }
+    _, res = await oauth2_test_client.post("/api/data/resource_pools", headers=admin_headers, json=rp_payload)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Regular user cannot see the RP before connecting
+    _, res = await oauth2_test_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    rp_ids_before = {r["id"] for r in res.json}
+    assert rp["id"] not in rp_ids_before
+
+    # Regular user completes OAuth flow
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/providers/{provider_id}/authorize", headers=user_headers)
+    assert res.status_code == 302
+    location = res.headers["location"]
+    state = parse_qs(urlparse(location).query)["state"][0]
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?state={state}")
+    assert res.status_code == 200
+
+    # Regular user can now see the RP
+    _, res = await oauth2_test_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    rp_ids_after = {r["id"] for r in res.json}
+    assert rp["id"] in rp_ids_after
+
+    # Cleanup
+    _, res = await oauth2_test_client.delete(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers)
+    assert res.status_code == 204
+
+
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+@pytest.mark.asyncio
+async def test_delete_oauth_connection_removes_rp_access(
+    oauth2_test_client: SanicASGITestClient,
+    app_manager_instance: "DependencyManager",
+    admin_user: UserInfo,
+    regular_user: UserInfo,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    create_oauth2_provider,
+    cluster: KindCluster,
+) -> None:
+    run_migrations_for_app("common")
+
+    provider = await create_oauth2_provider("hpc-revoke")
+    provider_id = provider["id"]
+
+    rp_payload = {
+        "name": "hpc-revoke-rp",
+        "classes": [
+            {
+                "cpu": 1,
+                "memory": 10,
+                "gpu": 0,
+                "name": "class1",
+                "max_storage": 100,
+                "default_storage": 1,
+                "default": True,
+                "node_affinities": [],
+                "tolerations": [],
+            }
+        ],
+        "quota": {"cpu": 100, "memory": 100, "gpu": 0},
+        "default": False,
+        "public": False,
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": provider_id,
+            "api_url": "https://example.org",
+            "system_name": "sys",
+        },
+    }
+    _, res = await oauth2_test_client.post("/api/data/resource_pools", headers=admin_headers, json=rp_payload)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Regular user completes OAuth flow
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/providers/{provider_id}/authorize", headers=user_headers)
+    assert res.status_code == 302
+    location = res.headers["location"]
+    state = parse_qs(urlparse(location).query)["state"][0]
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?state={state}")
+    assert res.status_code == 200
+
+    # Regular user can see the RP
+    _, res = await oauth2_test_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    rp_ids_after = {r["id"] for r in res.json}
+    assert rp["id"] in rp_ids_after
+
+    # Delete the connection
+    _, res = await oauth2_test_client.get("/api/data/oauth2/connections", headers=user_headers)
+    assert res.status_code == 200
+    connections = res.json
+    conn = next(c for c in connections if c["provider_id"] == provider_id)
+    _, res = await oauth2_test_client.delete(f"/api/data/oauth2/connections/{conn['id']}", headers=user_headers)
+    assert res.status_code == 204
+
+    # Regular user can no longer see the RP
+    _, res = await oauth2_test_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    rp_ids_final = {r["id"] for r in res.json}
+    assert rp["id"] not in rp_ids_final
+
+    # Cleanup
+    _, res = await oauth2_test_client.delete(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers)
+    assert res.status_code == 204

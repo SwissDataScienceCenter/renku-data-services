@@ -61,12 +61,6 @@ class CRCValidator:
         """Get the default resource class from the default resource pool."""
         return await self.rp_repo.get_default_resource_class()
 
-    async def _get_resource_pools(
-        self,
-        user: APIUser,
-    ) -> list[ResourcePool]:
-        return await self.rp_repo.filter_resource_pools(user)
-
 
 @dataclass
 class DummyCRCValidator:
@@ -154,7 +148,7 @@ class GitProviderHelper:
         return GitProviderHelper(
             connected_services_repo=csr,
             service_url=data_service_url,
-            renku_url=f"http://{sessions_config.ingress.host}",
+            renku_url=sessions_config.renku_url,
             internal_gitlab_url=git_config.url,
             enable_internal_gitlab=enable_internal_gitlab,
         )

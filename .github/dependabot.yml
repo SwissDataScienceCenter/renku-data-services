@@ -3,15 +3,21 @@ updates:
 - package-ecosystem: "pip"
   directories:
     - "/"
+    - "/projects/k8s_watcher"
     - "/projects/renku_data_service"
-    - "/projects/background_jobs"
+    - "/projects/renku_data_tasks"
     - "/projects/secrets_storage"
   schedule:
     interval: "weekly"
     day: "sunday"
   open-pull-requests-limit: 5
   groups:
-    poetry:
+    python:
+      applies-to: version-updates
+      patterns:
+        - "*"
+    python-security:
+      applies-to: security-updates
       patterns:
         - "*"
 - package-ecosystem: "github-actions"
@@ -19,3 +25,25 @@ updates:
   schedule:
     interval: "weekly"
     day: "sunday"
+  groups:
+    actions:
+      applies-to: version-updates
+      patterns:
+        - "*"
+    actions-security:
+      applies-to: security-updates
+      patterns:
+        - "*"
+- package-ecosystem: "docker"
+  directories:
+    - "/projects/k8s_watcher"
+    - "/projects/renku_data_service"
+    - "/projects/renku_data_tasks"
+    - "/projects/secrets_storage"
+  schedule:
+    interval: "weekly"
+    day: "sunday"
+  groups:
+    docker:
+      patterns:
+        - "*"

@@ -63,6 +63,7 @@
         'strip_path_prefix': False,
         'uid': 1000,
       }),
+      'launcher_type': 'interactive',
       'name': 'Launcher 1',
     }),
     dict({
@@ -79,6 +80,7 @@
         'strip_path_prefix': False,
         'uid': 1000,
       }),
+      'launcher_type': 'interactive',
       'name': 'Launcher 2',
     }),
     dict({
@@ -95,6 +97,7 @@
         'strip_path_prefix': False,
         'uid': 1000,
       }),
+      'launcher_type': 'interactive',
       'name': 'Launcher 3',
     }),
   ])

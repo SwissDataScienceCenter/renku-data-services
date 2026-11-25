@@ -5,6 +5,7 @@ import re
 from urllib.parse import ParseResult, urlparse
 
 from renku_data_services import errors
+from renku_data_services.authz.authz import Authz
 from renku_data_services.platform import apispec, models
 
 v2_project_pattern = re.compile(r"^/p/[0-7][0-9A-HJKMNP-TV-Z]{25}$")
@@ -94,3 +95,47 @@ def validate_url_redirect_post(post: apispec.UrlRedirectPlanPost) -> models.Unsa
         source_url=validate_source_url(post.source_url),
         target_url=validate_target_url(post.target_url),
     )
+
+
+def validate_authz_config_patch(patch: apispec.AuthzConfigPatch) -> models.AuthorizationConfigPatch:
+    """Validate the update to the platform configuration."""
+    return models.AuthorizationConfigPatch(
+        create_projects=models.AuthzFlag(patch.create_projects.value) if patch.create_projects is not None else None,
+        create_groups=models.AuthzFlag(patch.create_groups.value) if patch.create_groups is not None else None,
+    )
+
+
+async def get_authz_config(authz: Authz) -> models.AuthorizationConfig:
+    """Get the current platform-wide authorization configuration."""
+    projects_permssions, zed_token = await authz.project_creation_allowed()
+    groups_permissions, _ = await authz.group_creation_allowed(zed_token)
+    return models.AuthorizationConfig(
+        create_groups=groups_permissions,
+        create_projects=projects_permssions,
+    )
+
+
+async def update_authz_config(
+    authz: Authz, etag: str, patch: models.AuthorizationConfigPatch
+) -> models.AuthorizationConfig:
+    """Update the authorization configuration."""
+    current_config = await get_authz_config(authz)
+    if current_config.etag != etag:
+        raise errors.ConflictError(
+            message="The authorization config you are trying to patch is out of date. "
+            f"Current ETag is {current_config.etag}, not {etag}.",
+        )
+
+    if patch.create_groups is not None:
+        await authz.set_group_creation_permission(patch.create_groups)
+        create_groups = patch.create_groups
+    else:
+        create_groups = current_config.create_groups
+
+    if patch.create_projects is not None:
+        await authz.set_project_creation_permission(patch.create_projects)
+        create_projects = patch.create_projects
+    else:
+        create_projects = current_config.create_projects
+
+    return models.AuthorizationConfig(create_groups=create_groups, create_projects=create_projects)

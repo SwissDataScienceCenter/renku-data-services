@@ -7,7 +7,7 @@ from typing import Any
 
 from ulid import ULID
 
-from renku_data_services.users.db import APIUser
+from renku_data_services.base_models import APIUser
 
 
 class ProviderKind(StrEnum):
@@ -18,6 +18,8 @@ class ProviderKind(StrEnum):
     github = "github"
     gitlab = "gitlab"
     google = "google"
+    zenodo = "zenodo"
+    scicat = "scicat"
 
 
 class ConnectionStatus(StrEnum):
@@ -84,6 +86,8 @@ class OAuth2Connection:
     provider_id: str
     status: ConnectionStatus
     next_url: str | None
+    user_id: str | None = None
+    client_id: str | None = None
 
     def is_connected(self) -> bool:
         """Returns whether this connection is in status 'connected'."""

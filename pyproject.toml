@@ -6,7 +6,7 @@ authors = [
   { name = "Swiss Data Science Center", email = "contact@datascience.ch" },
 ]
 readme = "README.md"
-license = "Apache License 2.0"
+license = "Apache-2.0"
 requires-python = ">=3.13"
 dynamic = ["dependencies"]
 
@@ -44,6 +44,8 @@ packages = [
   { include = "renku_data_services/metrics", from = "components" },
   { include = "renku_data_services/notifications", from = "components" },
   { include = "renku_data_services/resource_usage", from = "components" },
+  { include = "renku_data_services/persisted_logs", from = "components" },
+  { include = "renku_data_services/ssh_proxy", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -111,7 +113,8 @@ pytest-mock = "^3.14.0"
 uvloop = "^0.21.0"
 syrupy = "^4.8.2"
 ruamel-yaml = "^0.18.14"
-datamodel-code-generator = "^0.28.4"
+datamodel-code-generator = "^0.57.0"
+pytest-testmon = "^2.2.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -126,6 +129,7 @@ exclude = [
   ".devcontainer/",
   "components/renku_data_services/notebooks/cr_amalthea_session.py",
   "components/renku_data_services/notebooks/cr_jupyter_server.py",
+  "components/renku_data_services/renku_apps/cr_knative_service.py",
   "components/renku_data_services/session/cr_shipwright_buildrun.py",
   "components/renku_data_services/notebooks/oci/image_config.py",
   "components/renku_data_services/notebooks/oci/image_index.py",
@@ -191,13 +195,18 @@ exclude_dirs = [
   "components/renku_data_services/connected_services/apispec.py",
   "components/renku_data_services/notebooks/cr_amalthea_session.py",
   "components/renku_data_services/notebooks/cr_jupyter_server.py",
+  "components/renku_data_services/renku_apps/cr_knative_service.py",
+  "components/renku_data_services/authn/api/apispec.py",
 ]
 
 [tool.pytest.ini_options]
 addopts = "--cov components/ --cov bases/ --cov-report=term-missing -v"
 doctest_optionflags = "ALLOW_UNICODE"
 testpaths = ["bases", "components", "test"]
-markers = ["integration: mark a test as a integration."]
+markers = [
+  "integration: mark a test as a integration.",
+  "sessions",
+]
 filterwarnings = [
   "ignore:<class 'pytest_black.BlackItem'> is not using a cooperative constructor:pytest.PytestDeprecationWarning",
   "ignore:distutils Version classes are deprecated. Use packaging.version instead:DeprecationWarning",

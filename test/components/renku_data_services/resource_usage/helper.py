@@ -37,7 +37,8 @@ def make_resources_request(
         else "PersistentVolumeClaim"
     )
     obj_name = name if name is not None else "pod1" if obj_kind == "Pod" else "pvc1"
-    obj_phase = phase if phase is not None else "Running" if obj_kind == "Pod" else "Mounted"
+    # Possible phases from prod for PVC and Pods are: Bound, Failed, Pending, Running
+    obj_phase = phase if phase is not None else "Running" if obj_kind == "Pod" else "Bound"
     ccpu: ComputeCapacity | None = None
     if isinstance(cpu_request, ComputeCapacity):
         ccpu = cpu_request

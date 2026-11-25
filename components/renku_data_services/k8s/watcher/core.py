@@ -14,12 +14,15 @@ import httpx
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
 from renku_data_services.base_models.metrics import MetricsService
-from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.db import ResourcePoolQueryRepository
 from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.k8s.models import GVK, APIObjectInCluster, K8sObject, K8sObjectFilter
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
+from renku_data_services.notebooks.cr_amalthea_session import SessionType as AmaltheaSessionType
 from renku_data_services.notebooks.crs import State
+from renku_data_services.notebooks.models import SessionType
 
 logger = logging.getLogger(__name__)
 
@@ -186,35 +189,56 @@ async def collect_metrics(
     event_type: str,
     user_id: str,
     metrics: MetricsService,
-    rp_repo: ResourcePoolRepository,
+    rp_repo: ResourcePoolQueryRepository,
 ) -> None:
     """Track product metrics."""
-    user = APIUser(id=user_id)
+    # Dispatch metric collection by kind
+    match new_obj.meta.gvk:
+        case gvk if gvk == AMALTHEA_SESSION_GVK:
+            await __collect_session_metrics(
+                previous_obj=previous_obj,
+                new_obj=new_obj,
+                event_type=event_type,
+                user_id=user_id,
+                metrics=metrics,
+                rp_repo=rp_repo,
+            )
+        case _:
+            # NOTE: at the moment, we only collect metrics on sessions
+            pass
 
+
+async def __collect_session_metrics(
+    previous_obj: K8sObject | None,
+    new_obj: APIObjectInCluster,
+    event_type: str,
+    user_id: str,
+    metrics: MetricsService,
+    rp_repo: ResourcePoolQueryRepository,
+) -> None:
+    """Track product metrics for sessions."""
+    user = APIUser(id=user_id)
     if event_type == "DELETED":
         # session stopping
         await metrics.session_stopped(user=user, metadata={"session_id": new_obj.meta.name})
         return
+
+    session_type_raw: str | None = new_obj.obj.spec.get("sessionType")
+    session_type = (
+        SessionType.from_amalthea(AmaltheaSessionType.from_str(session_type_raw))
+        if session_type_raw
+        else SessionType.interactive
+    )
     previous_state = previous_obj.manifest.get("status", {}).get("state", None) if previous_obj else None
     match new_obj.obj.raw.get("status", {}).get("state"):
         case State.Running.value if previous_state is None or previous_state == State.NotReady.value:
             # session starting
-            resource_class_id = int(new_obj.obj.metadata.annotations.get("renku.io/resource_class_id"))
-            resource_pool = await rp_repo.get_resource_pool_from_class(k8s_watcher_admin_user, resource_class_id)
-            resource_class = await rp_repo.get_resource_class(k8s_watcher_admin_user, resource_class_id)
-
-            await metrics.session_started(
+            await __collect_session_started(
+                new_obj,
+                session_type,
                 user=user,
-                metadata={
-                    "cpu": int(resource_class.cpu * 1000),
-                    "memory": resource_class.memory,
-                    "gpu": resource_class.gpu,
-                    "storage": new_obj.obj.spec.session.storage.size,
-                    "resource_class_id": resource_class_id,
-                    "resource_pool_id": resource_pool.id or "",
-                    "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
-                    "session_id": new_obj.meta.name,
-                },
+                metrics=metrics,
+                rp_repo=rp_repo,
             )
         case State.Running.value | State.NotReady.value if previous_state == State.Hibernated.value:
             # session resumed
@@ -222,11 +246,77 @@ async def collect_metrics(
         case State.Hibernated.value if previous_state != State.Hibernated.value:
             # session hibernated
             await metrics.session_hibernated(user=user, metadata={"session_id": new_obj.meta.name})
+        case State.Succeeded.value if (
+            previous_state != State.Succeeded.value and session_type == SessionType.non_interactive
+        ):
+            # job terminated successfully
+            if previous_state == State.NotReady.value:
+                # job ran fast, without going through the running phase,
+                # emit session_started before session_job_terminated
+                await __collect_session_started(
+                    new_obj,
+                    session_type,
+                    user=user,
+                    metrics=metrics,
+                    rp_repo=rp_repo,
+                )
+            await metrics.session_job_terminated(
+                user=user, metadata={"session_id": new_obj.meta.name, "status": State.Succeeded.value.lower()}
+            )
+        case State.Failed.value if (
+            previous_state != State.Failed.value and session_type == SessionType.non_interactive
+        ):
+            # job may have failed, we need to check that the failure is from the job itself
+            error_msg = new_obj.obj.raw.get("status", {}).get("error")
+            # NOTE: we only get a text message as a way to match for job failures
+            if isinstance(error_msg, str) and "container amalthea-session terminated" in error_msg:
+                # job terminated with an error
+                if previous_state == State.NotReady.value:
+                    # job ran fast, without going through the running phase,
+                    # emit session_started before session_job_terminated
+                    await __collect_session_started(
+                        new_obj,
+                        session_type,
+                        user=user,
+                        metrics=metrics,
+                        rp_repo=rp_repo,
+                    )
+                await metrics.session_job_terminated(
+                    user=user, metadata={"session_id": new_obj.meta.name, "status": State.Failed.value.lower()}
+                )
         case _:
             pass
 
 
-def k8s_object_handler(cache: K8sDbCache, metrics: MetricsService, rp_repo: ResourcePoolRepository) -> EventHandler:
+async def __collect_session_started(
+    new_obj: APIObjectInCluster,
+    session_type: SessionType,
+    user: APIUser,
+    metrics: MetricsService,
+    rp_repo: ResourcePoolQueryRepository,
+) -> None:
+    resource_class_id = int(new_obj.obj.metadata.annotations.get("renku.io/resource_class_id"))
+    resource_pool = await rp_repo.get_resource_pool_from_class(k8s_watcher_admin_user, resource_class_id)
+    resource_class = await rp_repo.get_resource_class(k8s_watcher_admin_user, resource_class_id)
+    await metrics.session_started(
+        user=user,
+        metadata={
+            "cpu": int(resource_class.cpu * 1000),
+            "memory": resource_class.memory,
+            "gpu": resource_class.gpu,
+            "storage": new_obj.obj.spec.session.storage.size,
+            "resource_class_id": resource_class_id,
+            "resource_pool_id": resource_pool.id or "",
+            "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
+            "session_id": new_obj.meta.name,
+            "session_type": session_type.value.lower(),
+        },
+    )
+
+
+def k8s_object_handler(
+    cache: K8sDbCache, metrics: MetricsService, rp_repo: ResourcePoolQueryRepository
+) -> EventHandler:
     """Listens and to k8s events and updates the cache."""
 
     async def handler(obj: APIObjectInCluster, event_type: str) -> None:

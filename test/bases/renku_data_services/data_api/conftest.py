@@ -1,17 +1,17 @@
 import asyncio
 import contextlib
 import json
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Coroutine
 from copy import deepcopy
-from datetime import timedelta
-from typing import Any, Protocol
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal, Protocol
 
 import pytest
 import pytest_asyncio
 from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
-from httpx import Response
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
+from sqlalchemy import select
 from ulid import ULID
 
 import renku_data_services.search.core as search_core
@@ -21,7 +21,7 @@ from renku_data_services.base_models import Slug
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, NamespacePath, ServiceAdminId
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
-from renku_data_services.data_connectors.apispec import DataConnector as ApiDataConnector
+from renku_data_services.data_connectors.apispec import DataConnector, DataConnectorToProjectLink
 from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.config import from_kubeconfig_file, get_clusters
 from renku_data_services.k8s.constants import ClusterId
@@ -34,6 +34,8 @@ from renku_data_services.project.apispec import Project as ApiProject
 from renku_data_services.search.apispec import SearchResult
 from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
 from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager
+from renku_data_services.session import models as session_models
+from renku_data_services.session import orm as session_schemas
 from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import DefaultSolrAdminClient, DefaultSolrClient
 from renku_data_services.solr.solr_migrate import SchemaMigrator
@@ -287,7 +289,12 @@ async def sanic_client_with_solr(sanic_client: SanicASGITestClient, app_manager)
 class SearchReprovisionCall(Protocol):
     """The type for the `search_reprovision` fixture."""
 
-    async def __call__(self, app_manager_instance: DependencyManager, migrate_solr_schema: bool = True) -> None: ...
+    async def __call__(
+        self,
+        app_manager_instance: DependencyManager,
+        migrate_solr_schema: bool = True,
+        clear_index: bool = False,
+    ) -> None: ...
 
 
 @pytest_asyncio.fixture
@@ -295,9 +302,12 @@ async def search_reprovision(search_push_updates) -> SearchReprovisionCall:
     admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
 
     async def search_reprovision_helper(
-        app_manager_instance: DependencyManager, migrate_solr_schema: bool = True, clear_index: bool = False
+        app_manager_instance: DependencyManager,
+        migrate_solr_schema: bool = True,
+        clear_index: bool = False,
+        schema_version: Literal["latest"] | int = "latest",
     ) -> None:
-        await app_manager_instance.search_reprovisioning.run_reprovision(admin, migrate_solr_schema)
+        await app_manager_instance.search_reprovisioning.run_reprovision(admin, migrate_solr_schema, schema_version)
         await search_push_updates(app_manager_instance, clear_index=clear_index)
 
     return search_reprovision_helper
@@ -305,7 +315,10 @@ async def search_reprovision(search_push_updates) -> SearchReprovisionCall:
 
 @pytest_asyncio.fixture
 async def search_push_updates():
-    async def search_push_updates_helper(app_manager_instance: DependencyManager, clear_index: bool = False) -> None:
+    async def search_push_updates_helper(
+        app_manager_instance: DependencyManager,
+        clear_index: bool = False,
+    ) -> None:
         async with DefaultSolrClient(app_manager_instance.config.solr) as client:
             if clear_index:
                 res = await client.delete("_type:*")
@@ -313,7 +326,11 @@ async def search_push_updates():
                 async with DefaultSolrAdminClient(app_manager_instance.config.solr) as admin_client:
                     res = await admin_client.reload(None)
                     assert res.status_code == 200, res.text
-            responses = await search_core.update_solr(app_manager_instance.search_updates_repo, client, 10)
+            responses = await search_core.update_solr(
+                app_manager_instance.search_updates_repo,
+                client,
+                10,
+            )
             assert len(responses) == 0, responses
 
     return search_push_updates_helper
@@ -589,6 +606,35 @@ async def create_session_launcher(sanic_client: SanicASGITestClient, user_header
     return create_session_launcher_helper
 
 
+@pytest.fixture
+def finish_image_build(app_manager_instance: DependencyManager):
+    async def finish_image_build_helper(build_id: str):
+        async_session_maker = app_manager_instance.config.db.async_session_maker
+        async with async_session_maker() as session, session.begin():
+            stmt = select(session_schemas.BuildORM).where(session_schemas.BuildORM.id == build_id)
+            build_orm = await session.scalar(stmt)
+            assert build_orm is not None
+            build_orm.status = session_models.BuildStatus.succeeded
+            build_orm.completed_at = datetime.now(tz=UTC)
+            build_orm.result_image = "some_built_image:latest"
+            build_orm.result_repository_url = "https://github.com/some/repo.git"
+            build_orm.result_repository_git_commit_sha = "some_git_commit_sha"
+            environment = build_orm.environment
+            environment.container_image = build_orm.result_image
+            build_env = session_models.BUILD_ENVIRONMENT_CONFIGS["vscodium"]
+            environment.default_url = build_env.default_url
+            environment.strip_path_prefix = build_env.strip_path_prefix
+            environment.port = build_env.port
+            environment.uid = build_env.uid
+            environment.gid = build_env.gid
+            environment.working_directory = build_env.working_directory
+            environment.mount_directory = build_env.mount_directory
+            environment.command = build_env.command
+            environment.args = build_env.args
+
+    return finish_image_build_helper
+
+
 @pytest_asyncio.fixture
 async def create_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers):
     async def create_data_connector_helper(
@@ -622,15 +668,36 @@ async def create_data_connector(sanic_client: SanicASGITestClient, regular_user:
     return create_data_connector_helper
 
 
+@pytest_asyncio.fixture
+async def create_global_data_connector(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str]
+) -> Callable[[str], Coroutine[Any, Any, DataConnector]]:
+    async def create_global_data_connector_helper(**storage: str) -> DataConnector:
+        payload = {
+            "storage": {
+                "configuration": {"type": "s3", "provider": "AWS", "region": "us-east-1"},
+                "source_path": "",
+                "target_path": "",
+            },
+        }
+        payload["storage"].update(storage)
+        _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+        assert response.status_code == 201, response.text
+
+        return DataConnector.model_validate(response.json)
+
+    return create_global_data_connector_helper
+
+
 class CreateDataConnectorCall(Protocol):
-    async def __call__(self, name: str, user: UserInfo | None = None, **payload) -> ApiDataConnector: ...
+    async def __call__(self, name: str, user: UserInfo | None = None, **payload) -> DataConnector: ...
 
 
 @pytest_asyncio.fixture
 async def create_data_connector_model(
     sanic_client: SanicASGITestClient, regular_user: UserInfo, admin_user: UserInfo
 ) -> CreateDataConnectorCall:
-    async def create_dc_helper(name: str, user: UserInfo | None = None, **payload) -> ApiDataConnector:
+    async def create_dc_helper(name: str, user: UserInfo | None = None, **payload) -> DataConnector:
         user = user or regular_user
         headers = __make_headers(user, admin=user.id == admin_user.id)
         dc_payload = {
@@ -652,7 +719,7 @@ async def create_data_connector_model(
         _, response = await sanic_client.post("/api/data/data_connectors", headers=headers, json=dc_payload)
 
         assert response.status_code == 201, response.text
-        return ApiDataConnector.model_validate(response.json)
+        return DataConnector.model_validate(response.json)
 
     return create_dc_helper
 
@@ -702,23 +769,28 @@ async def create_data_connector_and_link_project(
 
         data_connector = await create_data_connector(name, user=user, headers=headers, **payload)
         data_connector_id = data_connector["id"]
-        response = await link_data_connector(project_id, data_connector_id, headers=headers)
-        data_connector_link = response.json
+        data_connector_link = await link_data_connector(project_id, data_connector_id, headers=headers)
 
-        return data_connector, data_connector_link
+        return data_connector, data_connector_link.model_dump()
 
     return create_data_connector_and_link_project_helper
 
 
 @pytest.fixture
-def link_data_connector(sanic_client: SanicASGITestClient):
-    async def _link_data_connector(project_id: str, dc_id: str, headers: dict[str, str]) -> Response:
+def link_data_connector(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str]
+) -> Callable[[str, str, dict[str, str] | None], Coroutine[Any, Any, DataConnectorToProjectLink]]:
+    async def _link_data_connector(
+        project_id: str, data_connector_id: str, headers: dict[str, str] | None = None
+    ) -> DataConnectorToProjectLink:
+        headers = headers or user_headers
         payload = {"project_id": project_id}
         _, response = await sanic_client.post(
-            f"/api/data/data_connectors/{dc_id}/project_links", headers=headers, json=payload
+            f"/api/data/data_connectors/{data_connector_id}/project_links", headers=headers, json=payload
         )
         assert response.status_code == 201, response.text
-        return response
+
+        return DataConnectorToProjectLink.model_validate(response.json)
 
     return _link_data_connector
 
@@ -742,7 +814,7 @@ async def create_session_secret_slot(sanic_client: SanicASGITestClient, user_hea
 
 
 @pytest_asyncio.fixture
-async def create_resource_pool(sanic_client, user_headers, admin_headers, valid_resource_pool_payload):
+async def create_resource_pool(cluster, sanic_client, user_headers, admin_headers, valid_resource_pool_payload):
     async def create_resource_pool_helper(admin: bool = False, **payload) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
         valid_resource_pool_payload.update(payload)
@@ -807,15 +879,6 @@ async def secrets_sanic_client(
     app = register_secrets_handlers(app, secrets_storage_app_manager)
     async with SanicReusableASGITestClient(app) as client:
         yield client
-
-
-def pytest_addoption(parser):
-    parser.addoption("--disable-cluster-creation", action="store_true", default=False, help="Disable cluster creation")
-
-
-@pytest_asyncio.fixture(scope="session")
-def disable_cluster_creation(request):
-    return request.config.getoption("--disable-cluster-creation")
 
 
 def __make_headers(user: UserInfo, admin: bool = False) -> dict[str, str]:

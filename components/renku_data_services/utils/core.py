@@ -82,9 +82,37 @@ def with_db_transaction(
                 kwargs["session"] = session
                 return await f(self, *args, **kwargs)
         else:
-            return await f(self, *args, **kwargs)
+            existing_session: AsyncSession = cast(AsyncSession, session_kwarg)
+            if existing_session.in_transaction():
+                return await f(self, *args, **kwargs)
+            else:
+                async with existing_session.begin():
+                    return await f(self, *args, **kwargs)
 
     return transaction_wrapper
+
+
+def with_db_session(
+    f: Callable[Concatenate[_WithSessionMaker, _P], Awaitable[_T]],
+) -> Callable[Concatenate[_WithSessionMaker, _P], Awaitable[_T]]:
+    """Initializes a session (but not a transaction)."""
+
+    @functools.wraps(f)
+    async def session_wrapper(self: _WithSessionMaker, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        session_kwarg = kwargs.get("session")
+        if "session" in kwargs and session_kwarg is not None and not isinstance(session_kwarg, AsyncSession):
+            raise errors.ProgrammingError(
+                message="The decorator that starts a DB transaction encountered an existing session "
+                f"in the keyword arguments but the session is of an unexpected type {type(session_kwarg)}"
+            )
+        if session_kwarg is None:
+            async with self.session_maker() as session:
+                kwargs["session"] = session
+                return await f(self, *args, **kwargs)
+        else:
+            return await f(self, *args, **kwargs)
+
+    return session_wrapper
 
 
 def _get_openbis_url(openbis_host: str) -> str:
@@ -106,7 +134,7 @@ async def _get_openbis_session_token(openbis_host: str, login: dict[str, Any], t
             ) from err
         if json.get("result") is None:
             raise errors.ThirdPartyAPIError(
-                detail="The response from OpenBIS was parsed but it does not contain the exepected field(s) "
+                detail="The response from OpenBIS was parsed, but it does not contain the expected field(s) "
                 "when attempting to get a session token."
             )
         return json["result"]
@@ -150,7 +178,7 @@ async def get_openbis_pat(
         if response.status_code != 200:
             logger.error(
                 f"Received a non-200 response, {response.status_code} from OpenBIS "
-                f"for performing 'getServerInformation'. Reponse content: {response.text}"
+                f"for performing 'getServerInformation'. Response content: {response.text}"
             )
             raise errors.ThirdPartyAPIError(
                 detail="OpenBIS responded with a non-200 status code when performing 'getServerInformation'."
@@ -236,3 +264,8 @@ async def get_openbis_pat(
                 "from creating a personal access token."
             )
         return json2["result"][0]["permId"], valid_to
+
+
+def get_effective_quota(a: int, b: int) -> int:
+    """Return the minimum nonzero value; return zero only if both values are zero."""
+    return a if b == 0 else b if a == 0 else min(a, b)

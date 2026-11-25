@@ -36,6 +36,14 @@ paths:
         - sessions
     get:
       summary: Get a list of all sessions for a user
+      parameters:
+        - description: Filter by session mode.
+          in: query
+          name: session_type
+          required: false
+          default: interactive
+          schema:
+            $ref: "#/components/schemas/SessionType"
       responses:
         "200":
           description: Information about the sessions
@@ -51,12 +59,12 @@ paths:
     get:
       summary: Get information about a specific session
       parameters:
-      - description: The id of the session
-        in: path
-        name: session_id
-        required: true
-        schema:
-          type: string
+        - description: The id of the session
+          in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
       responses:
         "200":
           description: Information about the session
@@ -70,12 +78,12 @@ paths:
         - sessions
     delete:
       parameters:
-      - description: The id of the session that should be deleted
-        in: path
-        name: session_id
-        required: true
-        schema:
-          type: string
+        - description: The id of the session that should be deleted
+          in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
       summary: Fully remove a session
       responses:
         "204":
@@ -87,12 +95,12 @@ paths:
     patch:
       summary: Patch a session
       parameters:
-      - description: The id of the session
-        in: path
-        name: session_id
-        required: true
-        schema:
-          type: string
+        - description: The id of the session
+          in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -114,19 +122,19 @@ paths:
     get:
       summary: Get all logs from a specific session
       parameters:
-      - description: The id of the session
-        in: path
-        name: session_id
-        required: true
-        schema:
-          type: string
-      - description: The maximum number of most-recent lines to return for each container
-        in: query
-        name: max_lines
-        required: false
-        schema:
-          type: integer
-          default: 250
+        - description: The id of the session
+          in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+        - description: The maximum number of most-recent lines to return for each container
+          in: query
+          name: max_lines
+          required: false
+          schema:
+            type: integer
+            default: 250
       responses:
         "200":
           description: The session logs
@@ -142,13 +150,13 @@ paths:
     get:
       summary: Check if a session image exists
       parameters:
-      - description: The Docker image URL (tag included) that should be fetched.
-        in: query
-        name: image_url
-        required: true
-        schema:
-          type: string
-          minLength: 1
+        - description: The Docker image URL (tag included) that should be fetched.
+          in: query
+          name: image_url
+          required: true
+          schema:
+            type: string
+            minLength: 1
       responses:
         "200":
           description: Information about the accessibility of the image
@@ -210,6 +218,11 @@ components:
               description: Sentry trace ID for linking to corresponding log entries
           required: ["code", "message"]
       required: ["error"]
+    SessionType:
+      type: string
+      enum:
+        - interactive
+        - non-interactive
     SessionPostRequest:
       properties:
         launcher_id:
@@ -220,10 +233,22 @@ components:
         resource_class_id:
           nullable: true
           type: integer
+        submission_id:
+          $ref: "#/components/schemas/SubmissionId"
         data_connectors_overrides:
           $ref: "#/components/schemas/SessionDataConnectorsOverrideList"
         env_variable_overrides:
           $ref: "#/components/schemas/EnvVariableOverrides"
+        job_command_override:
+          nullable: true
+          type: array
+          items:
+            type: string
+        job_args_override:
+          nullable: true
+          type: array
+          items:
+            type: string
       required:
         - launcher_id
       type: object
@@ -239,6 +264,10 @@ components:
           format: date-time
           nullable: true
           type: string
+        job_completed_at:
+          type: string
+          format: date-time
+          nullable: true
         lastInteraction:
           type: string
           format: date-time
@@ -247,12 +276,29 @@ components:
           "$ref": "#/components/schemas/SessionStatus"
         url:
           type: string
+          description: The direct URL of a session
+        external_url:
+          type: string
+          nullable: true
+          description: The URL to use for external access to a session (usually the UI page)
         project_id:
           $ref: "#/components/schemas/Ulid"
         launcher_id:
           $ref: "#/components/schemas/Ulid"
         resource_class_id:
           type: integer
+        session_type:
+          $ref: "#/components/schemas/SessionType"
+        frontend_variant:
+          $ref: "#/components/schemas/FrontendVariant"
+        submission_id:
+          $ref: "#/components/schemas/SubmissionId"
+          nullable: true
+        command_args:
+          type: array
+          items:
+            type: string
+          nullable: true
       required:
         - image
         - name
@@ -263,6 +309,7 @@ components:
         - project_id
         - launcher_id
         - resource_class_id
+        - session_type
       type: object
     SessionListResponse:
       items:
@@ -274,8 +321,8 @@ components:
           type: integer
         state:
           enum:
-          - running
-          - hibernated
+            - running
+            - hibernated
           type: string
         lastInteraction:
           oneOf:
@@ -284,18 +331,19 @@ components:
             - "$ref": "#/components/schemas/CurrentTime"
     CurrentTime:
       type: string
-      enum: [ "now" ]
+      enum: ["now"]
     SessionStatus:
       properties:
         message:
           type: string
         state:
           enum:
-          - running
-          - starting
-          - stopping
-          - failed
-          - hibernated
+            - running
+            - starting
+            - stopping
+            - failed
+            - hibernated
+            - succeeded
           type: string
         will_hibernate_at:
           format: date-time
@@ -312,9 +360,9 @@ components:
           type: integer
           minimum: 0
       required:
-      - state
-      - ready_containers
-      - total_containers
+        - state
+        - ready_containers
+        - total_containers
       type: object
     SessionResources:
       properties:
@@ -408,8 +456,15 @@ components:
       # The actual limit from k8s is 63 characters but we leave some leeway in case we need to make changes
       # Note that changing this should be compatible with the methods that generate server names in the code
       maxLength: 50
-      pattern: '^[a-z]([-a-z0-9]*[a-z0-9])?$'
+      pattern: "^[a-z]([-a-z0-9]*[a-z0-9])?$"
       example: d185e68d-d43-renku-2-b9ac279a4e8a85ac28d08
+    SubmissionId:
+      type: string
+      pattern: "^[a-z][-0-9a-z]{3,19}$"
+      description: |
+        When submitting a job, i.e. the launcher used is a job
+        launcher, the submission id is required to deduplicate
+        same job submissions and allows retries.
     ImageCheckResponse:
       type: object
       properties:
@@ -480,6 +535,11 @@ components:
       required:
         - architecture
         - os
+    FrontendVariant:
+      description: User's Frontend Choice.
+      type: string
+      minLength: 1
+      maxLength: 99
   responses:
     ImageCheckResponse:
       description: Information about whether a docker image is available or not and if there is a connected service then which connected service can be used to access the image.

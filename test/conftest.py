@@ -2,12 +2,11 @@
 
 import asyncio
 import os
-import secrets
 import socket
 import stat
 import subprocess
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from multiprocessing import Lock
 from pathlib import Path
 from shutil import copytree, rmtree
@@ -30,7 +29,7 @@ from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.doi.models import DOIMetadata, SchemaOrgDataset
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager
+from renku_data_services.session import constants
 from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.solr.solr_migrate import SchemaMigrator
@@ -123,29 +122,6 @@ async def authz_setup(monkeysession) -> AsyncGenerator[None, None]:
 
 
 @pytest_asyncio.fixture
-async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBConfig, None]:
-    db_name = "R_" + str(ULID()).lower() + "_" + worker_id
-    user = os.getenv("DB_USER", "renku")
-    host = os.getenv("DB_HOST", "127.0.0.1")
-    port = os.getenv("DB_PORT", "5432")
-    password = os.getenv("DB_PASSWORD", "renku")  # nosec: B105
-
-    monkeypatch.setenv("DUMMY_STORES", "true")
-    monkeypatch.setenv("DB_NAME", db_name)
-    with DatabaseJanitor(
-        user=user,
-        host=host,
-        port=port,
-        dbname=db_name,
-        version="16.2",
-        password=password,
-        template_dbname="renku_template",
-    ):
-        yield DBConfig.from_env()
-        await DBConfig.dispose_connection()
-
-
-@pytest_asyncio.fixture
 async def db_instance(monkeysession, worker_id, app_manager, event_loop) -> AsyncGenerator[DBConfig, None]:
     db_name = "R_" + str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
@@ -164,18 +140,31 @@ async def db_instance(monkeysession, worker_id, app_manager, event_loop) -> Asyn
         password=password,
         template_dbname="renku_template",
     ):
-        db = DBConfig.from_env()
-        app_manager.config.db.push(db)
+        # The app (and every repository it built) is constructed once per session and holds a
+        # single, long-lived DBConfig. Point that instance at this test's fresh database in
+        # place rather than swapping the object, so the session factory captured by the
+        # repositories sees the change. Disposing the connection clears the cached engine so the
+        # next session is opened against this database; we restore and dispose again on teardown.
+        db = app_manager.config.db
+        previous_db_name = db.db_name
+        db.db_name = db_name
+        await DBConfig.dispose_connection()
         yield db
-        await app_manager.config.db.pop()
+        db.db_name = previous_db_name
+        await DBConfig.dispose_connection()
 
 
 @pytest_asyncio.fixture
-async def authz_instance(app_manager: DependencyManager, monkeypatch) -> AsyncGenerator[AuthzConfig]:
+async def authz_instance(app_manager: TestDependencyManager, monkeypatch) -> AsyncGenerator[AuthzConfig]:
     monkeypatch.setenv("AUTHZ_DB_KEY", f"renku-{uuid4().hex}")
-    app_manager.config.authz_config.push(AuthzConfig.from_env())
-    yield app_manager.config.authz_config
-    app_manager.config.authz_config.pop()
+    # As with the database above, the app holds a single AuthzConfig for the whole session. Mutate its
+    # key in place so the (non-caching) authz clients used by the repositories pick up this
+    # test's key; restore the previous key on teardown.
+    authz_config = app_manager.config.authz_config
+    previous_key = authz_config.key
+    authz_config.key = AuthzConfig.from_env().key
+    yield authz_config
+    authz_config.key = previous_key
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -214,16 +203,57 @@ async def dummy_users():
     ]
 
 
+def pytest_addoption(parser):
+    parser.addoption("--disable-cluster-creation", action="store_true", default=False, help="Disable cluster creation")
+    parser.addoption("--enable-builds", action="store_true", default=False, help="Enable builds")
+    parser.addoption("--enable-apps", action="store_true", default=False, help="Enable apps")
+
+
+@pytest.fixture(scope="session")
+def builds_enabled(request):
+    return request.config.getoption("--enable-builds")
+
+
+@pytest.fixture(scope="session")
+def apps_enabled(request):
+    return request.config.getoption("--enable-apps")
+
+
+@pytest_asyncio.fixture(scope="session")
+def disable_cluster_creation(request):
+    return request.config.getoption("--disable-cluster-creation")
+
+
 @pytest_asyncio.fixture(scope="session")
 async def app_manager(
-    authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users, kubeconfig_path: Path
+    authz_setup,
+    monkeysession,
+    worker_id,
+    secrets_key_pair,
+    dummy_users,
+    kubeconfig_path: Path,
+    builds_enabled,
+    apps_enabled,
 ) -> AsyncGenerator[DependencyManager, None]:
     monkeysession.setenv("DUMMY_STORES", "true")
     monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
     monkeysession.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
     monkeysession.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
     monkeysession.setenv("V1_SESSIONS_ENABLED", "true")
+    monkeysession.setenv("APPS_ENABLED", str(apps_enabled))
     monkeysession.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())
+    monkeysession.setenv("DATA_DEPOSITS_JOB_IMAGE", "test-deposit-image")
+    monkeysession.setenv("RENKU_URL", "http://test-renku-url.io")
+    monkeysession.setenv("KUBERNETES_NAMESPACE", "default")
+    monkeysession.setenv("BUILD_PUSH_SECRET_NAME", constants.BUILD_DEFAULT_PUSH_SECRET_NAME)
+    monkeysession.setenv("PROJECT_STORAGE_ENABLED", "true")
+    # NOTE: The storage class here is just a placeholder. The tests do not support running
+    # sessions with read-write-many shared storage.
+    monkeysession.setenv("PROJECT_STORAGE_STORAGE_CLASS", "azurefile")
+
+    monkeysession.setenv("CREATE_BUILDS_CLIENT", str(builds_enabled))
+    if builds_enabled:
+        monkeysession.setenv("BUILD_PRIVATE_REPO_BUILDS_ENABLED", "true")
 
     dm = TestDependencyManager.from_env(dummy_users)
 
@@ -236,23 +266,6 @@ async def app_manager(
 async def app_manager_instance(app_manager, db_instance, authz_instance) -> AsyncGenerator[DependencyManager, None]:
     app_manager.metrics.reset_mock()
     yield app_manager
-
-
-@pytest_asyncio.fixture
-async def secrets_storage_app_manager(
-    db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path, kubeconfig_path: Path
-) -> AsyncGenerator[SecretsDependencyManager, None]:
-    encryption_key_path = tmp_path / "encryption-key"
-    encryption_key_path.write_bytes(secrets.token_bytes(32))
-
-    monkeypatch.setenv("ENCRYPTION_KEY_PATH", encryption_key_path.as_posix())
-    monkeypatch.setenv("DUMMY_STORES", "true")
-    monkeypatch.setenv("DB_NAME", db_config.db_name)
-    monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
-    monkeypatch.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())
-
-    dm = SecretsDependencyManager.from_env()
-    yield dm
 
 
 @pytest_asyncio.fixture
@@ -506,16 +519,27 @@ def cluster_name():
 
 
 @pytest.fixture(scope="session")
-def kubeconfig_path(monkeysession):
-    kconf = ".kind-kubeconfig.yaml"
-    monkeysession.setenv("KUBECONFIG", kconf)
+def kubeconfig_path(monkeysession, disable_cluster_creation, tmpdir_factory):
+    if disable_cluster_creation:
+        kconf = Path("~/.kube/config").expanduser()
+    else:
+        tmp_path = tmpdir_factory.mktemp("kube")
+        kconf = tmp_path / ".kind-kubeconfig.yaml"
+    monkeysession.setenv("KUBECONFIG", str(kconf))
     return Path(kconf)
 
 
 @pytest.fixture(scope="session")
-def cluster(cluster_name, kubeconfig_path: Path, monkeysession):
+def cluster(
+    cluster_name, kubeconfig_path: Path, monkeysession, disable_cluster_creation, builds_enabled
+) -> Generator[KindCluster, None]:
     # NOTE: The config_name of the cluster has to match the name of the
     # kubeconfig file in the K8S_CONFIGS_ROOT folder
     monkeysession.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())
-    with KindCluster(cluster_name, kubeconfig=str(kubeconfig_path)) as cluster:
+    with KindCluster(
+        cluster_name,
+        kubeconfig=str(kubeconfig_path),
+        create_cluster=not disable_cluster_creation,
+        setup_shipwright=builds_enabled,
+    ) as cluster:
         yield cluster

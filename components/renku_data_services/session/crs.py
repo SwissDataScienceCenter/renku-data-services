@@ -2,9 +2,17 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, RootModel
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from renku_data_services.session.cr_shipwright_buildrun import Build, Git, ParamValue, Strategy, Toleration
+from renku_data_services.session.cr_shipwright_buildrun import (
+    Build,
+    Condition,
+    Git,
+    ParamValue,
+    Strategy,
+    Toleration,
+    Value,
+)
 from renku_data_services.session.cr_shipwright_buildrun import Model as _BuildRun
 from renku_data_services.session.cr_shipwright_buildrun import Output as BuildOutput
 from renku_data_services.session.cr_shipwright_buildrun import Retention1 as Retention
@@ -17,10 +25,10 @@ from renku_data_services.session.cr_tekton_taskrun import TaskRunBase as _TaskRu
 class Metadata(BaseModel):
     """Basic k8s metadata spec."""
 
-    class Config:
-        """Do not exclude unknown properties."""
-
-        extra = "allow"
+    model_config = ConfigDict(
+        # Do not exclude unknown properties.
+        extra="allow",
+    )
 
     name: str
     namespace: str | None = None
@@ -38,6 +46,20 @@ class BuildRun(_BuildRun):
     apiVersion: str = "shipwright.io/v1beta1"
     # Here we overwrite the default from ASModel because it is too weakly typed
     metadata: Metadata  # type: ignore[assignment]
+
+    def __get_param_value(self, key: str) -> str | None:
+        paramValues = self.spec.paramValues or (self.spec.build.spec.paramValues if self.spec.build.spec else None)
+        if not paramValues:
+            return None
+        res = next((i for i in paramValues if i.name == key), None)
+        if not res:
+            return None
+        return res.value
+
+    @property
+    def frontend_variant(self) -> str | None:
+        """Get the frontend variant from the parameters."""
+        return self.__get_param_value("frontend")
 
 
 class GitSource(BuildSource):

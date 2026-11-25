@@ -92,8 +92,8 @@ ALLOWED_SLOW_ENDPOINTS = [
     ("/oauth2/providers", "POST"),
 ]
 
-# TODO: RE-enable schemathesis when CI setup for notebooks / sessions is ready
-EXCLUDE_PATH_PREFIXES = ["/sessions", "/notebooks"]
+# TODO: RE-enable schemathesis when CI setup for notebooks / sessions / apps is ready
+EXCLUDE_PATH_PREFIXES = ["/sessions", "/notebooks", "/apps"]
 
 
 @pytest.mark.schemathesis

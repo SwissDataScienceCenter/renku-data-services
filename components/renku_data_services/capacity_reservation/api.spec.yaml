@@ -159,9 +159,7 @@ components:
           type: integer
           example: 42
         project_template_id:
-          type: string
-          nullable: true
-          example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+          $ref: "#/components/schemas/Ulid"
         recurrence:
           $ref: "#/components/schemas/RecurrenceConfig"
         provisioning:

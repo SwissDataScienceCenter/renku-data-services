@@ -32,9 +32,9 @@ paths:
       requestBody:
         required: true
         content:
-         application/json:
-              schema:
-                $ref: "#/components/schemas/PlatformConfigPatch"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlatformConfigPatch"
       responses:
         "200":
           description: The updated platform configuration
@@ -42,6 +42,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlatformConfig"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - platform
+  /platform/authorization_config:
+    get:
+      summary: Get the current authorization configuration for Renku
+      responses:
+        "200":
+          description: The authorization configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthzConfig"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - platform
+    patch:
+      summary: Update the authorization configuration
+      description: |
+        Requires admin permissions.
+      parameters:
+        - $ref: "#/components/parameters/If-Match"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthzConfigPatch"
+      responses:
+        "200":
+          description: The updated platform configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthzConfig"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -88,76 +125,76 @@ paths:
       tags:
         - platform
   /platform/redirects/{source_url}:
-      get:
-        summary: Return a redirect info for the specified source URL
-        parameters:
-          - in: path
-            name: source_url
-            required: true
-            description: The url-encoded source URL
-            schema:
-              type: string
-        responses:
-          "200":
-            description: The redirect plan
-            content:
-              application/json:
-                schema:
-                  $ref: "#/components/schemas/UrlRedirectPlan"
-          "404":
-            description: No redirect for the source URL
-            content:
-              application/json:
-                schema:
-                  $ref: "#/components/schemas/ErrorResponse"
-          default:
-            $ref: "#/components/responses/Error"
-        tags:
-          - platform
-      patch:
-        summary: Update a redirect plan
-        parameters:
-          - in: path
-            name: source_url
-            required: true
-            description: The url-encoded (original) source URL
-            schema:
-              type: string
-          - $ref: "#/components/parameters/If-Match"
-        requestBody:
+    get:
+      summary: Return a redirect info for the specified source URL
+      parameters:
+        - in: path
+          name: source_url
           required: true
+          description: The url-encoded source URL
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The redirect plan
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UrlRedirectPlanPatch"
-        responses:
-          "200":
-            description: The redirect info was updated
-            content:
-              application/json:
-                schema:
-                  $ref: "#/components/schemas/UrlRedirectPlan"
-          default:
-            $ref: "#/components/responses/Error"
-        tags:
-          - platform
-      delete:
-        summary: Delete a redirect plan
-        parameters:
-          - in: path
-            name: source_url
-            required: true
-            description: The url-encoded (original) source URL
+                $ref: "#/components/schemas/UrlRedirectPlan"
+        "404":
+          description: No redirect for the source URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - platform
+    patch:
+      summary: Update a redirect plan
+      parameters:
+        - in: path
+          name: source_url
+          required: true
+          description: The url-encoded (original) source URL
+          schema:
+            type: string
+        - $ref: "#/components/parameters/If-Match"
+      requestBody:
+        required: true
+        content:
+          application/json:
             schema:
-              type: string
-          - $ref: "#/components/parameters/If-Match"
-        responses:
-          "204":
-            description: The redirect plan was removed or did not exist in the first place
-          default:
-            $ref: "#/components/responses/Error"
-        tags:
-          - platform
+              $ref: "#/components/schemas/UrlRedirectPlanPatch"
+      responses:
+        "200":
+          description: The redirect info was updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UrlRedirectPlan"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - platform
+    delete:
+      summary: Delete a redirect plan
+      parameters:
+        - in: path
+          name: source_url
+          required: true
+          description: The url-encoded (original) source URL
+          schema:
+            type: string
+        - $ref: "#/components/parameters/If-Match"
+      responses:
+        "204":
+          description: The redirect plan was removed or did not exist in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - platform
 components:
   schemas:
     PlatformConfig:
@@ -184,15 +221,13 @@ components:
         The URL that should be redirected. Must begin with `/projects` or
         `https://gitlab.renkulab.io/`
       type: string
-      example:
-        "/projects/ns/slug"
+      example: "/projects/ns/slug"
     TargetUrl:
       description: |
         The URL that should be redirected to. Must begin with `https://` or
         have the structure `/p/[ULID]`
       type: string
-      example:
-        "/p/project-ulid"
+      example: "/p/project-ulid"
     UrlRedirectPlanList:
       description: A list of redirect info objects
       type: array
@@ -215,7 +250,7 @@ components:
     UrlRedirectPlansGetQuery:
       description: Query params for redirect list get request
       allOf:
-      - $ref: "#/components/schemas/PaginationRequest"
+        - $ref: "#/components/schemas/PaginationRequest"
     UrlRedirectPlanPatch:
       description: Schema for updating a redirect info
       type: object
@@ -286,6 +321,35 @@ components:
             - "message"
       required:
         - "error"
+    AuthzFlag:
+      type: string
+      enum: ["admins_only", "registered_users"]
+      description: |
+        Controls whether only admins or every registered user can perform a specific action.
+    AuthzConfig:
+      description: The authorization configuration for the whole platform.
+      type: object
+      properties:
+        etag:
+          $ref: "#/components/schemas/ETag"
+        create_projects:
+          $ref: "#/components/schemas/AuthzFlag"
+        create_groups:
+          $ref: "#/components/schemas/AuthzFlag"
+      required:
+        - etag
+        - create_projects
+        - create_groups
+      additionalProperties: false
+    AuthzConfigPatch:
+      description: Patch of the configuration of RenkuLab
+      type: object
+      properties:
+        create_projects:
+          $ref: "#/components/schemas/AuthzFlag"
+        create_groups:
+          $ref: "#/components/schemas/AuthzFlag"
+      additionalProperties: false
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses

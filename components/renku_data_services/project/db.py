@@ -7,7 +7,7 @@ import random
 import string
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-from typing import Concatenate, ParamSpec, TypeVar
+from typing import Concatenate, ParamSpec, Protocol, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import ColumnElement, Select, delete, distinct, func, or_, select, update
@@ -18,7 +18,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
+from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType, _AuthzConverter
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope, Visibility
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import RESET, ProjectPath, ProjectSlug
@@ -38,10 +38,17 @@ from renku_data_services.session.core import (
     validate_unsaved_session_launcher,
 )
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.storage import orm as storage_schemas
 from renku_data_services.users.db import UserRepo
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.core import with_db_transaction
+
+
+class AppsCleanupProtocol(Protocol):
+    """Protocol for tearing down the apps of a project that may no longer host them."""
+
+    async def delete_apps_for_project(self, project_id: ULID) -> None:
+        """Delete every app deployment belonging to the given project."""
+        ...
 
 
 class ProjectRepository:
@@ -58,6 +65,7 @@ class ProjectRepository:
         self.group_repo: GroupRepository = group_repo
         self.search_updates_repo: SearchUpdatesRepo = search_updates_repo
         self.authz = authz
+        self.apps_cleanup: AppsCleanupProtocol | None = None
 
     async def get_projects(
         self,
@@ -230,6 +238,14 @@ class ProjectRepository:
         """Insert a new project entry."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
+        allowed = await self.authz.has_permission(
+            user, ResourceType.platform, _AuthzConverter.platform().object_id, Scope.CREATE_PROJECTS
+        )
+        if not allowed:
+            raise errors.ForbiddenError(
+                message="Your administrator has limited who can create projects in the "
+                "platform and you are not allowed to create projects.",
+            )
         ns = await session.scalar(
             select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == project.namespace.lower())
         )
@@ -350,6 +366,12 @@ class ProjectRepository:
                 if isinstance(patch.visibility, str)
                 else project_apispec.Visibility(patch.visibility.value)
             )
+            if (
+                visibility_orm != project_apispec.Visibility.public
+                and project.visibility == project_apispec.Visibility.public
+                and self.apps_cleanup is not None
+            ):
+                await self.apps_cleanup.delete_apps_for_project(project_id=project_id)
             project.visibility = visibility_orm
         if patch.repositories is not None:
             project.repositories = [
@@ -401,6 +423,9 @@ class ProjectRepository:
         if project is None:
             return None
 
+        if self.apps_cleanup is not None:
+            await self.apps_cleanup.delete_apps_for_project(project_id=project_id)
+
         dcs = await session.execute(
             select(distinct(ns_schemas.EntitySlugORM.data_connector_id))
             .where(ns_schemas.EntitySlugORM.project_id == project_id)
@@ -409,10 +434,6 @@ class ProjectRepository:
         dcs = [e for e in dcs.scalars().all() if e]
 
         await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-
-        await session.execute(
-            delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == str(project_id))
-        )
 
         if dcs != []:
             await session.execute(delete(dc_schemas.DataConnectorORM).where(dc_schemas.DataConnectorORM.id.in_(dcs)))

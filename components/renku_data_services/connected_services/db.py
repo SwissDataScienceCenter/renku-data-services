@@ -1,6 +1,9 @@
 """Adapters for connected services database classes."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from sqlalchemy import and_, select
@@ -11,15 +14,21 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
+from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.connected_services import models
 from renku_data_services.connected_services import orm as schemas
 from renku_data_services.connected_services.oauth_http import (
     OAuthHttpClientFactory,
     OAuthHttpFactoryError,
 )
+from renku_data_services.crc import orm as crc_schemas
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.users.db import APIUser
+from renku_data_services.utils.core import with_db_transaction
 from renku_data_services.utils.cryptography import encrypt_string
+
+if TYPE_CHECKING:
+    from renku_data_services.crc.db import MemberRepository
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +41,50 @@ class ConnectedServicesRepository:
         session_maker: Callable[..., AsyncSession],
         oauth_client_factory: OAuthHttpClientFactory,
         encryption_key: bytes,
+        member_repo: MemberRepository,
     ):
         self.session_maker = session_maker
         self.encryption_key = encryption_key
         self.oauth_client_factory = oauth_client_factory
         self.supported_image_registry_providers = {models.ProviderKind.gitlab, models.ProviderKind.github}
+        self.member_repo = member_repo
+
+    async def _get_rp_ids_for_provider(self, client_id: str, session: AsyncSession) -> list[int]:
+        """Get all resource pool IDs linked to a given OAuth2 provider."""
+        rps = await session.scalars(
+            select(crc_schemas.ResourcePoolORM).where(crc_schemas.ResourcePoolORM.remote_provider_id == client_id)
+        )
+        return [rp.id for rp in rps]
+
+    @with_db_transaction
+    async def on_oauth2_connected(self, user_id: str, client_id: str, session: AsyncSession | None = None) -> None:
+        """Grant user viewer access to all RPs linked to the provider."""
+        if session is None:
+            raise errors.ProgrammingError(message="A session must be set to query the database")
+        admin = InternalServiceAdmin()
+        rp_ids = await self._get_rp_ids_for_provider(client_id, session)
+        if rp_ids:
+            try:
+                await self.member_repo.update_user_resource_pools(admin, user_id, rp_ids, append=True, session=session)
+            except errors.BaseError as e:
+                logger.warning(
+                    f"Failed to auto-grant member {user_id} to resource pools {rp_ids} for provider {client_id}: {e}"
+                )
+
+    @with_db_transaction
+    async def on_oauth2_disconnected(self, user_id: str, client_id: str, session: AsyncSession | None = None) -> None:
+        """Revoke user viewer access from all RPs linked to the provider."""
+        if session is None:
+            raise errors.ProgrammingError(message="A session must be set to query the database")
+        admin = InternalServiceAdmin()
+        rp_ids = await self._get_rp_ids_for_provider(client_id, session)
+        if rp_ids:
+            try:
+                await self.member_repo.remove_user_resource_pools(admin, user_id, rp_ids, session=session)
+            except errors.BaseError as e:
+                logger.warning(
+                    f"Failed to auto-revoke member {user_id} from resource pools {rp_ids} for provider {client_id}: {e}"
+                )
 
     async def get_oauth2_clients(
         self,
@@ -148,9 +196,6 @@ class ConnectedServicesRepository:
                 client.oidc_issuer_url = patch.oidc_issuer_url
             elif patch.oidc_issuer_url == "":
                 client.oidc_issuer_url = None
-            # Unset oidc_issuer_url when the kind has been changed to a value other than 'generic_oidc'
-            if client.kind != models.ProviderKind.generic_oidc:
-                client.oidc_issuer_url = None
 
             await session.flush()
             await session.refresh(client)
@@ -190,6 +235,16 @@ class ConnectedServicesRepository:
                 return False
 
             await session.delete(conn)
+            await session.flush()
+
+            try:
+                await self.on_oauth2_disconnected(conn.user_id, conn.client_id, session=session)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to sync resource pool memberships after OAuth2 disconnection for user "
+                    f"{conn.user_id} and provider {conn.client_id}: {e}"
+                )
+
             return True
 
     async def get_oauth2_connections(
@@ -240,6 +295,19 @@ class ConnectedServicesRepository:
             )
 
         return connection
+
+    async def get_oauth2_connection_next_url_by_state(self, state: str) -> str | None:
+        """Get the saved next_url for a pending OAuth2 connection using state."""
+        if not state:
+            return None
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(schemas.OAuth2ConnectionORM)
+                .where(schemas.OAuth2ConnectionORM.state == state)
+                .where(schemas.OAuth2ConnectionORM.status == models.ConnectionStatus.pending)
+            )
+            connection = result.one_or_none()
+            return connection.next_url if connection else None
 
     async def get_provider_for_image(self, user: APIUser, image: Image) -> models.ImageProvider | None:
         """Find a provider supporting the given image."""

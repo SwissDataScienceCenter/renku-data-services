@@ -54,6 +54,7 @@ class SolrClientConfig:
     core: str
     user: Optional[SolrUser] = None
     timeout: int = 600
+    major_version: str = "9"
     configset: str = "_default"
 
     @classmethod
@@ -63,6 +64,7 @@ class SolrClientConfig:
         core = os.environ.get("SOLR_CORE", "renku-search")
         username = os.environ.get("SOLR_USER")
         password = os.environ.get("SOLR_PASSWORD")
+        maj_version = os.environ.get("SOLR_MAJOR_VERSION", "9")
 
         tstr = os.environ.get("SOLR_REQUEST_TIMEOUT", "600")
         try:
@@ -72,7 +74,7 @@ class SolrClientConfig:
             timeout = 600
 
         user = SolrUser(username=username, password=str(password)) if username is not None else None
-        return cls(url, core, user, timeout)
+        return cls(url, core, user, timeout, maj_version)
 
     def __str__(self) -> str:
         return (
@@ -622,12 +624,18 @@ class SolrClient(AbstractAsyncContextManager, ABC):
         """Delete data that matches the `query`."""
         ...
 
+    @property
+    @abstractmethod
+    def config(self) -> SolrClientConfig:
+        """Get the config for the client."""
+        ...
+
 
 class DefaultSolrClient(SolrClient):
     """Default implementation of the solr client."""
 
     def __init__(self, cfg: SolrClientConfig):
-        self.config = cfg
+        self.__config = cfg
         url_parsed = list(urlparse(cfg.base_url))
         url_parsed[2] = urljoin(url_parsed[2], f"/solr/{cfg.core}")
         burl = urlunparse(url_parsed)
@@ -636,6 +644,11 @@ class DefaultSolrClient(SolrClient):
 
     def __repr__(self) -> str:
         return f"DefaultSolrClient(delegate={self.delegate}, config={self.config})"
+
+    @property
+    def config(self) -> SolrClientConfig:
+        """The client config."""
+        return self.__config
 
     async def __aenter__(self) -> Self:
         await self.delegate.__aenter__()
@@ -768,9 +781,14 @@ class DefaultSolrAdminClient(SolrAdminClient):
     """
 
     def __init__(self, cfg: SolrClientConfig):
-        self.config = cfg
+        self.__config = cfg
         bauth = BasicAuth(username=cfg.user.username, password=cfg.user.password) if cfg.user is not None else None
         self.delegate = AsyncClient(auth=bauth, base_url=self.config.base_url, timeout=cfg.timeout)
+
+    @property
+    def config(self) -> SolrClientConfig:
+        """The client config."""
+        return self.__config
 
     async def __aenter__(self) -> Self:
         await self.delegate.__aenter__()
@@ -792,10 +810,23 @@ class DefaultSolrAdminClient(SolrAdminClient):
             # if the core doesn't exist, solr returns 200 with an empty body
             return data if data.get("name") == self.config.core else None
 
+    async def create_collection(self, coll_name: str | None) -> None:
+        """Create a collection with the given name or the name from the config object."""
+        coll = coll_name or self.config.core
+        data = {"name": coll, "numShards": 1}
+        resp = await self.delegate.post("/api/collections", json=data)
+        if not resp.is_success:
+            raise SolrClientCreateCoreException(coll, resp)
+        else:
+            return None
+
     async def create(self, core_name: str | None) -> None:
         """Create a core with the given `core_name` or the name provided in the config object."""
         core = core_name or self.config.core
-        data = {"create": {"name": core, "configSet": self.config.configset}}
+        data: dict[str, Any] = {"create": {"name": core, "configSet": self.config.configset}}
+        if self.config.major_version == "10":
+            await self.create_collection(core)
+            data = {"name": core}
         resp = await self.delegate.post("/api/cores", json=data)
         if not resp.is_success:
             raise SolrClientCreateCoreException(core, resp)

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import NewType
 
 from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models.core import Slug
 from renku_data_services.base_models.nel import Nel
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.entity_schema import Fields
@@ -17,16 +18,21 @@ SolrToken = NewType("SolrToken", str)
 # https://github.com/apache/solr/blob/bcb9f144974ed07aa3b66766302474542067b522/solr/solrj/src/java/org/apache/solr/client/solrj/util/ClientUtils.java#L163
 __defaultSpecialChars = '\\+-!():^[]"{}~*?|&;/'
 
+# Remove these words from textual queries
+__query_words = ["OR", "AND", "NOT"]
+
 
 def __escape(input: str, bad_chars: str) -> str:
-    output = ""
-    for c in input:
-        if c.isspace() or bad_chars.find(c) >= 0:
-            output += "\\"
+    if input in __query_words:
+        return input.lower()
+    else:
+        output = ""
+        for c in input:
+            if c.isspace() or bad_chars.find(c) >= 0:
+                output += "\\"
 
-        output += c
-
-    return output
+            output += c
+        return output
 
 
 def __escape_query(input: str) -> str:
@@ -186,10 +192,34 @@ def public_only() -> SolrToken:
 
 
 def content_all(text: str) -> SolrToken:
-    """Search the content_all field with fuzzy searching each term."""
-    terms: list[SolrToken] = list(map(lambda s: SolrToken(__escape_query(s) + "~"), re.split("\\s+", text)))
-    terms_str = "(" + " ".join(terms) + ")"
-    return SolrToken(f"{Fields.content_all}:{terms_str}")
+    """Search free text across several fields, weighting better matches higher.
+
+    The text is fuzzy-matched against the broad ``content_all`` field and, with a
+    higher boost, against ``name``. The whole text is also matched *exactly* (no
+    fuzzy) against ``nameKeyword`` with the highest boost: that field is a
+    ``keyword`` type that keeps the entire title -- including spaces -- as a single,
+    case-insensitive token, so typing a project's exact title reliably matches and
+    ranks it first, regardless of spaces, hyphens or underscores. A single-word
+    query is additionally matched exactly against the untokenized ``slug``. Scores
+    from all matching clauses are summed, so name/title hits rank above generic
+    content matches.
+    """
+    words = [__escape_query(w) for w in re.split(r"\s+", text) if w != ""]
+    fuzzy = " ".join(f"{w}~" for w in words)
+    clauses = [
+        f"{Fields.content_all}:({fuzzy})",
+        f"{Fields.name}:({fuzzy})^2",
+        # Exact, case-insensitive match of the whole title. nameKeyword is
+        # untokenized (it keeps spaces), and its query analyzer lowercases, so we
+        # only need to escape the text. If we use words we will lose the spaces.
+        # But we want the spaces so that we can have a strong score on exact name matches.
+        f'{Fields.name_keyword}:"{__escape_query(text.strip())}"^10',
+    ]
+    # A slug is a single, untokenized, lowercased token, so only a whitespace-free
+    # query can match it exactly. Lowercase the term since slugs are always lowercase.
+    if Slug.from_str(text) is not None:
+        clauses.append(f'{Fields.slug}:"{__escape_query(text.lower())}"^5')
+    return SolrToken("(" + " OR ".join(clauses) + ")")
 
 
 def created_by_exists() -> SolrToken:

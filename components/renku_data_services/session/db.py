@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Protocol
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.selectable import CompoundSelect
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -18,6 +19,13 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.data_connectors.orm import DataConnectorORM, DataConnectorToProjectLinkORM
+from renku_data_services.project.apispec import Visibility as ProjectVisibility
+from renku_data_services.project.models import SessionSecret
+from renku_data_services.project.orm import SessionSecretORM, SessionSecretSlotORM
+from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.repositories.models import Metadata, RepositoryVisibility
+from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.k8s_client import ShipwrightClient
@@ -26,6 +34,60 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from renku_data_services.session.config import BuildsConfig
+
+
+def _validate_app_launcher_project_visibility(
+    launcher_type: models.LauncherType, project_visibility: ProjectVisibility
+) -> None:
+    """Enforce that an app launcher can only live in a public project."""
+    if not models.app_launcher_project_visibility_is_valid(
+        launcher_type, project_is_public=project_visibility == ProjectVisibility.public
+    ):
+        raise errors.ValidationError(message="An app launcher can only be created in a public project.")
+
+
+def _build_restricted_launcher_ids(
+    project_id: ULID,
+    allowed_dcs: list[str] | None = None,
+) -> CompoundSelect:
+    """Build a query returning IDs of restricted session launchers."""
+
+    DC_P = models.SessionLauncherDataConnectorPolicyName
+    SL_P = models.SessionLauncherSecretPolicyName
+    DC = DataConnectorORM
+    DCLink = DataConnectorToProjectLinkORM
+    LauncherDC = schemas.SessionLauncherDataConnectorORM
+    LauncherSL = schemas.SessionLauncherSecretORM
+
+    restricted_secrets = select(LauncherSL.launcher_id).where(
+        LauncherSL.project_id == project_id,
+        LauncherSL.policy == SL_P.excluded,
+    )
+
+    restricted_dcs = (
+        select(LauncherDC.launcher_id)
+        .join(
+            DCLink,
+            DCLink.id == LauncherDC.data_connector_to_project_link_id,
+        )
+        .join(DC, DC.id == DCLink.data_connector_id)
+        .where(
+            LauncherDC.project_id == project_id,
+            DCLink.project_id == project_id,
+            or_(
+                LauncherDC.policy == DC_P.excluded,
+                and_(
+                    LauncherDC.policy == DC_P.read_only,
+                    DC.readonly.is_(False),
+                ),
+            ),
+        )
+    )
+
+    if allowed_dcs is not None:
+        restricted_dcs = restricted_dcs.where(DCLink.data_connector_id.in_(allowed_dcs))
+
+    return restricted_dcs.union_all(restricted_secrets)
 
 
 class SessionEnvironmentRepositoryProtocol(Protocol):
@@ -42,6 +104,14 @@ class SessionEnvironmentRepositoryProtocol(Protocol):
         ...
 
 
+class AppLauncherCleanupProtocol(Protocol):
+    """Protocol for tearing down the app deployment backing a launcher that is going away."""
+
+    async def delete_app_for_launcher_id(self, launcher_id: ULID) -> None:
+        """Delete the app deployment backing the given launcher, if one exists."""
+        ...
+
+
 class SessionRepository(SessionEnvironmentRepositoryProtocol):
     """Repository for sessions."""
 
@@ -52,12 +122,15 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         resource_pools: ResourcePoolRepository,
         shipwright_client: ShipwrightClient | None,
         builds_config: BuildsConfig,
+        git_repositories_repo: GitRepositoriesRepository,
     ) -> None:
         self.session_maker = session_maker
         self.project_authz: Authz = project_authz
         self.resource_pools: ResourcePoolRepository = resource_pools
         self.shipwright_client = shipwright_client
         self.builds_config = builds_config
+        self.git_repositories_repo = git_repositories_repo
+        self.apps_cleanup: AppLauncherCleanupProtocol | None = None
 
     async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
@@ -162,6 +235,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 repository=environment.build_parameters.repository,
                 repository_revision=environment.build_parameters.repository_revision,
                 context_dir=environment.build_parameters.context_dir,
+                ai_agents=environment.build_parameters.ai_agents,
             )
             session.add(new_build_parameters)
 
@@ -192,28 +266,35 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             repository=new_build_parameters_environment.repository,
             repository_revision=new_build_parameters_environment.repository_revision,
             context_dir=new_build_parameters_environment.context_dir,
+            ai_agents=new_build_parameters_environment.ai_agents,
         )
         session.add(build_parameters_orm)
 
+        build_env = models.BUILD_ENVIRONMENT_CONFIGS.get(new_build_parameters_environment.frontend_variant)
+        if not build_env:
+            raise errors.ValidationError(
+                message=f"Frontend variant {new_build_parameters_environment.frontend_variant} is not valid or "
+                "cannot be found."
+            )
         environment_orm = schemas.EnvironmentORM(
             name=launcher.name,
             created_by_id=user.id,
             description=f"Generated environment for {launcher.name}",
-            container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
-            default_url="/lab",  # TODO: This should come from the build
-            port=8888,  # TODO: This should come from the build
-            working_directory=None,  # TODO: This should come from the build
-            mount_directory=None,  # TODO: This should come from the build
-            uid=1000,  # TODO: This should come from the build
-            gid=1000,  # TODO: This should come from the build
-            environment_kind=models.EnvironmentKind.CUSTOM,
-            command=None,  # TODO: This should come from the build
-            args=None,  # TODO: This should come from the build
+            container_image=build_env.container_image,
+            default_url=build_env.default_url,
+            port=build_env.port,
+            working_directory=build_env.working_directory,
+            mount_directory=build_env.mount_directory,
+            uid=build_env.uid,
+            gid=build_env.gid,
+            environment_kind=build_env.environment_kind,
+            command=build_env.command,
+            args=build_env.args,
             creation_date=datetime.now(UTC).replace(microsecond=0),
-            environment_image_source=models.EnvironmentImageSource.build,
+            environment_image_source=build_env.environment_image_source,
             build_parameters_id=build_parameters_orm.id,
             build_parameters=build_parameters_orm,
-            strip_path_prefix=False,
+            strip_path_prefix=build_env.strip_path_prefix,
         )
         session.add(environment_orm)
         return environment_orm
@@ -283,6 +364,15 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         if not update.build_parameters:
             return
 
+        if update.args is RESET:
+            environment.args = None
+        elif update.args is not None:
+            environment.args = update.args
+        if update.command is RESET:
+            environment.command = None
+        elif update.command is not None:
+            environment.command = update.command
+
         build_parameters = update.build_parameters
 
         if build_parameters.repository is not None:
@@ -303,6 +393,10 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             environment.build_parameters.context_dir = None
         elif build_parameters.context_dir:
             environment.build_parameters.context_dir = build_parameters.context_dir
+        if build_parameters.ai_agents is RESET:
+            environment.build_parameters.ai_agents = None
+        elif build_parameters.ai_agents is not None:
+            environment.build_parameters.ai_agents = build_parameters.ai_agents
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: ULID, patch: models.EnvironmentPatch
@@ -368,13 +462,23 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             )
 
         async with self.session_maker() as session:
-            res = await session.scalars(
-                select(schemas.SessionLauncherORM)
+            allowed_dcs = await self.project_authz.resources_with_permission(
+                user, user.id, ResourceType.data_connector, Scope.READ
+            )
+
+            restricted_launcher_ids = _build_restricted_launcher_ids(project_id, allowed_dcs)
+
+            res = await session.execute(
+                select(
+                    schemas.SessionLauncherORM,
+                    schemas.SessionLauncherORM.id.in_(restricted_launcher_ids).label("is_restricted"),
+                )
                 .where(schemas.SessionLauncherORM.project_id == project_id)
                 .order_by(schemas.SessionLauncherORM.creation_date.desc())
             )
+
             launcher = res.all()
-            return [item.dump() for item in launcher]
+            return [item.dump(is_restricted=is_restricted) for item, is_restricted in launcher]
 
     async def get_launcher(self, user: base_models.APIUser, launcher_id: ULID) -> models.SessionLauncher:
         """Get one session launcher from the database."""
@@ -394,7 +498,22 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     message=f"Session launcher with id '{launcher_id}' does not exist or you do not have access to it."
                 )
 
-            return launcher.dump()
+            allowed_dcs = await self.project_authz.resources_with_permission(
+                user, user.id, ResourceType.data_connector, Scope.READ
+            )
+
+            restricted_launcher_ids = _build_restricted_launcher_ids(launcher.project_id, allowed_dcs)
+
+            is_restricted = await session.scalar(
+                select(
+                    schemas.SessionLauncherORM.id.in_(restricted_launcher_ids).label("is_restricted"),
+                ).where(
+                    schemas.SessionLauncherORM.id == launcher.id,
+                    schemas.SessionLauncherORM.project_id == launcher.project_id,
+                )
+            )
+
+            return launcher.dump(is_restricted=is_restricted)
 
     async def insert_launcher(
         self, user: base_models.APIUser, launcher: models.UnsavedSessionLauncher
@@ -419,6 +538,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 raise errors.MissingResourceError(
                     message=f"Project with id '{project_id}' does not exist or you do not have access to it."
                 )
+
+            _validate_app_launcher_project_visibility(launcher.launcher_type, project.visibility)
 
             environment_id: ULID
             environment: models.Environment
@@ -452,30 +573,40 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     repository=launcher.environment.repository,
                     repository_revision=launcher.environment.repository_revision,
                     context_dir=launcher.environment.context_dir,
+                    ai_agents=launcher.environment.ai_agents,
                 )
                 session.add(build_parameters_orm)
+
+                env = models.BUILD_ENVIRONMENT_CONFIGS.get(launcher.environment.frontend_variant)
+                if not env:
+                    raise errors.ValidationError(
+                        message=f"Frontend variant {launcher.environment.frontend_variant} is not valid or "
+                        "cannot be found."
+                    )
+
+                cmd_args = self.__make_cmd_and_args(launcher.launcher_type, launcher.environment)
+                cmd = cmd_args[0] if cmd_args else None
+                args = cmd_args[1] if cmd_args else None
 
                 environment_orm = schemas.EnvironmentORM(
                     name=launcher.name,
                     created_by_id=user.id,
                     description=f"Generated environment for {launcher.name}",
-                    container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
-                    default_url=constants.BUILD_URL_PATH_MAP.get(
-                        launcher.environment.frontend_variant, constants.BUILD_DEFAULT_URL_PATH
-                    ),
-                    port=constants.BUILD_PORT,  # TODO: This should come from the build
-                    working_directory=constants.BUILD_WORKING_DIRECTORY,  # TODO: This should come from the build
-                    mount_directory=constants.BUILD_MOUNT_DIRECTORY,  # TODO: This should come from the build
-                    uid=constants.BUILD_UID,  # TODO: This should come from the build
-                    gid=constants.BUILD_GID,  # TODO: This should come from the build
-                    environment_kind=models.EnvironmentKind.CUSTOM,
-                    command=None,  # TODO: This should come from the build
-                    args=None,  # TODO: This should come from the build
+                    container_image=env.container_image,
+                    default_url=env.default_url,
+                    port=env.port,
+                    working_directory=env.working_directory,
+                    mount_directory=env.mount_directory,
+                    uid=env.uid,
+                    gid=env.gid,
+                    environment_kind=env.environment_kind,
+                    command=cmd or env.command,
+                    args=args or env.args,
                     creation_date=datetime.now(UTC).replace(microsecond=0),
-                    environment_image_source=models.EnvironmentImageSource.build,
+                    environment_image_source=env.environment_image_source,
                     build_parameters_id=build_parameters_orm.id,
                     build_parameters=build_parameters_orm,
-                    strip_path_prefix=False,  # TODO: Should this maybe be adjustable?
+                    strip_path_prefix=env.strip_path_prefix,
                 )
                 session.add(environment_orm)
 
@@ -528,6 +659,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 env_variables=models.EnvVar.to_dict(launcher.env_variables) if launcher.env_variables else None,
                 created_by_id=user.id,
                 creation_date=datetime.now(UTC).replace(microsecond=0),
+                launcher_type=launcher.launcher_type,
             )
             session.add(launcher_orm)
             await session.flush()
@@ -560,6 +692,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     message=f"Project with id '{project_id}' does not exist or you do not have access to it."
                 )
 
+            _validate_app_launcher_project_visibility(launcher.launcher_type, project.visibility)
+
             if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:
                 environment = self.__copy_environment(user, session, launcher.environment)
                 environment_id = environment.id
@@ -574,11 +708,81 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 resource_class_id=launcher.resource_class_id,
                 disk_storage=launcher.disk_storage,
                 env_variables=models.EnvVar.to_dict(launcher.env_variables) if launcher.env_variables else None,
+                launcher_type=launcher.launcher_type,
                 created_by_id=user.id,
                 creation_date=datetime.now(UTC).replace(microsecond=0),
             )
             session.add(launcher_orm)
             await session.flush()
+
+            # NOTE: copy session launchers secret permissions
+            source_secret_policies = await session.scalars(
+                select(schemas.SessionLauncherSecretORM).where(
+                    schemas.SessionLauncherSecretORM.launcher_id == launcher.id
+                )
+            )
+
+            destination_secret_slots = await session.scalars(
+                select(SessionSecretSlotORM).where(SessionSecretSlotORM.project_id == project_id)
+            )
+
+            destination_secret_slot_by_filename = {link.filename: link for link in destination_secret_slots}
+
+            for secret_slot_policy in source_secret_policies:
+                secret_slot_filename = secret_slot_policy.secret_slot.filename
+                destination_secret_slot = destination_secret_slot_by_filename.get(secret_slot_filename)
+
+                # destination_secret_slots should be a superset of source_secret_policies, if it is not, e.g. due to
+                # a race condition (the secret slot was deleted before completing the copy), we ignore it.
+                if destination_secret_slot is None:
+                    continue
+
+                new_secret_slot_policy = schemas.SessionLauncherSecretORM(
+                    project_id=project_id,
+                    launcher_id=launcher_orm.id,
+                    secret_slot_id=destination_secret_slot.id,
+                    policy=secret_slot_policy.policy,
+                )
+                session.add(new_secret_slot_policy)
+            await session.flush()
+
+            # NOTE: copy session launcher data connector permissions
+            # this will also copy permissions for data connectors that are invisible to the user
+            # This is intentional, otherwise users who have access to the data connectors will be
+            # given default permissions.
+            source_dc_policies = await session.scalars(
+                select(schemas.SessionLauncherDataConnectorORM).where(
+                    schemas.SessionLauncherDataConnectorORM.launcher_id == launcher.id
+                )
+            )
+
+            destination_dc_links = await session.scalars(
+                select(DataConnectorToProjectLinkORM).where(DataConnectorToProjectLinkORM.project_id == project_id)
+            )
+
+            destination_dc_links_by_dc_id = {link.data_connector_id: link for link in destination_dc_links}
+
+            for dc_policy in source_dc_policies:
+                source_dc_id = dc_policy.data_connector_to_project_link.data_connector.id
+                dc_link = destination_dc_links_by_dc_id.get(source_dc_id)
+
+                # destination_dc_links should be a superset of source_dc_policies, if it is not, e.g. due to
+                # a race condition (the data connector was deleted before completing the copy), we ignore it.
+                if dc_link is None:
+                    continue
+
+                new_dc_policy = schemas.SessionLauncherDataConnectorORM(
+                    project_id=project_id,
+                    launcher_id=launcher_orm.id,
+                    data_connector_to_project_link_id=dc_link.id,
+                    policy=dc_policy.policy,
+                )
+                session.add(new_dc_policy)
+            await session.flush()
+
+            # NOTE: copy session launcher repository permissions
+            # TODO...
+
             await session.refresh(launcher_orm)
             return launcher_orm.dump()
 
@@ -756,25 +960,35 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                     repository=new_custom_built_environment.repository,
                     repository_revision=new_custom_built_environment.repository_revision,
                     context_dir=new_custom_built_environment.context_dir,
+                    ai_agents=new_custom_built_environment.ai_agents,
                 )
                 session.add(build_parameters_orm)
 
-                launcher.environment.container_image = (
-                    "image:unknown-at-the-moment"  # TODO: This should come from the build
-                )
-                launcher.environment.default_url = "/lab"  # TODO: This should come from the build
-                launcher.environment.port = 8888  # TODO: This should come from the build
-                launcher.environment.working_directory = None  # TODO: This should come from the build
-                launcher.environment.mount_directory = None  # TODO: This should come from the build
-                launcher.environment.uid = 1000  # TODO: This should come from the build
-                launcher.environment.gid = 1000  # TODO: This should come from the build
-                launcher.environment.environment_kind = models.EnvironmentKind.CUSTOM
-                launcher.environment.command = None  # TODO: This should come from the build
-                launcher.environment.args = None  # TODO: This should come from the build
-                launcher.environment.environment_image_source = models.EnvironmentImageSource.build
+                frontend_variant = models.FrontendVariant(new_custom_built_environment.frontend_variant)
+                build_env = models.BUILD_ENVIRONMENT_CONFIGS.get(frontend_variant)
+                if not build_env:
+                    raise errors.ValidationError(
+                        message=f"Frontend variant {frontend_variant} is not valid or cannot be found."
+                    )
+
+                cmd_args = self.__make_cmd_and_args(launcher.launcher_type, new_custom_built_environment)
+                cmd = cmd_args[0] if cmd_args else None
+                args = cmd_args[1] if cmd_args else None
+
+                launcher.environment.container_image = build_env.container_image
+                launcher.environment.default_url = build_env.default_url
+                launcher.environment.port = build_env.port
+                launcher.environment.working_directory = build_env.working_directory
+                launcher.environment.mount_directory = build_env.mount_directory
+                launcher.environment.uid = build_env.uid
+                launcher.environment.gid = build_env.gid
+                launcher.environment.environment_kind = build_env.environment_kind
+                launcher.environment.command = cmd or build_env.command
+                launcher.environment.args = args or build_env.args
+                launcher.environment.environment_image_source = build_env.environment_image_source
                 launcher.environment.build_parameters_id = build_parameters_orm.id
                 launcher.environment.build_parameters = build_parameters_orm
-                launcher.environment.strip_path_prefix = False
+                launcher.environment.strip_path_prefix = build_env.strip_path_prefix
 
                 await session.flush()
             case _:
@@ -805,6 +1019,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             if not authorized:
                 raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
+            if launcher.launcher_type == models.LauncherType.app and self.apps_cleanup is not None:
+                await self.apps_cleanup.delete_app_for_launcher_id(launcher_id=launcher_id)
+
             await session.delete(launcher)
             if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:
                 await session.delete(launcher.environment)
@@ -827,17 +1044,12 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
-            if user.id is not None:
-                await self._refresh_build(build=build, session=session, user_id=user.id)
+            await self._refresh_build(build=build, session=session)
 
             return build.dump()
 
     async def get_environment_builds(self, user: base_models.APIUser, environment_id: ULID) -> list[models.Build]:
         """Get all builds from a session environment."""
-
-        if not user.is_authenticated or user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-
         async with self.session_maker() as session, session.begin():
             environment = await session.scalar(
                 select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
@@ -865,7 +1077,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
             # Check and refresh the status of in-progress builds
             for build in builds:
-                await self._refresh_build(build=build, session=session, user_id=user.id)
+                await self._refresh_build(build=build, session=session)
 
             return [build.dump() for build in builds]
 
@@ -886,7 +1098,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 raise errors.MissingResourceError(message=not_found_message)
 
             authorized = await self._get_environment_authorization(
-                session=session, user=user, environment=environment, scope=Scope.READ
+                session=session, user=user, environment=environment, scope=Scope.WRITE
             )
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_message)
@@ -910,7 +1122,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 .order_by(schemas.BuildORM.id.desc())
             )
             async for item in in_progress_builds:
-                await self._refresh_build(build=item, session=session, user_id=user.id)
+                await self._refresh_build(build=item, session=session)
                 if item.status == models.BuildStatus.in_progress:
                     raise errors.ConflictError(
                         message=f"Session environment with id '{build.environment_id}' already has a build in progress."
@@ -928,21 +1140,28 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             build_orm = schemas.BuildORM(
                 environment_id=build.environment_id,
                 status=models.BuildStatus.in_progress,
+                result_repository_url=build_parameters.repository,
             )
+
+            launcher = launcher_orm.dump() if launcher_orm is not None else None
+
+            params: models.ShipwrightBuildRunParams | None = None
+            if self.shipwright_client is not None:
+                params = await self._get_buildrun_params(
+                    user=user, build=build_orm.dump(), build_parameters=build_parameters, launcher=launcher
+                )
+                build_orm.result_image = params.output_image
+            else:
+                logger.error("Shipwright client is None")
+
             session.add(build_orm)
             await session.flush()
             await session.refresh(build_orm)
-
-        result = build_orm.dump()
-        launcher = launcher_orm.dump() if launcher_orm is not None else None
+            result = build_orm.dump()
 
         if self.shipwright_client is not None:
-            params = self._get_buildrun_params(
-                user=user, build=result, build_parameters=build_parameters, launcher=launcher
-            )
+            assert params is not None
             await self.shipwright_client.create_image_build(params=params, user_id=user.id)
-        else:
-            logger.error("Shipwright client is None")
 
         return result
 
@@ -967,7 +1186,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
-            await self._refresh_build(build=build, session=session, user_id=user.id)
+            await self._refresh_build(build=build, session=session)
 
             if build.status == models.BuildStatus.succeeded or build.status == models.BuildStatus.failed:
                 raise errors.ValidationError(
@@ -1002,29 +1221,34 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             result = await session.scalars(stmt)
             build = result.one_or_none()
 
+            not_found_message = f"Build with id '{build_id}' does not exist or you do not have access to it."
             if build is None:
-                raise errors.MissingResourceError(
-                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
-                )
+                raise errors.MissingResourceError(message=not_found_message)
 
-            if build.environment.environment_kind == models.EnvironmentKind.GLOBAL:
-                authorized = True
+            authorized = await self._get_environment_authorization(
+                session=session, user=user, environment=build.environment, scope=Scope.WRITE
+            )
+
+            # If the output image is private, check that the user can read the source repository
+            if build.result_image is None:
+                authorized = False
             else:
-                launcher = await session.scalar(
-                    select(schemas.SessionLauncherORM).where(
-                        schemas.SessionLauncherORM.environment_id == build.environment_id
-                    )
-                )
-                if launcher is None:
-                    authorized = False
-                else:
-                    authorized = await self.project_authz.has_permission(
-                        user, ResourceType.project, launcher.project_id, Scope.WRITE
-                    )
+                if self.builds_config.private_builds_enabled and build.result_image.startswith(
+                    self.builds_config.build_output_private_image_prefix
+                ):
+                    if build.result_repository_url is None:
+                        authorized = False
+                    else:
+                        repo_data = await self.git_repositories_repo.get_repository(
+                            repository_url=build.result_repository_url,
+                            user=user,
+                            etag=None,
+                        )
+                        if not isinstance(repo_data.metadata, Metadata) or not repo_data.metadata.pull_permission:
+                            authorized = False
+
             if not authorized:
-                raise errors.MissingResourceError(
-                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
-                )
+                raise errors.MissingResourceError(message=not_found_message)
 
         build_model = build.dump()
 
@@ -1032,11 +1256,15 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             raise errors.MissingResourceError(message=f"Build with id '{build_id}' does not have logs.")
 
         return await self.shipwright_client.get_image_build_logs(
-            buildrun_name=build_model.k8s_name, user_id=user.id, max_log_lines=max_log_lines
+            buildrun_name=build_model.k8s_name, max_log_lines=max_log_lines
         )
 
-    async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession, user_id: str) -> None:
-        """Refresh the status of a build by querying Shipwright."""
+    async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession) -> None:
+        """Refresh the status and environment of a build by querying Shipwright.
+
+        Once the build run has completed, the corresponding session launcher's environment
+        is updated to allow launching sessions with the newly built image.
+        """
         if build.status != models.BuildStatus.in_progress:
             return
 
@@ -1046,8 +1274,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             return
 
         # TODO: consider how we can parallelize calls to `shipwright_client` for refreshes.
-        status_update = await self.shipwright_client.update_image_build_status(
-            buildrun_name=build.dump().k8s_name, user_id=user_id
+        status_update, frontend_var = await self.shipwright_client.update_image_build_status(
+            buildrun_name=build.dump().k8s_name
         )
 
         if status_update.update is None:
@@ -1064,21 +1292,45 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             build.result_image = update.result.image
             build.result_repository_url = update.result.repository_url
             build.result_repository_git_commit_sha = update.result.repository_git_commit_sha
-            # Also update the session environment here
-            # TODO: move this to its own method where build parameters determine args
+
             environment = build.environment
             environment.container_image = build.result_image
-            # An older version was hardcoding the values but we can and should
-            # rely on the defaults for args and command
-            if environment.command is not None:
-                environment.command = None
-            if environment.args is not None:
-                environment.args = None
+
+            # Do not overwrite `command` and `args` for jobs
+            is_non_interactive = False
+            launcher = await session.scalar(
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.environment_id == environment.id)
+            )
+            if launcher and launcher.launcher_type == models.LauncherType.non_interactive:
+                is_non_interactive = True
+
+            build_env = models.BUILD_ENVIRONMENT_CONFIGS.get(frontend_var) if frontend_var else None
+            if build_env:
+                # NOTE: This is necessary because if the environment changed from jupyterlab to ttyd (for example)
+                # then ttyd may use different configuration for some parameters. And if these are not updated
+                # properly the new session image will not run.
+                environment.default_url = build_env.default_url
+                environment.strip_path_prefix = build_env.strip_path_prefix
+                environment.port = build_env.port
+                environment.uid = build_env.uid
+                environment.gid = build_env.gid
+                environment.working_directory = build_env.working_directory
+                environment.mount_directory = build_env.mount_directory
+                if not is_non_interactive:
+                    environment.command = build_env.command
+                    environment.args = build_env.args
+            else:
+                logger.error(
+                    f"Build {build.id}: could not find frontend variant '{frontend_var}' "
+                    "in the preset configurations and "
+                    "have skipped updating the launcher environment configuration. "
+                    "This may lead to a failing session. The frontend variant should be added to the code."
+                )
 
         await session.flush()
         await session.refresh(build)
 
-    def _get_buildrun_params(
+    async def _get_buildrun_params(
         self,
         user: base_models.APIUser,
         build: models.Build,
@@ -1096,16 +1348,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         builder_image = self.builds_config.build_builder_image or constants.BUILD_DEFAULT_BUILDER_IMAGE
         run_image = self.builds_config.build_run_image or constants.BUILD_DEFAULT_RUN_IMAGE
 
-        output_image_prefix = (
-            self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
-        )
-        output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
-        output_image_tag = build.k8s_name
-        output_image = f"{output_image_prefix}{output_image_name}:{output_image_tag}"
-
         # TODO: define the build strategy from `build_parameters`
         build_strategy_name = self.builds_config.build_strategy_name or constants.BUILD_DEFAULT_BUILD_STRATEGY_NAME
-        push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
 
         node_selector = self.builds_config.node_selector
         tolerations = self.builds_config.tolerations
@@ -1130,6 +1374,47 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             annotations["renku.io/launcher_id"] = str(launcher.id)
             annotations["renku.io/project_id"] = str(launcher.project_id)
 
+        result = await self.git_repositories_repo.get_repository(
+            repository_url=git_repository,
+            user=user,
+            etag=None,
+        )
+
+        if result.is_error:
+            raise errors.UnauthorizedError(
+                message=f"You do not have the required credentials to clone the code repository {git_repository}."
+            )
+
+        authentication_secret: models.AuthenticationSecret | None = None
+        output_image_prefix = self.builds_config.build_output_image_prefix
+        push_secret_name = self.builds_config.push_secret_name
+
+        visibility: RepositoryVisibility = RepositoryVisibility.public
+        if isinstance(result.metadata, Metadata):
+            visibility = result.metadata.visibility
+
+        if visibility == RepositoryVisibility.private:
+            if not self.builds_config.private_builds_enabled:
+                raise errors.CannotStartBuildError(message="Private repository builds are not enabled")
+            if isinstance(result.metadata, Metadata) and not result.metadata.pull_permission:
+                raise errors.ForbiddenError(
+                    message=f"You do not have the required permissions to clone the code repository {git_repository}."
+                )
+            token: dict[str, Any] | None = await self.git_repositories_repo.get_token(
+                repository_url=git_repository, user=user
+            )
+            authentication_secret = models.AuthenticationSecret(
+                username="token",
+                password=token.get("access_token", "") if token is not None else "",
+            )
+
+            output_image_prefix = self.builds_config.build_output_private_image_prefix
+            push_secret_name = self.builds_config.push_private_secret_name
+
+        output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
+        output_image_tag = build.k8s_name
+        output_image = f"{output_image_prefix}{output_image_name}:{output_image_tag}"
+
         params = models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
@@ -1138,6 +1423,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             output_image=output_image,
             build_strategy_name=build_strategy_name,
             push_secret_name=push_secret_name,
+            authentication_secret=authentication_secret,
             retention_after_failed=retention_after_failed,
             retention_after_succeeded=retention_after_succeeded,
             build_timeout=build_timeout,
@@ -1146,8 +1432,11 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             labels=labels,
             annotations=annotations,
             frontend=build_parameters.frontend_variant,
+            ai_agents=build_parameters.ai_agents,
             git_repository_revision=git_repository_revision,
             context_dir=context_dir,
+            build_insecure_output_enabled=self.builds_config.build_insecure_output_enabled,
+            insecure_registries=self.builds_config.build_insecure_registries,
         )
 
         platform = models.Platform.linux_amd64
@@ -1175,6 +1464,16 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             authorized = await self.project_authz.has_permission(user, ResourceType.project, launcher.project_id, scope)
         return authorized
 
+    def __make_cmd_and_args(
+        self, launcher_type: models.LauncherType, env: models.UnsavedBuildParameters
+    ) -> tuple[list[str], list[str]] | None:
+        if launcher_type == models.LauncherType.non_interactive:
+            cmd = env.job_command or []
+            args = env.job_args or []
+            return (cmd, args)
+        else:
+            return None
+
     @classmethod
     def make_session_environment_repo(
         cls,
@@ -1182,14 +1481,182 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         project_authz: Authz,
     ) -> SessionEnvironmentRepositoryProtocol:
         """Create an instance of SessionEnvironmentRepositoryProtocol."""
-        # NOTE: resource_pools, shipwright_client and builds_config are set to None
-        # because the SessionEnvironmentRepositoryProtocol only exposes database
-        # operations for session environments.
+        # NOTE: resource_pools, shipwright_client, builds_config and git_repositories_repo
+        # are set to None because the SessionEnvironmentRepositoryProtocol only
+        # exposes database operations for session environments.
         instance = cls(
             session_maker,
             project_authz=project_authz,
             resource_pools=None,  # type: ignore
             shipwright_client=None,
             builds_config=None,  # type: ignore
+            git_repositories_repo=None,  # type: ignore
         )
         return instance
+
+    async def get_all_session_secret_slots_from_launcher(
+        self, user: base_models.APIUser, launcher: models.SessionLauncher
+    ) -> list[models.SessionLauncherSecret]:
+        """Get the secret parameters of a launcher entry."""
+
+        project_id = launcher.project_id
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            result = await session.execute(
+                select(
+                    SessionSecretSlotORM,
+                    func.coalesce(
+                        schemas.SessionLauncherSecretORM.policy,
+                        models.SessionLauncherSecretPolicyName.included.value,
+                    ).label("policy"),
+                )
+                .outerjoin(
+                    schemas.SessionLauncherSecretORM,
+                    and_(
+                        schemas.SessionLauncherSecretORM.secret_slot_id == SessionSecretSlotORM.id,
+                        schemas.SessionLauncherSecretORM.launcher_id == launcher.id,
+                    ),
+                )
+                .where(
+                    SessionSecretSlotORM.project_id == launcher.project_id,
+                )
+                .order_by(SessionSecretSlotORM.id.desc())
+            )
+
+            return [
+                models.SessionLauncherSecret(
+                    launcher_id=launcher.id,
+                    secret_slot_id=slot.id,
+                    policy=models.SessionLauncherSecretPolicyName.safe_parse(
+                        policy,
+                        models.SessionLauncherSecretPolicyName.excluded,
+                    ),
+                )
+                for slot, policy in result.all()
+            ]
+
+    async def update_launcher_secret_slots(
+        self,
+        user: base_models.APIUser,
+        launcher: models.SessionLauncher,
+        patches: list[models.SessionLauncherSecretPatch],
+    ) -> list[models.SessionLauncherSecret]:
+        """Patch the secret parameters of the session launcher."""
+
+        project_id = launcher.project_id
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        secret_slot_ids = [patch.secret_slot_id for patch in patches]
+
+        if len(secret_slot_ids) != len(set(secret_slot_ids)):
+            raise errors.ValidationError(message="A secret slot may only appear once in the list.")
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.SessionLauncherSecretORM).where(
+                    schemas.SessionLauncherSecretORM.launcher_id == launcher.id
+                )
+            )
+
+            launcher_secrets = {secret.secret_slot_id: secret for secret in result.all()}
+
+            result = await session.scalars(
+                select(SessionSecretSlotORM).where(SessionSecretSlotORM.project_id == project_id)
+            )
+
+            project_secret_slot_ids = {slot.id for slot in result}
+
+            patch_secret_slot_ids = {patch.secret_slot_id for patch in patches}
+
+            invalid_secret_slot_ids = patch_secret_slot_ids - project_secret_slot_ids
+
+            if invalid_secret_slot_ids:
+                raise errors.ValidationError(
+                    message=f"Secret slots {invalid_secret_slot_ids} do not belong to project {project_id}."
+                )
+
+            for patch in patches:
+                secret = launcher_secrets.get(patch.secret_slot_id)
+                policy = patch.policy or models.SessionLauncherSecretPolicyName.excluded
+
+                if secret is None:
+                    secret = schemas.SessionLauncherSecretORM(
+                        project_id=launcher.project_id,
+                        launcher_id=launcher.id,
+                        secret_slot_id=patch.secret_slot_id,
+                        policy=policy,
+                    )
+                    session.add(secret)
+                else:
+                    secret.policy = policy
+
+            await session.flush()
+
+        return await self.get_all_session_secret_slots_from_launcher(user=user, launcher=launcher)
+
+    async def get_all_session_secrets_from_launcher(
+        self,
+        user: base_models.APIUser,
+        launcher: models.SessionLauncher,
+    ) -> list[SessionSecret]:
+        """Get all session secrets included in a launcher."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # Get project, get project id, check if the project id is authorized
+        # Check that the user is allowed to access the project
+        authorized = await self.project_authz.has_permission(
+            user, ResourceType.project, launcher.project_id, Scope.READ
+        )
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{launcher.project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(SessionSecretORM)
+                .join(SessionSecretORM.secret)
+                .join(SessionSecretORM.secret_slot)
+                .outerjoin(
+                    schemas.SessionLauncherSecretORM,
+                    and_(
+                        schemas.SessionLauncherSecretORM.secret_slot_id == SessionSecretORM.secret_slot_id,
+                        schemas.SessionLauncherSecretORM.launcher_id == launcher.id,
+                    ),
+                )
+                .where(
+                    or_(
+                        SecretORM.expiration_timestamp.is_(None),
+                        SecretORM.expiration_timestamp > datetime.now(UTC) + timedelta(seconds=120),
+                    ),
+                    SessionSecretORM.user_id == user.id,
+                    SessionSecretSlotORM.project_id == launcher.project_id,
+                    or_(
+                        schemas.SessionLauncherSecretORM.secret_slot_id.is_(None),
+                        schemas.SessionLauncherSecretORM.policy == models.SessionLauncherSecretPolicyName.included,
+                    ),
+                )
+                .order_by(SessionSecretORM.id.desc())
+            )
+
+            secrets = result.all()
+
+            return [s.dump() for s in secrets]

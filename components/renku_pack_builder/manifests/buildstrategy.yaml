@@ -7,7 +7,10 @@ spec:
   parameters:
     - name: platform-api-version
       description: The referenced version is the minimum version that all relevant buildpack implementations support.
-      default: "0.12"
+      default: "0.13"
+    - name: insecure-registries
+      description: Comma separated list of registries to consider insecure (http or self-signed certificate)
+      default: ""
     - name: run-image
       description: The image to use as the base for all session images built with this strategy
       default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.1.0"
@@ -17,6 +20,9 @@ spec:
     - name: frontend
       description: Which frontend should be used in the image. Either "jupyterlab" or "vscodium".
       default: vscodium
+    - name: ai-agents
+      description: Space-separated list of AI coding agents to install, e.g. "pi claude codex". When empty, the agents requested by the repository's project.toml are installed.
+      default: ""
   steps:
     - name: build-and-push
       image: $(params.builder-image)
@@ -26,12 +32,18 @@ spec:
           value: $(params.platform-api-version)
         - name: BP_RENKU_FRONTENDS
           value: $(params.frontend)
+        - name: BP_RENKU_AI_AGENTS
+          value: $(params.ai-agents)
         - name: PARAM_SOURCE_CONTEXT
           value: $(params.shp-source-context)
         - name: PARAM_OUTPUT_IMAGE
           value: $(params.shp-output-image)
         - name: PARAM_RUN_IMAGE
           value: $(params.run-image)
+        - name: PARAM_OUTPUT_INSECURE
+          value: $(params.shp-output-insecure)
+        - name: PARAM_INSECURE_REGISTRIES
+          value: $(params.insecure-registries)
       command:
         - /bin/bash
       args:
@@ -39,20 +51,38 @@ spec:
         - |
           set -euo pipefail
 
+          insecureRegistries="${PARAM_INSECURE_REGISTRIES}"
+
+          if [[ "${PARAM_OUTPUT_INSECURE}" == "true" ]]; then
+            outputImageHost="${PARAM_OUTPUT_IMAGE%%/*}"
+            if [[ "${outputImageHost}" == "${PARAM_OUTPUT_IMAGE}" || ( "${outputImageHost}" != *.* && "${outputImageHost}" != *:* && "${outputImageHost}" != "localhost" ) ]]; then
+              echo "> Output image '${PARAM_OUTPUT_IMAGE}' has no explicit registry host; not adding to insecure registries."
+            else
+              insecureRegistries="${insecureRegistries}${outputImageHost},"
+            fi
+          fi
+
+          if [[ ! -z "$insecureRegistries" ]]; then
+            echo "> Using insecure registries: $insecureRegistries"
+
+            export CNB_INSECURE_REGISTRIES="${insecureRegistries}"
+          fi
+
           echo "> Processing environment variables..."
           ENV_DIR="/platform/env"
 
-          envs=($(env))
-
+          # Read one KEY=VALUE line at a time. `envs=($(env))` word-splits values,
+          # so a space-separated BP_RENKU_AI_AGENTS list was truncated to its first agent.
           # Denying the creation of non required files from system environments.
           # The creation of a file named PATH (corresponding to PATH system environment)
           # caused failure for python source during pip install (https://github.com/Azure-Samples/python-docs-hello-world)
           block_list=("PATH" "HOSTNAME" "PWD" "_" "SHLVL" "HOME" "")
 
-          for env in "${envs[@]}"; do
+          while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ -z "$line" || "$line" != *=* ]] && continue
             blocked=false
 
-            IFS='=' read -r key value string <<< "$env"
+            IFS='=' read -r key value string <<< "$line"
 
             for str in "${block_list[@]}"; do
               if [[ "$key" == "$str" ]]; then
@@ -65,13 +95,18 @@ spec:
               path="${ENV_DIR}/${key}"
               echo -n "$value" > "$path"
             fi
-          done
+          done < <(env)
+
+          # #region agent log
+          echo "> BP_RENKU_AI_AGENTS=[$(cat "${ENV_DIR}/BP_RENKU_AI_AGENTS" 2>/dev/null || true)]"
+          # #endregion
 
           /cnb/lifecycle/creator \
             -app=${PARAM_SOURCE_CONTEXT} \
             -report=/tmp/report.toml \
             -run-image=${PARAM_RUN_IMAGE} \
             ${PARAM_OUTPUT_IMAGE}
+
       volumeMounts:
         - mountPath: /platform/env
           name: platform-env

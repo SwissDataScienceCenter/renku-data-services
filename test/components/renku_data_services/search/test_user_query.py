@@ -181,7 +181,7 @@ def test_resolve_date_calc() -> None:
     )
 
 
-class TestUserQueryTransform(EmptyUserQueryVisitor[UserQuery]):
+class UserQueryTransformer(EmptyUserQueryVisitor[UserQuery]):
     def __init__(self, to_add: Segment) -> None:
         self.segments: list[Segment] = []
         self.to_add = to_add
@@ -204,7 +204,8 @@ class TestUserQueryTransform(EmptyUserQueryVisitor[UserQuery]):
 async def test_transform() -> None:
     q0 = UserQuery.of(Segments.name_is("john"), Segments.text("help"))
     q = await q0.transform(
-        TestUserQueryTransform(Segments.type_is(EntityType.project)), TestUserQueryTransform(Segments.id_is("id-123"))
+        UserQueryTransformer(Segments.type_is(EntityType.project)),
+        UserQueryTransformer(Segments.id_is("id-123")),
     )
 
     assert q == UserQuery(q0.segments + [Segments.type_is(EntityType.project), Segments.id_is("id-123")])

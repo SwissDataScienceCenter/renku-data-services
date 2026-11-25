@@ -13,6 +13,7 @@ class DatasetProvider(StrEnum):
     """The provider for the dataset."""
 
     envidat = "envidat"
+    scicat = "scicat"
 
 
 @dataclass
@@ -35,7 +36,8 @@ def get_rclone_config(dataset: SchemaOrgDataset, provider: DatasetProvider) -> S
     match provider:
         case DatasetProvider.envidat:
             return __get_rclone_s3_config_envidat(dataset)
-        # TODO: Add scicat here
+        case DatasetProvider.scicat:
+            return __get_rclone_s3_config_scicat(dataset)
         case _:
             raise errors.ValidationError(message=f"Got an unknown dataset provider {provider}")
 
@@ -75,3 +77,64 @@ def __get_rclone_s3_config_envidat(dataset: SchemaOrgDataset) -> S3Config:
         bucket,
         prefix,
     )
+
+
+def __get_rclone_s3_config_scicat(dataset: SchemaOrgDataset) -> S3Config:
+    """Get the S3 rclone configuration and source path from a dataset returned by scicat.
+
+    A single dataset may contain more than one S3 url.
+    The S3 information is encoded in the distribution, in fields where the name is 'S3 URI'.
+    See https://rclone.org/combine/.
+    """
+
+    def _parse_s3_from_url(url: str) -> tuple[str, str, str]:
+        """Get S3 config values from a URL in the schema.org distrubution.
+
+        Returns a tuple of endpoint, bucket, prefix.
+        """
+        parsed = urlparse(url)
+        query_parsed = parse_qs(parsed.query)
+        bucket = parsed.path.strip("/")
+        prefix = query_parsed.get("prefix", [None])[0]
+        if not bucket:
+            raise errors.ValidationError(message="The S3 bucket from scicat metadata cannot be found")
+        if not prefix:
+            raise errors.ValidationError(message="The S3 prefix from scicat metadata cannot be found")
+        prefix = prefix.strip("/")
+        endpoint = f"{parsed.scheme}://{parsed.hostname}"
+        return endpoint, bucket, prefix
+
+    distributions = sorted(dataset.distribution, key=lambda x: x.content_url)
+    s3_distributions = [dist for dist in distributions if dist.name == "S3 URI"]
+    if len(s3_distributions) == 0:
+        raise errors.ValidationError(
+            message="Cannot use a Scicat dataset that has no distribution links or does not contain any S3 URIs.",
+            detail="This can happen if the dataset is expired and needs to be retrieved.",
+        )
+    elif len(s3_distributions) == 1:
+        endpoint, bucket, prefix = _parse_s3_from_url(s3_distributions[0].content_url)
+        output = S3Config(
+            rclone_config={"type": "s3", "provider": "Other", "endpoint": endpoint},
+            bucket=bucket,
+            prefix=prefix,
+        )
+    else:
+        remote_upstreams: list[str] = []
+        for dist in s3_distributions:
+            endpoint, bucket, prefix = _parse_s3_from_url(dist.content_url)
+            # NOTE: Rclone does not support `/` in the directory names for combine
+            dir_name = prefix.replace("/", "_")
+            # NOTE: Rclone will get confused about the ':' in the endpoint URL if you do not put quotes around it.
+            # NOTE: We inline the upstream configuration as csi-rclone will reject configurations with multiple remotes
+            # See: https://github.com/SwissDataScienceCenter/renku-data-services/pull/1425/changes#r3951060385
+            remote_upstreams.append(f"{dir_name}=:s3,provider=Other,endpoint='{endpoint}':{bucket}/{prefix}")
+
+        # NOTE: When you use combine the bucket and prefix are not relevant to pathing
+        # and should be left blank.
+        output = S3Config(
+            rclone_config={"type": "combine", "upstreams": " ".join(remote_upstreams)},
+            bucket="",
+            prefix="",
+        )
+
+    return output

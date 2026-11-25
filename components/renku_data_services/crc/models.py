@@ -9,9 +9,12 @@ from math import ceil
 from typing import Any, Final, Optional, Protocol, Self
 
 from kubernetes.utils import parse_quantity
+from ulid import ULID
 
 from renku_data_services import errors
+from renku_data_services.authz.models import MembershipChange
 from renku_data_services.base_models import ResetType
+from renku_data_services.base_models.core import ResourceType
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sPatch, K8sResourceQuota
 
@@ -80,6 +83,95 @@ class NodeAffinity:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class FirecrestClassRemote:
+    """FirecREST-only overrides that can be set per resource class."""
+
+    system_name: str | None = None
+    partition: str | None = None
+    forward_resource_values: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert this instance into a dictionary."""
+        result: dict[str, Any] = {
+            "forward_resource_values": self.forward_resource_values,
+        }
+        if self.system_name is not None:
+            result["system_name"] = self.system_name
+        if self.partition is not None:
+            result["partition"] = self.partition
+        return result
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourceShape:
+    """The resource values of a resource class."""
+
+    cpu: float
+    """Number of cores."""
+    memory: int
+    """RAM in gigabytes."""
+    gpu: int
+    """Number of gpus."""
+    max_storage: int
+    """Maximum allowed disk storage in gigabytes."""
+    default_storage: int
+    """The default disk storage used when launching a session (in gigabytes)."""
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedResourceFlavor(ResourcesCompareMixin):
+    """A named shape that resource classes can link to instead of setting their own values."""
+
+    name: str
+    cpu: float
+    """Number of cores."""
+    memory: int
+    """RAM in gigabytes."""
+    max_storage: int
+    """Maximum allowed disk storage in gigabytes."""
+    gpu: int = 0
+    """Number of gpus."""
+    default_storage: int = 1
+    """The default disk storage used when launching a session (in gigabytes)."""
+    description: str | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourceFlavor(UnsavedResourceFlavor):
+    """Resource flavor model."""
+
+    id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourceFlavorPatch:
+    """Model for changes requested on a resource flavor."""
+
+    name: str | None = None
+    cpu: float | None = None
+    """Number of cores."""
+    memory: int | None = None
+    """RAM in gigabytes."""
+    max_storage: int | None = None
+    """Maximum allowed disk storage in gigabytes."""
+    gpu: int | None = None
+    """Number of gpus."""
+    default_storage: int | None = None
+    """The default disk storage used when launching a session (in gigabytes)."""
+    description: str | None | ResetType = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class LinkedResourceClass:
+    """A resource class linked to a resource flavor, with the pool it belongs to."""
+
+    id: int
+    name: str
+    resource_pool_id: int | None = None
+    resource_pool_name: str | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedResourceClass(ResourcesCompareMixin):
     """Model for a resource class yet to be saved."""
 
@@ -92,6 +184,10 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     default_storage: int = 1
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
+    quota_enforced: bool = False
+    preemptible: bool = False
+    remote: FirecrestClassRemote | None = None
+    resource_flavor_id: ULID | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -110,6 +206,12 @@ class ResourceClass(ResourcesCompareMixin):
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
     quota: str | None = None
+    usage_hours_remaining: float | None = None
+    usage_hours_total: float | None = None
+    quota_enforced: bool = False
+    preemptible: bool = False
+    remote: FirecrestClassRemote | None = None
+    resource_flavor_id: ULID | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -125,6 +227,10 @@ class ResourceClassPatch:
     default_storage: int | None = None
     node_affinities: list[NodeAffinity] | None = None
     tolerations: list[str] | None = None
+    quota_enforced: bool | None = None
+    preemptible: bool | None = None
+    remote: FirecrestClassRemote | None = None
+    resource_flavor_id: ULID | ResetType | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -139,6 +245,24 @@ class GpuKind(StrEnum):
 
     NVIDIA = "nvidia.com"
     AMD = "amd.com"
+
+
+def preemptible_priority_class_name(quota_id: str) -> str:
+    """Return the name of the priority class for the preemptible resource classes of a quota."""
+    return f"{quota_id}-preemptible"
+
+
+def quota_scope_selector(quota_id: str) -> dict[str, Any]:
+    """Return the resource quota scope selector that matches the normal and preemptible priority classes."""
+    return {
+        "matchExpressions": [
+            {
+                "operator": "In",
+                "scopeName": "PriorityClass",
+                "values": [quota_id, preemptible_priority_class_name(quota_id)],
+            }
+        ]
+    }
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -209,9 +333,7 @@ class Quota(UnsavedQuota):
                     "requests.memory": str(self.memory * 1_000_000_000),
                     f"requests.{self.gpu_kind}/gpu": self.gpu,
                 },
-                "scopeSelector": {
-                    "matchExpressions": [{"operator": "In", "scopeName": "PriorityClass", "values": [self.id]}]
-                },
+                "scopeSelector": quota_scope_selector(self.id),
             },
         }
 
@@ -325,6 +447,10 @@ class UnsavedResourcePool:
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = None
     cluster_id: ClusterId | None = None
     platform: RuntimePlatform
+    cpu_limit_factor: float | None = None
+    """Used to assign cpu limits based on the cpu value in the resource classes in the pool.
+    If the value is zero or unset then cpu limits are not set.
+    """
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -343,6 +469,11 @@ class ResourcePool:
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = None
     cluster: SavedClusterSettings | None = None
     platform: RuntimePlatform
+    credits_used: int | None = None
+    cpu_limit_factor: float | None = None
+    """Used to assign cpu limits based on the cpu value in the resource classes in the pool.
+    If the value is zero or unset then cpu limits are not set.
+    """
 
     def get_resource_class(self, resource_class_id: int) -> ResourceClass | None:
         """Find a specific resource class in the resource pool by the resource class id."""
@@ -380,6 +511,7 @@ class ResourcePoolPatch:
     remote: RemoteConfigurationPatch | None = None
     cluster_id: ClusterId | ResetType | None = None
     platform: RuntimePlatform | None = None
+    cpu_limit_factor: float | None | ResetType = None
 
 
 class RemoteConfigurationKind(StrEnum):
@@ -472,3 +604,74 @@ class RemoteConfigurationRunaiPatch:
 
 
 RemoteConfigurationPatch = ResetType | RemoteConfigurationFirecrestPatch | RemoteConfigurationRunaiPatch
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class DeletedResourcePool:
+    """A resource pool that has been deleted."""
+
+    id: int
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourcePoolMembershipChange:
+    """Returned by user-management methods so the authz_change decorator knows what to sync to SpiceDB."""
+
+    changes: list[MembershipChange]
+
+
+class MemberType(StrEnum):
+    """Types of members for resource pool."""
+
+    USER = "user"
+    GROUP = "group"
+    PROJECT = "project"
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourcePoolMemberIdentifier:
+    """Identifier for a member in a resource pool.
+
+    Identifier semantics by member_type:
+      - USER    : Keycloak user id (string)
+      - GROUP   : group id (ULID)
+      - PROJECT : project id (ULID)
+    """
+
+    member_id: str
+    member_type: MemberType
+    role: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.member_id or not self.member_id.strip():
+            raise errors.ValidationError(message="member_id must be a non-empty string")
+        match self.member_type:
+            case MemberType.GROUP | MemberType.PROJECT:
+                try:
+                    ULID.from_str(self.member_id)
+                except ValueError as e:
+                    raise errors.ValidationError(
+                        message=f"Member identifier {self.member_id!r} must be a valid ULID"
+                    ) from e
+            case MemberType.USER:
+                pass
+        # Apply defaults if role is empty
+        object.__setattr__(
+            self,
+            "role",
+            self.role
+            or {
+                MemberType.USER: "viewer",
+                MemberType.GROUP: "group_viewer",
+                MemberType.PROJECT: "project_viewer",
+            }.get(self.member_type, "viewer"),
+        )
+
+    @classmethod
+    def from_resource(cls, resource_type: ResourceType, resource_id: ULID) -> ResourcePoolMemberIdentifier:
+        """Create a member identifier from an authz-backed resource reference."""
+        if resource_type == ResourceType.group:
+            return cls(member_id=str(resource_id), member_type=MemberType.GROUP)
+        if resource_type == ResourceType.project:
+            return cls(member_id=str(resource_id), member_type=MemberType.PROJECT)
+        return cls(member_id=str(resource_id), member_type=MemberType.USER)

@@ -8,8 +8,12 @@ from sanic_ext import validate
 
 from renku_data_services import base_models
 from renku_data_services.app_config import logging
+from renku_data_services.app_config.config import SshProxyConfig
+from renku_data_services.authn.renku import RenkuSelfTokenMint
+from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.models import ConnectionStatus
@@ -30,9 +34,14 @@ from renku_data_services.notebooks.core_sessions import (
 )
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
+from renku_data_services.notebooks.models import SessionType
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
+from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.resource_usage.core import ResourceUsageService
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.storage.db import StorageRepository
+from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.users.db import UserRepo
 
 logger = logging.getLogger(__name__)
@@ -44,6 +53,7 @@ class NotebooksNewBP(CustomBlueprint):
 
     authenticator: base_models.Authenticator
     internal_gitlab_authenticator: base_models.Authenticator
+    internal_token_mint: RenkuSelfTokenMint
     nb_config: NotebooksConfig
     cluster_repo: ClusterRepository
     data_connector_repo: DataConnectorRepository
@@ -54,11 +64,17 @@ class NotebooksNewBP(CustomBlueprint):
     image_check_repo: ImageCheckRepository
     project_repo: ProjectRepository
     project_session_secret_repo: ProjectSessionSecretRepository
+    project_storage_repo: ProjectStorageRepository
     rp_repo: ResourcePoolRepository
     session_repo: SessionRepository
-    storage_repo: StorageRepository
     user_repo: UserRepo
     metrics: MetricsService
+    git_repositories_repo: GitRepositoriesRepository
+    builds_config: BuildsConfig
+    resource_usage_service: ResourceUsageService
+    resource_requests_repo: ResourceRequestsRepo
+    authz: Authz
+    ssh_proxy_config: SshProxyConfig
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -81,17 +97,25 @@ class NotebooksNewBP(CustomBlueprint):
                 git_provider_helper=self.git_provider_helper,
                 cluster_repo=self.cluster_repo,
                 data_connector_secret_repo=self.data_connector_secret_repo,
+                data_connector_repo=self.data_connector_repo,
                 project_repo=self.project_repo,
                 project_session_secret_repo=self.project_session_secret_repo,
+                project_storage_repo=self.project_storage_repo,
                 rp_repo=self.rp_repo,
                 session_repo=self.session_repo,
                 user_repo=self.user_repo,
                 metrics=self.metrics,
                 image_check_repo=self.image_check_repo,
                 data_source_repo=self.data_source_repo,
+                git_repositories_repo=self.git_repositories_repo,
+                builds_config=self.builds_config,
+                internal_token_mint=self.internal_token_mint,
+                resource_usage_service=self.resource_usage_service,
+                authz=self.authz,
+                ssh_proxy_config=self.ssh_proxy_config,
             )
             status = 201 if created else 200
-            return json(session.as_apispec().model_dump(exclude_none=True, mode="json"), status)
+            return json(session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"), status)
 
         return "/sessions", ["POST"], _handler
 
@@ -99,11 +123,21 @@ class NotebooksNewBP(CustomBlueprint):
         """Get all sessions for a user."""
 
         @authenticate(self.authenticator)
-        async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser) -> HTTPResponse:
-            sessions = await self.nb_config.k8s_v2_client.list_sessions(user.id)
+        @validate_query(query=apispec.SessionsGetParametersQuery)
+        async def _handler(
+            _: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, query: apispec.SessionsGetParametersQuery
+        ) -> HTTPResponse:
+            session_mode: SessionType | None = None
+            match query.session_type:
+                case apispec.SessionType.interactive:
+                    session_mode = SessionType.interactive
+                case apispec.SessionType.non_interactive:
+                    session_mode = SessionType.non_interactive
+
+            sessions = await self.nb_config.k8s_v2_client.list_sessions(user.id, session_mode)
             output: list[dict] = []
             for session in sessions:
-                output.append(session.as_apispec().model_dump(exclude_none=True, mode="json"))
+                output.append(session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"))
             return json(output)
 
         return "/sessions", ["GET"], _handler
@@ -115,8 +149,10 @@ class NotebooksNewBP(CustomBlueprint):
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
             session = await self.nb_config.k8s_v2_client.get_session(session_id, user.id)
             if session is None:
-                raise errors.ValidationError(message=f"The session with ID {session_id} does not exist.", quiet=True)
-            return json(session.as_apispec().model_dump(exclude_none=True, mode="json"))
+                raise errors.MissingResourceError(
+                    message=f"The session with ID {session_id} does not exist.", quiet=True
+                )
+            return json(session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"))
 
         return "/sessions/<session_id>", ["GET"], _handler
 
@@ -159,8 +195,15 @@ class NotebooksNewBP(CustomBlueprint):
                 metrics=self.metrics,
                 image_check_repo=self.image_check_repo,
                 data_source_repo=self.data_source_repo,
+                builds_config=self.builds_config,
+                internal_token_mint=self.internal_token_mint,
+                resource_usage_service=self.resource_usage_service,
+                resource_requests_repo=self.resource_requests_repo,
+                project_storage_repo=self.project_storage_repo,
+                authz=self.authz,
+                ssh_proxy_config=self.ssh_proxy_config,
             )
-            return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
+            return json(new_session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"))
 
         return "/sessions/<session_id>", ["PATCH"], _handler
 
@@ -183,21 +226,20 @@ class NotebooksNewBP(CustomBlueprint):
     def check_docker_image(self) -> BlueprintFactoryResponse:
         """Return the availability of the docker image."""
 
-        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
+        @authenticate(self.authenticator)
         @validate(query=apispec.SessionsImagesGetParametersQuery)
         async def _check_docker_image(
             request: Request,
             user: AnonymousAPIUser | AuthenticatedAPIUser,
-            internal_gitlab_user: APIUser,
             query: apispec.SessionsImagesGetParametersQuery,
         ) -> JSONResponse:
             image = Image.from_path(query.image_url)
             result = await self.image_check_repo.check_image(
                 user=user,
-                gitlab_user=internal_gitlab_user,
-                image=image,
+                image_src=image,
             )
             logger.info(f"Checked image {query.image_url}: {result}")
+
             conn = None
             if result.connection:
                 match result.connection.status:
@@ -225,7 +267,10 @@ class NotebooksNewBP(CustomBlueprint):
                 platforms = [apispec.ImagePlatform.model_validate(p) for p in result.platforms]
 
             resp = apispec.ImageCheckResponse(
-                accessible=result.accessible, platforms=platforms, connection=conn, provider=provider
+                accessible=result.accessible,
+                platforms=platforms,
+                connection=conn,
+                provider=provider,
             )
 
             return json(resp.model_dump(exclude_none=True, mode="json"))

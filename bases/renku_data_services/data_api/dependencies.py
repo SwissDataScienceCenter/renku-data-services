@@ -17,31 +17,45 @@ import renku_data_services.crc
 import renku_data_services.data_connectors
 import renku_data_services.notifications
 import renku_data_services.platform
+import renku_data_services.renku_apps
 import renku_data_services.repositories
 import renku_data_services.search
 import renku_data_services.storage
 import renku_data_services.users
+from renku_data_services.authn.api.core import ScopeVerifier
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import EmptyGitlabAuthenticator, GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
+from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.authz.authz import Authz
 from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory, OAuthHttpClientFactory
 from renku_data_services.crc import models as crc_models
 from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
-from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolRepository, UserRepository
+from renku_data_services.crc.db import (
+    ClusterRepository,
+    MemberRepository,
+    QuotaRepository,
+    ResourceFlavorRepository,
+    ResourcePoolRepository,
+)
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
+from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
+from renku_data_services.data_connectors.deposits.scicat import ScicatAPIClient
+from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import (
+    DepositUploadJobClient,
     K8sClusterClientsPool,
     K8sPriorityClassClient,
     K8sResourceQuotaClient,
+    K8sSecretClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv
 from renku_data_services.k8s.db import K8sDbCache
@@ -55,6 +69,10 @@ from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTE
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.notifications.db import NotificationsRepository
+from renku_data_services.persisted_logs.db import (
+    AmaltheaSessionPersistedLogsReadRepository,
+    ImageBuildPersistedLogsReadRepository,
+)
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -62,6 +80,8 @@ from renku_data_services.project.db import (
     ProjectRepository,
     ProjectSessionSecretRepository,
 )
+from renku_data_services.renku_apps.k8s_client import KNATIVE_SERVICE_GVK, RenkuAppsK8sClient
+from renku_data_services.renku_apps.repository import RenkuAppsRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
@@ -72,8 +92,10 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
-from renku_data_services.storage.db import StorageRepository
-from renku_data_services.users.db import UserPreferencesRepository
+from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
+from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.users.db import SSHKeyRepository, UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
@@ -125,13 +147,14 @@ class DependencyManager:
     user_store: base_models.UserStore
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
+    internal_authenticator: RenkuSelfAuthenticator
     quota_repo: QuotaRepository
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     authz: Authz
-    user_repo: UserRepository
+    member_repo: MemberRepository
     rp_repo: ResourcePoolRepository
-    storage_repo: StorageRepository
+    resource_flavor_repo: ResourceFlavorRepository
     project_repo: ProjectRepository
     project_migration_repo: ProjectMigrationRepository
     group_repo: GroupRepository
@@ -139,7 +162,10 @@ class DependencyManager:
     search_updates_repo: SearchUpdatesRepo
     search_reprovisioning: SearchReprovision
     session_repo: SessionRepository
+    apps_k8s_client: RenkuAppsK8sClient | None
+    apps_repo: RenkuAppsRepository | None
     user_preferences_repo: UserPreferencesRepository
+    ssh_key_repo: SSHKeyRepository
     kc_user_repo: KcUserRepo
     low_level_user_secrets_repo: LowLevelUserSecretsRepo
     user_secrets_repo: UserSecretsRepo
@@ -164,6 +190,17 @@ class DependencyManager:
     occurrence_repo: OccurrenceRepository
     resource_requests_repo: ResourceRequestsRepo
     resource_usage_service: ResourceUsageService
+    session_logs_repo: AmaltheaSessionPersistedLogsReadRepository
+    build_logs_repo: ImageBuildPersistedLogsReadRepository
+    zenodo_client: ZenodoAPIClient
+    envidat_client: EnvidatClient
+    scicat_client: ScicatAPIClient
+    job_client: DepositUploadJobClient
+    secret_client: K8sSecretClient
+    internal_token_mint: RenkuSelfTokenMint
+    internal_scope_verifier: ScopeVerifier
+    project_storage_k8s: ProjectStorageK8s
+    project_storage_repo: ProjectStorageRepository
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -185,6 +222,7 @@ class DependencyManager:
             renku_data_services.project.__file__,
             renku_data_services.namespace.__file__,
             renku_data_services.session.__file__,
+            renku_data_services.renku_apps.__file__,
             renku_data_services.connected_services.__file__,
             renku_data_services.repositories.__file__,
             renku_data_services.notebooks.__file__,
@@ -194,6 +232,8 @@ class DependencyManager:
             renku_data_services.notifications.__file__,
             renku_data_services.capacity_reservation.__file__,
             renku_data_services.resource_usage.__file__,
+            renku_data_services.persisted_logs.__file__,
+            renku_data_services.authn.api.__file__,
         ]
 
         api_specs = []
@@ -232,23 +272,63 @@ class DependencyManager:
             config.secrets.encryption_key, config.db.async_session_maker
         )
 
-        connected_services_repo = ConnectedServicesRepository(
+        metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
+        metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
+        search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
+        authz = Authz(config.authz_config)
+        group_repo = GroupRepository(
             session_maker=config.db.async_session_maker,
-            encryption_key=config.secrets.encryption_key,
-            oauth_client_factory=oauth_http_client_factory,
+            group_authz=authz,
+            search_updates_repo=search_updates_repo,
         )
+        kc_user_repo = KcUserRepo(
+            session_maker=config.db.async_session_maker,
+            group_repo=group_repo,
+            search_updates_repo=search_updates_repo,
+            encryption_key=config.secrets.encryption_key,
+            metrics=metrics,
+            authz=authz,
+        )
+
+        project_repo = ProjectRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            group_repo=group_repo,
+            search_updates_repo=search_updates_repo,
+        )
+
         k8s_db_cache = K8sDbCache(config.db.async_session_maker)
         default_kubeconfig = KubeConfigEnv()
+        kinds_to_cache = [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK]
+        if config.apps.enabled:
+            kinds_to_cache.append(KNATIVE_SERVICE_GVK)
         client = K8sClusterClientsPool(
             lambda: get_clusters(
                 kube_conf_root_dir=config.k8s_config_root,
                 default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_repo,
                 cache=k8s_db_cache,
-                kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                kinds_to_cache=kinds_to_cache,
             ),
         )
+
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
+        member_repo = MemberRepository(
+            session_maker=config.db.async_session_maker,
+            quotas_repo=quota_repo,
+            user_repo=kc_user_repo,
+            group_repo=group_repo,
+            project_repo=project_repo,
+            authz=authz,
+        )
+        connected_services_repo = ConnectedServicesRepository(
+            session_maker=config.db.async_session_maker,
+            encryption_key=config.secrets.encryption_key,
+            oauth_client_factory=oauth_http_client_factory,
+            member_repo=member_repo,
+        )
+        job_client = DepositUploadJobClient(client)
+        secret_client = K8sSecretClient(client)
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
@@ -283,7 +363,6 @@ class DependencyManager:
             )
             if config.builds.enabled:
                 k8s_db_cache = K8sDbCache(config.db.async_session_maker)
-                default_kubeconfig = KubeConfigEnv()
                 shipwright_client = ShipwrightClient(
                     client=K8sClusterClientsPool(
                         lambda: get_clusters(
@@ -291,48 +370,55 @@ class DependencyManager:
                             default_kubeconfig=default_kubeconfig,
                             cluster_repo=cluster_repo,
                             cache=k8s_db_cache,
-                            kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                            kinds_to_cache=kinds_to_cache,
                         ),
                     ),
                     namespace=config.k8s_namespace,
                 )
 
-        authz = Authz(config.authz_config)
-        search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
-        metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
-        metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
-        group_repo = GroupRepository(
-            session_maker=config.db.async_session_maker,
-            group_authz=authz,
-            search_updates_repo=search_updates_repo,
+        internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
+        internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
+        internal_scope_verifier = ScopeVerifier(
+            deposit_config=config.deposit_config,
+            notebook_k8s_client=config.nb_config.k8s_v2_client,
+            job_client=job_client,
         )
-        kc_user_repo = KcUserRepo(
+        resource_requests_repo = ResourceRequestsRepo(
             session_maker=config.db.async_session_maker,
-            group_repo=group_repo,
-            search_updates_repo=search_updates_repo,
-            encryption_key=config.secrets.encryption_key,
-            metrics=metrics,
-            authz=authz,
         )
-
-        user_repo = UserRepository(
+        resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
+        rp_repo = ResourcePoolRepository(
             session_maker=config.db.async_session_maker,
             quotas_repo=quota_repo,
-            user_repo=kc_user_repo,
+            authz=authz,
+            resource_usage_service=resource_usage_service,
+            resource_requests_repo=resource_requests_repo,
+            member_repo=member_repo,
         )
-        rp_repo = ResourcePoolRepository(session_maker=config.db.async_session_maker, quotas_repo=quota_repo)
-        storage_repo = StorageRepository(
-            session_maker=config.db.async_session_maker,
-            gitlab_client=gitlab_client,
-            user_repo=kc_user_repo,
-            secret_service_public_key=config.secrets.public_key,
+        resource_flavor_repo = ResourceFlavorRepository(
+            session_maker=config.db.async_session_maker, quotas_repo=quota_repo
         )
-        reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
-        project_repo = ProjectRepository(
+        project_storage_k8s = ProjectStorageK8s(config.nb_config.k8s_v2_client)
+        project_storage_repo = ProjectStorageRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
+            project_repo=project_repo,
             group_repo=group_repo,
-            search_updates_repo=search_updates_repo,
+            project_storage_config=config.project_storage_config,
+        )
+        reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
+
+        git_repositories_repo = GitRepositoriesRepository(
+            session_maker=config.db.async_session_maker,
+            oauth_client_factory=oauth_http_client_factory,
+            internal_gitlab_url=config.gitlab_url,
+            enable_internal_gitlab=config.enable_internal_gitlab,
+        )
+        project_session_secret_repo = ProjectSessionSecretRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            user_repo=kc_user_repo,
+            secret_service_public_key=config.secrets.public_key,
         )
         session_repo = SessionRepository(
             session_maker=config.db.async_session_maker,
@@ -340,6 +426,7 @@ class DependencyManager:
             resource_pools=rp_repo,
             shipwright_client=shipwright_client,
             builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
         )
         project_migration_repo = ProjectMigrationRepository(
             session_maker=config.db.async_session_maker,
@@ -351,16 +438,11 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
             authz=authz,
         )
-        project_session_secret_repo = ProjectSessionSecretRepository(
-            session_maker=config.db.async_session_maker,
-            authz=authz,
-            user_repo=kc_user_repo,
-            secret_service_public_key=config.secrets.public_key,
-        )
         user_preferences_repo = UserPreferencesRepository(
             session_maker=config.db.async_session_maker,
             user_preferences_config=config.user_preferences,
         )
+        ssh_key_repo = SSHKeyRepository(session_maker=config.db.async_session_maker)
         low_level_user_secrets_repo = LowLevelUserSecretsRepo(
             session_maker=config.db.async_session_maker,
         )
@@ -369,12 +451,6 @@ class DependencyManager:
             low_level_repo=low_level_user_secrets_repo,
             user_repo=kc_user_repo,
             secret_service_public_key=config.secrets.public_key,
-        )
-        git_repositories_repo = GitRepositoriesRepository(
-            session_maker=config.db.async_session_maker,
-            oauth_client_factory=oauth_http_client_factory,
-            internal_gitlab_url=config.gitlab_url,
-            enable_internal_gitlab=config.enable_internal_gitlab,
         )
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,
@@ -395,12 +471,38 @@ class DependencyManager:
             authz=authz,
         )
         data_source_repo = DataSourceRepository(
-            nb_config=config.nb_config,
+            user_repo=kc_user_repo,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_http_client_factory,
+            internal_token_mint=internal_token_mint,
         )
+        apps_k8s_client: RenkuAppsK8sClient | None = None
+        apps_repo: RenkuAppsRepository | None = None
+        if config.apps.enabled:
+            validator = RCloneValidator()
+            apps_k8s_client = RenkuAppsK8sClient(
+                client=client,
+                cluster_repo=cluster_repo,
+                storage_class=config.nb_config.cloud_storage.storage_class,
+                default_affinity=config.nb_config.sessions.affinity_model,
+                default_tolerations=config.nb_config.sessions.tolerations_model,
+            )
+            apps_repo = RenkuAppsRepository(
+                authz=authz,
+                session_repo=session_repo,
+                rp_repo=rp_repo,
+                project_repo=project_repo,
+                k8s_client=apps_k8s_client,
+                dc_secret_repo=data_connector_secret_repo,
+                validator=validator,
+            )
+            project_repo.apps_cleanup = apps_repo
+            session_repo.apps_cleanup = apps_repo
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
+            builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
+            session_repo=session_repo,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_http_client_factory,
         )
@@ -424,22 +526,25 @@ class DependencyManager:
         occurrence_repo = OccurrenceRepository(
             session_maker=config.db.async_session_maker,
         )
-        resource_requests_repo = ResourceRequestsRepo(
-            session_maker=config.db.async_session_maker,
+        session_logs_repo = AmaltheaSessionPersistedLogsReadRepository(authz=authz)
+        build_logs_repo = ImageBuildPersistedLogsReadRepository(
+            authz=authz,
+            builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
         )
-        resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
         return cls(
             config,
             k8s_client=client,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
+            internal_authenticator=internal_authenticator,
             gitlab_client=gitlab_client,
             user_store=user_store,
             quota_repo=quota_repo,
             kc_api=kc_api,
-            user_repo=user_repo,
+            member_repo=member_repo,
             rp_repo=rp_repo,
-            storage_repo=storage_repo,
+            resource_flavor_repo=resource_flavor_repo,
             reprovisioning_repo=reprovisioning_repo,
             search_updates_repo=search_updates_repo,
             search_reprovisioning=search_reprovisioning,
@@ -449,7 +554,10 @@ class DependencyManager:
             project_session_secret_repo=project_session_secret_repo,
             group_repo=group_repo,
             session_repo=session_repo,
+            apps_k8s_client=apps_k8s_client,
+            apps_repo=apps_repo,
             user_preferences_repo=user_preferences_repo,
+            ssh_key_repo=ssh_key_repo,
             kc_user_repo=kc_user_repo,
             user_secrets_repo=user_secrets_repo,
             connected_services_repo=connected_services_repo,
@@ -473,4 +581,15 @@ class DependencyManager:
             occurrence_repo=occurrence_repo,
             resource_requests_repo=resource_requests_repo,
             resource_usage_service=resource_usage_service,
+            session_logs_repo=session_logs_repo,
+            build_logs_repo=build_logs_repo,
+            zenodo_client=ZenodoAPIClient(),
+            envidat_client=EnvidatClient(),
+            scicat_client=ScicatAPIClient(config.deposit_config.scicat.api_url),
+            job_client=job_client,
+            secret_client=secret_client,
+            internal_token_mint=internal_token_mint,
+            internal_scope_verifier=internal_scope_verifier,
+            project_storage_k8s=project_storage_k8s,
+            project_storage_repo=project_storage_repo,
         )

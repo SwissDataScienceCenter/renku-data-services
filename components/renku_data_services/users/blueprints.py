@@ -17,8 +17,13 @@ from renku_data_services.errors import errors
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.users import apispec, models
-from renku_data_services.users.core import validate_secret_patch, validate_unsaved_secret
-from renku_data_services.users.db import UserPreferencesRepository, UserRepo
+from renku_data_services.users.core import (
+    validate_secret_patch,
+    validate_unsaved_secret,
+    validate_unsaved_ssh_key,
+)
+from renku_data_services.users.db import SSHKeyRepository, UserPreferencesRepository, UserRepo
+from renku_data_services.users.models import SSHKey
 
 
 @dataclass(kw_only=True)
@@ -41,9 +46,9 @@ class KCUsersBP(CustomBlueprint):
                     dict(
                         id=user.id,
                         username=user.namespace.path.first.value,
-                        email=user.email,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
+                        email=user.email if user.email else None,
+                        first_name=user.first_name if user.first_name else None,
+                        last_name=user.last_name if user.last_name else None,
                     )
                     for user in users
                 ],
@@ -67,9 +72,9 @@ class KCUsersBP(CustomBlueprint):
                 dict(
                     id=user_info.id,
                     username=user_info.namespace.path.first.value,
-                    email=user_info.email,
-                    first_name=user_info.first_name,
-                    last_name=user_info.last_name,
+                    email=user_info.email if user_info.email else None,
+                    first_name=user_info.first_name if user_info.first_name else None,
+                    last_name=user_info.last_name if user_info.last_name else None,
                     is_admin=user.is_admin,
                 ),
             )
@@ -96,15 +101,18 @@ class KCUsersBP(CustomBlueprint):
         async def _get_one(_: Request, user: base_models.APIUser, user_id: str) -> JSONResponse:
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user_id)
             if not user_info:
-                raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
+                raise errors.MissingResourceError(
+                    message=f"The user with ID {user_id} cannot be found or you do not have permission "
+                    "to access this information."
+                )
             return validated_json(
                 apispec.UserWithId,
                 dict(
                     id=user_info.id,
                     username=user_info.namespace.path.first.value,
-                    email=user_info.email,
-                    first_name=user_info.first_name,
-                    last_name=user_info.last_name,
+                    email=user_info.email if user_info.email else None,
+                    first_name=user_info.first_name if user_info.first_name else None,
+                    last_name=user_info.last_name if user_info.last_name else None,
                 ),
             )
 
@@ -297,3 +305,68 @@ class UserPreferencesBP(CustomBlueprint):
             return validated_json(apispec.UserPreferences, res)
 
         return "/user/preferences/dismiss_project_migration_banner", ["DELETE"], _delete
+
+
+@dataclass(kw_only=True)
+class SSHKeysBP(CustomBlueprint):
+    """Handlers for user SSH public keys."""
+
+    ssh_key_repo: SSHKeyRepository
+    authenticator: base_models.Authenticator
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """List the SSH public keys of the logged in user."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_all(_: Request, user: base_models.APIUser) -> JSONResponse:
+            keys = await self.ssh_key_repo.get_ssh_keys(requested_by=user)
+            return validated_json(apispec.SSHKeysList, [self._dump_key(key) for key in keys])
+
+        return "/user/ssh_keys", ["GET"], _get_all
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Register a new SSH public key."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.SSHKeyPost)
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.SSHKeyPost) -> JSONResponse:
+            new_key = validate_unsaved_ssh_key(public_key=body.public_key, name=body.name)
+            key = await self.ssh_key_repo.insert_ssh_key(requested_by=user, ssh_key=new_key)
+            return validated_json(apispec.SSHKey, self._dump_key(key), status=201)
+
+        return "/user/ssh_keys", ["POST"], _post
+
+    def get_one(self) -> BlueprintFactoryResponse:
+        """Get a single SSH public key."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_one(_: Request, user: base_models.APIUser, key_id: ULID) -> JSONResponse:
+            key = await self.ssh_key_repo.get_ssh_key(requested_by=user, key_id=key_id)
+            return validated_json(apispec.SSHKey, self._dump_key(key))
+
+        return "/user/ssh_keys/<key_id:ulid>", ["GET"], _get_one
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Delete an SSH public key."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete(_: Request, user: base_models.APIUser, key_id: ULID) -> HTTPResponse:
+            await self.ssh_key_repo.delete_ssh_key(requested_by=user, key_id=key_id)
+            return HTTPResponse(status=204)
+
+        return "/user/ssh_keys/<key_id:ulid>", ["DELETE"], _delete
+
+    @staticmethod
+    def _dump_key(key: SSHKey) -> dict[str, Any]:
+        return dict(
+            id=str(key.id),
+            public_key=key.public_key,
+            key_type=key.key_type,
+            fingerprint=key.fingerprint,
+            name=key.name,
+            created_at=key.created_at,
+        )

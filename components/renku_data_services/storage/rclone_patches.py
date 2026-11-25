@@ -273,6 +273,18 @@ def __patch_schema_add_openbis_type(spec: list[dict[str, Any]]) -> None:
     )
 
 
+def __patch_schema_combine_remote_default(spec: list[dict[str, Any]]) -> None:
+    """Add default value for the "combine" remote.
+
+    Without this if the remote is used then Pydantic schema validation fails.
+    """
+    for storage in spec:
+        if storage["Prefix"] == "combine":
+            for option in storage["Options"]:
+                if option["Name"].lower() == "upstreams":
+                    option["Default"] = ""
+
+
 def apply_patches(spec: list[dict[str, Any]]) -> None:
     """Apply patches to RClone schema."""
     patches = [
@@ -283,6 +295,7 @@ def apply_patches(spec: list[dict[str, Any]]) -> None:
         __patch_polybox_storage,
         __patch_switchdrive_storage,
         __patch_schema_add_openbis_type,
+        __patch_schema_combine_remote_default,
     ]
 
     for patch in patches:

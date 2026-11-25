@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
+from kr8s import ServerError
 from sanic import Request
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
@@ -26,17 +28,39 @@ from renku_data_services.base_models.core import (
 )
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
+from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.models import ProviderKind
 from renku_data_services.data_connectors import apispec, models
+from renku_data_services.data_connectors.config import DepositConfig
 from renku_data_services.data_connectors.core import (
+    create_deposit_upload,
     dump_storage_with_sensitive_fields,
     prevalidate_unsaved_global_data_connector,
+    serialize_deposit,
     transform_secrets_for_back_end,
     transform_secrets_for_front_end,
+    update_deposit_status,
+    update_deposits_statuses,
     validate_data_connector_patch,
     validate_data_connector_secrets_patch,
+    validate_deposit,
+    validate_deposit_patch,
+    validate_deposit_status_change,
+    validate_session_launcher_dc_links_patch,
     validate_unsaved_data_connector,
 )
-from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
+from renku_data_services.data_connectors.db import (
+    DOI,
+    DataConnectorRepository,
+    DataConnectorSecretRepository,
+)
+from renku_data_services.data_connectors.deposits.envidat import EnvidatClient
+from renku_data_services.data_connectors.deposits.scicat import ScicatAPIClient
+from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
+from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
+from renku_data_services.k8s.clients import DepositUploadJobClient
+from renku_data_services.notebooks.data_sources import DataSourceRepository
+from renku_data_services.session import apispec as session_apispec
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -48,6 +72,17 @@ class DataConnectorsBP(CustomBlueprint):
     data_connector_secret_repo: DataConnectorSecretRepository
     authenticator: base_models.Authenticator
     metrics: MetricsService
+    job_client: DepositUploadJobClient
+    secret_client: SecretClient
+    zenodo_client: ZenodoAPIClient
+    envidat_client: EnvidatClient
+    scicat_client: ScicatAPIClient
+    connected_services_repo: ConnectedServicesRepository
+    data_source_repo: DataSourceRepository
+    dc_storage_class: str
+    secrets_storage_service_url: str
+    k8s_client: K8sClient
+    deposit_config: DepositConfig
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List data connectors."""
@@ -118,7 +153,10 @@ class DataConnectorsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.GlobalDataConnectorPost)
         async def _post_global(
-            _: Request, user: base_models.APIUser, body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
+            _: Request,
+            user: base_models.APIUser,
+            body: apispec.GlobalDataConnectorPost,
+            validator: RCloneValidator,
         ) -> JSONResponse:
             data_connector = await prevalidate_unsaved_global_data_connector(body, validator=validator)
             result, inserted = await self.data_connector_repo.insert_global_data_connector(
@@ -138,7 +176,11 @@ class DataConnectorsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @extract_if_none_match
         async def _get_one(
-            _: Request, user: base_models.APIUser, data_connector_id: ULID, etag: str | None, validator: RCloneValidator
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+            etag: str | None,
+            validator: RCloneValidator,
         ) -> HTTPResponse:
             data_connector = await self.data_connector_repo.get_data_connector(
                 user=user, data_connector_id=data_connector_id
@@ -483,6 +525,31 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["DELETE"], _delete_secrets
 
+    def get_all_links(self) -> BlueprintFactoryResponse:
+        """Get all data connector links."""
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.DataConnectorLinksGetQuery)
+        @paginate
+        async def _get_all(
+            _: Request,
+            user: base_models.APIUser,
+            pagination: PaginationRequest,
+            query: apispec.DataConnectorLinksGetQuery,
+        ) -> tuple[list[dict[str, Any]], int]:
+            doi = DOI(query.doi) if query.doi is not None else None
+            links, total_count = await self.data_connector_repo.get_links(user=user, pagination=pagination, doi=doi)
+            serialized_links = [
+                validate_and_dump(
+                    apispec.DataConnectorToProjectLink,
+                    self._dump_data_connector_to_project_link(link),
+                )
+                for link in links
+            ]
+            return serialized_links, total_count
+
+        return "/data_connector_links", ["GET"], _get_all
+
     @staticmethod
     def _dump_data_connector(
         data_connector: models.DataConnector | models.GlobalDataConnector, validator: RCloneValidator
@@ -504,6 +571,7 @@ class DataConnectorsBP(CustomBlueprint):
                 doi=data_connector.doi,
                 publisher_name=data_connector.publisher_name,
                 publisher_url=data_connector.publisher_url,
+                expires_at=data_connector.expires_at,
             )
         return dict(
             id=str(data_connector.id),
@@ -518,6 +586,7 @@ class DataConnectorsBP(CustomBlueprint):
             description=data_connector.description,
             etag=data_connector.etag,
             keywords=data_connector.keywords or [],
+            expires_at=data_connector.expires_at,
         )
 
     @staticmethod
@@ -538,3 +607,410 @@ class DataConnectorsBP(CustomBlueprint):
             name=secret.name,
             secret_id=str(secret.secret_id),
         )
+
+    async def __get_provider_access_token(self, user: base_models.APIUser, provider_kind: ProviderKind) -> str:
+        provider = await self.connected_services_repo.get_provider_for_kind(user, provider_kind)
+        if not provider:
+            raise errors.UnauthorizedError(
+                message=f"The {provider_kind.value} provider does not exist, please contact the administrator."
+            )
+        if not provider.connected_user:
+            raise errors.UnauthorizedError(
+                message=f"You need to connect and authenticate with the {provider_kind.value} provider to do this"
+            )
+        token_set = await self.connected_services_repo.get_token_set(
+            user=user, connection_id=provider.connected_user.connection.id
+        )
+        if not token_set:
+            raise errors.UnauthorizedError(
+                message=f"You need to connect and authenticate with the {provider_kind.value} provider to do this"
+            )
+        access_token = token_set.access_token
+        if not access_token:
+            raise errors.UnauthorizedError(
+                message=f"You need to connect and authenticate with the {provider_kind.value} provider to do this"
+            )
+        return access_token
+
+    async def __get_scicat_token(self, user: base_models.APIUser) -> str:
+        token = await self.__get_provider_access_token(user, ProviderKind.scicat)
+        # Exchange access token for a SciCat token using the SciCat API.
+        deposit_api_key = await self.scicat_client.get_scicat_token(token)
+        return deposit_api_key
+
+    def post_deposit(self) -> BlueprintFactoryResponse:
+        """Create a deposit."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.DepositPost)
+        async def _post_deposit(
+            request: Request,
+            user: base_models.AuthenticatedAPIUser,
+            body: apispec.DepositPost,
+        ) -> JSONResponse:
+            dc_id = ULID.from_str(body.data_connector_id)
+            await self.data_connector_repo.get_data_connector(user=user, data_connector_id=dc_id)
+            existing_deposits, _ = await self.data_connector_repo.get_deposits(user, dc_id)
+            if len(existing_deposits) != 0:
+                raise errors.ValidationError(
+                    message="Cannot have more than 1 deposit for the same user and data connector.",
+                    detail="Please delete your existing deposit and make a new one afterward.",
+                )
+
+            deposit_data = None
+            match body.provider:
+                case apispec.DepositProvider.envidat:
+                    # TODO: Should we use the deposit ULID as the directory name!?
+                    # NOTE: Each new Envidat deposit gets its own dir, so a failed deposit cannot be resumed and need to
+                    # be cleaned up manually on Envidat.
+                    original_id = str(ULID())
+                    deposit_api_key: str | None = None
+
+                case apispec.DepositProvider.zenodo:
+                    deposit_api_key = await self.__get_provider_access_token(user, ProviderKind.zenodo)
+                    zenodo_dep = await self.zenodo_client.create_deposit(deposit_api_key, body.name)
+                    original_id = str(zenodo_dep.id)
+
+                case apispec.DepositProvider.scicat:
+                    deposit_api_key = await self.__get_scicat_token(user)
+                    deposit_data = await self.scicat_client.create_deposit(deposit_api_key, body)
+                    original_id = str(deposit_data.pid)
+
+                case x:
+                    raise errors.ValidationError(
+                        message=f"Received unknown deposit provider {x} when creating deposit."
+                    )
+
+            # The closure below allows us to tie the creation of the db entry to the successful
+            # creation of the job in kubernetes. I.e. if the k8s creation fails nothing is saved
+            # in the database.
+            async def in_transaction_ops(
+                saved_dep: models.DepositJob,
+            ) -> None:
+                await create_deposit_upload(
+                    request=request,
+                    user=user,
+                    deposit_job=saved_dep,
+                    data_connector_repo=self.data_connector_repo,
+                    storage_class=self.dc_storage_class,
+                    secrets_storage_service_url=self.secrets_storage_service_url,
+                    k8s_client=self.k8s_client,
+                    deposit_config=self.deposit_config,
+                    job_client=self.job_client,
+                    data_connector_secret_repo=self.data_connector_secret_repo,
+                    data_source_repo=self.data_source_repo,
+                    deposit_api_key=deposit_api_key,
+                    deposit_data=deposit_data,
+                )
+
+            unsaved_dep = validate_deposit(body, original_id)
+            saved_dep = await self.data_connector_repo.create_deposit(user, unsaved_dep, in_transaction_ops)
+            return validated_json(apispec.Deposit, serialize_deposit(saved_dep, self.deposit_config))
+
+        return "/deposits", ["POST"], _post_deposit
+
+    def get_deposit(self) -> BlueprintFactoryResponse:
+        """Get a specific deposit."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @extract_if_none_match
+        async def _get_deposit(
+            _: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID, etag: str | None
+        ) -> HTTPResponse:
+            saved_dep = await update_deposit_status(
+                user=user,
+                job=deposit_id,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
+            if saved_dep.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": saved_dep.etag}
+            return validated_json(apispec.Deposit, serialize_deposit(saved_dep, self.deposit_config), headers=headers)
+
+        return "/deposits/<deposit_id:ulid>", ["GET"], _get_deposit
+
+    def patch_deposit(self) -> BlueprintFactoryResponse:
+        """Patch a specific deposit."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @if_match_required
+        @validate(json=apispec.DepositPatch)
+        async def _patch_deposit(
+            _: Request,
+            user: base_models.AuthenticatedAPIUser,
+            body: apispec.DepositPatch,
+            deposit_id: ULID,
+            etag: str,
+        ) -> JSONResponse:
+            saved_dep = await update_deposit_status(
+                user=user,
+                job=deposit_id,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
+            patch = validate_deposit_patch(body)
+            if patch.status:
+                validate_deposit_status_change(saved_dep.deposit.status, patch.status)
+            if patch.status == models.DepositStatus.complete:
+                match saved_dep.deposit.source:
+                    case models.DepositSource.envidat:
+                        envidat_status = await self.envidat_client.get_deposit_status(saved_dep.deposit.original_id)
+                        if not envidat_status.is_published:
+                            raise errors.ValidationError(
+                                message="The deposit needs to be published on Envidat before being marked complete."
+                            )
+                    case models.DepositSource.zenodo:
+                        deposit_api_key = await self.__get_provider_access_token(user, ProviderKind.zenodo)
+                        zenodo_dep = await self.zenodo_client.get_deposit(
+                            deposit_api_key, saved_dep.deposit.original_id
+                        )
+                        if not zenodo_dep:
+                            raise errors.MissingResourceError(
+                                message=f"The Zenodo deposit with id {saved_dep.deposit.original_id} cannot be found."
+                            )
+                        if not zenodo_dep.submitted:
+                            raise errors.ValidationError(
+                                message="The Zenodo deposit needs to be completed and published first "
+                                "before being completed."
+                            )
+                    case models.DepositSource.scicat:
+                        deposit_api_key = await self.__get_scicat_token(user)
+                        scicat_dep = await self.scicat_client.get_deposit(
+                            deposit_api_key, saved_dep.deposit.original_id
+                        )
+                        if not scicat_dep:
+                            raise errors.MissingResourceError(
+                                message=f"The SciCat deposit with id {saved_dep.deposit.original_id} cannot be found."
+                            )
+                        if not scicat_dep.isPublished:
+                            raise errors.ValidationError(
+                                message="The deposit needs to be published on SciCat before being marked complete."
+                            )
+                    case x:
+                        raise errors.ValidationError(
+                            message=f"Received unknown deposit source {x} when pathing deposit with ID {deposit_id}."
+                        )
+            saved_dep = await self.data_connector_repo.update_deposit(user, deposit_id, patch, etag=etag)
+            if patch.status == models.DepositStatus.complete:
+                # If the deposit is being completed then we delete it
+                # We leave it to the user to create a new data connector and link it
+                await self.data_connector_repo.delete_deposit(user, saved_dep.deposit.id)
+            return validated_json(apispec.Deposit, serialize_deposit(saved_dep, self.deposit_config))
+
+        return "/deposits/<deposit_id:ulid>", ["PATCH"], _patch_deposit
+
+    def post_deposit_job(self) -> BlueprintFactoryResponse:
+        """Rerun a deposit job."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _post_deposit_job(
+            request: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID
+        ) -> HTTPResponse:
+            saved_dep = await update_deposit_status(
+                user,
+                job=deposit_id,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
+            if saved_dep.deposit.source == models.DepositSource.envidat:
+                raise errors.ValidationError(
+                    message="Envidat deposits cannot be retried. Please delete this deposit and create a new one.",
+                    detail="Each Envidat deposit uploads to a unique S3 directory identified by the deposit ID. "
+                    "Starting over with a new deposit ensures a clean upload without mixing partial files.",
+                )
+            if saved_dep.deposit.status == models.DepositStatus.in_progress:
+                raise errors.ValidationError(message="Cannot rerun a deposit job that is currently in progress.")
+
+            deposit_data = None
+            match saved_dep.deposit.source:
+                case models.DepositSource.zenodo:
+                    deposit_api_key = await self.__get_provider_access_token(user, ProviderKind.zenodo)
+                case models.DepositSource.scicat:
+                    deposit_api_key = await self.__get_scicat_token(user)
+                    deposit_data = await self.scicat_client.get_deposit(deposit_api_key, saved_dep.deposit.original_id)
+                case x:
+                    raise errors.ValidationError(
+                        message=f"Received unknown deposit provider {x} when rerunning deposit job."
+                    )
+
+            await self.job_client.delete(saved_dep.to_meta(user.id, self.deposit_config.namespace))
+            new_job_name = "deposit-" + str(ULID()).lower()
+            saved_dep = await self.data_connector_repo.update_deposit(
+                user,
+                saved_dep.deposit.id,
+                models.DepositPatch(job_name=new_job_name, status=models.DepositStatus.in_progress),
+                etag=saved_dep.etag,
+            )
+            await create_deposit_upload(
+                request=request,
+                user=user,
+                storage_class=self.dc_storage_class,
+                k8s_client=self.k8s_client,
+                secrets_storage_service_url=self.secrets_storage_service_url,
+                deposit_job=saved_dep,
+                job_client=self.job_client,
+                deposit_api_key=deposit_api_key,
+                data_source_repo=self.data_source_repo,
+                data_connector_repo=self.data_connector_repo,
+                data_connector_secret_repo=self.data_connector_secret_repo,
+                deposit_config=self.deposit_config,
+                deposit_data=deposit_data,
+            )
+            return HTTPResponse(status=201)
+
+        return "/deposits/<deposit_id:ulid>/job", ["POST"], _post_deposit_job
+
+    def delete_deposit(self) -> BlueprintFactoryResponse:
+        """Delete a specific deposit."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete_deposit(_: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID) -> HTTPResponse:
+            deposit_job = await update_deposit_status(
+                user,
+                job=deposit_id,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
+            await self.data_connector_repo.delete_deposit(user, deposit_id)
+            await self.job_client.delete(deposit_job.to_meta(user_id=user.id, namespace=self.deposit_config.namespace))
+            return HTTPResponse(status=204)
+
+        return "/deposits/<deposit_id:ulid>", ["DELETE"], _delete_deposit
+
+    def get_deposits(self) -> BlueprintFactoryResponse:
+        """Get a specific deposit."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate_query(apispec.PaginationRequest)
+        @paginate
+        async def _get_deposits(
+            _: Request,
+            user: base_models.AuthenticatedAPIUser,
+            pagination: PaginationRequest,
+            query: apispec.PaginationRequest,
+        ) -> tuple[list[dict[str, Any]], int]:
+            deposits, total_num = await self.data_connector_repo.get_deposits(
+                user, data_connector_id=None, pagination=pagination
+            )
+            deposits = await update_deposits_statuses(
+                user=user,
+                deposit_jobs=deposits,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
+            return [
+                validate_and_dump(apispec.Deposit, serialize_deposit(i, self.deposit_config)) for i in deposits
+            ], total_num
+
+        return "/deposits", ["GET"], _get_deposits
+
+    def get_dc_deposits(self) -> BlueprintFactoryResponse:
+        """Get a specific deposit."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @paginate
+        async def _get_dc_deposits(
+            _: Request, user: base_models.AuthenticatedAPIUser, data_connector_id: ULID, pagination: PaginationRequest
+        ) -> tuple[list[dict[str, Any]], int]:
+            deposits, total_num = await self.data_connector_repo.get_deposits(user, data_connector_id, pagination)
+            deposits = await update_deposits_statuses(
+                user=user,
+                deposit_jobs=deposits,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
+            return [
+                validate_and_dump(apispec.Deposit, serialize_deposit(i, self.deposit_config)) for i in deposits
+            ], total_num
+
+        return "/data_connectors/<data_connector_id:ulid>/deposits", ["GET"], _get_dc_deposits
+
+    def get_dc_deposit_logs(self) -> BlueprintFactoryResponse:
+        """Get logs of a specific deposit."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_dc_deposit_logs(
+            _: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID
+        ) -> JSONResponse:
+            saved_dep = await update_deposit_status(
+                user=user,
+                job=deposit_id,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
+            all_logs = await self.job_client.logs(
+                saved_dep.to_meta(user_id=user.id, namespace=self.deposit_config.namespace)
+            )
+            output: dict[str, str] = {}
+            containers = sorted(all_logs.keys())
+            for container in containers:
+                # NOTE: mirror error handling in NotebookK8sClient.get_session_logs
+                try:
+                    logs: list[str] = [log async for log in all_logs[container]]
+                except (httpx.ResponseNotRead, httpx.HTTPStatusError):
+                    # NOTE: This occurs when the container is still starting, but we try to read its logs
+                    continue
+                except ServerError as err:
+                    if err.response is not None and err.response.status_code == 400:
+                        # NOTE: This occurs when the target container is not yet running, but we try to read its logs
+                        continue
+                    if err.response is not None and err.response.status_code == 404:
+                        raise errors.MissingResourceError(
+                            message=f"Could not find logs for deposit job {deposit_id}."
+                        ) from err
+                    raise
+                output[container] = "\n".join(logs)
+            return validated_json(apispec.DepositLogs, output)
+
+        return "/deposits/<deposit_id:ulid>/logs", ["GET"], _get_dc_deposit_logs
+
+    def get_dc_link_policies(self) -> BlueprintFactoryResponse:
+        """Get the data connector to project links with the launcher policies."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_dc_links(_: Request, user: base_models.AuthenticatedAPIUser, launcher_id: ULID) -> JSONResponse:
+            launcher_dc_links = await self.data_connector_repo.get_dc_link_policies_for_launcher(
+                user=user, launcher_id=launcher_id
+            )
+            return validated_json(session_apispec.SessionLauncherDataConnectorList, launcher_dc_links)
+
+        return "/session_launchers/<launcher_id:ulid>/data_connectors", ["GET"], _get_dc_links
+
+    def update_dc_link_policies(self) -> BlueprintFactoryResponse:
+        """Update the data connector access policies for the launcher."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=session_apispec.SessionLauncherDataConnectorPatchList)
+        async def _patch_dc_links(
+            request: Request,
+            user: base_models.APIUser,
+            launcher_id: ULID,
+            body: session_apispec.SessionLauncherDataConnectorPatchList,
+        ) -> JSONResponse:
+            dc_links = await self.data_connector_repo.update_dc_link_policies_for_launcher(
+                user=user,
+                launcher_id=launcher_id,
+                patches=validate_session_launcher_dc_links_patch(body),
+            )
+            return validated_json(session_apispec.SessionLauncherDataConnectorList, dc_links)
+
+        return "/session_launchers/<launcher_id:ulid>/data_connectors", ["PATCH"], _patch_dc_links

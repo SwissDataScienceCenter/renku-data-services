@@ -24,7 +24,7 @@ class ScaleDownBehavior(StrEnum):
 
 
 class OccurrenceState(StrEnum):
-    """The occurence states for capacity reservations schedules."""
+    """The occurrence states for capacity reservations schedules."""
 
     PENDING = "pending"
     ACTIVE = "active"

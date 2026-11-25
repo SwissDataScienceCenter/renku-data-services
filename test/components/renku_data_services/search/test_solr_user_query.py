@@ -38,7 +38,7 @@ ctx: Context = Context.for_anonymous(ref_date, UTC)
 
 
 @dataclass
-class TestAuthAccess(AuthAccess):
+class DummyAuthAccess(AuthAccess):
     result: list[str]
 
     async def get_ids_for_role(
@@ -48,7 +48,7 @@ class TestAuthAccess(AuthAccess):
 
     @classmethod
     def of(cls, *args: str) -> AuthAccess:
-        return TestAuthAccess(list(args))
+        return cls(list(args))
 
 
 def midnight(d: datetime) -> datetime:
@@ -96,10 +96,10 @@ async def test_from_term() -> None:
 
     assert await to_solr(ctx, S.role_is(Role.OWNER)) == st.empty()
     assert await to_solr(
-        ctx.with_user_role("user1").with_auth_access(TestAuthAccess.of("id1", "id2")), S.role_is(Role.OWNER)
+        ctx.with_user_role("user1").with_auth_access(DummyAuthAccess.of("id1", "id2")), S.role_is(Role.OWNER)
     ) == st.id_in(Nel.of("id1", "id2"))
     assert await to_solr(
-        ctx.with_admin_role("user1").with_auth_access(TestAuthAccess.of("id1", "id2")), S.role_is(Role.OWNER)
+        ctx.with_admin_role("user1").with_auth_access(DummyAuthAccess.of("id1", "id2")), S.role_is(Role.OWNER)
     ) == st.id_in(Nel.of("id1", "id2"))
 
 

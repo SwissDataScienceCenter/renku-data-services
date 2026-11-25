@@ -1,7 +1,7 @@
 """Adapters for repositories database classes."""
 
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 import pydantic
@@ -53,14 +53,31 @@ class GitRepositoriesRepository:
             not github_type or github_type == GitHubProviderType.standard_app
         )
 
+    async def get_token(self, repository_url: str, user: base_models.APIUser) -> dict[str, Any] | None:
+        """Get token for repository provider."""
+        match GitUrl.parse(repository_url):
+            case GitUrlError():
+                return None
+            case url:
+                valid_url = url
+
+        provider = await self._find_client(valid_url)
+        if provider is None:
+            return None
+        connection = await self._find_connection(user, provider)
+        if connection is None:
+            return None
+        oauth_client = await self.oauth_client_factory.for_user_connection_raise(user, connection.id)
+        return await oauth_client.get_token()
+
     async def get_repository(
         self,
         repository_url: str,
         user: base_models.APIUser,
         etag: str | None,
-        internal_gitlab_user: base_models.APIUser,
     ) -> models.RepositoryDataResult:
         """Get metadata about one repository."""
+
         match GitUrl.parse(repository_url):
             case GitUrlError() as err:
                 return models.RepositoryDataResult(error=err)
@@ -80,17 +97,6 @@ class GitRepositoriesRepository:
                 else await self._get_repository_anonymously(repository_url=valid_url, client=provider, etag=etag)
             )
             result = result.with_metadata(repo_meta)
-
-        else:
-            if self._is_internal_gitlab(valid_url) and self.internal_gitlab_url:
-                provider_data = models.ProviderData(id="INTERNAL_GITLAB", name="GitLab", url=self.internal_gitlab_url)
-                repo_meta = await self._get_repository_from_internal_gitlab(
-                    repository_url=valid_url,
-                    user=internal_gitlab_user,
-                    etag=etag,
-                    internal_gitlab_url=self.internal_gitlab_url,
-                )
-                result = result.with_metadata(repo_meta).with_provider(provider_data)
 
         if not result.metadata:
             repo_err = await self._check_arbitrary_git_repo(valid_url)

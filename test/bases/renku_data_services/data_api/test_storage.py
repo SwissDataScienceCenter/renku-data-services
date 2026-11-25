@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
-from syrupy.filters import props
+from ulid import ULID
 
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.data_api.app import register_all_handlers
@@ -27,6 +27,14 @@ _valid_storage: dict[str, Any] = {
     "source_path": "bucket/myfolder",
     "target_path": "my/target",
 }
+
+
+def merge_headers(*headers: dict[str, str]) -> dict[str, str]:
+    """Merge multiple headers."""
+    all_headers = dict()
+    for h in headers:
+        all_headers.update(**h)
+    return all_headers
 
 
 @pytest.fixture
@@ -53,508 +61,6 @@ async def storage_test_client(
 ) -> SanicASGITestClient:
     run_migrations_for_app("common")
     yield storage_test_client_setup
-
-
-@pytest.mark.parametrize(
-    "payload,expected_status_code,expected_storage_type",
-    [
-        (_valid_storage, 201, "s3"),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "configuration": {
-                    "type": "s3",
-                    "provider": "AWS",
-                    "region": "us-east-1",
-                },
-                "source_path": "bucket/myfolder",
-                "target_path": "my/target",
-            },
-            201,
-            "s3",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "target_path": "my/target",
-                "storage_url": "s3://s3.us-east-2.amazonaws.com/mybucket/myfolder",
-            },
-            201,
-            "s3",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "target_path": "my/target",
-                "storage_url": "s3://giab/",
-            },
-            201,
-            "s3",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "target_path": "my/target",
-                "storage_url": "s3://mybucket.s3.us-east-2.amazonaws.com/myfolder",
-                "readonly": False,
-            },
-            201,
-            "s3",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "target_path": "my/target",
-                "storage_url": "https://my.provider.com/mybucket/myfolder",
-                "readonly": True,
-            },
-            201,
-            "s3",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "target_path": "my/target",
-                "storage_url": "azure://mycontainer/myfolder",
-            },
-            201,
-            "azureblob",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "target_path": "my/target",
-                "storage_url": "az://myaccount.dfs.core.windows.net/myfolder",
-            },
-            201,
-            "azureblob",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "source_path": "bucket/myfolder",
-                "target_path": "my/target",
-                "storage_url": "az://myaccount.blob.core.windows.net/myfolder",
-            },
-            201,
-            "azureblob",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "configuration": {
-                    "type": "s3",
-                    "provider": "AWS",
-                    "secret_access_key": "1234567",  # passing in secret
-                },
-                "source_path": "bucket/myfolder",
-                "target_path": "my/target",
-            },
-            201,
-            "s3",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "configuration": {
-                    "type": "s3",
-                    "provider": "AWS",
-                    "secret_access_key": "1234567",  # passing in secret
-                },
-                "source_path": "bucket/myfolder",
-                "target_path": "my/target",
-                "readonly": True,
-            },
-            201,
-            "s3",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "configuration": {
-                    "provider": "Petabox",
-                    "type": "s3",
-                },
-                "source_path": "bucket/myfolder",
-                "target_path": "my/target",
-            },
-            422,
-            "",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "storage_type": "s3",
-                "configuration": {
-                    "provider": "AWS",
-                    "region": "us-east-1",
-                    "type": "s3",
-                },  # mising source/target path
-            },
-            422,
-            "",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "storage_type": "s3",
-                "configuration": {  # missing type in config
-                    "provider": "AWS",
-                    "region": "us-east-1",
-                },
-                "source_path": "bucket/myfolder",
-                "target_path": "my/target",
-            },
-            422,
-            "",
-        ),
-        (
-            {
-                "project_id": "00000",  # unauthorized storage id
-                "name": "mystorage",
-                "configuration": {
-                    "type": "s3",
-                    "provider": "AWS",
-                    "region": "us-east-1",
-                },
-                "source_path": "bucket/myfolder",
-                "target_path": "my/target",
-            },
-            403,
-            "",
-        ),
-        (
-            {  # no name
-                "project_id": "123456",
-                "configuration": {
-                    "type": "s3",
-                    "provider": "AWS",
-                    "region": "us-east-1",
-                },
-                "source_path": "bucket/my-folder",
-                "target_path": "my/my-target",
-            },
-            422,
-            "",
-        ),
-        (
-            {
-                "project_id": "123456",
-                "name": "mystorage",
-                "configuration": {
-                    "type": "sftp",
-                    "host": "myhost",
-                    "ssh": "ssh",  # passing in banned option
-                },
-                "source_path": "bucket/myfolder",
-                "target_path": "my/target",
-            },
-            422,
-            "",
-        ),
-    ],
-)
-@pytest.mark.asyncio
-async def test_storage_creation(
-    storage_test_client: SanicASGITestClient,
-    payload: dict[str, Any],
-    expected_status_code: int,
-    expected_storage_type: str,
-    admin_headers: dict[str, str],
-    snapshot,
-) -> None:
-    storage_test_client, _ = storage_test_client
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers=admin_headers,
-        data=json.dumps(payload),
-    )
-    assert res
-    assert res.status_code == expected_status_code
-    assert res.json
-    if res.status_code < 300:
-        assert res.json["storage"]["storage_type"] == expected_storage_type
-        assert res.json["storage"]["name"] == payload["name"]
-        assert res.json["storage"]["target_path"] == payload["target_path"]
-        assert res.json == snapshot(exclude=props("storage_id"))
-
-
-@pytest.mark.asyncio
-async def test_create_storage_duplicate_name(storage_test_client, valid_storage_payload, admin_headers) -> None:
-    storage_test_client, _ = storage_test_client
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers=admin_headers,
-        data=json.dumps(valid_storage_payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "s3"
-
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers=admin_headers,
-        data=json.dumps(valid_storage_payload),
-    )
-    assert res.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_get_storage(storage_test_client, valid_storage_payload, admin_headers) -> None:
-    storage_test_client, _ = storage_test_client
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers=admin_headers,
-        data=json.dumps(valid_storage_payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "s3"
-
-    project_id = res.json["storage"]["project_id"]
-    _, res = await storage_test_client.get(
-        f"/api/data/storage?project_id={project_id}",
-        headers=admin_headers,
-    )
-    assert res.status_code == 200
-    assert len(res.json) == 1
-    result = res.json[0]
-    storage = result["storage"]
-    assert storage["project_id"] == project_id
-    assert storage["storage_type"] == "s3"
-    assert storage["configuration"]["provider"] == "AWS"
-
-
-@pytest.mark.asyncio
-async def test_get_storage_unauthorized(storage_test_client, valid_storage_payload, admin_headers) -> None:
-    storage_test_client, gl_auth = storage_test_client
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers=admin_headers,
-        data=json.dumps(valid_storage_payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "s3"
-
-    project_id = res.json["storage"]["project_id"]
-    _, res = await storage_test_client.get(
-        f"/api/data/storage?project_id={project_id}",
-        headers={"Authorization": ""},
-    )
-    assert res.status_code == 200
-    assert len(res.json) == 0
-
-
-@pytest.mark.asyncio
-async def test_storage_deletion(storage_test_client, valid_storage_payload, admin_headers) -> None:
-    storage_test_client, _ = storage_test_client
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers=admin_headers,
-        data=json.dumps(valid_storage_payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "s3"
-    storage_id = res.json["storage"]["storage_id"]
-
-    _, res = await storage_test_client.delete(
-        f"/api/data/storage/{storage_id}",
-        headers=admin_headers,
-    )
-    assert res.status_code == 204
-
-    _, res = await storage_test_client.get(
-        f"/api/data/storage/{storage_id}",
-        headers=admin_headers,
-    )
-
-    assert res.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_storage_deletion_unauthorized(storage_test_client, valid_storage_payload, admin_headers) -> None:
-    storage_test_client, gl_auth = storage_test_client
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers=admin_headers,
-        data=json.dumps(valid_storage_payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "s3"
-    storage_id = res.json["storage"]["storage_id"]
-    _, res = await storage_test_client.delete(
-        f"/api/data/storage/{storage_id}",
-        headers={"Authorization": ""},
-    )
-    assert res.status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_storage_put(storage_test_client, valid_storage_payload, admin_headers) -> None:
-    storage_test_client, _ = storage_test_client
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers=admin_headers,
-        data=json.dumps(valid_storage_payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "s3"
-    storage_id = res.json["storage"]["storage_id"]
-
-    _, res = await storage_test_client.put(
-        f"/api/data/storage/{storage_id}",
-        headers=admin_headers,
-        data=json.dumps(
-            {
-                "project_id": valid_storage_payload["project_id"],
-                "name": "newstoragename",
-                "configuration": {"type": "azureblob"},
-                "source_path": "bucket/myfolder",
-                "target_path": "my/target",
-            }
-        ),
-    )
-    assert res.status_code == 200
-    assert res.json["storage"]["storage_type"] == "azureblob"
-
-
-@pytest.mark.asyncio
-async def test_storage_put_unauthorized(storage_test_client, valid_storage_payload, admin_headers) -> None:
-    storage_test_client, gl_auth = storage_test_client
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers=admin_headers,
-        data=json.dumps(valid_storage_payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "s3"
-    storage_id = res.json["storage"]["storage_id"]
-    _, res = await storage_test_client.put(
-        f"/api/data/storage/{storage_id}",
-        headers={"Authorization": ""},
-        data=json.dumps(
-            {
-                "project_id": valid_storage_payload["project_id"],
-                "name": "newstoragename",
-                "configuration": {"type": "azureblob"},
-                "source_path": "bucket/myfolder",
-                "target_path": "my/target",
-            }
-        ),
-    )
-    assert res.status_code == 403, res.text
-
-
-@pytest.mark.asyncio
-async def test_storage_patch(storage_test_client, valid_storage_payload) -> None:
-    storage_test_client, _ = storage_test_client
-    # NOTE: The keycloak dummy client used to authorize the storage patch requests only has info
-    # on a user with name Admin Doe, using a different user will fail with a 401 error.
-    access_token = json.dumps({"is_admin": False, "id": "some-id", "full_name": "Admin Doe"})
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers={"Authorization": f"bearer {access_token}"},
-        data=json.dumps(valid_storage_payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "s3"
-    storage_id = res.json["storage"]["storage_id"]
-
-    _, res = await storage_test_client.patch(
-        f"/api/data/storage/{storage_id}",
-        headers={"Authorization": f"bearer {access_token}"},
-        data=json.dumps(
-            {
-                "configuration": {"provider": "Other", "region": None},
-                "source_path": "bucket/myotherfolder",
-            }
-        ),
-    )
-    assert res.status_code == 422
-    assert "endpoint" in res.text
-
-    _, res = await storage_test_client.patch(
-        f"/api/data/storage/{storage_id}",
-        headers={"Authorization": f"bearer {access_token}"},
-        data=json.dumps(
-            {
-                "configuration": {"provider": "Other", "region": None, "endpoint": "https://test.com"},
-                "source_path": "bucket/myotherfolder",
-            }
-        ),
-    )
-    assert res.status_code == 200
-    assert res.json["storage"]["configuration"]["provider"] == "Other"
-    assert res.json["storage"]["source_path"] == "bucket/myotherfolder"
-    assert "region" not in res.json["storage"]["configuration"]
-
-
-@pytest.mark.asyncio
-async def test_storage_patch_unauthorized(storage_test_client, valid_storage_payload, admin_headers) -> None:
-    storage_test_client, gl_auth = storage_test_client
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers=admin_headers,
-        data=json.dumps(valid_storage_payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "s3"
-    storage_id = res.json["storage"]["storage_id"]
-    _, res = await storage_test_client.patch(
-        f"/api/data/storage/{storage_id}",
-        headers={"Authorization": ""},
-        data=json.dumps(
-            {
-                "configuration": {"type": "azureblob"},
-                "source_path": "bucket/myotherfolder",
-            }
-        ),
-    )
-    assert res.status_code == 403, res.text
-
-
-@pytest.mark.asyncio
-async def test_storage_patch_banned_option(storage_test_client, valid_storage_payload) -> None:
-    storage_test_client, _ = storage_test_client
-    # NOTE: The keycloak dummy client used to authorize the storage patch requests only has info
-    # on a user with name Admin Doe, using a different user will fail with a 401 error.
-    access_token = json.dumps({"is_admin": False, "id": "some-id", "full_name": "Admin Doe"})
-    payload = dict(valid_storage_payload)
-    payload["configuration"] = {
-        "type": "sftp",
-        "host": "myhost",
-    }
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers={"Authorization": f"bearer {access_token}"},
-        data=json.dumps(payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "sftp"
-    storage_id = res.json["storage"]["storage_id"]
-
-    _, res = await storage_test_client.patch(
-        f"/api/data/storage/{storage_id}",
-        headers={"Authorization": f"bearer {access_token}"},
-        data=json.dumps(
-            {
-                "configuration": {"key_file": "my_key"},
-            }
-        ),
-    )
-    assert res.status_code == 422
-    assert "key_file option is not allowed" in res.text
 
 
 @pytest.mark.asyncio
@@ -732,3 +238,818 @@ async def test_storage_validate_connection_supports_doi(storage_test_client) -> 
     payload = {"configuration": {"type": "doi", "doi": "10.5281/zenodo.15174623"}, "source_path": ""}
     _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", json=payload)
     assert res.status_code == 204, res.text
+
+
+@pytest.mark.asyncio
+async def test_post_storage_success(
+    sanic_client: SanicASGITestClient,
+    create_project,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    storage = response.json
+    assert storage.get("project_id") == project["id"]
+    assert storage.get("size") == 10
+    assert storage.get("mount_path") == "/data"
+    assert storage.get("created_by") == "user"
+    assert "ETag" in response.headers
+
+
+@pytest.mark.asyncio
+async def test_post_storage_unauthenticated_fails(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", json=payload)
+
+    assert response.status_code == 401, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_storage_not_allowed_fails(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", json=payload, headers=user_headers)
+
+    assert response.status_code == 403, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_storage_duplicate_fails(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status == 201
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("size", [0, -1, -20])
+async def test_post_storage_negative_size_fails(
+    sanic_client: SanicASGITestClient,
+    create_project,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    size: int,
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": -1, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+
+    assert response.status_code == 422, response.text
+    assert response.json is not None
+    assert response.json.get("error") is not None
+    error = response.json["error"]
+    assert "size: Input should be greater than or equal to 1" in error.get("message")
+
+
+@pytest.mark.asyncio
+async def test_get_one_storage_success(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+
+    _, response = await sanic_client.get(f"/api/data/storage/{storage_id}", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    storage = response.json
+    assert storage.get("id") == storage_id
+    assert storage.get("project_id") == project["id"]
+    assert storage.get("size") == 10
+    assert storage.get("mount_path") == "/data"
+
+
+@pytest.mark.asyncio
+async def test_get_one_storage_not_found(sanic_client: SanicASGITestClient, user_headers: dict[str, str]) -> None:
+    non_existent_id = str(ULID())
+    _, response = await sanic_client.get(f"/api/data/storage/{non_existent_id}", headers=user_headers)
+
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+async def test_get_one_storage_etag(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+    etag = response.headers["ETag"]
+
+    headers = merge_headers(user_headers, {"If-None-Match": etag})
+    _, response = await sanic_client.get(f"/api/data/storage/{storage_id}", headers=headers)
+
+    assert response.status_code == 304, response.text
+
+
+@pytest.mark.asyncio
+async def test_get_storage_to_project_for_no_storage(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project['id']}/storage", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json == []
+
+
+@pytest.mark.asyncio
+async def test_get_storage_to_project_success(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status == 201
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project['id']}/storage", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+    storage = response.json[0]
+    assert storage.get("project_id") == project["id"]
+    assert storage.get("size") == 10
+    assert storage.get("mount_path") == "/data"
+
+
+@pytest.mark.asyncio
+async def test_delete_storage_success(
+    sanic_client: SanicASGITestClient,
+    create_project,
+    user_headers: dict[str, str],
+    admin_headers: dict[str, str],
+    cluster,
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+
+    _, response = await sanic_client.delete(f"/api/data/storage/{storage_id}", headers=user_headers)
+    assert response.status_code == 204, response.text
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project['id']}/storage", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json == []
+
+
+@pytest.mark.asyncio
+async def test_delete_storage_unauthenticated_fails(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+
+    _, response = await sanic_client.delete(f"/api/data/storage/{storage_id}")
+
+    assert response.status_code == 401, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_storage_allow_success(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    allow = response.json
+    assert allow.get("project_ref").get("id") == project_id
+    assert allow.get("max_size") == 10
+
+
+@pytest.mark.asyncio
+async def test_post_storage_allow_requires_admin(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+
+    payload = {"project_ref": {"id": project["id"]}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=user_headers, json=payload)
+
+    assert response.status_code == 403, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_storage_allow_unauthenticated_fails(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+
+    payload = {"project_ref": {"id": project["id"]}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", json=payload)
+
+    assert response.status_code == 401, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_storage_allow_duplicate_fails(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.asyncio
+async def test_delete_storage_allow_success(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.delete(f"/api/data/storage/allow/{project_id}", headers=admin_headers)
+
+    assert response.status_code == 204, response.text
+
+    # Re-adding after deletion should succeed
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.asyncio
+async def test_delete_storage_allow_requires_admin(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str], user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.delete(f"/api/data/storage/allow/{project_id}", headers=user_headers)
+
+    assert response.status_code == 403, response.text
+
+
+@pytest.mark.asyncio
+async def test_get_storage_allow_success(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str], user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("project_id") == project_id
+    assert response.json.get("max_size") == 10
+
+
+@pytest.mark.asyncio
+async def test_get_storage_allow_not_in_list(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}", headers=user_headers)
+
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+async def test_get_storage_allow_unauthenticated(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}")
+
+    assert response.status_code == 401, response.text
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_success(
+    sanic_client: SanicASGITestClient,
+    create_project,
+    user_headers: dict[str, str],
+    admin_headers: dict[str, str],
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 5, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage = response.json
+    storage_id = storage["id"]
+    original_etag = response.headers["ETag"]
+
+    # Patch the size
+    headers = merge_headers(user_headers, {"If-Match": original_etag})
+    patch = {"size": 8}
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    updated_storage = response.json
+    assert updated_storage.get("id") == storage_id
+    assert updated_storage.get("size") == 8
+    assert updated_storage.get("mount_path") == "/data"
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_mount_path(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage = response.json
+    storage_id = storage["id"]
+
+    # Patch the mount path
+    headers = merge_headers(user_headers, {"If-Match": response.headers["ETag"]})
+    patch = {"mount_path": "/new/mount"}
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    updated_storage = response.json
+    assert updated_storage.get("id") == storage_id
+    assert updated_storage.get("size") == 10
+    assert updated_storage.get("mount_path") == "/new/mount"
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_both_fields(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 5, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage = response.json
+    storage_id = storage["id"]
+
+    # Patch both fields at once
+    headers = merge_headers(user_headers, {"If-Match": response.headers["ETag"]})
+    patch = {"size": 8, "mount_path": "/new/mount"}
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    updated_storage = response.json
+    assert updated_storage.get("id") == storage_id
+    assert updated_storage.get("size") == 8
+    assert updated_storage.get("mount_path") == "/new/mount"
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_without_if_match_header(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+
+    # Patch without If-Match header
+    patch = {"size": 20}
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=user_headers, json=patch)
+
+    assert response.status_code == 428, response.text
+    assert "If-Match header not provided" in response.text
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_with_invalid_etag(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 5, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+    correct_etag = response.headers["ETag"]
+
+    # Patch with wrong ETag
+    headers = merge_headers(user_headers, {"If-Match": "wrong-etag"})
+    patch = {"size": 8}
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
+
+    assert response.status_code == 409, response.text
+
+    # Verify the etag changed after a successful patch
+    headers = merge_headers(user_headers, {"If-Match": correct_etag})
+    patch = {"size": 6}
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
+    assert response.status_code == 200, response.text
+    new_etag = response.headers["ETag"]
+    assert new_etag != correct_etag
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_not_found(sanic_client: SanicASGITestClient, user_headers: dict[str, str]) -> None:
+    non_existent_id = str(ULID())
+    headers = merge_headers(user_headers, {"If-Match": "some-etag"})
+    patch = {"size": 20}
+    _, response = await sanic_client.patch(f"/api/data/storage/{non_existent_id}", headers=headers, json=patch)
+
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_unauthenticated_fails(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str], user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 5, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+
+    # Patch without authentication
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", json={"size": 8})
+
+    assert response.status_code == 401, response.text
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_exceeds_max_size(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 5, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+
+    # Try to patch size beyond the allowed max (10GB)
+    headers = merge_headers(user_headers, {"If-Match": response.headers["ETag"]})
+    patch = {"size": 11}
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
+
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_invalid_mount_path(
+    sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    namespace = f"{project['namespace']}/{project['slug']}"
+
+    project_id = project["id"]
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+    _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    storage_id = response.json["id"]
+
+    # Try to patch with invalid mount path
+    headers = merge_headers(user_headers, {"If-Match": response.headers["ETag"]})
+    patch = {"mount_path": "/etc/passwd"}
+    _, response = await sanic_client.patch(f"/api/data/storage/{storage_id}", headers=headers, json=patch)
+
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_allow_success(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str], user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Get the allow entry to retrieve the etag (use user_headers as admin may not have read access)
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    etag = response.headers["ETag"]
+
+    # Patch the max_size
+    headers = merge_headers(admin_headers, {"If-Match": etag})
+    patch = {"max_size": 20}
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    updated_allow = response.json
+    assert updated_allow.get("project_id") == project_id
+    assert updated_allow.get("max_size") == 20
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_allow_requires_admin(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str], user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Get the allow entry to retrieve the etag (use user_headers as admin may not have read access)
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}", headers=admin_headers)
+    assert response.status_code == 200, response.text
+    etag = response.headers["ETag"]
+
+    # Try to patch as non-admin
+    headers = merge_headers(user_headers, {"If-Match": etag})
+    patch = {"max_size": 20}
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
+
+    assert response.status_code == 403, response.text
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_allow_without_if_match_header(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Patch without If-Match header
+    patch = {"max_size": 20}
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=admin_headers, json=patch)
+
+    assert response.status_code == 428, response.text
+    assert "If-Match header not provided" in response.text
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_allow_with_invalid_etag(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str], user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Get the allow entry to retrieve the etag (use user_headers as admin may not have read access)
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    correct_etag = response.headers["ETag"]
+
+    # Patch with wrong ETag
+    headers = merge_headers(admin_headers, {"If-Match": "wrong-etag"})
+    patch = {"max_size": 20}
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
+
+    assert response.status_code == 409, response.text
+
+    # Verify the etag changed after a successful patch
+    headers = merge_headers(admin_headers, {"If-Match": correct_etag})
+    patch = {"max_size": 15}
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
+    assert response.status_code == 200, response.text
+    new_etag = response.headers["ETag"]
+    assert new_etag != correct_etag
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_allow_not_in_list(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    headers = merge_headers(admin_headers, {"If-Match": "some-etag"})
+    patch = {"max_size": 20}
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
+
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_allow_unauthenticated_fails(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Patch without authentication
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", json={"max_size": 20})
+
+    assert response.status_code == 401, response.text
+
+
+@pytest.mark.asyncio
+async def test_patch_storage_allow_min_size(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str], user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+
+    payload = {"project_ref": {"id": project_id}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Get the allow entry to retrieve the etag (use user_headers as admin may not have read access)
+    _, response = await sanic_client.get(f"/api/data/storage/allow/{project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    etag = response.headers["ETag"]
+
+    # Try to set max_size below minimum (1GB)
+    headers = merge_headers(admin_headers, {"If-Match": etag})
+    patch = {"max_size": 0}
+    _, response = await sanic_client.patch(f"/api/data/storage/allow/{project_id}", headers=headers, json=patch)
+
+    assert response.status_code == 422, response.text
+    assert "should be greater than 0" in response.text
+
+
+@pytest.mark.asyncio
+async def test_get_all_storage_allow(
+    sanic_client: SanicASGITestClient, create_project, admin_headers: dict[str, str], user_headers: dict[str, str]
+) -> None:
+    project = await create_project(sanic_client, "Test Project")
+    project_id = project["id"]
+    slug = f"{project["namespace"]}/{project["slug"]}"
+
+    payload = {"project_ref": {"slug": slug}, "max_size": 10}
+    _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.get("/api/data/storage/allow", headers=admin_headers)
+    assert response.status_code == 200, response.text
+    assert response.json is not None, f"No json response body: {response.text}"
+    assert isinstance(response.json, list)
+    assert len(response.json) == 1
+    assert response.json[0]["project_id"] == project_id
+    assert response.json[0]["max_size"] == 10

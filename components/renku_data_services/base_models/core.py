@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import Enum, StrEnum
 from typing import Any, ClassVar, Never, Optional, Protocol, Self, TypeVar, overload
 
-from pydantic_core import core_schema
+from pydantic_core import PydanticSerializationUnexpectedValue, core_schema
 from sanic import Request
 
 from renku_data_services.errors import errors
@@ -169,6 +169,14 @@ class Slug:
         object.__setattr__(self, "value", value)
 
     @classmethod
+    def from_str(cls, value: str) -> Self | None:
+        """Creates a slug from a string. Returns None if the string doesn't match the requirements."""
+        if not re.match(cls._regex, value):
+            return None
+        else:
+            return cls(value)
+
+    @classmethod
     def from_name(cls, name: str) -> Self:
         """Takes a name with any amount of invalid characters and transforms it in a valid slug."""
         lower_case = name.lower()
@@ -316,6 +324,12 @@ class ProjectPath(__NamespaceCommonMixin):
             raise errors.ValidationError(message=f"Two slug strings are needed to create a project path, got {slugs}.")
         return cls(NamespaceSlug(slugs[0]), ProjectSlug(slugs[1]))
 
+    @classmethod
+    def parse(cls, slug: str) -> Self:
+        """Parses a single string into a ProjectPath."""
+        namespace_split = slug.split("/")
+        return cls.from_strings(*namespace_split)
+
 
 @dataclass(frozen=True, eq=True, repr=False)
 class DataConnectorPath(__NamespaceCommonMixin):
@@ -432,10 +446,23 @@ class ResetType(Enum):
             cls,
             core_schema.int_schema(),
             serialization=core_schema.plain_serializer_function_ser_schema(
-                lambda _: None,
+                _serialize_reset,
                 when_used="always",
             ),
         )
+
+
+def _serialize_reset(value: Any) -> None:
+    """Serialize RESET as None, refusing any other value.
+
+    Raising here matters when `ResetType` is part of a union like `Model | ResetType | None`:
+    pydantic tries each union member's serializer in turn, and a serializer that accepts
+    anything would silently turn values that are not an exact match for `Model` (e.g. a model
+    holding a subclass instance in a nested field) into null.
+    """
+    if value is not ResetType.Reset:
+        raise PydanticSerializationUnexpectedValue(f"Expected RESET, got {type(value).__name__}")
+    return None
 
 
 RESET = ResetType.Reset
@@ -452,3 +479,4 @@ class ResourceType(StrEnum):
     group = "group"
     user_namespace = "user_namespace"
     data_connector = "data_connector"
+    resource_pool = "resource_pool"

@@ -2,15 +2,15 @@
 
 import random
 import string
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnExpressionArgument, Select, delete, func, or_, select
+from sqlalchemy import ColumnElement, ColumnExpressionArgument, Select, and_, case, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from ulid import ULID
 
 from renku_data_services import base_models, errors
@@ -30,20 +30,80 @@ from renku_data_services.base_models.core import (
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.data_connectors.core import validate_unsaved_global_data_connector
+from renku_data_services.data_connectors.doi.metadata import get_metadata
 from renku_data_services.data_connectors.doi.models import DOI
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.namespace import orm as ns_schemas
-from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.namespace.db import DataConnectorORM, GroupRepository
 from renku_data_services.namespace.models import ProjectNamespace
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project
 from renku_data_services.project.orm import ProjectORM
-from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.db import GlobalDataConnector, SearchUpdatesRepo
 from renku_data_services.search.decorators import update_search_document
 from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.models import SecretKind
+from renku_data_services.session.models import (
+    SessionLauncherDataConnector,
+    SessionLauncherDataConnectorPatch,
+    SessionLauncherDataConnectorPolicyName,
+)
+from renku_data_services.session.orm import SessionLauncherDataConnectorORM, SessionLauncherORM
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
+
+
+def _build_launcher_data_connector_select(
+    launcher_id: ULID,
+) -> Select[tuple[schemas.DataConnectorToProjectLinkORM, str]]:
+    """Build a SELECT statement for a launcher's data connectors and their effective access policies."""
+
+    launcher_policy = SessionLauncherDataConnectorORM.policy
+    ro = schemas.DataConnectorORM.readonly.is_(True)
+    rw = schemas.DataConnectorORM.readonly.is_(False)
+
+    P = SessionLauncherDataConnectorPolicyName
+    DC = schemas.DataConnectorORM
+    DCLink = schemas.DataConnectorToProjectLinkORM
+    LauncherDC = SessionLauncherDataConnectorORM
+
+    policy: ColumnElement[str] = case(
+        # Read-only connector
+        (and_(ro, launcher_policy == P.excluded), P.excluded.value),
+        (and_(ro, launcher_policy == P.read_only), P.read_only.value),
+        (and_(ro, launcher_policy == P.read_write), P.read_only.value),
+        (and_(ro, launcher_policy.is_(None)), P.read_only.value),
+        # Writable connector
+        (and_(rw, launcher_policy == P.excluded), P.excluded.value),
+        (and_(rw, launcher_policy == P.read_only), P.read_only.value),
+        (and_(rw, launcher_policy == P.read_write), P.read_write.value),
+        (and_(rw, launcher_policy.is_(None)), P.read_write.value),
+        else_=func.coalesce(launcher_policy, P.read_write.value),
+    ).label("policy")
+
+    stmt = (
+        select(DCLink, policy)
+        .select_from(SessionLauncherORM)
+        .join(
+            DCLink,
+            DCLink.project_id == SessionLauncherORM.project_id,
+        )
+        .join(
+            DC,
+            DC.id == DCLink.data_connector_id,
+        )
+        .outerjoin(
+            LauncherDC,
+            and_(
+                LauncherDC.launcher_id == launcher_id,
+                LauncherDC.data_connector_to_project_link_id == DCLink.id,
+            ),
+        )
+        .where(SessionLauncherORM.id == launcher_id)
+    )
+
+    return stmt
 
 
 class DataConnectorRepository:
@@ -110,7 +170,7 @@ class DataConnectorRepository:
         if not authorized:
             raise errors.MissingResourceError(message=not_found_msg)
 
-        async with self.session_maker() as session:
+        async with self.session_maker() as session, session.begin():
             result = await session.scalars(
                 select(schemas.DataConnectorORM)
                 .where(schemas.DataConnectorORM.id == data_connector_id)
@@ -123,7 +183,23 @@ class DataConnectorRepository:
             data_connector = result.one_or_none()
             if data_connector is None:
                 raise errors.MissingResourceError(message=not_found_msg)
-            return data_connector.dump()
+            output = data_connector.dump()
+
+            # Check if the data connector is global and if it is expired, update its expiry date
+            now = datetime.now(UTC)
+            if isinstance(output, GlobalDataConnector) and output.expires_at is not None and output.expires_at <= now:
+                metadata = await get_metadata(output.doi) if output.doi is not None else None
+                fresh_expiry_date = metadata.dataset.expires_at() if metadata is not None else None
+                if fresh_expiry_date is not None and fresh_expiry_date > output.expires_at:
+                    data_connector.expires_at = fresh_expiry_date
+                    # Flush so that the DB-side onupdate for updated_at fires, then read it back.
+                    # dump() -> etag is derived from updated_at, so dumping before this would
+                    # return a stale ETag and the client would get a 304 for changed data.
+                    await session.flush()
+                    await session.refresh(data_connector, ["updated_at"])
+                    output = data_connector.dump()
+
+            return output
 
     async def get_data_connectors_names_and_ids(
         self,
@@ -163,12 +239,7 @@ class DataConnectorRepository:
 
         async with self.session_maker() as session:
             stmt = select(schemas.DataConnectorORM)
-            stmt = _filter_by_namespace_slug(stmt, path.parent())
-            stmt = stmt.where(
-                schemas.DataConnectorORM.slug.has(
-                    ns_schemas.EntitySlugORM.slug == path.last().value.lower(),
-                )
-            )
+            stmt = _filter_by_namespace_slug(stmt, path.parent(), path.last())
             result = await session.scalars(stmt)
             data_connector = result.one_or_none()
 
@@ -341,6 +412,9 @@ class DataConnectorRepository:
             doi=doi,
             publisher_url=publisher_url,
             publisher_name=publisher_name,
+            expires_at=data_connector.expires_at
+            if isinstance(data_connector, models.UnsavedGlobalDataConnector)
+            else None,
         )
         if ns is not None:
             data_connector_slug = ns_schemas.EntitySlugORM.create_data_connector_slug(
@@ -381,7 +455,7 @@ class DataConnectorRepository:
         self,
         user: base_models.APIUser,
         prevalidated_dc: models.PrevalidatedGlobalDataConnector,
-        validator: RCloneValidator | None,
+        validator: RCloneValidator,
         *,
         session: AsyncSession | None = None,
     ) -> tuple[models.GlobalDataConnector, bool]:
@@ -408,12 +482,9 @@ class DataConnectorRepository:
             return dc, False
 
         # Fully validate a global data connector before inserting
-        if isinstance(data_connector, models.UnsavedGlobalDataConnector):
-            if validator is None:
-                raise RuntimeError("Could not validate global data connector")
-            data_connector = await validate_unsaved_global_data_connector(
-                prevalidated_dc=prevalidated_dc, validator=validator
-            )
+        data_connector = await validate_unsaved_global_data_connector(
+            prevalidated_dc=prevalidated_dc, validator=validator
+        )
 
         dc = await self._insert_data_connector(user=user, data_connector=data_connector, session=session)
         if not isinstance(dc, models.GlobalDataConnector):
@@ -817,6 +888,370 @@ class DataConnectorRepository:
         await session.delete(link_orm)
         return link
 
+    async def get_deposits(
+        self,
+        user: base_models.APIUser,
+        data_connector_id: ULID | None = None,
+        pagination: PaginationRequest | None = None,
+    ) -> tuple[list[models.DepositJob], int]:
+        """Get a deposit from the DB."""
+
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                select(schemas.DepositORM)
+                .where(schemas.DepositORM.user_id == user.id)
+                .order_by(schemas.DepositORM.id.desc())
+            )
+            stmt_count = (
+                select(func.count()).select_from(schemas.DepositORM).where(schemas.DepositORM.user_id == user.id)
+            )
+            if data_connector_id:
+                stmt = stmt.where(schemas.DepositORM.data_connector_id == data_connector_id)
+                stmt_count.where(schemas.DepositORM.data_connector_id == data_connector_id)
+            if pagination:
+                stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
+            res = await session.scalars(stmt)
+            res_count = await session.scalar(stmt_count)
+            return [i.dump() for i in res], res_count or 0
+
+    async def __get_deposit(
+        self, user: base_models.APIUser, deposit_id: ULID, session: AsyncSession
+    ) -> schemas.DepositORM | None:
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        stmt = await session.scalars(
+            select(schemas.DepositORM)
+            .where(schemas.DepositORM.user_id == user.id)
+            .where(schemas.DepositORM.id == deposit_id)
+        )
+        return stmt.one_or_none()
+
+    async def get_deposit(self, user: base_models.APIUser, deposit_id: ULID) -> models.DepositJob:
+        """Get a deposit from the DB."""
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        async with self.session_maker() as session, session.begin():
+            res = await self.__get_deposit(user, deposit_id, session)
+            if res is None:
+                raise errors.MissingResourceError(
+                    message=f"The deposit with ID {deposit_id} does not exist or you do not have access to it."
+                )
+            return res.dump()
+
+    async def create_deposit(
+        self,
+        user: base_models.APIUser,
+        deposit_job: models.UnsavedDepositJob,
+        in_transaction_ops: Callable[[models.DepositJob], Awaitable[None]],
+    ) -> models.DepositJob:
+        """Create a deposit in the DB."""
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        deposit = deposit_job.deposit
+        async with self.session_maker() as session, session.begin():
+            existing_stmt = (
+                select(schemas.DepositORM)
+                .where(schemas.DepositORM.data_connector_id == deposit.data_connector_id)
+                .where(schemas.DepositORM.user_id == user.id)
+            )
+            existing_dep = await session.scalar(existing_stmt)
+            if existing_dep is not None:
+                raise errors.ConflictError(
+                    message="Cannot create a new deposit when there is already an existing deposit "
+                    f"for the data connector with ID {deposit.data_connector_id}",
+                    detail="Please delete the existing deposit and then create a new one or edit the existing deposit",
+                )
+            status_subq = (
+                select(schemas.DepositStatusORM.id)
+                .where(schemas.DepositStatusORM.status == deposit.status.value)
+                .scalar_subquery()
+            )
+            source_subq = (
+                select(schemas.DepositSourceORM.id)
+                .where(schemas.DepositSourceORM.source == deposit.source.value)
+                .scalar_subquery()
+            )
+            dep = schemas.DepositORM(
+                source_id=source_subq,
+                status_id=status_subq,
+                original_id=deposit.original_id,
+                data_connector_id=deposit.data_connector_id,
+                user_id=user.id,
+                path=deposit.path.as_posix() if deposit.path else None,
+                job_name=deposit_job.name,
+                # The local cluster ID does not exist in the DB so it cannot be used as a foreign key
+                cluster_id=None if deposit_job.cluster_id == DEFAULT_K8S_CLUSTER else deposit_job.cluster_id,
+                name=deposit_job.deposit.name,
+            )
+            session.add(dep)
+            await session.flush()
+            await session.refresh(dep)
+            output = dep.dump()
+            await in_transaction_ops(output)
+        return output
+
+    async def delete_deposit(self, user: base_models.APIUser, deposit_id: ULID) -> None:
+        """Delete an existing deposit from the database."""
+        async with self.session_maker() as session, session.begin():
+            await session.execute(
+                delete(schemas.DepositORM)
+                .where(schemas.DepositORM.id == deposit_id)
+                .where(schemas.DepositORM.user_id == user.id)
+            )
+
+    async def update_deposit(
+        self,
+        user: base_models.APIUser,
+        deposit_id: ULID,
+        patch: models.DepositPatch,
+        etag: str,
+    ) -> models.DepositJob:
+        """Update an existing deposit from the database."""
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        async with self.session_maker() as session, session.begin():
+            res = await self.__get_deposit(user, deposit_id, session)
+            if res is None:
+                raise errors.MissingResourceError(
+                    message=f"The deposit with ID {deposit_id} does not exist or you do not have access to it."
+                )
+
+            current_etag = res.dump().etag
+            if current_etag != etag:
+                raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
+            if patch.name is not None:
+                res.name = patch.name
+            if patch.job_name is not None:
+                res.job_name = patch.job_name
+            if patch.status is not None:
+                status_subq = (
+                    select(schemas.DepositStatusORM.id)
+                    .where(schemas.DepositStatusORM.status == patch.status.value)
+                    .scalar_subquery()
+                )
+                res.status_id = status_subq
+            if patch.path is not None:
+                res.path = patch.path.as_posix()
+            await session.flush()
+            await session.refresh(res)
+        return res.dump()
+
+    async def get_links(
+        self,
+        user: base_models.APIUser,
+        doi: DOI | None,
+        pagination: PaginationRequest | None,
+    ) -> tuple[list[models.DataConnectorToProjectLink], int]:
+        """Get all links to data connectors the user has READ access to.
+
+        Optionally filter by doi.
+        Also returns the total number of data connector links found in the DB.
+        We check that the user has READ or higher access to both the data connector and the project.
+        """
+        dcs = await self.authz.resources_with_permission(user, user.id, ResourceType.data_connector, Scope.READ)
+        projects = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+        stmt = (
+            select(schemas.DataConnectorToProjectLinkORM)
+            .where(
+                schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(dcs),
+            )
+            .where(schemas.DataConnectorToProjectLinkORM.project_id.in_(projects))
+        )
+        stmt_count = (
+            select(func.count())
+            .select_from(schemas.DataConnectorToProjectLinkORM)
+            .where(
+                schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(dcs),
+            )
+            .where(schemas.DataConnectorToProjectLinkORM.project_id.in_(projects))
+        )
+
+        if doi:
+            stmt = stmt.where(schemas.DataConnectorToProjectLinkORM.data_connector.has(DataConnectorORM.doi == doi))
+            stmt_count = stmt_count.where(
+                schemas.DataConnectorToProjectLinkORM.data_connector.has(DataConnectorORM.doi == doi)
+            )
+
+        if pagination:
+            stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
+
+        async with self.session_maker() as session, session.begin():
+            count = await session.scalar(stmt_count) or 0
+            results = await session.stream_scalars(stmt)
+
+            links: list[models.DataConnectorToProjectLink] = []
+            async for link in results:
+                links.append(link.dump())
+
+            return links, count
+
+    @with_db_transaction
+    async def get_dc_link_policies_for_launcher(
+        self, user: base_models.APIUser, launcher_id: ULID, session: AsyncSession | None = None
+    ) -> list[SessionLauncherDataConnector]:
+        """Get the data connector links and the access policies for a session launcher."""
+
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        launcher = await session.scalar(select(SessionLauncherORM).where(SessionLauncherORM.id == launcher_id))
+        if launcher is None:
+            raise errors.MissingResourceError(
+                message=f"Launcher with id '{launcher_id}' does not exist or you do not have access to it."
+            )
+
+        project_id = launcher.project_id
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Launcher with id '{launcher_id}' does not exist or you do not have access to it."
+            )
+
+        allowed_dcs = await self.authz.resources_with_permission(user, user.id, ResourceType.data_connector, Scope.READ)
+
+        # A launcher policy cannot be more permissive than the data connector's
+        # project-level policy. The project level's policy is used if a launcher
+        # policy is not specified.
+        result = await session.stream(
+            _build_launcher_data_connector_select(launcher_id=launcher.id)
+            .where(schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(allowed_dcs))
+            .order_by(schemas.DataConnectorToProjectLinkORM.id.desc())
+        )
+
+        return [
+            SessionLauncherDataConnector(
+                launcher_id=launcher.id,
+                data_connector_link_id=link.id,
+                policy=SessionLauncherDataConnectorPolicyName.safe_parse(
+                    policy, SessionLauncherDataConnectorPolicyName.excluded
+                ),
+            )
+            async for link, policy in result
+        ]
+
+    @with_db_transaction
+    async def update_dc_link_policies_for_launcher(
+        self,
+        user: base_models.APIUser,
+        launcher_id: ULID,
+        patches: list[SessionLauncherDataConnectorPatch],
+        session: AsyncSession | None = None,
+    ) -> list[SessionLauncherDataConnector]:
+        """Get the data connector links and the access policies for a session launcher."""
+
+        if session is None:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        launcher = await session.scalar(select(SessionLauncherORM).where(SessionLauncherORM.id == launcher_id))
+        if launcher is None:
+            raise errors.MissingResourceError(
+                message=f"Launcher with id '{launcher_id}' does not exist or you do not have access to it."
+            )
+
+        project_id = launcher.project_id
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Launcher with id '{launcher_id}' does not exist or you do not have access to it."
+            )
+
+        patch_dc_link_ids_list = [patch.data_connector_link_id for patch in patches]
+
+        patch_dc_link_ids = {patch.data_connector_link_id for patch in patches}
+
+        if len(patch_dc_link_ids_list) != len(patch_dc_link_ids):
+            raise errors.ValidationError(message="A data connector link id may only appear once in the list.")
+
+        allowed_dcs = await self.authz.resources_with_permission(user, user.id, ResourceType.data_connector, Scope.READ)
+
+        result = await session.stream_scalars(
+            select(schemas.DataConnectorToProjectLinkORM)
+            .where(
+                and_(
+                    schemas.DataConnectorToProjectLinkORM.project_id == project_id,
+                    schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(allowed_dcs),
+                )
+            )
+            .options(selectinload(schemas.DataConnectorToProjectLinkORM.data_connector))
+        )
+
+        project_dc_links = {link.id: link async for link in result}
+
+        invalid_dc_link_ids = patch_dc_link_ids - project_dc_links.keys()
+
+        if invalid_dc_link_ids:
+            raise errors.ValidationError(
+                message="Some of the data connectors you are trying to update are not part of this project "
+                f"or you do not have access to them. The invalid data connector link IDs are: {invalid_dc_link_ids}."
+            )
+
+        result = await session.stream_scalars(
+            select(SessionLauncherDataConnectorORM)
+            .where(
+                and_(
+                    SessionLauncherDataConnectorORM.launcher_id == launcher_id,
+                    SessionLauncherDataConnectorORM.project_id == project_id,
+                    SessionLauncherDataConnectorORM.data_connector_to_project_link_id.in_(patch_dc_link_ids),
+                )
+            )
+            .options(
+                selectinload(SessionLauncherDataConnectorORM.data_connector_to_project_link).selectinload(
+                    schemas.DataConnectorToProjectLinkORM.data_connector
+                )
+            )
+        )
+
+        launcher_dc_links = {link.data_connector_to_project_link_id: link async for link in result}
+
+        for patch in patches:
+            if not patch.policy:
+                # When the policy is None - it means do not change it.
+                # And the policy is currently the only thing that can be patches for data connectors.
+                continue
+
+            patch_dc_link_id = patch.data_connector_link_id
+            launcher_dc_link = launcher_dc_links.get(patch_dc_link_id)
+            project_dc_link = project_dc_links.get(patch_dc_link_id)
+            if not project_dc_link:
+                raise errors.ValidationError(
+                    message=f"The data connector with link ID {patch_dc_link_id} cannot be found in the project."
+                )
+            data_connector = project_dc_link.data_connector
+
+            if patch.policy.requires_write_access and data_connector.readonly:
+                raise errors.ValidationError(
+                    message=f"Data connector {patch_dc_link_id}/{data_connector.id} is read only."
+                )
+
+            if launcher_dc_link is None:
+                launcher_dc_link = SessionLauncherDataConnectorORM.create(
+                    launcher=launcher,
+                    link=project_dc_link,
+                    policy=patch.policy,
+                )
+                session.add(launcher_dc_link)
+            else:
+                launcher_dc_link.policy = patch.policy.value
+
+        await session.flush()
+
+        return await self.get_dc_link_policies_for_launcher(
+            user=user,
+            launcher_id=launcher_id,
+            session=session,
+        )
+
 
 class DataConnectorSecretRepository:
     """Repository for data connector secrets."""
@@ -839,6 +1274,7 @@ class DataConnectorSecretRepository:
         self,
         user: base_models.APIUser,
         project_id: ULID,
+        launcher_id: ULID | None = None,
     ) -> AsyncIterator[models.DataConnectorWithSecrets]:
         """Get all data connectors and their secrets for a project."""
         if user.id is None:
@@ -855,25 +1291,55 @@ class DataConnectorSecretRepository:
         )
 
         async with self.session_maker() as session:
-            stmt = (
-                select(schemas.DataConnectorORM)
-                .where(
-                    schemas.DataConnectorORM.project_links.any(
-                        schemas.DataConnectorToProjectLinkORM.project_id == project_id
-                    ),
-                    schemas.DataConnectorORM.id.in_(data_connector_ids),
+            stmt: Select[tuple[schemas.DataConnectorORM, bool]]
+            if launcher_id is None:
+                stmt = (
+                    select(
+                        schemas.DataConnectorORM,
+                        schemas.DataConnectorORM.readonly.label("computed_readonly"),
+                    )
+                    .where(
+                        schemas.DataConnectorORM.project_links.any(
+                            schemas.DataConnectorToProjectLinkORM.project_id == project_id
+                        ),
+                        schemas.DataConnectorORM.id.in_(data_connector_ids),
+                    )
+                    .options(
+                        joinedload(schemas.DataConnectorORM.slug)
+                        .joinedload(ns_schemas.EntitySlugORM.project)
+                        .joinedload(ProjectORM.slug)
+                    )
                 )
-                .options(
-                    joinedload(schemas.DataConnectorORM.slug)
-                    .joinedload(ns_schemas.EntitySlugORM.project)
-                    .joinedload(ProjectORM.slug)
-                )
-            )
+            else:
+                stmt_dcs = _build_launcher_data_connector_select(launcher_id=launcher_id)
 
-            results = await session.stream_scalars(stmt)
-            async for dc in results:
+                policy: ColumnElement[str] = stmt_dcs.selected_columns.policy
+
+                computed_readonly = (policy == SessionLauncherDataConnectorPolicyName.read_only.value).label(
+                    "computed_readonly"
+                )
+
+                # NOTE: with_only_columns keeps the joins from the launcher select and, unlike
+                # add_columns, preserves the row typing.
+                stmt = (
+                    stmt_dcs.with_only_columns(schemas.DataConnectorORM, computed_readonly)
+                    .where(
+                        schemas.DataConnectorToProjectLinkORM.project_id == project_id,
+                        schemas.DataConnectorORM.id.in_(data_connector_ids),
+                        policy != SessionLauncherDataConnectorPolicyName.excluded,
+                    )
+                    .options(
+                        joinedload(schemas.DataConnectorORM.slug)
+                        .joinedload(ns_schemas.EntitySlugORM.project)
+                        .joinedload(ProjectORM.slug)
+                    )
+                )
+
+            results = await session.stream(stmt)
+            async for row in results:
+                dc, computed_readonly_val = row.tuple()
                 secrets = await self.get_data_connector_secrets(user, dc.id)
-                yield models.DataConnectorWithSecrets(dc.dump(), secrets)
+                yield models.DataConnectorWithSecrets(dc.dump(readonly=computed_readonly_val), secrets)
 
     async def get_data_connector_secrets(
         self,
@@ -1009,8 +1475,17 @@ class DataConnectorSecretRepository:
 _T = TypeVar("_T", int, schemas.DataConnectorORM)
 
 
-def _filter_by_namespace_slug(stmt: Select[tuple[_T]], namespace: ProjectPath | NamespacePath) -> Select[tuple[_T]]:
-    """Filters a select query on data connectors to a given namespace."""
+def _filter_by_namespace_slug(
+    stmt: Select[tuple[_T]], namespace: ProjectPath | NamespacePath, slug: DataConnectorSlug | None = None
+) -> Select[tuple[_T]]:
+    """Filters a select query on data connectors to a given namespace.
+
+    If the data connector slug is given we try to match 1 single data connector.
+    If the data connector slug is omitted we match all possible data connectors at the defined namespace.
+    So if you provide a user or group namespace and no DC slug we filter for all data connectos in the user
+    and in all projects in the user namepace.
+    """
+    # Regardless of where the DC is it will have a namespace slug.
     stmt = stmt.where(
         schemas.DataConnectorORM.slug.has(
             ns_schemas.EntitySlugORM.namespace.has(
@@ -1018,16 +1493,55 @@ def _filter_by_namespace_slug(stmt: Select[tuple[_T]], namespace: ProjectPath | 
             )
         )
     )
-    if isinstance(namespace, ProjectPath):
-        stmt = stmt.where(
-            schemas.DataConnectorORM.slug.has(
-                ns_schemas.EntitySlugORM.project.has(
-                    schemas.ProjectORM.slug.has(
-                        ns_schemas.EntitySlugORM.slug == namespace.second.value.lower(),
+    match (namespace, slug):
+        case (NamespacePath(), DataConnectorSlug()):
+            # Match an exact data connector for the slug in the namespace
+            # The DC is in a user namespace, the project has to be NULL in this case.
+            # If this is removed we could match on a DCs that have the same slug in the user and project namspace.
+            stmt = stmt.where(
+                schemas.DataConnectorORM.slug.has(
+                    ns_schemas.EntitySlugORM.slug == slug.value.lower(),
+                )
+            ).where(
+                schemas.DataConnectorORM.slug.has(
+                    ns_schemas.EntitySlugORM.project_id.is_(None),
+                )
+            )
+        case (NamespacePath(), None):
+            # Match all data connectors in the namespace or in projects in the namespace
+            pass
+        case (ProjectPath(), DataConnectorSlug()):
+            # Match an exact data connector in the project
+            stmt = stmt.where(
+                schemas.DataConnectorORM.slug.has(
+                    ns_schemas.EntitySlugORM.slug == slug.value.lower(),
+                )
+            ).where(
+                schemas.DataConnectorORM.slug.has(
+                    ns_schemas.EntitySlugORM.project.has(
+                        schemas.ProjectORM.slug.has(
+                            ns_schemas.EntitySlugORM.slug == namespace.second.value.lower(),
+                        )
                     )
                 )
             )
-        )
+        case (ProjectPath(), None):
+            # Match all data connectors in the project
+            stmt = stmt.where(
+                schemas.DataConnectorORM.slug.has(
+                    ns_schemas.EntitySlugORM.project.has(
+                        schemas.ProjectORM.slug.has(
+                            ns_schemas.EntitySlugORM.slug == namespace.second.value.lower(),
+                        )
+                    )
+                )
+            )
+        case x:
+            raise errors.ProgrammingError(
+                message=f"Received unexpected namespace type {type(x)} "
+                "when adding namespace filters for finding data connectors."
+            )
+
     return stmt
 
 

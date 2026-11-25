@@ -1,230 +1,151 @@
-"""Models for cloud storage."""
+"""Models for storage."""
 
-from collections.abc import Generator, MutableMapping
-from typing import Any
-from urllib.parse import ParseResult, urlparse
+from __future__ import annotations
 
-from pydantic import BaseModel, Field, PrivateAttr, model_serializer, model_validator
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import PurePosixPath
+
 from ulid import ULID
 
-from renku_data_services import errors
-from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.base_models.bytesize import ByteSize
+from renku_data_services.base_models.core import (
+    ProjectPath,
+)
+from renku_data_services.utils.etag import compute_etag_from_fields
 
 
-class RCloneConfig(BaseModel, MutableMapping):
-    """Class for RClone configuration that is valid."""
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedProjectStorage:
+    """Project storage definition."""
 
-    config: dict[str, Any] = Field(exclude=True)
-
-    _validator: RCloneValidator = PrivateAttr(default=RCloneValidator())
-
-    @model_validator(mode="after")
-    def check_rclone_schema(self) -> "RCloneConfig":
-        """Validate that the reclone config is valid."""
-        self._validator.validate(self.config)
-        return self
-
-    @model_serializer
-    def serialize_model(self) -> dict[str, Any]:
-        """Serialize model by returning contained dict."""
-        return self.config
-
-    def __len__(self) -> int:
-        return len(self.config)
-
-    def __getitem__(self, k: str) -> Any:
-        return self.config[k]
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        self.config[key] = value
-        self._validator.validate(self.config)
-
-    def __delitem__(self, key: str) -> None:
-        del self.config[key]
-        self._validator.validate(self.config)
-
-    def __iter__(self) -> Generator[str, None, None]:  # type: ignore[override]
-        """Iterate method.
-
-        Needed for pydantic to properly serialize the object.
-        """
-        yield from self.config.keys()
+    namespace_path: ProjectPath
+    size: ByteSize
+    mount_path: PurePosixPath
 
 
-class UnsavedCloudStorage(BaseModel):
-    """Cloud Storage model."""
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStoragePatch:
+    """Model for changes requested on a project storage."""
 
-    project_id: str = Field(pattern=r"^[A-Z0-9]+$")
-    name: str = Field(min_length=3)
-    storage_type: str = Field(pattern=r"^[a-z0-9]+$")
-    configuration: RCloneConfig
-    readonly: bool = Field(default=True)
+    size: ByteSize | None
+    mount_path: PurePosixPath | None
 
-    source_path: str = Field()
-    """Path inside the cloud storage.
 
-    Note: Since rclone itself doesn't really know about buckets/containers (they're not in the schema),
-    bucket/container/etc. has to be the first part of source path.
-    """
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorage:
+    """Stored project storage information."""
 
-    target_path: str = Field(min_length=1)
-    """Path inside the target repository to mount/clone data to."""
+    id: ULID
+    project_id: ULID
+    storage_class: str
+    size: ByteSize
+    mount_path: PurePosixPath
+    created_by: str
+    creation_date: datetime
+    updated_at: datetime
 
-    @classmethod
-    def from_dict(cls, data: dict) -> "UnsavedCloudStorage":
-        """Create the model from a plain dictionary."""
-
-        if "project_id" not in data:
-            raise errors.ValidationError(message="'project_id' not set")
-        if "configuration" not in data:
-            raise errors.ValidationError(message="'configuration' not set")
-
-        if "source_path" not in data:
-            raise errors.ValidationError(message="'source_path' not set")
-
-        if "target_path" not in data:
-            raise errors.ValidationError(message="'target_path' not set")
-
-        if "type" not in data["configuration"]:
-            raise errors.ValidationError(message="'type' not set in 'configuration'")
-
-        return cls(
-            project_id=data["project_id"],
-            name=data["name"],
-            configuration=RCloneConfig(config=data["configuration"]),
-            storage_type=data["configuration"]["type"],
-            source_path=data["source_path"],
-            target_path=data["target_path"],
-            readonly=data.get("readonly", True),
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project storage object."""
+        return compute_etag_from_fields(
+            self.updated_at, self.project_id, self.storage_class, self.size.to_bytes(), self.mount_path.as_posix()
         )
 
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class DeletedProjectStorage:
+    """A project storage that has been deleted."""
+
+    project_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllow:
+    """Allowed project storage with max size."""
+
+    project_ref: ProjectRef
+    max_size: ByteSize
+    updated_at: datetime
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project storage allow object."""
+        return compute_etag_from_fields(self.updated_at, self.project_ref, self.max_size.to_bytes())
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllowDetail:
+    """Allowed project storage with max size."""
+
+    project_id: ULID
+    max_size: ByteSize
+    name: str
+    namespace_path: ProjectPath
+    updated_at: datetime
+
     @classmethod
-    def from_url(
-        cls, storage_url: str, name: str, readonly: bool, project_id: str, target_path: str
-    ) -> "UnsavedCloudStorage":
-        """Get Cloud Storage/rclone config from a storage URL.
-
-        Example:
-            Supported URLs are:
-            - s3://s3.<region>.amazonaws.com/<bucket>/<path>
-            - s3://<bucket>.s3.<region>.amazonaws.com/<path>
-            - s3://bucket/
-            - http(s)://<endpoint>/<bucket>/<path>
-            - (azure|az)://<account>.dfs.core.windows.net/<container>/<path>
-            - (azure|az)://<account>.blob.core.windows.net/<container>/<path>
-            - (azure|az)://<container>/<path>
-        """
-        parsed_url = urlparse(storage_url)
-
-        if parsed_url.scheme is None:
-            raise errors.ValidationError(message="Couldn't parse scheme of 'storage_url'")
-
-        match parsed_url.scheme:
-            case "s3":
-                return UnsavedCloudStorage.from_s3_url(parsed_url, project_id, name, readonly, target_path)
-            case "azure" | "az":
-                return UnsavedCloudStorage.from_azure_url(parsed_url, project_id, name, readonly, target_path)
-            case "http" | "https":
-                return UnsavedCloudStorage._from_ambiguous_url(parsed_url, project_id, name, readonly, target_path)
-            case _:
-                raise errors.ValidationError(message=f"Scheme '{parsed_url.scheme}' is not supported.")
-
-    @classmethod
-    def from_s3_url(
-        cls, storage_url: ParseResult, project_id: str, name: str, readonly: bool, target_path: str
-    ) -> "UnsavedCloudStorage":
-        """Get Cloud storage from an S3 URL.
-
-        Example:
-            Supported URLs are:
-            - s3://s3.<region>.amazonaws.com/<bucket>/<path>
-            - s3://<bucket>.s3.<region>.amazonaws.com/<path>
-            - s3://bucket/
-            - https://<endpoint>/<bucket>/<path>
-        """
-
-        if storage_url.hostname is None:
-            raise errors.ValidationError(message="Storage URL must contain a host")
-
-        configuration = {"type": "s3"}
-        source_path = storage_url.path.lstrip("/")
-
-        if storage_url.scheme == "s3":
-            configuration["provider"] = "AWS"
-            match storage_url.hostname.split(".", 4):
-                case ["s3", region, "amazonaws", "com"]:
-                    configuration["region"] = region
-                case [bucket, "s3", region, "amazonaws", "com"]:
-                    configuration["region"] = region
-                    source_path = f"{bucket}{storage_url.path}"
-                case _:
-                    # URL like 's3://giab/' where the bucket is the
-                    source_path = f"{storage_url.hostname}/{source_path}" if source_path else storage_url.hostname
-        else:
-            configuration["endpoint"] = storage_url.netloc
-
-        return UnsavedCloudStorage(
-            project_id=project_id,
-            name=name,
-            storage_type="s3",
-            configuration=RCloneConfig(config=configuration),
-            source_path=source_path,
-            target_path=target_path,
-            readonly=readonly,
+    def create(
+        cls,
+        project_id: ULID,
+        max_size: ByteSize,
+        name: str,
+        namespace_slug: str,
+        project_slug: str,
+        updated_at: datetime,
+    ) -> ProjectStorageAllowDetail:
+        """Create an instance with the project path given as two strings."""
+        np = ProjectPath.from_strings(namespace_slug, project_slug)
+        return ProjectStorageAllowDetail(
+            project_id=project_id, max_size=max_size, name=name, namespace_path=np, updated_at=updated_at
         )
 
-    @classmethod
-    def from_azure_url(
-        cls, storage_url: ParseResult, project_id: str, name: str, readonly: bool, target_path: str
-    ) -> "UnsavedCloudStorage":
-        """Get Cloud storage from an Azure URL.
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project storage allow object."""
+        return compute_etag_from_fields(self.updated_at, self.project_id, self.max_size.to_bytes())
 
-        Example:
-            Supported URLs are:
-            - (azure|az)://<account>.dfs.core.windows.net/<container>/<path>
-            - (azure|az)://<account>.blob.core.windows.net/<container>/<path>
-            - (azure|az)://<container>/<path>
-        """
-        if storage_url.hostname is None:
-            raise errors.ValidationError(message="Storage URL must contain a host")
 
-        configuration = {"type": "azureblob"}
-        source_path = storage_url.path.lstrip("/")
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllowPatch:
+    """Model for changes requested on a project storage allow entry."""
 
-        match storage_url.hostname.split(".", 5):
-            case [account, "dfs", "core", "windows", "net"] | [account, "blob", "core", "windows", "net"]:
-                configuration["account"] = account
-            case _:
-                if "." in storage_url.hostname:
-                    raise errors.ValidationError(message="Host cannot contain dots unless it's a core.windows.net URL")
+    max_size: ByteSize | None
 
-                source_path = f"{storage_url.hostname}{storage_url.path}"
-        return UnsavedCloudStorage(
-            project_id=project_id,
-            name=name,
-            storage_type="azureblob",
-            configuration=RCloneConfig(config=configuration),
-            source_path=source_path,
-            target_path=target_path,
-            readonly=readonly,
-        )
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageAllowUpdate:
+    """Return data when updating an allow entry."""
+
+    old: ProjectStorageAllowDetail
+    new: ProjectStorageAllowDetail
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectRef:
+    """A reference to a project."""
+
+    ref: ULID | ProjectPath
+
+    def __str__(self) -> str:
+        return f"ProjectRef({self.ref})"
 
     @classmethod
-    def _from_ambiguous_url(
-        cls, storage_url: ParseResult, project_id: str, name: str, readonly: bool, target_path: str
-    ) -> "UnsavedCloudStorage":
-        """Get cloud storage from an ambiguous storage url."""
-        if storage_url.hostname is None:
-            raise errors.ValidationError(message="Storage URL must contain a host")
+    def from_id(cls, id: ULID) -> ProjectRef:
+        """Create a project ref from an id."""
+        return ProjectRef(ref=id)
 
-        if storage_url.hostname.endswith(".windows.net"):
-            return UnsavedCloudStorage.from_azure_url(storage_url, project_id, name, readonly, target_path)
+    @classmethod
+    def from_id_str(cls, id: str) -> ProjectRef:
+        """Create a project ref from an id."""
+        return cls.from_id(ULID.from_str(id))
 
-        # default to S3 for unknown URLs, since these are way more common
-        return UnsavedCloudStorage.from_s3_url(storage_url, project_id, name, readonly, target_path)
+    @classmethod
+    def from_slug(cls, slug: ProjectPath) -> ProjectRef:
+        """Create a project ref from a path."""
+        return ProjectRef(ref=slug)
 
-
-class CloudStorage(UnsavedCloudStorage):
-    """Cloudstorage saved in the database."""
-
-    storage_id: ULID = Field()
+    @classmethod
+    def from_slug_str(cls, slug: str) -> ProjectRef:
+        """Create a project ref from a path."""
+        return ProjectRef(ref=ProjectPath.parse(slug))

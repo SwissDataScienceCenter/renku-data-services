@@ -8,8 +8,9 @@ from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from enum import StrEnum
 from typing import Any, Protocol
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, urljoin, urlparse
 
+import httpx
 import sqlalchemy as sa
 import sqlalchemy.orm as sao
 from authlib.integrations.base_client import InvalidTokenError, OAuthError
@@ -24,8 +25,8 @@ import renku_data_services.connected_services.orm as schemas
 from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import models
-from renku_data_services.connected_services.models import OAuth2Client, OAuth2Connection, OAuth2TokenSet
-from renku_data_services.connected_services.orm import OAuth2ConnectionORM
+from renku_data_services.connected_services.models import OAuth2Client, OAuth2Connection, OAuth2TokenSet, ProviderKind
+from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2ConnectionORM
 from renku_data_services.connected_services.provider_adapters import (
     GitHubAdapter,
     ProviderAdapter,
@@ -37,7 +38,6 @@ from renku_data_services.connected_services.utils import (
     get_github_provider_type,
 )
 from renku_data_services.errors import SecretDecryptionError, errors
-from renku_data_services.repositories.models import OAuth2ClientORM
 from renku_data_services.users.db import APIUser
 from renku_data_services.utils import cryptography as crypt
 
@@ -542,9 +542,42 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
                 adapter=adapter,
                 token=None,
             )
-            token = await oauth_client.fetch_token(
-                adapter.token_endpoint_url, authorization_response=raw_url, code_verifier=code_verifier
-            )
+            if client.kind == ProviderKind.zenodo:
+                # NOTE: Getting the token from the oauth_client.fetch_token method did not work
+                # with Zenodo. Probably because Zenodo is very sensitive to the encoding.
+                parsed_url = urlparse(raw_url)
+                q = parse_qs(parsed_url.query)
+                code = next(iter(q.get("code") or []), None)
+                if not code:
+                    raise errors.InvalidTokenError(
+                        message="The callback from zenodo did not contain a code.",
+                        detail="Please retry, if this problem persist contact a Renku administrator.",
+                    )
+                state_from_query = next(iter(q.get("state") or []), None)
+                if not state_from_query:
+                    raise errors.InvalidTokenError(
+                        message="The callback from zenodo did not contain a state parameter.",
+                        detail="Please retry, if this problem persist contact a Renku administrator.",
+                    )
+                state = state_from_query
+                body = {
+                    "client_id": client.client_id,
+                    "client_secret": client_secret,
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": callback_url,
+                    "scope": client.scope,
+                    "state": state,
+                }
+                async with httpx.AsyncClient() as clnt:
+                    res = await clnt.post(adapter.token_endpoint_url, data=body)
+                token = res.json()
+            else:
+                token = await oauth_client.fetch_token(
+                    adapter.token_endpoint_url,
+                    authorization_response=raw_url,
+                    code_verifier=code_verifier,
+                )
 
             logger.info(f"Token for client {client.id} has keys: {', '.join(token.keys())}")
 

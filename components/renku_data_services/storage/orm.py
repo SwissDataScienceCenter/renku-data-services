@@ -1,88 +1,114 @@
-"""SQLAlchemy schemas for the cloud storage database."""
+"""SQLAlchemy schemas for the data project storage database."""
 
-from typing import Any
+from __future__ import annotations
 
-from sqlalchemy import JSON, Boolean, MetaData, String
-from sqlalchemy.dialects.postgresql import JSONB
+from datetime import datetime
+from pathlib import PurePosixPath
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, ForeignKey, MetaData, String, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
-from sqlalchemy.schema import UniqueConstraint
 from ulid import ULID
 
+from renku_data_services.base_models.bytesize import ByteSize
+from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
+from renku_data_services.project.orm import ProjectORM
 from renku_data_services.storage import models
-from renku_data_services.utils.sqlalchemy import ULIDType
+from renku_data_services.users.orm import UserORM
+from renku_data_services.utils.sqlalchemy import ByteSizeType, PurePosixPathType, ULIDType
 
-JSONVariant = JSON().with_variant(JSONB(), "postgresql")
-
-metadata_obj = MetaData(schema="storage")  # Has to match alembic ini section name
+if TYPE_CHECKING:
+    pass
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
-    metadata = metadata_obj
+    metadata = MetaData(schema="storage")
+    registry = COMMON_ORM_REGISTRY
 
 
-class CloudStorageORM(BaseORM):
-    """A cloud storage that can be mounted to a project."""
+class ProjectStorageAllowORM(BaseORM):
+    """ORM model for project storage allow list with size limits."""
 
-    __tablename__ = "cloud_storage"
+    __tablename__ = "project_storage_allow"
 
-    project_id: Mapped[str] = mapped_column("project_id", String(), index=True)
-    """Id of the project."""
-
-    storage_type: Mapped[str] = mapped_column("storage_type", String(20))
-    """Type of storage (e.g. s3), read-only based on 'configuration'."""
-
-    configuration: Mapped[dict[str, Any]] = mapped_column("configuration", JSONVariant)
-    """RClone configuration dict."""
-
-    source_path: Mapped[str] = mapped_column("source_path", String())
-    """Source path to mount from (e.g. bucket/folder for s3)."""
-
-    target_path: Mapped[str] = mapped_column("target_path", String())
-    """Target folder in the repository to mount to."""
-
-    name: Mapped[str] = mapped_column("name", String())
-    """Name of the cloud storage"""
-
-    readonly: Mapped[bool] = mapped_column("readonly", Boolean(), default=True)
-    """Whether this storage should be mounted readonly or not """
-
-    storage_id: Mapped[ULID] = mapped_column(
-        "storage_id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False
+    project_id: Mapped[ULID] = mapped_column(
+        "project_id",
+        ForeignKey(ProjectORM.id, ondelete="CASCADE"),
+        primary_key=True,
+        unique=True,
+        index=True,
     )
-    """Id of this storage."""
+    """ID of the project."""
 
-    __table_args__ = (
-        UniqueConstraint(
-            "project_id",
-            "name",
-            name="_unique_name_uc",
-        ),
+    max_size: Mapped[ByteSize] = mapped_column("max_size", ByteSizeType())
+    """Maximum allowed size in bytes."""
+
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
 
-    @classmethod
-    def load(cls, storage: models.UnsavedCloudStorage) -> "CloudStorageORM":
-        """Create CloudStorageORM from the cloud storage model."""
-        return cls(
-            project_id=storage.project_id,
-            name=storage.name,
-            storage_type=storage.storage_type,
-            configuration=storage.configuration.model_dump(),
-            source_path=storage.source_path,
-            target_path=storage.target_path,
-            readonly=storage.readonly,
+    def dump(self) -> models.ProjectStorageAllow:
+        """Convert the ORM row to a ProjectStorageAllow model."""
+        return models.ProjectStorageAllow(
+            project_ref=models.ProjectRef.from_id(self.project_id),
+            max_size=self.max_size,
+            updated_at=self.updated_at,
         )
 
-    def dump(self) -> models.CloudStorage:
-        """Create a cloud storage model from the ORM object."""
-        return models.CloudStorage(
+
+class ProjectStorageORM(BaseORM):
+    """ORM model for project storage configuration."""
+
+    __tablename__ = "project_storage"
+
+    id: Mapped[ULID] = mapped_column(
+        "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
+    )
+    project_id: Mapped[ULID] = mapped_column(
+        ForeignKey(ProjectStorageAllowORM.project_id, ondelete="CASCADE"), index=True, nullable=False, unique=True
+    )
+    """ID of the project (must exist in project_storage_allow)."""
+
+    storage_class: Mapped[str] = mapped_column("storage_class", String(253))
+    """The storage class (e.g. azurefile)."""
+
+    size_limit: Mapped[ByteSize] = mapped_column("size_limit", ByteSizeType())
+    """The storage limit in bytes."""
+
+    mount_path: Mapped[PurePosixPath] = mapped_column("target_path", PurePosixPathType())
+    """Folder to mount to."""
+
+    created_by_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
+    """User ID of the creator of the project storage."""
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def dump(self) -> models.ProjectStorage:
+        """Convert the ORM row to a ProjectStorage model."""
+        return models.ProjectStorage(
+            id=self.id,
             project_id=self.project_id,
-            name=self.name,
-            storage_type=self.storage_type,
-            configuration=models.RCloneConfig(config=self.configuration),
-            source_path=self.source_path,
-            target_path=self.target_path,
-            storage_id=self.storage_id,
-            readonly=self.readonly,
+            storage_class=self.storage_class,
+            size=self.size_limit,
+            mount_path=self.mount_path,
+            created_by=self.created_by_id,
+            creation_date=self.creation_date,
+            updated_at=self.updated_at,
         )

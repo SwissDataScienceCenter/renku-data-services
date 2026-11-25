@@ -1,17 +1,22 @@
 """Basic models for amalthea sessions."""
 
+from __future__ import annotations
+
+import re
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Final, cast
 
 from kubernetes.client import V1ObjectMeta, V1Secret
-from pydantic import AliasGenerator, BaseModel, Field, Json
+from pydantic import AliasGenerator, BaseModel, ConfigDict, Field, Json
 from ulid import ULID
 
 from renku_data_services.data_connectors.models import DataConnectorSecret
 from renku_data_services.errors import errors
 from renku_data_services.errors.errors import ProgrammingError
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorageRequestOverride
+from renku_data_services.notebooks.cr_amalthea_session import SessionType as AmaltheaSessionType
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionV1Alpha1,
     DataSource,
@@ -21,6 +26,46 @@ from renku_data_services.notebooks.crs import (
     InitContainer,
     SecretRef,
 )
+from renku_data_services.session.models import LauncherType
+
+
+class SubmissionId:
+    """Type for a submission id used to start jobs."""
+
+    __pattern: Final[re.Pattern] = re.compile("^[a-z][-0-9a-z]{3,19}$")
+
+    def __init__(self, value: Any) -> None:
+        msg = self.__check_str(value)
+        if msg is None:
+            self.value: str = value
+        else:
+            raise ValueError(msg)
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __repr__(self) -> str:
+        return self.value
+
+    @classmethod
+    def from_str(cls, v: str) -> SubmissionId | None:
+        """Create a submission id from a str if it validates."""
+        if not cls.__check_str(v):
+            return SubmissionId(v.strip())
+        return None
+
+    @classmethod
+    def __check_str(cls, v: Any) -> str | None:
+        """Validate a string for a submission id.
+
+        Return either an error message or None if the string is valid.
+        """
+        if not isinstance(v, str):
+            return f"Invalid submission id: {v}"
+
+        if not cls.__pattern.fullmatch(v):
+            return f"Invalid submission id: {v}"
+        return None
 
 
 @dataclass
@@ -40,11 +85,12 @@ class SessionUserSecrets:
 
 
 class _AmaltheaSessionAnnotations(BaseModel):
-    class Config:
-        extra = "allow"
-        alias_generator = AliasGenerator(
+    model_config = ConfigDict(
+        extra="allow",
+        alias_generator=AliasGenerator(
             alias=lambda field_name: f"renku.io/{field_name}",
-        )
+        ),
+    )
 
     session_launcher_id: str | None = None
     project_id: str | None = None
@@ -54,8 +100,7 @@ class _AmaltheaSessionAnnotations(BaseModel):
 
 
 class _MetadataValidation(BaseModel):
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
     name: str
     annotations: _AmaltheaSessionAnnotations
@@ -155,7 +200,28 @@ class SessionExtraResources:
     volume_mounts: list[ExtraVolumeMount] = field(default_factory=list)
     volumes: list[ExtraVolume] = field(default_factory=list)
 
-    def concat(self, added_extras: "SessionExtraResources | None") -> "SessionExtraResources":
+    def __extra_to_sidecar_container(self, ec: ExtraContainer) -> InitContainer:
+        """Convert a ExtracContainer value to an InitContainer value.
+
+        Both types have the exact same shape, we only change the restartPolicy to 'Always' to mark it as a sidcar.
+        """
+        ic = ec.model_copy(update={"restartPolicy": "Always"}).model_dump()
+        return InitContainer.model_construct(**ic)
+
+    def extra_container_as_sidecars(self) -> SessionExtraResources:
+        """Moves all extra containers to be sidecars."""
+        more_inits = [self.__extra_to_sidecar_container(e) for e in self.containers]
+        return SessionExtraResources(
+            containers=[],
+            data_connector_secrets=self.data_connector_secrets,
+            data_sources=self.data_sources,
+            init_containers=self.init_containers + more_inits,
+            secrets=self.secrets,
+            volume_mounts=self.volume_mounts,
+            volumes=self.volumes,
+        )
+
+    def concat(self, added_extras: SessionExtraResources | None) -> SessionExtraResources:
         """Concatenates these session extras with more session extras."""
         if added_extras is None:
             return self
@@ -185,6 +251,47 @@ class SessionDataConnectorOverride(RCloneStorageRequestOverride):
     readonly: bool | None
 
 
+class SessionType(StrEnum):
+    """The session mode."""
+
+    interactive = "interactive"
+    non_interactive = "non_interactive"
+
+    @property
+    def is_non_interactive(self) -> bool:
+        """Return true when non_interactive."""
+        return self == SessionType.non_interactive
+
+    @property
+    def is_interactive(self) -> bool:
+        """Return true when interactive."""
+        return not self.is_non_interactive
+
+    def to_amalthea(self) -> AmaltheaSessionType:
+        """Return the value for the amalthea spec."""
+        match self:
+            case SessionType.interactive:
+                return AmaltheaSessionType.Interactive
+            case SessionType.non_interactive:
+                return AmaltheaSessionType.NonInteractive
+
+    @classmethod
+    def from_amalthea(cls, name: AmaltheaSessionType | None) -> SessionType:
+        """Select a value based on the amalthea name. Returns interactive if the value is unknown."""
+        if name == AmaltheaSessionType.NonInteractive:
+            return SessionType.non_interactive
+        else:
+            return SessionType.interactive
+
+    @classmethod
+    def from_launcher_type(cls, lt: LauncherType) -> SessionType:
+        """Return a session type given a launcher type. Unsupported values are mapped to an interactive session."""
+        if lt == LauncherType.non_interactive:
+            return SessionType.non_interactive
+        else:
+            return SessionType.interactive
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SessionLaunchRequest:
     """Model for requesting a session launch."""
@@ -194,3 +301,6 @@ class SessionLaunchRequest:
     resource_class_id: int | None
     data_connectors_overrides: list[SessionDataConnectorOverride] | None
     env_variable_overrides: list[SessionEnvVar] | None
+    submission_id: SubmissionId | None
+    job_command_overrides: list[str] | None
+    job_args_overrides: list[str] | None

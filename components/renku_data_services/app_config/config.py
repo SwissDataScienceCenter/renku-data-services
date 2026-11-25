@@ -11,8 +11,12 @@ instantiated multiple times without creating multiple database connections.
 
 from __future__ import annotations
 
+import base64
 import os
-from dataclasses import dataclass
+import random
+from dataclasses import dataclass, field
+from datetime import timedelta
+from pathlib import Path
 
 from renku_data_services import errors
 
@@ -99,3 +103,122 @@ class TrustedProxiesConfig:
         proxies_count = int(os.environ.get("PROXIES_COUNT") or "0")
         real_ip_header = os.environ.get("REAL_IP_HEADER")
         return cls(proxies_count=proxies_count or None, real_ip_header=real_ip_header or None)
+
+
+@dataclass
+class InternalAuthenticationConfig:
+    """Configuration for internal authentication.
+
+    Internal authentication tokens are injected in sessions.
+    """
+
+    secret_key: bytes = field(repr=False)
+    default_access_token_expiration: timedelta
+    default_refresh_token_expiration: timedelta
+    long_refresh_token_expiration: timedelta
+    issuer: str
+    audience: str
+
+    @classmethod
+    def from_env(cls) -> InternalAuthenticationConfig:
+        """Create a config from environment variables."""
+        default_access_token_expiration_str = os.environ.get("INTERNAL_AUTHN_DEFAULT_ACCESS_TOKEN_EXPIRATION_SECONDS")
+        default_access_token_expiration = (
+            timedelta(seconds=int(default_access_token_expiration_str))
+            if default_access_token_expiration_str
+            else timedelta(minutes=15)
+        )
+        default_refresh_token_expiration_str = os.environ.get("INTERNAL_AUTHN_DEFAULT_REFRESH_TOKEN_EXPIRATION_SECONDS")
+        default_refresh_token_expiration = (
+            timedelta(seconds=int(default_refresh_token_expiration_str))
+            if default_refresh_token_expiration_str
+            else timedelta(hours=1)
+        )
+        long_refresh_token_expiration_str = os.environ.get("INTERNAL_AUTHN_LONG_REFRESH_TOKEN_EXPIRATION_SECONDS")
+        long_refresh_token_expiration = (
+            timedelta(seconds=int(long_refresh_token_expiration_str))
+            if long_refresh_token_expiration_str
+            else timedelta(hours=24)
+        )
+        issuer = os.environ.get("INTERNAL_AUTHN_ISSUER") or "renku-self"
+        audience = os.environ.get("INTERNAL_AUTHN_AUDIENCE") or "renku-self"
+
+        dummy_stores = os.environ.get("DUMMY_STORES", "false").lower() == "true"
+        if dummy_stores:
+            rand = random.SystemRandom()
+            secret_key = rand.randbytes(64)
+            return cls(
+                secret_key=secret_key,
+                default_access_token_expiration=default_access_token_expiration,
+                default_refresh_token_expiration=default_refresh_token_expiration,
+                long_refresh_token_expiration=long_refresh_token_expiration,
+                issuer=issuer,
+                audience=audience,
+            )
+
+        secret_key_path = os.environ.get("INTERNAL_AUTHN_SECRET_KEY_PATH", "")
+        if not secret_key_path:
+            raise errors.ConfigurationError(message="The secret key for internal authentication has to be specified.")
+        secret_key = base64.urlsafe_b64decode(Path(secret_key_path).read_bytes())
+        return cls(
+            secret_key=secret_key,
+            default_access_token_expiration=default_access_token_expiration,
+            default_refresh_token_expiration=default_refresh_token_expiration,
+            long_refresh_token_expiration=long_refresh_token_expiration,
+            issuer=issuer,
+            audience=audience,
+        )
+
+
+@dataclass
+class SshProxyConfig:
+    """Configuration of the ssh proxy component."""
+
+    enabled: bool
+    hostname: str
+    port: int
+    session_host_key_secret_name: str | None = None
+    """The name of the Kubernetes secret that contains the host key used to identify the session SSH server
+    as a valid host with the proxy. The session uses only the private portion of this key."""
+    session_host_key_secret_key: str = "hostKey"
+    """The name of the key inside the Kubernetes secret that holds the private portion of the session host key."""
+
+    proxy_auth_key_secret_name: str | None = None
+    """The name of the Kubernetes secret that contains the SSH key used to authenticate the proxy with the
+    session SSH server. The session uses only the public portion of this key."""
+    proxy_auth_key_secret_key: str = "authKeyPub"
+    """The name of the key inside the Kubernetes secret that holds the public portion of the SSH key."""
+
+    @classmethod
+    def from_env(cls) -> SshProxyConfig:
+        """Configuration of the ssh proxy component created from env variables."""
+        enabled = os.environ.get("SSH_PROXY_ENABLED", "false").lower() == "true"
+        if not enabled:
+            return SshProxyConfig(False, "", 0)
+
+        hostname = os.environ.get("SSH_PROXY_HOSTNAME")
+        port = os.environ.get("SSH_PROXY_PORT")
+        if not hostname:
+            raise errors.ConfigurationError(message="The ssh proxy hostname (SSH_PROXY_HOSTNAME) is missing.")
+        if not port:
+            raise errors.ConfigurationError(message="The ssh proxy port (SSH_PROXY_PORT) is missing.")
+
+        session_host_key_secret_name = os.environ.get("SSH_PROXY_HOST_KEY_SECRET")
+        proxy_auth_key_secret_name = os.environ.get("SSH_PROXY_AUTH_KEY_SECRET")
+
+        if not session_host_key_secret_name:
+            raise errors.ValidationError(
+                message="SSH is enabled but the session host key Kubernetes secret name is not set."
+            )
+        if not proxy_auth_key_secret_name:
+            raise errors.ValidationError(
+                message="SSH is enabled but the proxy authentication key Kubernetes secret name is not defined."
+            )
+
+        return SshProxyConfig(
+            enabled=True,
+            hostname=hostname,
+            port=int(port),
+            session_host_key_secret_name=session_host_key_secret_name,
+            proxy_auth_key_secret_name=proxy_auth_key_secret_name,
+        )

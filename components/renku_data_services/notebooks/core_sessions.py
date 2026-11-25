@@ -5,23 +5,29 @@ from __future__ import annotations
 import base64
 import json
 import os
-import random
-import string
 from collections.abc import AsyncIterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from math import ceil
 from pathlib import PurePosixPath
 from typing import Protocol, TypeVar, cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from kubernetes.client import V1ObjectMeta, V1Secret
+from kubernetes.client import (
+    V1ObjectMeta,
+    V1Secret,
+)
 from sanic import Request
 from toml import dumps
 from ulid import ULID
 from yaml import safe_dump
 
 from renku_data_services.app_config import logging
+from renku_data_services.app_config.config import SshProxyConfig
+from renku_data_services.authn.renku import RenkuSelfTokenMint
+from renku_data_services.authz.authz import Authz
+from renku_data_services.authz.models import ResourceType, Scope
 from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
@@ -36,18 +42,19 @@ from renku_data_services.crc.models import (
     SessionProtocol,
 )
 from renku_data_services.data_connectors.db import (
+    DataConnectorRepository,
     DataConnectorSecretRepository,
 )
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import ValidationError, errors
 from renku_data_services.k8s.models import ClusterConnection, K8sSecret, sanitizer
-from renku_data_services.notebooks import apispec, core
+from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_extras
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
-from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
+from renku_data_services.notebooks.cr_amalthea_session import PersistentVolumeClaim
 from renku_data_services.notebooks.crs import (
     AmaltheaMetadata,
     AmaltheaSessionSpec,
@@ -60,7 +67,6 @@ from renku_data_services.notebooks.crs import (
     AuthenticationType,
     Culling,
     CullingPatch,
-    DataSource,
     ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
@@ -71,6 +77,7 @@ from renku_data_services.notebooks.crs import (
     Limits,
     LimitsStr,
     Metadata,
+    ReadinessProbe,
     ReconcileStrategy,
     Requests,
     RequestsStr,
@@ -86,7 +93,10 @@ from renku_data_services.notebooks.crs import (
     State,
     Storage,
     Template,
+    TemplateMetadataPatch,
+    TemplatePatch,
     TlsSecret,
+    Type,
 )
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
@@ -96,6 +106,8 @@ from renku_data_services.notebooks.models import (
     SessionEnvVar,
     SessionExtraResources,
     SessionLaunchRequest,
+    SessionType,
+    SubmissionId,
 )
 from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
@@ -103,14 +115,21 @@ from renku_data_services.notebooks.util.kubernetes_ import (
 from renku_data_services.notebooks.utils import (
     node_affinity_from_resource_class,
     node_affinity_patch_from_resource_class,
+    repositories_from_project,
     tolerations_from_resource_class,
 )
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
-from renku_data_services.project.models import Project, SessionSecret
+from renku_data_services.project.models import SessionSecret
+from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.resource_usage.core import ResourceUsageService
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.session.config import BuildsConfig
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.models import SessionLauncher
+from renku_data_services.session.models import BuildParameters, Environment, FrontendVariant, SessionLauncher
+from renku_data_services.storage.db import ProjectStorageRepository
+from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.users.db import UserRepo
-from renku_data_services.utils.cryptography import get_encryption_key
+from renku_data_services.utils.core import get_effective_quota
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +161,7 @@ async def get_extra_init_containers(
     )
     if git_clone is not None:
         session_init_containers.append(InitContainer.model_validate(git_clone))
+
     return SessionExtraResources(
         init_containers=session_init_containers,
         volumes=extra_volumes,
@@ -150,18 +170,66 @@ async def get_extra_init_containers(
 
 async def get_extra_containers(
     nb_config: NotebooksConfig,
+    server_name: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     repositories: list[Repository],
     git_providers: list[GitProvider],
+    internal_token_mint: RenkuSelfTokenMint,
 ) -> SessionExtraResources:
     """Get the extra containers added to amalthea sessions."""
     conts: list[ExtraContainer] = []
     git_proxy_container = await git_proxy.main_container(
-        user=user, config=nb_config, repositories=repositories, git_providers=git_providers
+        server_name=server_name,
+        user=user,
+        config=nb_config,
+        repositories=repositories,
+        git_providers=git_providers,
+        internal_token_mint=internal_token_mint,
     )
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
     return SessionExtraResources(containers=conts)
+
+
+async def get_project_storage(
+    user: APIUser,
+    project_storage_k8s: ProjectStorageK8s,
+    project_storage_repo: ProjectStorageRepository,
+    project_id: ULID,
+    storage_mount: PurePosixPath,
+    cluster: ClusterConnection,
+    authz: Authz,
+) -> SessionExtraResources:
+    """If applicable, fetch the project storage and return it as SessionExtras."""
+    project_storage = await project_storage_repo.get_storage_to(user, project_id)
+    if not project_storage:
+        logger.debug(f"Project {project_id} has no project storage.")
+        return SessionExtraResources()
+
+    pvc = await project_storage_k8s.get_or_create_volume(project_storage, cluster)
+
+    logger.debug(f"Configuring project storage for {project_id}: {project_storage}")
+    mount_path = project_storage.mount_path
+    if not mount_path.is_absolute():
+        mount_path = storage_mount / mount_path
+
+    mount_name = f"ps-{project_id}-0".lower()
+    can_write = await authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+    return SessionExtraResources(
+        volume_mounts=[
+            ExtraVolumeMount(
+                mountPath=mount_path.as_posix(),
+                name=mount_name,
+                readOnly=not can_write,
+            )
+        ],
+        volumes=[
+            ExtraVolume(
+                name=mount_name,
+                persistentVolumeClaim=PersistentVolumeClaim(claimName=pvc.name),
+            )
+        ],
+    )
 
 
 async def get_auth_secret_authenticated(
@@ -264,102 +332,6 @@ async def __get_gitlab_image_pull_secret(
     return ExtraSecret(secret)
 
 
-async def get_data_sources(
-    request: Request,
-    nb_config: NotebooksConfig,
-    user: AnonymousAPIUser | AuthenticatedAPIUser,
-    server_name: str,
-    data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
-    work_dir: PurePosixPath,
-    data_connectors_overrides: list[SessionDataConnectorOverride],
-    user_repo: UserRepo,
-    data_source_repo: DataSourceRepository,
-) -> SessionExtraResources:
-    """Generate cloud storage related resources."""
-    data_sources: list[DataSource] = []
-    secrets: list[ExtraSecret] = []
-    dcs: dict[str, RCloneStorage] = {}
-    dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
-    user_secret_key: str | None = None
-    async for dc in data_connectors_stream:
-        configuration = await data_source_repo.handle_configuration(
-            request=request, user=user, data_connector=dc.data_connector
-        )
-        if configuration is None:
-            continue
-        mount_folder = (
-            dc.data_connector.storage.target_path
-            if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
-            else (work_dir / dc.data_connector.storage.target_path).as_posix()
-        )
-        dcs[str(dc.data_connector.id)] = RCloneStorage(
-            source_path=dc.data_connector.storage.source_path,
-            mount_folder=mount_folder,
-            configuration=configuration,
-            readonly=dc.data_connector.storage.readonly,
-            name=dc.data_connector.name,
-            secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
-            storage_class=nb_config.cloud_storage.storage_class,
-        )
-        if len(dc.secrets) > 0:
-            dcs_secrets[str(dc.data_connector.id)] = dc.secrets
-    if isinstance(user, AuthenticatedAPIUser) and len(dcs_secrets) > 0:
-        secret_key = await user_repo.get_or_create_user_secret_key(user)
-        user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode("utf-8")
-    # NOTE: Check the cloud storage overrides from the request body and if any match
-    # then overwrite the projects cloud storages
-    # NOTE: Cloud storages in the session launch request body that are not from the DB will cause a 404 error
-    # TODO: Is this correct? -> NOTE: Overriding the configuration when a saved secret is there will cause a 422 error
-    for dco in data_connectors_overrides:
-        dc_id = str(dco.data_connector_id)
-        if dc_id not in dcs:
-            raise errors.MissingResourceError(
-                message=f"You have requested a data connector with ID {dc_id} which does not exist "
-                "or you don't have access to."
-            )
-        # NOTE: if 'skip' is true, we do not mount that data connector
-        if dco.skip:
-            del dcs[dc_id]
-            continue
-        if dco.target_path is not None and not PurePosixPath(dco.target_path).is_absolute():
-            dco.target_path = (work_dir / dco.target_path).as_posix()
-        dcs[dc_id] = dcs[dc_id].with_override(dco)
-
-    # Handle potential duplicate target_path
-    dcs = _deduplicate_target_paths(dcs)
-
-    for cs_id, cs in dcs.items():
-        secret_name = f"{server_name}-ds-{cs_id.lower()}"
-        secret_key_needed = len(dcs_secrets.get(cs_id, [])) > 0
-        if secret_key_needed and user_secret_key is None:
-            raise errors.ProgrammingError(
-                message=f"You have saved storage secrets for data connector {cs_id} "
-                f"associated with your user ID {user.id} but no key to decrypt them, "
-                "therefore we cannot mount the requested data connector. "
-                "Please report this to the renku administrators."
-            )
-        secret = ExtraSecret(
-            cs.secret(
-                secret_name,
-                await nb_config.k8s_v2_client.namespace(),
-                user_secret_key=user_secret_key if secret_key_needed else None,
-            )
-        )
-        secrets.append(secret)
-        data_sources.append(
-            DataSource(
-                mountPath=cs.mount_folder,
-                secretRef=secret.ref(),
-                accessMode="ReadOnlyMany" if cs.readonly else "ReadWriteOnce",
-            )
-        )
-    return SessionExtraResources(
-        data_sources=data_sources,
-        secrets=secrets,
-        data_connector_secrets=dcs_secrets,
-    )
-
-
 async def patch_data_sources(
     request: Request,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
@@ -414,8 +386,13 @@ async def patch_data_sources(
         except Exception as err:
             logger.warning(f"Error decoding 'configData' for data connector {str(dc_id)}, skipping! {err}")
             continue
+        internal_token_scope = f"session:{server_name}"
         new_config_data = await data_source_repo.handle_patching_configuration(
-            request=request, user=user, data_connector=dc.data_connector, rclone_ini_config=existing_config_data
+            request=request,
+            user=user,
+            data_connector=dc.data_connector,
+            rclone_ini_config=existing_config_data,
+            scope=internal_token_scope,
         )
         if not new_config_data:
             continue
@@ -556,10 +533,12 @@ async def request_session_secret_creation(
             )
 
 
-def resources_patch_from_resource_class(resource_class: ResourceClass) -> ResourcesPatch:
+def resources_patch_from_resource_class(
+    resource_class: ResourceClass, cpu_limit_factor: float | None = None
+) -> ResourcesPatch:
     """Convert the resource class to a k8s resources spec."""
     gpu_name = GpuKind.NVIDIA.value + "/gpu"
-    resources = resources_from_resource_class(resource_class)
+    resources = resources_from_resource_class(resource_class, cpu_limit_factor)
     requests: Mapping[str, Requests | RequestsStr | ResetType] | ResetType | None = None
     limits: Mapping[str, Limits | LimitsStr | ResetType] | ResetType | None = None
     defaul_requests = {"memory": RESET, "cpu": RESET, gpu_name: RESET}
@@ -571,8 +550,15 @@ def resources_patch_from_resource_class(resource_class: ResourceClass) -> Resour
     return ResourcesPatch(requests=requests, limits=limits)
 
 
-def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
-    """Convert the resource class to a k8s resources spec."""
+def resources_from_resource_class(resource_class: ResourceClass, cpu_limit_factor: float | None = None) -> Resources:
+    """Convert the resource class to a k8s resources spec.
+
+    The cpu limit factor is optional beacuse cpu is burstable in Kubernetes with
+    low risk of oversubscription causing problems to the node. We always apply
+    limits for memory beacuse it can cause problems on the node and affect other pods
+    when the node is oversubscribed. And for GPUs the limits simply have to be defined
+    and equal to the requests, oversubscription is not possible for GPUs.
+    """
     requests: dict[str, Requests | RequestsStr] = {
         "cpu": RequestsStr(str(round(resource_class.cpu * 1000)) + "m"),
         "memory": RequestsStr(f"{resource_class.memory}Gi"),
@@ -584,20 +570,9 @@ def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
         # NOTE: GPUs have to be set in limits too since GPUs cannot be overcommited, if
         # not on some clusters this will cause the session to fully fail to start.
         limits[gpu_name] = Limits(resource_class.gpu)
+    if cpu_limit_factor is not None and cpu_limit_factor >= 1.0:
+        limits["cpu"] = LimitsStr(str(round(resource_class.cpu * cpu_limit_factor * 1000)) + "m")
     return Resources(requests=requests, limits=limits if len(limits) > 0 else None)
-
-
-def repositories_from_project(project: Project, git_providers: list[GitProvider]) -> list[Repository]:
-    """Get the list of git repositories from a project."""
-    repositories: list[Repository] = []
-    for repo in project.repositories:
-        found_provider_id: str | None = None
-        for provider in git_providers:
-            if urlparse(provider.url).netloc == urlparse(repo).netloc:
-                found_provider_id = provider.id
-                break
-        repositories.append(Repository(url=repo, provider=found_provider_id))
-    return repositories
 
 
 async def repositories_from_session(
@@ -614,8 +589,10 @@ async def repositories_from_session(
     return repositories_from_project(project, git_providers)
 
 
-def get_culling(
-    user: AuthenticatedAPIUser | AnonymousAPIUser, resource_pool: ResourcePool, nb_config: NotebooksConfig
+def _get_interactive_culling(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    resource_pool: ResourcePool,
+    nb_config: NotebooksConfig,
 ) -> Culling:
     """Create the culling specification for an AmaltheaSession."""
     hibernation_threshold: timedelta | None = None
@@ -652,11 +629,44 @@ def get_culling(
     )
 
 
+def _get_non_interactive_culling(
+    resource_pool: ResourcePool,
+    nb_config: NotebooksConfig,
+) -> Culling:
+    # currently hard code max job runtime (=max_age) and maximum time a
+    # finished job stays around for logs (hibernation_threshold)
+    hibernation_threshold: timedelta = timedelta(hours=24)
+    max_age: timedelta = timedelta(hours=8)  ## TODO this will be a new field on resource pool
+
+    return Culling(
+        maxAge=max_age,
+        maxFailedDuration=timedelta(seconds=nb_config.sessions.culling.registered.failed_seconds),
+        maxHibernatedDuration=hibernation_threshold,
+        maxIdleDuration=None,
+        maxStartingDuration=timedelta(seconds=nb_config.sessions.culling.registered.pending_seconds),
+    )
+
+
+def get_culling(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    resource_pool: ResourcePool,
+    nb_config: NotebooksConfig,
+    session_type: SessionType,
+) -> Culling:
+    """Create the culling specification for an AmaltheaSession."""
+
+    if session_type == SessionType.non_interactive:
+        return _get_non_interactive_culling(resource_pool, nb_config)
+    else:
+        return _get_interactive_culling(user, resource_pool, nb_config)
+
+
 def get_culling_patch(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
     resource_pool: ResourcePool | None,
     nb_config: NotebooksConfig,
     lastInteraction: datetime | apispec.CurrentTime | None,
+    session_type: SessionType,
 ) -> CullingPatch:
     """Get the patch for the culling durations of a session."""
     lastInteractionDT: datetime | None = None
@@ -675,7 +685,7 @@ def get_culling_patch(
             # only update lastInteraction
             return CullingPatch(lastInteraction=lastInteractionDT or RESET)
         case rp:
-            culling = get_culling(user, rp, nb_config) if resource_pool else Culling()
+            culling = get_culling(user, rp, nb_config, session_type) if resource_pool else Culling()
             return CullingPatch(
                 maxAge=culling.maxAge or RESET,
                 maxFailedDuration=culling.maxFailedDuration or RESET,
@@ -716,17 +726,26 @@ def __format_image_pull_secret(secret_name: str, access_token: str, registry_dom
             data={".dockerconfigjson": registry_secret},
             metadata=V1ObjectMeta(name=secret_name),
             type="kubernetes.io/dockerconfigjson",
-        )
+        ),
+        adopt=True,
     )
 
 
 async def __get_connected_services_image_pull_secret(
-    secret_name: str, image_check_repo: ImageCheckRepository, image: str, user: APIUser
+    secret_name: str,
+    image_check_repo: ImageCheckRepository,
+    launcher: SessionLauncher,
+    user: APIUser,
 ) -> ExtraSecret | None:
     """Return a secret for accessing the image if one is available for the given user."""
-    image_parsed = Image.from_path(image)
-    image_check_result = await image_check_repo.check_image(user=user, gitlab_user=None, image=image_parsed)
-    logger.debug(f"Set pull secret for {image} to connection {image_check_result.image_provider}")
+    image_check_result = await image_check_repo.check_image(user=user, image_src=launcher)
+
+    if not image_check_result.accessible:
+        return None
+
+    logger.debug(
+        f"Set pull secret for {launcher.environment.container_image} to connection {image_check_result.image_provider}"
+    )
     if not image_check_result.token:
         return None
 
@@ -740,28 +759,64 @@ async def __get_connected_services_image_pull_secret(
     )
 
 
+async def __get_private_image_build_secret(
+    launcher: SessionLauncher, user: APIUser, image_check_repo: ImageCheckRepository, builds_config: BuildsConfig
+) -> ExtraSecret | None:
+    """Get the private image pull secret if user has access to the repository used to build the image."""
+
+    if user.is_anonymous:
+        return None
+
+    try:
+        await image_check_repo.check_built_image_accessibility(user=user, launcher=launcher)
+    except (errors.ValidationError, errors.ProgrammingError, errors.ForbiddenError):
+        return None
+
+    return ExtraSecret(
+        V1Secret(
+            metadata=V1ObjectMeta(name=builds_config.pull_private_image_secret_name),
+        ),
+        adopt=False,
+    )
+
+
 async def get_image_pull_secret(
-    image: str,
+    launcher: SessionLauncher,
     server_name: str,
     nb_config: NotebooksConfig,
     user: APIUser,
     internal_gitlab_user: APIUser,
     image_check_repo: ImageCheckRepository,
+    builds_config: BuildsConfig,
 ) -> ExtraSecret | None:
     """Get an image pull secret."""
 
     v2_secret = await __get_connected_services_image_pull_secret(
-        f"{server_name}-image-secret", image_check_repo, image, user
+        f"{server_name}-image-secret", image_check_repo, launcher, user
     )
     if v2_secret:
         return v2_secret
+
+    if (
+        builds_config.enabled
+        and builds_config.private_builds_enabled
+        and launcher.environment.container_image.startswith(builds_config.build_output_private_image_prefix)
+    ):
+        return await __get_private_image_build_secret(
+            launcher=launcher,
+            user=user,
+            image_check_repo=image_check_repo,
+            builds_config=builds_config,
+        )
 
     if (
         nb_config.enable_internal_gitlab
         and isinstance(user, AuthenticatedAPIUser)
         and internal_gitlab_user.access_token is not None
     ):
-        needs_pull_secret = await __requires_image_pull_secret(nb_config, image, internal_gitlab_user)
+        needs_pull_secret = await __requires_image_pull_secret(
+            nb_config, launcher.environment.container_image, internal_gitlab_user
+        )
         if needs_pull_secret:
             v1_secret = await __get_gitlab_image_pull_secret(
                 nb_config, user, f"{server_name}-image-secret-v1", internal_gitlab_user.access_token
@@ -777,6 +832,7 @@ def get_remote_secret(
     server_name: str,
     remote_provider_id: str,
     git_providers: list[GitProvider],
+    internal_token_mint: RenkuSelfTokenMint,
 ) -> ExtraSecret | None:
     """Returns the secret containing the configuration for the remote session controller."""
     if not user.is_authenticated or user.access_token is None or user.refresh_token is None:
@@ -784,24 +840,48 @@ def get_remote_secret(
     remote_provider = next(filter(lambda p: p.id == remote_provider_id, git_providers), None)
     if not remote_provider:
         return None
-    renku_base_url = "https://" + config.sessions.ingress.host
-    renku_base_url = renku_base_url.rstrip("/")
-    renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
+    internal_token_scope = f"session:{server_name}"
+    internal_access_token = internal_token_mint.create_access_token(user=user, scope=internal_token_scope)
+    internal_refresh_token = internal_token_mint.create_refresh_token(user=user, scope=internal_token_scope)
     secret_data = {
-        "RSC_AUTH_KIND": "renku",
+        "RSC_AUTH_KIND": "renku_v2",
         "RSC_AUTH_TOKEN_URI": remote_provider.access_token_url,
-        "RSC_AUTH_RENKU_ACCESS_TOKEN": user.access_token,
-        "RSC_AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
-        "RSC_AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
-        "RSC_AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
-        "RSC_AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
+        "RSC_AUTH_RENKU_TOKEN_URI": f"https://{config.sessions.ingress.host}/api/data/internal/authentication/token",
+        "RSC_AUTH_RENKU_ACCESS_TOKEN": internal_access_token,
+        "RSC_AUTH_RENKU_REFRESH_TOKEN": internal_refresh_token,
     }
     secret_name = f"{server_name}-remote-secret"
     secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
     return ExtraSecret(secret)
 
 
+def _firecrest_resource_env_items(
+    resource_class: ResourceClass,
+    pool_remote: RemoteConfigurationFirecrest,
+) -> list[SessionEnvItem]:
+    """Build FirecREST-specific env vars for a remote session.
+
+    Resource class CPU, memory and GPU values are passed to Amalthea through
+    the CRD, so they are never emitted as env vars. Class-level system and
+    partition override the pool defaults. ``forward_resource_values`` is always
+    emitted: when true Amalthea forwards the CRD CPU/memory/GPU values to
+    FirecREST; when false (the default) the HPC grid picks the resources.
+    """
+    class_remote = resource_class.remote
+    system_name = (class_remote.system_name if class_remote is not None else None) or pool_remote.system_name
+    partition = (class_remote.partition if class_remote is not None else None) or pool_remote.partition
+    forward = class_remote.forward_resource_values if class_remote is not None else False
+    env: list[SessionEnvItem] = [
+        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=system_name),
+        SessionEnvItem(name="RSC_FIRECREST_FORWARD_RESOURCE_VALUES", value=str(forward).lower()),
+    ]
+    if partition:
+        env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=partition))
+    return env
+
+
 def get_remote_env(
+    resource_class: ResourceClass,
     remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
@@ -809,16 +889,115 @@ def get_remote_env(
         SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value),
     ]
     if isinstance(remote, RemoteConfigurationRunai):
-        env.append(
-            SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url),
-        )
+        env.append(SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url))
     else:
-        env.append(SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value))
         env.append(SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url))
-        env.append(SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote.system_name))
-        if remote.partition:
-            env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote.partition))
+        env.extend(_firecrest_resource_env_items(resource_class, remote))
     return env
+
+
+async def _check_quota(resource_usage_service: ResourceUsageService, resource_pool_id: int, user_id: str) -> None:
+    """Raise a ValidationError if the user has exhausted their quota, do nothing otherwise."""
+    usage = await resource_usage_service.get_running_week(resource_pool_id=resource_pool_id, user_id=user_id)
+    if usage is None:
+        return
+
+    total_quota = get_effective_quota(usage.pool_limits.user_limit.value, usage.pool_limits.total_limit.value)
+    if total_quota <= 0:
+        return
+
+    if usage.user_usage.cost.value >= total_quota:
+        raise errors.ValidationError(
+            message="Cannot start the session because your quota in the selected resource pool is exhausted."
+        )
+
+
+async def get_mount_work_dir(
+    user: APIUser, environment: Environment, image_check_repo: ImageCheckRepository
+) -> tuple[PurePosixPath, PurePosixPath]:
+    """Get the storage mount and work directories."""
+    work_dir = environment.working_directory
+    if not work_dir:
+        parsed_image = Image.from_path(environment.container_image)
+        image_workdir = await image_check_repo.image_workdir(user, parsed_image)
+        work_dir_fallback = PurePosixPath("/home/jovyan/work")
+        work_dir = image_workdir or work_dir_fallback
+    # NOTE: The fallback should have /work appended to the path to avoid collisions
+    # between the mount and workdir and for backwards compatibility reasons.
+    # If /work is not added then we overwrite the workdir from the image which may contain files that are needed.
+    storage_mount_fallback = work_dir / "work"
+    storage_mount = environment.mount_directory or storage_mount_fallback
+    if storage_mount == PurePosixPath("/"):
+        # NOTE: Mounting the volume for the session at / will essentially wipe everything out from the image
+        storage_mount = PurePosixPath("/work")
+    return storage_mount, work_dir
+
+
+def ssh_proxy_session_extras(ssh_config: SshProxyConfig, storage_mount: PurePosixPath) -> SessionExtraResources:
+    """Volumes and mounts delivering the proxy-to-session keys to a session.
+
+    Only ssh frontends are reached by the proxy; every other session must not get the keys.
+    The two secrets are created once by the Helm keygen job; data-services only mounts them here.
+    """
+    if not ssh_config.enabled:
+        return SessionExtraResources()
+
+    if not ssh_config.proxy_auth_key_secret_name:
+        raise errors.ProgrammingError(
+            message="SSH is enabled but the name of the Kubernetes secret that stores the proxy authentication key "
+            "(specifically its public portion) has not been set by the Renku administrator."
+        )
+
+    if not ssh_config.session_host_key_secret_name:
+        raise errors.ProgrammingError(
+            message="SSH is enabled but the name of the Kubernetes secret that stores the session host key "
+            "(specifically its private portion) has not been set by the Renku administrator."
+        )
+
+    ssh_dir = (storage_mount / ".ssh").as_posix()
+    return SessionExtraResources(
+        volumes=[
+            ExtraVolume(
+                name="ssh-session-host-key",
+                secret=SecretAsVolume(
+                    secretName=ssh_config.session_host_key_secret_name,
+                    items=[
+                        SecretAsVolumeItem(key=ssh_config.session_host_key_secret_key, path="dropbear_ed25519_host_key")
+                    ],
+                ),
+            ),
+            ExtraVolume(
+                name="ssh-proxy-session-auth-key",
+                secret=SecretAsVolume(
+                    secretName=ssh_config.proxy_auth_key_secret_name,
+                    items=[SecretAsVolumeItem(key=ssh_config.proxy_auth_key_secret_key, path="proxy_auth_key.pub")],
+                ),
+            ),
+        ],
+        volume_mounts=[
+            ExtraVolumeMount(
+                name="ssh-session-host-key",
+                mountPath=f"{ssh_dir}/dropbear_ed25519_host_key",
+                subPath="dropbear_ed25519_host_key",
+                readOnly=True,
+            ),
+            ExtraVolumeMount(
+                name="ssh-proxy-session-auth-key",
+                mountPath=f"{ssh_dir}/proxy_auth_key.pub",
+                subPath="proxy_auth_key.pub",
+                readOnly=True,
+            ),
+        ],
+    )
+
+
+def session_has_http_frontend(build_parameters: BuildParameters | None) -> bool:
+    """Whether the session serves an HTTP frontend.
+
+    ssh sessions run a bare ssh daemon on the session port and have no HTTP
+    frontend, so they get neither the authentication proxy nor an ingress.
+    """
+    return build_parameters is None or build_parameters.frontend_variant != FrontendVariant.ssh
 
 
 async def start_session(
@@ -829,15 +1008,23 @@ async def start_session(
     nb_config: NotebooksConfig,
     git_provider_helper: GitProviderHelperProto,
     cluster_repo: ClusterRepository,
+    data_connector_repo: DataConnectorRepository,
     data_connector_secret_repo: DataConnectorSecretRepository,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
+    project_storage_repo: ProjectStorageRepository,
     rp_repo: ResourcePoolRepository,
     session_repo: SessionRepository,
     user_repo: UserRepo,
     metrics: MetricsService,
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
+    git_repositories_repo: GitRepositoriesRepository,
+    builds_config: BuildsConfig,
+    internal_token_mint: RenkuSelfTokenMint,
+    resource_usage_service: ResourceUsageService,
+    authz: Authz,
+    ssh_proxy_config: SshProxyConfig,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -846,7 +1033,15 @@ async def start_session(
     """
     launcher = await session_repo.get_launcher(user=user, launcher_id=launch_request.launcher_id)
     launcher_id = launcher.id
+
     project = await project_repo.get_project(user=user, project_id=launcher.project_id)
+    session_type = SessionType.from_launcher_type(launcher.launcher_type)
+
+    if session_type.is_non_interactive and launch_request.submission_id is None:
+        raise errors.ValidationError(message="Job submissions require a submission_id.")
+
+    if session_type.is_interactive and (launch_request.job_args_overrides or launch_request.job_command_overrides):
+        raise errors.ValidationError(message="Interactive sessions don't allow job_args_override.")
 
     # Determine resource_class_id: the class can be overwritten at the user's request
     resource_class_id = launch_request.resource_class_id or launcher.resource_class_id
@@ -854,11 +1049,21 @@ async def start_session(
     cluster = await nb_config.k8s_v2_client.cluster_by_class_id(resource_class_id, user)
 
     server_name = renku_2_make_server_name(
-        user=user, project_id=str(launcher.project_id), launcher_id=str(launcher_id), cluster_id=str(cluster.id)
+        user=user,
+        project_id=str(launcher.project_id),
+        launcher_id=str(launcher_id),
+        cluster_id=str(cluster.id),
+        submission_id=launch_request.submission_id,
     )
     existing_session = await nb_config.k8s_v2_client.get_session(name=server_name, safe_username=user.id)
     if existing_session is not None:
-        return existing_session, False
+        if session_type == SessionType.from_amalthea(existing_session.spec.sessionType):
+            return existing_session, False
+        else:
+            raise errors.ValidationError(
+                message=f"Session exists with type={existing_session.spec.sessionType}, "
+                f"while launcher contains {session_type}."
+            )
 
     # Fully determine the resource pool and resource class
     if resource_class_id is None:
@@ -868,7 +1073,6 @@ async def start_session(
             resource_class = resource_pool.classes[0]
         if not resource_class or not resource_class.id:
             raise errors.ProgrammingError(message="Cannot find any resource classes in the default pool.")
-        resource_class_id = resource_class.id
     else:
         resource_pool = await rp_repo.get_resource_pool_from_class(user, resource_class_id)
         resource_class = resource_pool.get_resource_class(resource_class_id)
@@ -877,25 +1081,24 @@ async def start_session(
     await nb_config.crc_validator.validate_class_storage(user, resource_class.id, launch_request.disk_storage)
     disk_storage = launch_request.disk_storage or resource_class.default_storage
 
+    # NOTE: Refuse to start if the user is over quota and the resource class enforces it
+    if user.id and resource_pool.id and resource_class.quota_enforced:
+        await _check_quota(resource_usage_service, resource_pool.id, user.id)
+
     # Determine session location
     session_location = SessionLocation.remote if resource_pool.remote else SessionLocation.local
     if session_location == SessionLocation.remote and not user.is_authenticated:
         raise errors.ValidationError(message="Anonymous users cannot start remote sessions.")
 
+    if session_location == SessionLocation.remote and session_type.is_non_interactive:
+        raise errors.ValidationError(message="Non-Interactive sessions are not supported for remote sessions")
+
     environment = launcher.environment
     image = environment.container_image
-    work_dir = environment.working_directory
-    if not work_dir:
-        image_workdir = await core.docker_image_workdir(nb_config, environment.container_image, internal_gitlab_user)
-        work_dir_fallback = PurePosixPath("/home/jovyan")
-        work_dir = image_workdir or work_dir_fallback
-    storage_mount_fallback = work_dir / "work"
-    storage_mount = launcher.environment.mount_directory or storage_mount_fallback
+    storage_mount, work_dir = await get_mount_work_dir(user, environment, image_check_repo)
     secrets_mount_directory = storage_mount / project.secrets_mount_directory
-    session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
-        user=user, project_id=project.id
-    )
-    data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
+    session_secrets = await session_repo.get_all_session_secrets_from_launcher(user=user, launcher=launcher)
+    data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id, launcher.id)
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
@@ -913,18 +1116,22 @@ async def start_session(
         )
     )
 
+    # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
+    if not session_has_http_frontend(launcher.environment.build_parameters):
+        session_extras = session_extras.concat(ssh_proxy_session_extras(ssh_proxy_config, storage_mount))
+
     # Data connectors
     session_extras = session_extras.concat(
-        await get_data_sources(
+        await data_source_repo.get_data_sources(
             request=request,
-            nb_config=nb_config,
-            server_name=server_name,
             user=user,
+            resource_type="session",
+            base_name=server_name,
             data_connectors_stream=data_connectors_stream,
             work_dir=work_dir,
             data_connectors_overrides=launch_request.data_connectors_overrides or [],
-            user_repo=user_repo,
-            data_source_repo=data_source_repo,
+            namespace=await nb_config.k8s_v2_client.namespace(),
+            storage_class=nb_config.cloud_storage.storage_class,
         )
     )
 
@@ -943,7 +1150,17 @@ async def start_session(
     )
 
     # Extra containers
-    session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
+    session_extras = session_extras.concat(
+        await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
+    )
+
+    # project storage
+    project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
+    session_extras = session_extras.concat(
+        await get_project_storage(
+            user, project_storage_k8s, project_storage_repo, project.id, storage_mount, cluster, authz
+        )
+    )
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings
@@ -958,7 +1175,7 @@ async def start_session(
     storage_class = cluster_settings.get_storage_class()
     service_account_name = cluster_settings.service_account_name
 
-    ui_path = f"{ingress_config.url_path}/{environment.default_url.lstrip('/')}"
+    ui_path = f"{ingress_config.url_path}/{environment.default_url.lstrip('/')}" if session_type.is_interactive else ""
 
     # Annotations
     annotations: dict[str, str] = {
@@ -967,37 +1184,34 @@ async def start_session(
         "renku.io/resource_class_id": str(resource_class.id),
         "renku.io/resource_pool_id": str(resource_pool.id),
     }
+    if launch_request.submission_id:
+        annotations.update({"renku.io/submission_id": str(launch_request.submission_id)})
+
+    has_http_frontend = session_has_http_frontend(launcher.environment.build_parameters)
 
     # Authentication
-    if isinstance(user, AuthenticatedAPIUser):
-        auth_secret = await get_auth_secret_authenticated(
-            nb_config, user, server_name, ingress_config.url, ingress_config.url_path
-        )
-    else:
-        auth_secret = get_auth_secret_anonymous(nb_config, server_name, request)
-    session_extras = session_extras.concat(
-        SessionExtraResources(
-            secrets=[auth_secret],
-            volumes=[auth_secret.volume] if auth_secret.volume else [],
-        )
+    authentication, auth_secret = await _get_authentication(
+        request, user, launcher, nb_config, server_name, ingress_config
     )
-    authn_extra_volume_mounts: list[ExtraVolumeMount] = []
-    if auth_secret.volume_mount:
-        authn_extra_volume_mounts.append(auth_secret.volume_mount)
-
-    cert_vol_mounts = init_containers.certificates_volume_mounts(nb_config)
-    if cert_vol_mounts:
-        authn_extra_volume_mounts.extend(cert_vol_mounts)
+    if auth_secret:
+        session_extras = session_extras.concat(
+            SessionExtraResources(
+                secrets=[auth_secret],
+                volumes=[auth_secret.volume] if auth_secret.volume else [],
+            )
+        )
 
     image_secret = await get_image_pull_secret(
-        image=image,
+        launcher=launcher,
         server_name=server_name,
         nb_config=nb_config,
         user=user,
         internal_gitlab_user=internal_gitlab_user,
         image_check_repo=image_check_repo,
+        builds_config=builds_config,
     )
-    if image_secret:
+
+    if image_secret and image_secret.secret.data is not None:
         session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
 
     # Remote session configuration
@@ -1017,6 +1231,7 @@ async def start_session(
                 server_name=server_name,
                 remote_provider_id=resource_pool.remote.provider_id,
                 git_providers=git_providers,
+                internal_token_mint=internal_token_mint,
             )
         if remote_secret is not None:
             session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
@@ -1024,39 +1239,82 @@ async def start_session(
     # Raise an error if there are invalid environment variables in the request body
     verify_launcher_env_variable_overrides(launcher, launch_request)
     env = [
-        SessionEnvItem(name="RENKU_BASE_URL_PATH", value=ingress_config.url_path),
-        SessionEnvItem(name="RENKU_BASE_URL", value=ingress_config.url),
         SessionEnvItem(name="RENKU_MOUNT_DIR", value=storage_mount.as_posix()),
-        SessionEnvItem(name="RENKU_SESSION", value="1"),
-        SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
-        SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
         SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
         SessionEnvItem(name="RENKU_SECRETS_PATH", value=project.secrets_mount_directory.as_posix()),
         SessionEnvItem(name="RENKU_PROJECT_ID", value=str(project.id)),
         SessionEnvItem(name="RENKU_PROJECT_PATH", value=project.path.serialize()),
         SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
+        # NOTE: CNB_APP_DIR sets the working directory for images built with cloud native buildpacks
+        SessionEnvItem(name="CNB_APP_DIR", value=work_dir.as_posix()),
     ]
+    if session_type.is_interactive:
+        env.extend(
+            [
+                SessionEnvItem(name="RENKU_BASE_URL_PATH", value=ingress_config.url_path),
+                SessionEnvItem(name="RENKU_BASE_URL", value=ingress_config.url),
+                SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
+                SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
+                SessionEnvItem(name="RENKU_SESSION", value="1"),
+            ]
+        )
+    else:
+        env.extend(
+            [
+                SessionEnvItem(name="RENKU_JOB", value="1"),
+                SessionEnvItem(name="RENKU_SUBMISSION_ID", value=str(launch_request.submission_id)),
+            ]
+        )
     if session_location == SessionLocation.remote:
         assert resource_pool.remote is not None
-        env.extend(
-            get_remote_env(
-                remote=resource_pool.remote,
-            )
-        )
+        if resource_pool.remote.kind == RemoteConfigurationKind.firecrest:
+            resource_class = replace(resource_class, cpu=ceil(resource_class.cpu))
+        env.extend(get_remote_env(resource_class, resource_pool.remote))
     launcher_env_variables = get_launcher_env_variables(launcher, launch_request)
     env.extend(launcher_env_variables)
 
-    labels = {"renku.io/safe-username": user.id}
+    labels: dict[str, str] = {
+        "renku.io/safe-username": user.id,
+        "renku.io/session-type": str(session_type),
+        "renku.io/preemptible": str(resource_class.preemptible).lower(),
+    }
+
+    if launcher.environment.build_parameters:
+        labels["renku.io/frontend-variant"] = launcher.environment.build_parameters.frontend_variant
+
+    if session_location == SessionLocation.remote:
+        labels["renku.io/remote-tunnel"] = "allow"
+
+    if user.is_anonymous:
+        labels["renku.io/anonymous-session"] = "true"
+
+    if session_type.is_non_interactive:
+        session_extras = session_extras.extra_container_as_sidecars()
+
+    command = environment.command
+    args = environment.args
+    # if non-interactive and built-from-code, we need to wrap the "real" command in a launcher script
+    if session_type.is_non_interactive and launcher.environment.build_parameters_id is not None:
+        command = ["/cnb/lifecycle/launcher", "--"]
+        args = (launch_request.job_command_overrides or environment.command or []) + (
+            launch_request.job_args_overrides or environment.args or []
+        )
+    elif session_type.is_non_interactive:
+        command = launch_request.job_command_overrides or environment.command or []
+        args = launch_request.job_args_overrides or environment.args or []
 
     session = AmaltheaSessionV1Alpha1(
-        metadata=Metadata(name=server_name, annotations=annotations),
+        metadata=Metadata(name=server_name, annotations=annotations, labels=labels),
         spec=AmaltheaSessionSpec(
             location=session_location,
-            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=True)] if image_secret else [],
+            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=image_secret.adopt)]
+            if image_secret
+            else [],
             codeRepositories=[],
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
-            priorityClassName=resource_class.quota,
+            priorityClassName=rp_repo.quotas_repo.priority_class_name(resource_class),
+            sessionType=session_type.to_amalthea(),
             session=Session(
                 image=image,
                 imagePullPolicy=ImagePullPolicy.Always,
@@ -1070,28 +1328,22 @@ async def start_session(
                 workingDir=work_dir.as_posix(),
                 runAsUser=environment.uid,
                 runAsGroup=environment.gid,
-                resources=resources_from_resource_class(resource_class),
+                resources=resources_from_resource_class(resource_class, resource_pool.cpu_limit_factor),
                 extraVolumeMounts=session_extras.volume_mounts,
-                command=environment.command,
-                args=environment.args,
+                command=command,
+                args=args,
                 shmSize=ShmSizeStr("1G"),
                 stripURLPath=environment.strip_path_prefix,
                 env=env,
                 remoteSecretRef=remote_secret.ref() if remote_secret else None,
+                readinessProbe=_get_readiness_probe(session_type, session_location),
             ),
-            ingress=ingress_config.get_k8s_ingress(),
+            ingress=ingress_config.get_k8s_ingress() if session_type.is_interactive and has_http_frontend else None,
             extraContainers=session_extras.containers,
             initContainers=session_extras.init_containers,
             extraVolumes=session_extras.volumes,
-            culling=get_culling(user, resource_pool, nb_config),
-            authentication=Authentication(
-                enabled=True,
-                type=AuthenticationType.oauth2proxy
-                if isinstance(user, AuthenticatedAPIUser)
-                else AuthenticationType.token,
-                secretRef=auth_secret.key_ref("auth"),
-                extraVolumeMounts=authn_extra_volume_mounts,
-            ),
+            culling=get_culling(user, resource_pool, nb_config, session_type),
+            authentication=authentication,
             dataSources=session_extras.data_sources,
             tolerations=tolerations_from_resource_class(resource_class, nb_config.sessions.tolerations_model),
             affinity=node_affinity_from_resource_class(resource_class, nb_config.sessions.affinity_model),
@@ -1099,6 +1351,7 @@ async def start_session(
             template=Template(metadata=AmaltheaMetadata(annotations=annotations, labels=labels)),
         ),
     )
+
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
         logger.debug(f"Creating {len(secrets_to_create)} session secrets")
@@ -1131,6 +1384,7 @@ async def start_session(
             "resource_pool_id": resource_pool.id or "",
             "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
             "session_id": server_name,
+            "session_type": session_type.value.lower(),
         },
     )
     return session, True
@@ -1152,6 +1406,13 @@ async def patch_session(
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
     metrics: MetricsService,
+    builds_config: BuildsConfig,
+    internal_token_mint: RenkuSelfTokenMint,
+    resource_usage_service: ResourceUsageService,
+    resource_requests_repo: ResourceRequestsRepo,
+    project_storage_repo: ProjectStorageRepository,
+    authz: Authz,
+    ssh_proxy_config: SshProxyConfig,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -1161,6 +1422,8 @@ async def patch_session(
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())
     is_getting_hibernated: bool = False
+    is_being_resumed: bool = False
+    session_type = SessionType.from_amalthea(session.spec.sessionType)
 
     # Hibernation
     # TODO: Some patching should only be done when the session is in some states to avoid inadvertent restarts
@@ -1178,11 +1441,11 @@ async def patch_session(
         and body.state.value.lower() == State.Running.value.lower()
         and session.status.state.value.lower() != body.state.value.lower()
     ):
-        # Session is being resumed
-        patch.spec.hibernated = False
-        await metrics.user_requested_session_resume(user, metadata={"session_id": session_id})
+        # Session is being resumed - quota check happens below after the resource class is resolved
+        is_being_resumed = True
 
     rp: ResourcePool | None = None
+    rc: ResourceClass | None = None
     # Resource class
     if body.resource_class_id is not None:
         new_cluster = await nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
@@ -1202,26 +1465,86 @@ async def patch_session(
         if not patch.metadata:
             patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
         # Patch the resource pool and class ID in the annotations
-        patch.metadata.annotations = {"renku.io/resource_pool_id": str(rp.id)}
-        patch.metadata.annotations = {"renku.io/resource_class_id": str(body.resource_class_id)}
+        annotations: dict[str, str | ResetType] = dict()
+        annotations.update(session.metadata.annotations)
+        annotations["renku.io/resource_class_id"] = str(rc.id)
+        annotations["renku.io/resource_pool_id"] = str(rp.id)
+        patch.metadata.annotations = annotations
+        # Patch the resource pool and class ID in the template annotations
+        annotations: dict[str, str | ResetType] = dict()
+        if session.spec.template and session.spec.template.metadata and session.spec.template.metadata.annotations:
+            annotations.update(session.spec.template.metadata.annotations)
+        annotations["renku.io/resource_class_id"] = str(rc.id)
+        annotations["renku.io/resource_pool_id"] = str(rp.id)
+        patch.spec.template = TemplatePatch(metadata=TemplateMetadataPatch(annotations=annotations))
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
-        patch.spec.session.resources = resources_patch_from_resource_class(rc)
+        patch.spec.session.resources = resources_patch_from_resource_class(rc, rp.cpu_limit_factor)
         # Tolerations
-        tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
-        patch.spec.tolerations = tolerations
+        patch.spec.tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
         # Affinities
         patch.spec.affinity = node_affinity_patch_from_resource_class(rc, nb_config.sessions.affinity_model)
-        # Priority class (if a quota is being used)
-        if rc.quota is None:
-            patch.spec.priorityClassName = RESET
+        # Priority class
+        patch.spec.priorityClassName = rp_repo.quotas_repo.priority_class_name(rc) or RESET
         # Service account name
         if rp.cluster is not None:
             patch.spec.service_account_name = (
                 rp.cluster.service_account_name if rp.cluster.service_account_name is not None else RESET
             )
 
-    patch.spec.culling = get_culling_patch(user, rp, nb_config, body.lastInteraction)
+    # Patch the labels
+    labels: dict[str, str | ResetType] = dict()
+    labels.update(session.metadata.labels)
+    labels["renku.io/safe-username"] = user.id
+    if user.is_anonymous:
+        labels["renku.io/anonymous-session"] = "true"
+    if not labels.get("renku.io/session-type"):
+        labels["renku.io/session-type"] = SessionType.interactive.value
+    if rc is not None:
+        labels["renku.io/preemptible"] = str(rc.preemptible).lower()
+
+    launcher = await session_repo.get_launcher(user, session.launcher_id)
+
+    if not patch.metadata:
+        patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
+    patch.metadata.labels = labels
+    # Patch the template labels
+    labels: dict[str, str | ResetType] = dict()
+    if session.spec.template and session.spec.template.metadata and session.spec.template.metadata.labels:
+        labels.update(session.spec.template.metadata.labels)
+    labels["renku.io/safe-username"] = user.id
+    if user.is_anonymous:
+        labels["renku.io/anonymous-session"] = "true"
+    if not labels.get("renku.io/session-type"):
+        labels["renku.io/session-type"] = SessionType.interactive.value
+    if rc is not None:
+        labels["renku.io/preemptible"] = str(rc.preemptible).lower()
+    if not isinstance(patch.spec.template, TemplatePatch):
+        patch.spec.template = TemplatePatch(metadata=TemplateMetadataPatch())
+    if not isinstance(patch.spec.template.metadata, TemplateMetadataPatch):
+        patch.spec.template.metadata = TemplateMetadataPatch()
+    patch.spec.template.metadata.labels = labels
+
+    # NOTE: Refuse to resume if quota is exhausted and the resource class enforces it
+    if is_being_resumed:
+        rp_id: int | None
+        quota_enforced: bool | None
+        if rp and rc:
+            rp_id = rp.id
+            quota_enforced = rc.quota_enforced
+        else:
+            raw_pool_id = session.metadata.annotations.get("renku.io/resource_pool_id")
+            rp_id = int(raw_pool_id) if raw_pool_id else None
+            quota_enforced = await resource_requests_repo.get_quota_enforced(session.resource_class_id())
+        if user.id and rp_id and quota_enforced:
+            await _check_quota(resource_usage_service, rp_id, user.id)
+
+        patch.spec.hibernated = False
+        await metrics.user_requested_session_resume(user, metadata={"session_id": session_id})
+
+    patch.spec.culling = get_culling_patch(
+        user, rp, nb_config, body.lastInteraction, SessionType.from_amalthea(session.spec.sessionType)
+    )
 
     # If the session is being hibernated we do not need to patch anything else that is
     # not specifically called for in the request body, we can refresh things when the user resumes.
@@ -1229,21 +1552,12 @@ async def patch_session(
         return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch.to_rfc7386())
 
     server_name = session.metadata.name
-    launcher = await session_repo.get_launcher(user, session.launcher_id)
     project = await project_repo.get_project(user=user, project_id=session.project_id)
     environment = launcher.environment
-    work_dir = environment.working_directory
-    if not work_dir:
-        image_workdir = await core.docker_image_workdir(nb_config, environment.container_image, internal_gitlab_user)
-        work_dir_fallback = PurePosixPath("/home/jovyan")
-        work_dir = image_workdir or work_dir_fallback
-    storage_mount_fallback = work_dir / "work"
-    storage_mount = launcher.environment.mount_directory or storage_mount_fallback
+    storage_mount, work_dir = await get_mount_work_dir(user, environment, image_check_repo)
     secrets_mount_directory = storage_mount / project.secrets_mount_directory
-    session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
-        user=user, project_id=project.id
-    )
-    data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
+    session_secrets = await session_repo.get_all_session_secrets_from_launcher(user=user, launcher=launcher)
+    data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id, launcher.id)
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
@@ -1260,6 +1574,10 @@ async def patch_session(
             gid=environment.gid,
         )
     )
+
+    # Proxy-to-session (hop 2) keys, created once by the Helm keygen job
+    if session.likely_ssh():
+        session_extras = session_extras.concat(ssh_proxy_session_extras(ssh_proxy_config, storage_mount))
 
     # Data connectors: skip
     # TODO: How can we patch data connectors? Should we even patch them?
@@ -1294,23 +1612,47 @@ async def patch_session(
     )
 
     # Extra containers
-    session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
+    if session_type.is_interactive:
+        session_extras = session_extras.concat(
+            await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
+        )
 
     # Patching the image pull secret
-    image = session.spec.session.image
     image_pull_secret = await get_image_pull_secret(
-        image=image,
+        launcher=launcher,
         server_name=server_name,
         nb_config=nb_config,
         image_check_repo=image_check_repo,
         user=user,
         internal_gitlab_user=internal_gitlab_user,
+        builds_config=builds_config,
     )
     if image_pull_secret:
-        session_extras = session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
+        if image_pull_secret.secret.data is not None:
+            session_extras = session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret.name, adopt=image_pull_secret.adopt)]
     else:
         patch.spec.imagePullSecrets = RESET
+
+    if session_type.is_non_interactive:
+        session_extras = session_extras.extra_container_as_sidecars()
+
+    # When resuming, we need to check for a project storage and disable it if it has been removed
+    remove_mounts: list[str] | None = None
+    if is_being_resumed:
+        storage_db = await project_storage_repo.get_storage_to(user, project.id)
+        if storage_db is None:
+            logger.debug(f"Removing project storage mounts on project {project.id}")
+            remove_mounts = [f"ps-{project.id}-0".lower()]
+        else:
+            # but if a project storage has been added, we need to add it to the resumed session
+            logger.debug(f"Adding storage to resumed session for project {project.id}")
+            project_storage_k8s = ProjectStorageK8s(nb_config.k8s_v2_client)
+            session_extras = session_extras.concat(
+                await get_project_storage(
+                    user, project_storage_k8s, project_storage_repo, project.id, storage_mount, cluster, authz
+                )
+            )
 
     # Construct session patch
     patch.spec.extraContainers = _make_patch_spec_list(
@@ -1320,12 +1662,14 @@ async def patch_session(
         existing=session.spec.initContainers or [], updated=session_extras.init_containers
     )
     patch.spec.extraVolumes = _make_patch_spec_list(
-        existing=session.spec.extraVolumes or [], updated=session_extras.volumes
+        existing=session.spec.extraVolumes or [], updated=session_extras.volumes, remove=remove_mounts
     )
     if not patch.spec.session:
         patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
     patch.spec.session.extraVolumeMounts = _make_patch_spec_list(
-        existing=session.spec.session.extraVolumeMounts or [], updated=session_extras.volume_mounts
+        existing=session.spec.session.extraVolumeMounts or [],
+        updated=session_extras.volume_mounts,
+        remove=remove_mounts,
     )
 
     secrets_to_create = session_extras.secrets or []
@@ -1339,57 +1683,18 @@ async def patch_session(
     return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch_serialized)
 
 
-def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RCloneStorage]:
-    """Ensures that the target paths for all storages are unique.
+def _get_readiness_probe(session_type: SessionType, session_location: SessionLocation) -> ReadinessProbe:
+    """Return the readiness probe for a session based on type and location.
 
-    This method will attempt to de-duplicate the target_path for all items passed in,
-    and raise an error if it fails to generate unique target_path.
+    - Non-interactive sessions get no probe (Type.none).
+    - Interactive remote sessions (firecrest/runai) use an HTTP probe.
+    - Interactive local sessions use the default TCP probe.
     """
-    result_dcs: dict[str, RCloneStorage] = {}
-    mount_folders: dict[str, list[str]] = {}
-
-    def _find_mount_folder(dc: RCloneStorage) -> str:
-        mount_folder = dc.mount_folder
-        if mount_folder not in mount_folders:
-            return mount_folder
-        # 1. Try with a "-1", "-2", etc. suffix
-        mount_folder_try = f"{mount_folder}-{len(mount_folders[mount_folder])}"
-        if mount_folder_try not in mount_folders:
-            return mount_folder_try
-        # 2. Try with a random suffix
-        suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(4)])  # nosec B311
-        mount_folder_try = f"{mount_folder}-{suffix}"
-        if mount_folder_try not in mount_folders:
-            return mount_folder_try
-        raise errors.ValidationError(
-            message=f"Could not start session because two or more data connectors ({', '.join(mount_folders[mount_folder])}) share the same mount point '{mount_folder}'"  # noqa E501
-        )
-
-    for dc_id, dc in dcs.items():
-        original_mount_folder = dc.mount_folder
-        new_mount_folder = _find_mount_folder(dc)
-        # Keep track of the original mount folder here
-        if new_mount_folder != original_mount_folder:
-            logger.warning(f"Re-assigning data connector {dc_id} to mount point '{new_mount_folder}'")
-            dc_ids = mount_folders.get(original_mount_folder, [])
-            dc_ids.append(dc_id)
-            mount_folders[original_mount_folder] = dc_ids
-        # Keep track of the assigned mount folder here
-        dc_ids = mount_folders.get(new_mount_folder, [])
-        dc_ids.append(dc_id)
-        mount_folders[new_mount_folder] = dc_ids
-        result_dcs[dc_id] = dc.with_override(
-            override=SessionDataConnectorOverride(
-                skip=False,
-                data_connector_id=ULID.from_str(dc_id),
-                target_path=new_mount_folder,
-                configuration=None,
-                source_path=None,
-                readonly=None,
-            )
-        )
-
-    return result_dcs
+    if session_type.is_non_interactive:
+        return ReadinessProbe(type=Type.none)
+    if session_location == SessionLocation.remote:
+        return ReadinessProbe(type=Type.http)
+    return ReadinessProbe(type=Type.tcp)
 
 
 class _NamedResource(Protocol):
@@ -1401,10 +1706,13 @@ class _NamedResource(Protocol):
 _T = TypeVar("_T", bound=_NamedResource)
 
 
-def _make_patch_spec_list(existing: Sequence[_T], updated: Sequence[_T]) -> list[_T] | None:
+def _make_patch_spec_list(
+    existing: Sequence[_T], updated: Sequence[_T], remove: list[str] | None = None
+) -> list[_T] | None:
     """Merges updated into existing by upserting items identified by their name.
 
     This method is used to construct session patches, merging session resources by name (containers, volumes, etc.).
+    The `remove` is a set of names that are not taken from the existing or updated sequences.
     """
     patch_list = None
     if updated:
@@ -1419,6 +1727,12 @@ def _make_patch_spec_list(existing: Sequence[_T], updated: Sequence[_T]) -> list
                 patch_list[idx] = upsert_item
             else:
                 patch_list.append(upsert_item)
+
+    if remove:
+        if not patch_list:
+            patch_list = list(existing)
+        patch_list = [e for e in patch_list if e.name not in remove]
+
     return patch_list
 
 
@@ -1444,12 +1758,19 @@ def validate_session_post_request(body: apispec.SessionPostRequest) -> SessionLa
         if body.env_variable_overrides
         else None
     )
+    submission_id: SubmissionId | None = None
+    if body.submission_id:
+        submission_id = SubmissionId(body.submission_id)
+
     return SessionLaunchRequest(
         launcher_id=ULID.from_str(body.launcher_id),
         disk_storage=body.disk_storage,
         resource_class_id=body.resource_class_id,
         data_connectors_overrides=data_connectors_overrides,
         env_variable_overrides=env_variable_overrides,
+        submission_id=submission_id,
+        job_command_overrides=body.job_command_override,
+        job_args_overrides=body.job_args_override,
     )
 
 
@@ -1506,3 +1827,38 @@ class SessionIngress:
         else:
             base_server_url = f"{self.cluster_settings.session_protocol.value}://{self.cluster_settings.session_host}:{self.cluster_settings.session_port}{self.url_path}"
         return base_server_url
+
+
+async def _get_authentication(
+    request: Request,
+    user: AnonymousAPIUser | AuthenticatedAPIUser,
+    launcher: SessionLauncher,
+    nb_config: NotebooksConfig,
+    server_name: str,
+    ingress_config: SessionIngress,
+) -> tuple[Authentication, ExtraSecret] | tuple[None, None]:
+    has_http_frontend = session_has_http_frontend(launcher.environment.build_parameters)
+
+    # Only http frontends get authentication
+    if not has_http_frontend:
+        return None, None
+
+    if isinstance(user, AuthenticatedAPIUser):
+        auth_secret = await get_auth_secret_authenticated(
+            nb_config, user, server_name, ingress_config.url, ingress_config.url_path
+        )
+    else:
+        auth_secret = get_auth_secret_anonymous(nb_config, server_name, request)
+    authn_extra_volume_mounts: list[ExtraVolumeMount] = []
+    if auth_secret.volume_mount:
+        authn_extra_volume_mounts.append(auth_secret.volume_mount)
+    cert_vol_mounts = init_containers.certificates_volume_mounts(nb_config)
+    if cert_vol_mounts:
+        authn_extra_volume_mounts.extend(cert_vol_mounts)
+    authentication = Authentication(
+        enabled=True,
+        type=AuthenticationType.oauth2proxy if isinstance(user, AuthenticatedAPIUser) else AuthenticationType.token,
+        secretRef=auth_secret.key_ref("auth"),
+        extraVolumeMounts=authn_extra_volume_mounts,
+    )
+    return authentication, auth_secret

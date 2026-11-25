@@ -92,7 +92,7 @@ async def test_lookup_token_on_error(app_manager_instance: DependencyManager) ->
 async def test_store_new_token(app_manager_instance: DependencyManager) -> None:
     new_token = {"access_token": "access_xyz", "refresh_token": "refresh_xyz"}
 
-    class TestTokenClient(_SafeAsyncOAuthClient):
+    class TokenClient(_SafeAsyncOAuthClient):
         async def refresh_token(self, url=None, refresh_token=None, body: str = "", auth=None, headers=None, **kwargs):
             return new_token
 
@@ -102,7 +102,7 @@ async def test_store_new_token(app_manager_instance: DependencyManager) -> None:
     factory = DefaultOAuthHttpClientFactory(deps.config.secrets.encryption_key, deps.config.db.async_session_maker)
     (client, conn) = await _setup_connection(deps, ConnectionStatus.connected)
 
-    oauth_client = TestTokenClient(
+    oauth_client = TokenClient(
         client.client_id,
         token={"expires_at": 1},
         connection_id=conn.id,

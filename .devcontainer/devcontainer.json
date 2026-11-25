@@ -10,6 +10,7 @@
 		"ghcr.io/devcontainers-extra/features/bash-command:1": {
 			"command": "poetry self add poetry-polylith-plugin"
 		},
+		"./iptables-nft": {},
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {
 			"moby": false
 		},
@@ -26,7 +27,7 @@
 			"yqVersion": "latest"
 		},
 		"ghcr.io/dhoeric/features/k9s:1": {
-			"version": "0.40.9"
+			"version": "0.50.18"
 		},
 		"ghcr.io/EliiseS/devcontainer-features/bash-profile:1": {
 			"command": "alias k=kubectl"
@@ -47,7 +48,8 @@
 		"ghcr.io/devcontainers-extra/features/poetry",
 		"ghcr.io/devcontainers-extra/features/bash-command",
 		"./fix-yarnpkg",
-		"ghcr.io/devcontainers/features/docker-in-docker"
+		"ghcr.io/devcontainers/features/docker-in-docker",
+		"./iptables-nft"
 	],
 	"postCreateCommand": "poetry install --with dev && mkdir -p /home/vscode/.config/k9s",
 	"customizations": {

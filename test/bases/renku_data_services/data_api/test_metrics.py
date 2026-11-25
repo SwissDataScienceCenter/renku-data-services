@@ -46,4 +46,8 @@ async def test_metrics_are_stored(sanic_metrics_client, app_manager, create_proj
     session_launcher_created = events[1]
     assert re.match(r"^[0-7][0-9A-HJKMNP-TV-Z]{25}$", str(session_launcher_created.id))
     assert session_launcher_created.event == "session_launcher_created"
-    assert session_launcher_created.metadata_ == {"environment_image_source": "image", "environment_kind": "CUSTOM"}
+    assert session_launcher_created.metadata_ == {
+        "environment_image_source": "image",
+        "environment_kind": "CUSTOM",
+        "session_type": "interactive",
+    }

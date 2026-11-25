@@ -1,17 +1,24 @@
 """Tests for secrets blueprints."""
 
+import os
+import secrets
 import time
 from base64 import b64decode
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
+import pytest_asyncio
 from cryptography.hazmat.primitives.asymmetric import rsa
+from pytest_postgresql.janitor import DatabaseJanitor
 from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
+from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.models import GVK, K8sObjectMeta, K8sSecret
 from renku_data_services.secrets.models import Secret, SecretKind
@@ -26,6 +33,46 @@ from renku_data_services.utils.cryptography import (
     generate_random_encryption_key,
 )
 from test.utils import KindCluster
+
+
+@pytest_asyncio.fixture
+async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBConfig, None]:
+    db_name = "R_" + str(ULID()).lower() + "_" + worker_id
+    user = os.getenv("DB_USER", "renku")
+    host = os.getenv("DB_HOST", "127.0.0.1")
+    port = os.getenv("DB_PORT", "5432")
+    password = os.getenv("DB_PASSWORD", "renku")  # nosec: B105
+
+    monkeypatch.setenv("DUMMY_STORES", "true")
+    monkeypatch.setenv("DB_NAME", db_name)
+    with DatabaseJanitor(
+        user=user,
+        host=host,
+        port=port,
+        dbname=db_name,
+        version="16.2",
+        password=password,
+        template_dbname="renku_template",
+    ):
+        yield DBConfig.from_env()
+        await DBConfig.dispose_connection()
+
+
+@pytest_asyncio.fixture
+async def secrets_storage_app_manager(
+    db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path, kubeconfig_path: Path
+) -> AsyncGenerator[SecretsDependencyManager, None]:
+    encryption_key_path = tmp_path / "encryption-key"
+    encryption_key_path.write_bytes(secrets.token_bytes(32))
+
+    monkeypatch.setenv("ENCRYPTION_KEY_PATH", encryption_key_path.as_posix())
+    monkeypatch.setenv("DUMMY_STORES", "true")
+    monkeypatch.setenv("DB_NAME", db_config.db_name)
+    monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
+    monkeypatch.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())
+
+    dm = SecretsDependencyManager.from_env()
+    yield dm
 
 
 @pytest.fixture

@@ -1,13 +1,68 @@
 import json
 from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from sanic_testing.testing import SanicASGITestClient
+from ulid import ULID
 
-from test.bases.renku_data_services.data_api.utils import create_rp
+from renku_data_services.data_api.dependencies import DependencyManager
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.resource_usage.model import Credit, ResourceClassCost, ResourcePoolLimits
+from renku_data_services.users.models import UserInfo
+from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_client, create_rp
+from test.components.renku_data_services.resource_usage.helper import make_resources_request
 from test.utils import KindCluster
+
+
+async def _create_oauth_provider_and_pool(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    *,
+    pool_name: str,
+    class_remote: dict | None = None,
+    remote: dict | None = None,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Create an OAuth provider and a resource pool with one class."""
+    provider_payload = {
+        "id": "some-provider",
+        "kind": "gitlab",
+        "client_id": "some-client-id",
+        "display_name": "my oauth2 application",
+        "scope": "api",
+        "url": "https://example.org",
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=provider_payload)
+    assert res.status_code == 201, res.text
+
+    payload: dict[str, Any] = {
+        "name": pool_name,
+        "default": False,
+        "public": False,
+        "classes": [
+            {
+                "cpu": 2,
+                "memory": 10,
+                "gpu": 0,
+                "name": f"{pool_name}-class",
+                "max_storage": 100,
+                "default_storage": 1,
+                "default": True,
+            }
+        ],
+    }
+    if class_remote:
+        payload["classes"][0]["remote"] = class_remote
+    if remote:
+        payload["remote"] = remote
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201, res.text
+    return res.json, provider_payload
+
 
 resource_pool_payload = [
     (
@@ -24,6 +79,7 @@ resource_pool_payload = [
                     "default": True,
                     "node_affinities": [],
                     "tolerations": [],
+                    "quota_enforced": False,
                 }
             ],
             "quota": {"cpu": 100, "memory": 100, "gpu": 0},
@@ -91,6 +147,7 @@ async def test_resource_pool_creation_with_cluster_ids(
     cluster: KindCluster,
     kubeconfig_path: Path,
     monkeypatch,
+    admin_headers,
 ) -> None:
     payload = deepcopy(payload)
     monkeypatch.setenv("ALWAYS_READ_CLUSTERS", "true")
@@ -107,7 +164,7 @@ async def test_resource_pool_creation_with_cluster_ids(
                 "session_ingress_annotations": {},
                 "session_tls_secret_name": "a-domain-name-tls",
             },
-            headers={"Authorization": 'Bearer {"is_admin": true}'},
+            headers=admin_headers,
         )
         assert res.status_code == 201, res.text
         payload["cluster_id"] = res.json["id"]
@@ -119,6 +176,12 @@ async def test_resource_pool_creation_with_cluster_ids(
         assert "cluster" in res.json
         assert "id" in res.json["cluster"]
         assert res.json["cluster"]["id"] == payload["cluster_id"]
+
+        rp_id = res.json["id"]
+        _, res = await sanic_client.get("/api/data/resource_pools", headers=admin_headers)
+        assert res.status_code == 200, res.text
+        rp = next(rp for rp in res.json if rp["id"] == rp_id)
+        assert rp.get("cluster_id") == payload["cluster_id"]
 
 
 @pytest.mark.parametrize(
@@ -156,6 +219,8 @@ async def test_resource_pool_creation_with_remote_firecrest(
         "api_url": "https://example.org",
         "system_name": "my-system",
     }
+    for cls in payload["classes"]:
+        cls["cpu"] = int(cls["cpu"])
 
     _, res = await create_rp(payload, sanic_client)
     assert res.status_code == expected_status_code, res.text
@@ -169,6 +234,240 @@ async def test_resource_pool_creation_with_remote_firecrest(
             "api_url": "https://example.org",
             "system_name": "my-system",
         }
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_put_resource_class_without_kind_keeps_firecrest_kind(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """PUT of a FirecREST class without kind should keep the FirecREST kind."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="firecrest-pool",
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    )
+    rc = rp["classes"][0]
+
+    body = {
+        "name": "updated-class",
+        "default": True,
+        "cpu": 2,
+        "memory": 10,
+        "gpu": 0,
+        "max_storage": 100,
+        "default_storage": 1,
+    }
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/classes/{rc['id']}",
+        headers=admin_headers,
+        json=body,
+    )
+    assert res.status_code == 200, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_put_resource_class_on_firecrest_pool_preserves_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Standalone PUT on a FirecREST class preserves remote_json."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="fc-pool",
+        class_remote={"system_name": "eiger"},
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://firecrest.example.com",
+            "system_name": "eiger",
+        },
+    )
+    pool_id = rp["id"]
+    class_id = rp["classes"][0]["id"]
+
+    _, response = await sanic_client.put(
+        f"/api/data/resource_pools/{pool_id}/classes/{class_id}",
+        headers=admin_headers,
+        json={
+            "name": "fc-class-renamed",
+            "cpu": 4,
+            "memory": 16,
+            "gpu": 0,
+            "max_storage": 100,
+            "default_storage": 1,
+            "default": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json["name"] == "fc-class-renamed"
+    assert response.json.get("remote") is not None
+    assert response.json["remote"]["system_name"] == "eiger"
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_post_resource_class_on_firecrest_pool_preserves_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """POSTing a FirecREST class with a remote block stores the remote config."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="fc-pool-post",
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://firecrest.example.com",
+            "system_name": "eiger",
+        },
+    )
+    pool_id = rp["id"]
+
+    _, response = await sanic_client.post(
+        f"/api/data/resource_pools/{pool_id}/classes",
+        headers=admin_headers,
+        json={
+            "name": "fc-posted-class",
+            "cpu": 2,
+            "memory": 8,
+            "gpu": 0,
+            "max_storage": 100,
+            "default_storage": 1,
+            "default": False,
+            "quota_enforced": False,
+            "remote": {"forward_resource_values": True},
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert "id" in response.json
+    assert response.json["remote"]["forward_resource_values"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_pool_to_firecrest_converts_local_classes(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Patching a local pool to FirecREST converts the class kinds."""
+    rp, provider_payload = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="local-pool",
+    )
+    rc = rp["classes"][0]
+
+    patch = {
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": provider_payload["id"],
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+        "classes": [{"id": rc["id"], "cpu": 2}],
+    }
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_pool_from_firecrest_rejects_when_class_has_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Converting a FirecREST pool to local is rejected if a class has remote data."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="firecrest-pool",
+        class_remote={"system_name": "eiger"},
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    )
+
+    patch = {"remote": {}, "classes": [{"id": rp["classes"][0]["id"], "cpu": 2}]}
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 422, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_pool_from_firecrest_clears_kind_when_class_has_no_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Converting a FirecREST pool to local clears class kind when no remote data is stored."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="firecrest-pool",
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    )
+
+    patch = {"remote": {}, "classes": [{"id": rp["classes"][0]["id"], "cpu": 2}]}
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_pool_from_firecrest_clears_stale_class_remote_json(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """PATCHing a FirecREST pool to local clears remote_json on classes not in the update (Finding 3)."""
+    rp, _ = await _create_oauth_provider_and_pool(
+        sanic_client,
+        admin_headers,
+        pool_name="firecrest-pool-stale",
+        class_remote={"system_name": "eiger"},
+        remote={
+            "kind": "firecrest",
+            "provider_id": "some-provider",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    )
+    pool_id = rp["id"]
+    class_id = rp["classes"][0]["id"]
+
+    # PATCH the pool to local (reset remote) WITHOUT including the class in the update
+    patch = {"remote": {}}
+    _, response = await sanic_client.patch(
+        f"/api/data/resource_pools/{pool_id}",
+        headers=admin_headers,
+        json=patch,
+    )
+    assert response.status_code == 200, response.text
+
+    # Verify the class's remote_json is cleared (stale data must not persist)
+    _, response = await sanic_client.get(
+        f"/api/data/resource_pools/{pool_id}/classes/{class_id}",
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json.get("remote") is None
 
 
 @pytest.mark.parametrize(
@@ -210,7 +509,7 @@ async def test_resource_pool_creation_with_remote_runai(
     _, res = await create_rp(payload, sanic_client)
     assert res.status_code == expected_status_code, res.text
 
-    if res.status_code >= 200 and res.status_code < 400:
+    if 200 <= res.status_code < 400:
         assert res.json is not None
         rp = res.json
         assert rp.get("remote") == {
@@ -282,6 +581,7 @@ async def test_resource_class_filtering(
             "default_storage": 1,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": True,
         },
         {
             "name": "resource class 2",
@@ -325,6 +625,9 @@ async def test_resource_class_filtering(
     matching_class = matching_classes[0]
     matching_class.pop("id")
     matching_class.pop("matching")
+    # NOTE: `quota_enforced` and `preemptible` are `False` by default
+    new_classes[2]["quota_enforced"] = False
+    new_classes[2]["preemptible"] = False
     assert matching_class == new_classes[2]
     # Test without any filtering
     _, res = await sanic_client.get(
@@ -547,8 +850,8 @@ async def test_restricted_default_resource_pool_access(
     existing_users = res.json
     assert res.status_code == 200
     assert len(existing_users) >= 2
-    # Restrict one user to not have access to the default pool
-    no_default_user = existing_users[0]
+    # Restrict one user to not have access to the default pool (not user[0] who is admin)
+    no_default_user = existing_users[1]
     no_default_user_id = no_default_user["id"]
     no_default_access_token = json.dumps({"id": no_default_user_id})
     _, res = await sanic_client.delete(
@@ -557,7 +860,7 @@ async def test_restricted_default_resource_pool_access(
     )
     assert res.status_code == 204
     # The other user in the db should be able to access the default pool
-    default_access_user = existing_users[1]
+    default_access_user = existing_users[2]
     user_id = default_access_user["id"]
     access_token = json.dumps({"id": user_id})
     # Ensure non-authenticated users have access to the default pool
@@ -617,8 +920,8 @@ async def test_restricted_default_resource_pool_access_changes(
     existing_users = res.json
     assert res.status_code == 200
     assert len(existing_users) >= 2
-    # Restrict one user to not have access to the default pool
-    no_default_user = existing_users[0]
+    # Restrict one user to not have access to the default pool (not user[0] who is admin)
+    no_default_user = existing_users[1]
     no_default_user_id = no_default_user["id"]
     no_default_access_token = json.dumps({"id": no_default_user_id})
     _, res = await sanic_client.delete(
@@ -664,8 +967,8 @@ async def test_private_resource_pool_access(
     existing_users = res.json
     assert res.status_code == 200
     assert len(existing_users) >= 2
-    # Select one user that has no access
-    restricted_user = existing_users[0]
+    # Select one user that has no access (not user[0] who is admin)
+    restricted_user = existing_users[3]
     restricted_user_id = restricted_user["id"]
     restricted_access_token = json.dumps({"id": restricted_user_id})
     # Give another user access to the private pool
@@ -800,7 +1103,8 @@ async def test_user_resource_pools(
     existing_users = res.json
     assert res.status_code == 200
     assert len(existing_users) >= 1
-    user = existing_users[0]
+    # not user[0] who is admin
+    user = existing_users[1]
     user_id = user["id"]
     user_access_token = json.dumps({"id": user_id})
     user_headers = {"Authorization": f"Bearer {user_access_token}"}
@@ -1264,6 +1568,7 @@ resource_pool_payload_2 = {
             "default": True,
             "node_affinities": [],
             "tolerations": [],
+            "quota_enforced": False,
         }
     ],
     "quota": {"cpu": 100.0, "memory": 100, "gpu": 0},
@@ -1294,6 +1599,7 @@ async def _resource_pools_request(
     input_payload = deepcopy(payload)
     check_payload = None
     if resource_pool_id is None:
+        assert input_payload is not None, "Payload must be provided when creating a resource pool"
         tmp = deepcopy(resource_pool_payload_2)
         if "cluster_id" in input_payload and input_payload["cluster_id"] == "replace-me":
             _, res = await sanic_client.post("/api/data/clusters/", headers=admin_headers, json=cluster_payload)
@@ -1313,6 +1619,10 @@ async def _resource_pools_request(
         for i, c in enumerate(input_payload["classes"]):
             if "id" not in c:
                 c["id"] = rp["classes"][i]["id"]
+            if "quota_enforced" not in c:
+                c["quota_enforced"] = False
+            if "preemptible" not in c:
+                c["preemptible"] = False
 
         if "platform" not in input_payload:
             input_payload["platform"] = "linux/amd64"
@@ -1643,3 +1953,1621 @@ async def test_resource_class_empty_patch_noop(
     assert res.json is not None
     rc = res.json
     assert rc == default_rc
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_visibility_toggle(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    """E2E: toggling the public flag via PATCH updates Authzed access for non-admin users."""
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = True
+
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp_id = res.json["id"]
+
+    # Pick a regular user (not user[0] who is admin)
+    _, res = await sanic_client.get("/api/data/users", headers=admin_headers)
+    assert res.status_code == 200
+    assert len(res.json) >= 1
+    user_id = res.json[1]["id"]
+    user_headers = {"Authorization": f"Bearer {json.dumps({'id': user_id})}"}
+
+    # Visible while public
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_id}", headers=user_headers)
+    assert res.status_code == 200
+
+    # PATCH → private
+    _, res = await sanic_client.patch(
+        f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json={"public": False}
+    )
+    assert res.status_code == 200
+    assert res.json["public"] is False
+
+    # Hidden after going private
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_id}", headers=user_headers)
+    assert res.status_code == 404
+
+    # PATCH → public again
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json={"public": True})
+    assert res.status_code == 200
+    assert res.json["public"] is True
+
+    # Visible again
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_id}", headers=user_headers)
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+@pytest.mark.parametrize("total_limit,user_limit", [(1000, 200), (200, 1000), (200, 0), (0, 200)])
+async def test_resource_pools_quota_with_partial_usage(
+    sanic_client,
+    admin_headers,
+    user_headers,
+    regular_user,
+    valid_resource_pool_payload,
+    cluster,
+    app_manager_instance,
+    total_limit,
+    user_limit,
+) -> None:
+    """Test resource pools endpoint returns correct credits_used and usage_hours_remaining."""
+    payload = valid_resource_pool_payload.copy()
+    payload["classes"] = [
+        {
+            "cpu": 1.0,
+            "memory": 2048,
+            "gpu": 0,
+            "name": "test-class",
+            "max_storage": 100,
+            "default_storage": 10,
+            "default": True,
+            "node_affinities": [],
+            "tolerations": [],
+            "quota_enforced": True,
+        }
+    ]
+    payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201
+    created_pool = res.json
+    resource_pool_id = created_pool["id"]
+    class_id = created_pool["classes"][0]["id"]
+
+    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
+
+    # Cost is 50 credits per hour
+    cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(50))
+    await repo.set_resource_class_costs(cost)
+
+    # Set limits total=1000 credits and user=200 credits
+    limits = ResourcePoolLimits(
+        pool_id=resource_pool_id,
+        total_limit=Credit.from_int(total_limit),
+        user_limit=Credit.from_int(user_limit),
+    )
+    await repo.set_resource_pool_limits(limits)
+
+    # Insert resource usage data for the current week (partial usage: 50 credits = 1 hour)
+    current_time = datetime.now(UTC)
+    # NOTE: Other days won't work because the endpoint calculates usage based on the current week (Monday to Sunday)
+    monday = current_time - timedelta(days=current_time.weekday())
+    monday = monday.replace(hour=12, minute=0, second=0, microsecond=0)
+
+    one_hour_usage = timedelta(hours=1)
+    usage_record = make_resources_request(
+        date=monday,
+        interval=one_hour_usage,
+        cpu_request=1.0,
+        memory_request="2048Mi",
+        resource_class_id=class_id,
+        resource_pool_id=resource_pool_id,
+        user_id=regular_user.id,
+    )
+    await repo.insert_one(usage_record)
+
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    assert len(res.json) > 0
+
+    resource_pool = next((p for p in res.json if p["id"] == resource_pool_id), None)
+    assert resource_pool is not None, "Resource pool not found in response"
+
+    # credits_used should be 50 credits that equals to 1 hour
+    assert resource_pool["credits_used"] == 50
+
+    resource_class = resource_pool["classes"][0]
+
+    # usage_hours_remaining should be 3 hours which is 75 percent of the total 4 hours available
+    assert resource_class["usage_hours_remaining"] == 3.0
+    # usage_hours_total should be 4 hours (200 credits total limit / 50 credits per hour)
+    assert resource_class["usage_hours_total"] == 4.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pools_quota_with_no_usage(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    regular_user,
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+    app_manager_instance,
+) -> None:
+    """Test resource pools endpoint returns correct usage_hours_remaining when user has no usage."""
+    payload = valid_resource_pool_payload.copy()
+    payload["classes"] = [
+        {
+            "cpu": 1.0,
+            "memory": 2048,
+            "gpu": 0,
+            "name": "test-class",
+            "max_storage": 100,
+            "default_storage": 10,
+            "default": True,
+            "node_affinities": [],
+            "tolerations": [],
+        }
+    ]
+    payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201
+    created_pool = res.json
+    resource_pool_id = created_pool["id"]
+    class_id = created_pool["classes"][0]["id"]
+
+    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
+
+    # Cost is 50 credits per hour
+    cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(50))
+    await repo.set_resource_class_costs(cost)
+
+    # Set limits total=1000 credits and user=200 credits
+    limits = ResourcePoolLimits(
+        pool_id=resource_pool_id,
+        total_limit=Credit.from_int(1000),
+        user_limit=Credit.from_int(200),
+    )
+    await repo.set_resource_pool_limits(limits)
+
+    # No usage records inserted
+
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    assert len(res.json) > 0
+
+    resource_pool = next((p for p in res.json if p["id"] == resource_pool_id), None)
+    assert resource_pool is not None, "Resource pool not found in response"
+
+    # credits_used should not exist in the response since it's None
+    assert "credits_used" not in resource_pool
+
+    resource_class = resource_pool["classes"][0]
+
+    # usage_hours_remaining should be full quota: 200/50 = 4.0 hours
+    assert resource_class["usage_hours_remaining"] == 4.0
+    # usage_hours_total should be 4 hours (200 credits total limit / 50 credits per hour)
+    assert resource_class["usage_hours_total"] == 4.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+async def test_resource_pool_members_add_group(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    member_1_headers,
+    member_1_user,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(
+        sanic_client, "test-pool-group", admin=True, members=[{"id": member_1_user.id, "role": "viewer"}]
+    )
+
+    # Add the group to the pool via /members
+    member_payload = [{"member_type": "group", "id": group["id"], "role": "group_viewer"}]
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=member_payload,
+    )
+    assert res.status_code == 201
+    assert res.json[0]["slug"] == "test-pool-group"
+    assert res.json[0]["name"] == "test-pool-group"
+
+    # GET /members should return the group
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    members = res.json
+    group_members = [m for m in members if m.get("member_type") == "group" and m.get("id") == group["id"]]
+    assert len(group_members) == 1
+    assert group_members[0]["slug"] == "test-pool-group"
+    assert group_members[0]["name"] == "test-pool-group"
+
+    # member_1 (in the group) should now be able to access the pool
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # GET /users should resolve and include member_1
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/users",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    users = res.json
+    user_ids = [u["id"] for u in users]
+    assert member_1_user.id in user_ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pools_quota_exceeded(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    regular_user,
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+    app_manager_instance,
+) -> None:
+    """Test resource pools endpoint returns correct values when quota is exceeded."""
+    payload = valid_resource_pool_payload.copy()
+    payload["classes"] = [
+        {
+            "cpu": 1.0,
+            "memory": 2048,
+            "gpu": 0,
+            "name": "test-class",
+            "max_storage": 100,
+            "default_storage": 10,
+            "default": True,
+            "node_affinities": [],
+            "tolerations": [],
+            "quota_enforced": True,
+        }
+    ]
+    payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201
+    created_pool = res.json
+    resource_pool_id = created_pool["id"]
+    class_id = created_pool["classes"][0]["id"]
+
+    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
+
+    # Cost is 50 credits per hour
+    cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(50))
+    await repo.set_resource_class_costs(cost)
+
+    # Set limits total=1000 credits and user=100 credits
+    limits = ResourcePoolLimits(
+        pool_id=resource_pool_id,
+        total_limit=Credit.from_int(1000),
+        user_limit=Credit.from_int(100),
+    )
+    await repo.set_resource_pool_limits(limits)
+
+    # Insert usage that exceeds quota: 3 hours = 150 credits > 100 limit
+    current_time = datetime.now(UTC)
+    monday = current_time - timedelta(days=current_time.weekday())
+    monday = monday.replace(hour=12, minute=0, second=0, microsecond=0)
+
+    three_hour_usage = timedelta(hours=3)
+    usage_record = make_resources_request(
+        date=monday,
+        interval=three_hour_usage,
+        cpu_request=1.0,
+        memory_request="2048Mi",
+        resource_class_id=class_id,
+        resource_pool_id=resource_pool_id,
+        user_id=regular_user.id,
+    )
+    await repo.insert_one(usage_record)
+
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    assert len(res.json) > 0
+
+    resource_pool = next((p for p in res.json if p["id"] == resource_pool_id), None)
+    assert resource_pool is not None, "Resource pool not found in response"
+
+    # credits_used should be 150 credits (3 hours * 50 credits/hour)
+    assert resource_pool["credits_used"] == 150
+
+    resource_class = resource_pool["classes"][0]
+
+    # usage_hours_remaining should be 0 (quota exceeded)
+    assert resource_class["usage_hours_remaining"] == 0.0
+    # usage_hours_total should be 2.0 hours (50 credits/hour * 2 hours = 100 credits limit)
+    assert resource_class["usage_hours_total"] == 2.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_add_project(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_project,
+    member_1_headers,
+    member_1_user,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    project = await create_project(
+        sanic_client, "test-pool-project", admin=True, members=[{"id": member_1_user.id, "role": "viewer"}]
+    )
+
+    # Add the project to the pool via /members
+    member_payload = [{"member_type": "project", "id": project["id"], "role": "project_viewer"}]
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=member_payload,
+    )
+    assert res.status_code == 201
+    assert res.json[0]["namespace"] == "admin.doe/test-pool-project"
+    assert res.json[0]["name"] == "test-pool-project"
+
+    # GET /members should return the project
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    members = res.json
+    project_members = [m for m in members if m.get("member_type") == "project" and m.get("id") == project["id"]]
+    assert len(project_members) == 1
+    assert project_members[0]["namespace"] == "admin.doe/test-pool-project"
+    assert project_members[0]["name"] == "test-pool-project"
+
+    # member_1 (in the project) should now be able to access the pool
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # GET /users should resolve and include member_1
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/users",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    users = res.json
+    user_ids = [u["id"] for u in users]
+    assert member_1_user.id in user_ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pools_quota_with_no_limits(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    regular_user,
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+    app_manager_instance,
+) -> None:
+    """Test resource pools endpoint returns null for usage_hours_remaining when no limits are set."""
+    payload = valid_resource_pool_payload.copy()
+    payload["classes"] = [
+        {
+            "cpu": 1.0,
+            "memory": 2048,
+            "gpu": 0,
+            "name": "test-class",
+            "max_storage": 100,
+            "default_storage": 10,
+            "default": True,
+            "node_affinities": [],
+            "tolerations": [],
+            "quota_enforced": True,
+        }
+    ]
+    payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201
+    created_pool = res.json
+    resource_pool_id = created_pool["id"]
+    class_id = created_pool["classes"][0]["id"]
+
+    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
+
+    # Set cost but NO limits
+    cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(50))
+    await repo.set_resource_class_costs(cost)
+
+    # Insert some usage
+    current_time = datetime.now(UTC)
+    monday = current_time - timedelta(days=current_time.weekday())
+    monday = monday.replace(hour=12, minute=0, second=0, microsecond=0)
+
+    one_hour_usage = timedelta(hours=1)
+    usage_record = make_resources_request(
+        date=monday,
+        interval=one_hour_usage,
+        cpu_request=1.0,
+        memory_request="2048Mi",
+        resource_class_id=class_id,
+        resource_pool_id=resource_pool_id,
+        user_id=regular_user.id,
+    )
+    await repo.insert_one(usage_record)
+
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    assert len(res.json) > 0
+
+    resource_pool = next((p for p in res.json if p["id"] == resource_pool_id), None)
+    assert resource_pool is not None, "Resource pool not found in response"
+
+    # credits_used should still be calculated
+    assert resource_pool["credits_used"] == 50
+
+    resource_class = resource_pool["classes"][0]
+
+    # usage_hours_remaining should not exist in the response since it's None
+    assert "usage_hours_remaining" not in resource_class
+    # usage_hours_total should not exist in the response since it's None
+    assert "usage_hours_total" not in resource_class
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_put_replaces(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group1 = await create_group(sanic_client, "test-group-1", admin=True)
+    group2 = await create_group(sanic_client, "test-group-2", admin=True)
+
+    # Add group1
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group1["id"], "role": "group_viewer"}],
+    )
+    assert res.status_code == 201
+
+    # PUT with only group2 should replace
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group2["id"], "role": "group_viewer"}],
+    )
+    assert res.status_code == 200
+    assert res.json[0]["slug"] == "test-group-2"
+    assert res.json[0]["name"] == "test-group-2"
+
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    members = res.json
+    assert len(members) == 1
+    assert members[0]["id"] == group2["id"]
+    assert members[0]["slug"] == "test-group-2"
+    assert members[0]["name"] == "test-group-2"
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pools_quota_with_no_costs(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    regular_user,
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+    app_manager_instance,
+) -> None:
+    """Test resource pools endpoint returns null for usage_hours_remaining when no costs are defined."""
+    payload = valid_resource_pool_payload.copy()
+    payload["classes"] = [
+        {
+            "cpu": 1.0,
+            "memory": 2048,
+            "gpu": 0,
+            "name": "test-class",
+            "max_storage": 100,
+            "default_storage": 10,
+            "default": True,
+            "node_affinities": [],
+            "tolerations": [],
+            "quota_enforced": True,
+        }
+    ]
+    payload["quota"] = {"cpu": 10, "memory": 10000, "gpu": 0}
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201
+    created_pool = res.json
+    resource_pool_id = created_pool["id"]
+    class_id = created_pool["classes"][0]["id"]
+
+    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
+
+    # Set limits but NO costs
+    limits = ResourcePoolLimits(
+        pool_id=resource_pool_id,
+        total_limit=Credit.from_int(1000),
+        user_limit=Credit.from_int(200),
+    )
+    await repo.set_resource_pool_limits(limits)
+
+    # Insert some usage (though without costs it won't be calculated properly)
+    current_time = datetime.now(UTC)
+    monday = current_time - timedelta(days=current_time.weekday())
+    monday = monday.replace(hour=12, minute=0, second=0, microsecond=0)
+
+    one_hour_usage = timedelta(hours=1)
+    usage_record = make_resources_request(
+        date=monday,
+        interval=one_hour_usage,
+        cpu_request=1.0,
+        memory_request="2048Mi",
+        resource_class_id=class_id,
+        resource_pool_id=resource_pool_id,
+        user_id=regular_user.id,
+    )
+    await repo.insert_one(usage_record)
+
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    assert len(res.json) > 0
+
+    resource_pool = next((p for p in res.json if p["id"] == resource_pool_id), None)
+    assert resource_pool is not None, "Resource pool not found in response"
+
+    # credits_used should be 0
+    assert resource_pool["credits_used"] == 0
+
+    resource_class = resource_pool["classes"][0]
+
+    # usage_hours_remaining should not exist in the response since it's None
+    assert "usage_hours_remaining" not in resource_class
+    # usage_hours_total should not exist in the response since it's None
+    assert "usage_hours_total" not in resource_class
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_delete(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    member_1_headers,
+    member_1_user,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(
+        sanic_client,
+        "test-del-group",
+        admin=True,
+        members=[{"id": member_1_user.id, "role": "viewer"}],
+    )
+
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group["id"], "role": "group_viewer"}],
+    )
+    assert res.status_code == 201
+
+    # member_1 can access the pool
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # Delete the group from the pool
+    _, res = await sanic_client.delete(
+        f"/api/data/resource_pools/{rp['id']}/members/group/{group['id']}",
+        headers=admin_headers,
+    )
+    assert res.status_code == 204
+
+    # member_1 can no longer access the pool
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_get_includes_role(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    _, res = await sanic_client.get("/api/data/users", headers=admin_headers)
+    existing_users = res.json
+    user = existing_users[1]
+
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": user["id"], "role": "viewer"}],
+    )
+    assert res.status_code == 201
+    assert "email" in res.json[0]
+
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    members = res.json
+    assert len(members) == 1
+    assert members[0]["member_type"] == "user"
+    assert members[0]["id"] == user["id"]
+    assert members[0]["role"] == "viewer"
+    assert "email" in members[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_users_resolved_via_authz_empty_for_public(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = True
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/users",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    assert res.json == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_empty_array(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    # POST empty array should succeed and return 201
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[],
+    )
+    assert res.status_code == 201
+    assert res.json == []
+
+    # PUT empty array should succeed and return 200
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[],
+    )
+    assert res.status_code == 200
+    assert res.json == []
+
+    # PUT empty array on /users should also succeed
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/users",
+        headers=admin_headers,
+        json=[],
+    )
+    assert res.status_code == 200
+    assert res.json == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_users_put_syncs_authz(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    member_1_user,
+    member_1_headers,
+    member_2_user,
+    member_2_headers,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Add user1 to the pool
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/users",
+        headers=admin_headers,
+        json=[{"id": member_1_user.id}],
+    )
+    assert res.status_code == 201
+
+    # Verify user1 can access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # PUT replace with only user2
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/users",
+        headers=admin_headers,
+        json=[{"id": member_2_user.id}],
+    )
+    assert res.status_code == 200
+
+    # Verify user1 can NO LONGER access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 404
+
+    # Verify user2 CAN access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_2_headers,
+    )
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_put_replaces_prohibited(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    member_1_user,
+    member_1_headers,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Add user1 as viewer
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": member_1_user.id, "role": "viewer"}],
+    )
+    assert res.status_code == 201
+
+    # Verify user1 can access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # PUT replace with user1 as prohibited
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": member_1_user.id, "role": "prohibited"}],
+    )
+    assert res.status_code == 200
+    assert "email" in res.json[0]
+
+    # Verify GET /members shows prohibited
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    members = res.json
+    assert len(members) == 1
+    assert members[0]["role"] == "prohibited"
+    assert "email" in members[0]
+
+    # Verify user1 can NO LONGER access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 404
+
+    # PUT replace back with viewer
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": member_1_user.id, "role": "viewer"}],
+    )
+    assert res.status_code == 200
+
+    # Verify user1 can access again
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_put_mixed_types(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    create_project,
+    member_1_user,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(sanic_client, "test-mixed-group", admin=True)
+    project = await create_project(sanic_client, "test-mixed-project", admin=True)
+
+    # PUT with user + group + project
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[
+            {"member_type": "user", "id": member_1_user.id, "role": "viewer"},
+            {"member_type": "group", "id": group["id"], "role": "group_viewer"},
+            {"member_type": "project", "id": project["id"], "role": "project_viewer"},
+        ],
+    )
+    assert res.status_code == 200
+    members = res.json
+    assert len(members) == 3
+    types = {m["member_type"] for m in members}
+    assert types == {"user", "group", "project"}
+    for m in members:
+        if m["member_type"] == "user":
+            assert "email" in m
+        elif m["member_type"] == "group":
+            assert m["slug"] == "test-mixed-group"
+            assert m["name"] == "test-mixed-group"
+        elif m["member_type"] == "project":
+            assert m["namespace"] == "admin.doe/test-mixed-project"
+            assert m["name"] == "test-mixed-project"
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_add_user_via_members(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    member_1_user,
+    member_1_headers,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Add user via /members (not legacy /users)
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": member_1_user.id, "role": "viewer"}],
+    )
+    assert res.status_code == 201
+    assert "email" in res.json[0]
+
+    # User should be able to access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_get_single_member(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(sanic_client, "test-single-group", admin=True)
+
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group["id"], "role": "group_viewer"}],
+    )
+    assert res.status_code == 201
+    assert res.json[0]["slug"] == "test-single-group"
+    assert res.json[0]["name"] == "test-single-group"
+
+    # GET single member
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members/group/{group['id']}",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    assert res.json["member_type"] == "group"
+    assert res.json["id"] == group["id"]
+    assert res.json["slug"] == "test-single-group"
+    assert res.json["name"] == "test-single-group"
+
+    # GET non-existent member
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}/members/user/nonexistent",
+        headers=admin_headers,
+    )
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_add_nonexistent_group(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    fake_group_id = str(ULID())
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": fake_group_id, "role": "group_viewer"}],
+    )
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_add_nonexistent_project(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    fake_project_id = str(ULID())
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "project", "id": fake_project_id, "role": "project_viewer"}],
+    )
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_add_prohibited_group(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(sanic_client, "test-prohibited-group", admin=True)
+
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group["id"], "role": "prohibited"}],
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_delete_user_inherited_access(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    member_1_user,
+    member_1_headers,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(
+        sanic_client,
+        "test-inherited-group",
+        admin=True,
+        members=[{"id": member_1_user.id, "role": "viewer"}],
+    )
+
+    # Add group to pool
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group["id"], "role": "group_viewer"}],
+    )
+    assert res.status_code == 201
+
+    # member_1 has inherited access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # Try to DELETE the user directly (they only have inherited access)
+    _, res = await sanic_client.delete(
+        f"/api/data/resource_pools/{rp['id']}/members/user/{member_1_user.id}",
+        headers=admin_headers,
+    )
+    # Should return 204 because user is not a direct member
+    assert res.status_code == 204
+
+    # member_1 should STILL have access through the group
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_put_preserves_admin(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    member_1_user,
+    member_1_headers,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    group = await create_group(sanic_client, "test-admin-preserve-group", admin=True)
+
+    # Add user1 as direct viewer
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": member_1_user.id, "role": "viewer"}],
+    )
+    assert res.status_code == 201
+
+    # user1 can access
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 200
+
+    # Admin can access (inherited admin permission)
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+
+    # PUT replace with only the group
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "group", "id": group["id"], "role": "group_viewer"}],
+    )
+    assert res.status_code == 200
+
+    # user1 should NO LONGER have access (direct relation removed)
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=member_1_headers,
+    )
+    assert res.status_code == 404
+
+    # Admin should STILL have access (inherited admin relation not corrupted)
+    _, res = await sanic_client.get(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_malformed_discriminator(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Missing member_type
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"id": "some-id", "role": "viewer"}],
+    )
+    assert res.status_code == 422
+
+    # Invalid member_type
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "invalid", "id": "some-id", "role": "viewer"}],
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_unknown_role(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    member_1_user,
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    # Unknown role "view" (typo) should be rejected
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": member_1_user.id, "role": "view"}],
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_delete_nonexistent_group(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    fake_group_id = str(ULID())
+    _, res = await sanic_client.delete(
+        f"/api/data/resource_pools/{rp['id']}/members/group/{fake_group_id}",
+        headers=admin_headers,
+    )
+    assert res.status_code == 204
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_members_delete_nonexistent_project(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp = res.json
+
+    fake_project_id = str(ULID())
+    _, res = await sanic_client.delete(
+        f"/api/data/resource_pools/{rp['id']}/members/project/{fake_project_id}",
+        headers=admin_headers,
+    )
+    assert res.status_code == 204
+
+
+# --- Integration Group API Tests (D1-D3) ---
+
+
+async def _complete_oauth_flow(
+    test_client: SanicASGITestClient,
+    provider_id: str,
+    user_headers: dict[str, str],
+) -> None:
+    """Helper to complete a dummy OAuth2 authorization flow for a given provider."""
+    _, res = await test_client.get(f"/api/data/oauth2/providers/{provider_id}/authorize", headers=user_headers)
+    assert res.status_code == 302, res.text
+    location = res.headers["location"]
+    state = parse_qs(urlparse(location).query)["state"][0]
+    _, res = await test_client.get(f"/api/data/oauth2/callback?state={state}")
+    assert res.status_code == 200, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_post_resource_pool_with_remote_grants_connected_users(
+    sanic_client: SanicASGITestClient,
+    app_manager_instance: "DependencyManager",
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    regular_user: UserInfo,
+    cluster: KindCluster,
+) -> None:
+    # Set up dummy OAuth client so the flow works
+    app_manager_instance.oauth_http_client_factory.create_client = create_dummy_oauth_client
+
+    # Create provider
+    provider_payload = {
+        "id": "d1-provider",
+        "kind": "gitlab",
+        "client_id": "cid",
+        "client_secret": "secret",
+        "display_name": "D1 Provider",
+        "scope": "api",
+        "url": "https://example.org",
+        "use_pkce": False,
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=provider_payload)
+    assert res.status_code == 201, res.text
+    provider_id = provider_payload["id"]
+
+    # Regular user connects to provider
+    await _complete_oauth_flow(sanic_client, provider_id, user_headers)
+
+    # Admin creates linked RP
+    rp_payload = {
+        "name": "d1-rp",
+        "classes": [
+            {
+                "cpu": 1,
+                "memory": 10,
+                "gpu": 0,
+                "name": "class1",
+                "max_storage": 100,
+                "default_storage": 1,
+                "default": True,
+                "node_affinities": [],
+                "tolerations": [],
+            }
+        ],
+        "quota": {"cpu": 100, "memory": 100, "gpu": 0},
+        "default": False,
+        "public": False,
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": provider_id,
+            "api_url": "https://example.org",
+            "system_name": "sys",
+        },
+    }
+    _, res = await create_rp(rp_payload, sanic_client)
+    assert res.status_code == 201, res.text
+    rp = res.json
+
+    # Regular user can now see the RP
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200, res.text
+    rp_ids = {r["id"] for r in res.json}
+    assert rp["id"] in rp_ids
+
+    # Cleanup
+    _, res = await sanic_client.delete(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers)
+    assert res.status_code == 204, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_patch_resource_pool_remote_change_swaps_access(
+    sanic_client: SanicASGITestClient,
+    app_manager_instance: "DependencyManager",
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    member_1_headers: dict[str, str],
+    regular_user: UserInfo,
+    member_1_user: UserInfo,
+    cluster: KindCluster,
+) -> None:
+    app_manager_instance.oauth_http_client_factory.create_client = create_dummy_oauth_client
+
+    # Create two providers
+    p1_payload = {
+        "id": "d3-p1",
+        "kind": "gitlab",
+        "client_id": "c1",
+        "client_secret": "s1",
+        "display_name": "D3 P1",
+        "scope": "api",
+        "url": "https://example.org",
+        "use_pkce": False,
+    }
+    p2_payload = {
+        "id": "d3-p2",
+        "kind": "gitlab",
+        "client_id": "c2",
+        "client_secret": "s2",
+        "display_name": "D3 P2",
+        "scope": "api",
+        "url": "https://example.org",
+        "use_pkce": False,
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=p1_payload)
+    assert res.status_code == 201, res.text
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=p2_payload)
+    assert res.status_code == 201, res.text
+
+    # Connect regular_user to P1 and member_1 to P2
+    await _complete_oauth_flow(sanic_client, p1_payload["id"], user_headers)
+    await _complete_oauth_flow(sanic_client, p2_payload["id"], member_1_headers)
+
+    # Admin creates RP linked to P1
+    rp_payload = {
+        "name": "d3-rp",
+        "classes": [
+            {
+                "cpu": 1,
+                "memory": 10,
+                "gpu": 0,
+                "name": "class1",
+                "max_storage": 100,
+                "default_storage": 1,
+                "default": True,
+                "node_affinities": [],
+                "tolerations": [],
+            }
+        ],
+        "quota": {"cpu": 100, "memory": 100, "gpu": 0},
+        "default": False,
+        "public": False,
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": p1_payload["id"],
+            "api_url": "https://example.org",
+            "system_name": "sys",
+        },
+    }
+    _, res = await create_rp(rp_payload, sanic_client)
+    assert res.status_code == 201, res.text
+    rp = res.json
+
+    # regular_user can see RP; member_1 cannot
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert rp["id"] in {r["id"] for r in res.json}
+
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=member_1_headers)
+    assert res.status_code == 200, res.text
+    assert rp["id"] not in {r["id"] for r in res.json}
+
+    # Admin patches RP to P2
+    patch = {
+        "remote": {
+            "kind": "firecrest",
+            "provider_id": p2_payload["id"],
+            "api_url": "https://example.org",
+            "system_name": "sys2",
+        }
+    }
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+
+    # regular_user can no longer see RP; member_1 can
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200, res.text
+    assert rp["id"] not in {r["id"] for r in res.json}
+
+    _, res = await sanic_client.get("/api/data/resource_pools", headers=member_1_headers)
+    assert res.status_code == 200, res.text
+    assert rp["id"] in {r["id"] for r in res.json}
+
+    # Cleanup
+    _, res = await sanic_client.delete(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers)
+    assert res.status_code == 204, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+async def test_get_group_resource_pools(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    create_group,
+    member_1_headers,
+    member_1_user,
+    member_2_user,
+    member_2_headers,
+    cluster: KindCluster,
+) -> None:
+    # Create public and private resource pools
+    resource_pool_public = deepcopy(valid_resource_pool_payload)
+    resource_pool_public["default"] = False
+    resource_pool_public["public"] = True
+    _, res = await create_rp(resource_pool_public, sanic_client)
+    assert res.status_code == 201
+
+    resource_pool_private = deepcopy(valid_resource_pool_payload)
+    resource_pool_private["default"] = False
+    resource_pool_private["public"] = False
+    _, res = await create_rp(resource_pool_private, sanic_client)
+    assert res.status_code == 201
+    rp_private = res.json
+
+    group = await create_group(
+        sanic_client, "test-pool-group", admin=True, members=[{"id": member_1_user.id, "role": "viewer"}]
+    )
+
+    # Check that the route does not return the public resource pool if not explicitly added to the group
+    _, response = await sanic_client.get(f"/api/data/groups/{group['slug']}/resource_pools", headers=member_1_headers)
+    assert response.status_code == 200
+    group_rps = response.json
+    assert len(group_rps) == 0
+
+    # Add the group to the private resource pool via /members
+    member_payload = [{"member_type": "group", "id": group["id"], "role": "group_viewer"}]
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp_private['id']}/members",
+        headers=admin_headers,
+        json=member_payload,
+    )
+    assert res.status_code == 201
+    assert res.json[0]["slug"] == "test-pool-group"
+    assert res.json[0]["name"] == "test-pool-group"
+
+    # GET /groups/{slug}/resource_pools should now return the private resource pool
+    _, response = await sanic_client.get(f"/api/data/groups/{group['slug']}/resource_pools", headers=member_1_headers)
+    assert response.status_code == 200
+    group_rps = response.json
+    assert len(group_rps) == 1
+    assert {rp["id"] for rp in group_rps} == {rp_private["id"]}
+
+    # Check that a user not in the group gets a 404 error
+    _, response = await sanic_client.get(f"/api/data/groups/{group['slug']}/resource_pools", headers=member_2_headers)
+    assert response.status_code == 404
+
+    # Test route with a non-existent group slug
+    _, response = await sanic_client.get("/api/data/groups/nonexistent-group/resource_pools", headers=member_1_headers)
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_preemptible_classes_require_a_quota(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+) -> None:
+    del valid_resource_pool_payload["quota"]
+    valid_resource_pool_payload["classes"][1]["preemptible"] = True
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 422, res.text
+
+    valid_resource_pool_payload["classes"][1]["preemptible"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201, res.text
+    rp = res.json
+    rc = next(c for c in rp["classes"] if not c["default"])
+
+    new_class = dict(valid_resource_pool_payload["classes"][1], name="new-class", preemptible=True)
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp['id']}/classes", headers=admin_headers, json=new_class
+    )
+    assert res.status_code == 422, res.text
+
+    _, res = await sanic_client.patch(
+        f"/api/data/resource_pools/{rp['id']}/classes/{rc['id']}", headers=admin_headers, json={"preemptible": True}
+    )
+    assert res.status_code == 422, res.text
+
+    _, res = await sanic_client.patch(
+        f"/api/data/resource_pools/{rp['id']}",
+        headers=admin_headers,
+        json={"classes": [{"id": rc["id"], "preemptible": True}]},
+    )
+    assert res.status_code == 422, res.text
+
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{rp['id']}", headers=admin_headers)
+    assert res.status_code == 200, res.text
+    assert len(res.json["classes"]) == len(rp["classes"])
+    assert not any(c["preemptible"] for c in res.json["classes"])

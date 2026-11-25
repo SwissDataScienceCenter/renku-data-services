@@ -1,14 +1,10 @@
 """Data service app."""
 
-from collections.abc import Callable
-from typing import Any
-
 from sanic import Sanic
-from sanic_ext.exceptions import ValidationError
-from sanic_ext.extras.validation.validators import VALIDATION_ERROR
 from ulid import ULID
 
 from renku_data_services import errors
+from renku_data_services.authn.api.blueprints import InternalAuthenticationBP
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
 from renku_data_services.base_models.core import Slug
@@ -19,6 +15,8 @@ from renku_data_services.crc.blueprints import (
     ClassesBP,
     ClustersBP,
     QuotaBP,
+    ResourceFlavorsBP,
+    ResourcePoolMembersBP,
     ResourcePoolsBP,
     ResourcePoolUsersBP,
     UserResourcePoolsBP,
@@ -28,16 +26,18 @@ from renku_data_services.data_connectors.blueprints import DataConnectorsBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.notebooks.blueprints import NotebooksNewBP
 from renku_data_services.notifications.blueprints import NotificationsBP
+from renku_data_services.persisted_logs.blueprints import PersistedLogsBP
 from renku_data_services.platform.blueprints import PlatformConfigBP, PlatformUrlRedirectBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
+from renku_data_services.renku_apps.blueprints import RenkuAppBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.resource_usage.blueprints import ResourceUsageBP
 from renku_data_services.search.blueprints import SearchBP
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
-from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
-from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
+from renku_data_services.storage.blueprints import ProjectStorageBP, StorageSchemaBP
+from renku_data_services.users.blueprints import KCUsersBP, SSHKeysBP, UserPreferencesBP, UserSecretsBP
 
 
 def str_to_slug(value: str) -> Slug:
@@ -46,25 +46,6 @@ def str_to_slug(value: str) -> Slug:
         return Slug(value)
     except errors.ValidationError as err:
         raise ValueError("Couldn't parse slug") from err
-
-
-def _patched_validate_body(
-    validator: Callable[[type[Any], dict[str, Any]], Any],
-    model: type[Any],
-    body: dict[str, Any],
-) -> Any:
-    """Validate body method for monkey patching.
-
-    sanic_ext does not return contained exceptions as errors anymore, instead it returns a string.
-    This undoes that change.
-    """
-    try:
-        return validator(model, body)
-    except VALIDATION_ERROR as e:
-        raise ValidationError(
-            f"Invalid request body: {model.__name__}. Error: {e}",
-            extra={"exception": e},
-        ) from e
 
 
 def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
@@ -79,10 +60,23 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         rp_repo=dm.rp_repo,
         authenticator=dm.authenticator,
-        user_repo=dm.user_repo,
+        member_repo=dm.member_repo,
         cluster_repo=dm.cluster_repo,
+        flavor_repo=dm.resource_flavor_repo,
     )
-    classes = ClassesBP(name="classes", url_prefix=url_prefix, repo=dm.rp_repo, authenticator=dm.authenticator)
+    classes = ClassesBP(
+        name="classes",
+        url_prefix=url_prefix,
+        repo=dm.rp_repo,
+        flavor_repo=dm.resource_flavor_repo,
+        authenticator=dm.authenticator,
+    )
+    resource_flavors = ResourceFlavorsBP(
+        name="resource_flavors",
+        url_prefix=url_prefix,
+        repo=dm.resource_flavor_repo,
+        authenticator=dm.authenticator,
+    )
     quota = QuotaBP(
         name="quota",
         url_prefix=url_prefix,
@@ -96,27 +90,33 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         secret_repo=dm.user_secrets_repo,
         authenticator=dm.authenticator,
     )
+    ssh_keys = SSHKeysBP(
+        name="ssh_keys",
+        url_prefix=url_prefix,
+        ssh_key_repo=dm.ssh_key_repo,
+        authenticator=dm.authenticator,
+    )
     resource_pools_users = ResourcePoolUsersBP(
         name="resource_pool_users",
         url_prefix=url_prefix,
-        repo=dm.user_repo,
+        repo=dm.member_repo,
         authenticator=dm.authenticator,
         kc_user_repo=dm.kc_user_repo,
+    )
+    resource_pools_members = ResourcePoolMembersBP(
+        name="resource_pool_members",
+        url_prefix=url_prefix,
+        repo=dm.member_repo,
+        authenticator=dm.authenticator,
     )
     user_resource_pools = UserResourcePoolsBP(
         name="user_resource_pools",
         url_prefix=url_prefix,
-        repo=dm.user_repo,
+        repo=dm.member_repo,
         authenticator=dm.authenticator,
         kc_user_repo=dm.kc_user_repo,
     )
     clusters = ClustersBP(name="clusters", url_prefix=url_prefix, repo=dm.cluster_repo, authenticator=dm.authenticator)
-    storage = StorageBP(
-        name="storage",
-        url_prefix=url_prefix,
-        storage_repo=dm.storage_repo,
-        authenticator=dm.gitlab_authenticator,
-    )
     storage_schema = StorageSchemaBP(
         name="storage_schema",
         url_prefix=url_prefix,
@@ -142,6 +142,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         session_repo=dm.session_repo,
         session_secret_repo=dm.project_session_secret_repo,
         metrics=dm.metrics,
+        project_storage_k8s=dm.project_storage_k8s,
     )
     project_session_secrets = ProjectSessionSecretBP(
         name="project_session_secrets",
@@ -169,6 +170,16 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         metrics=dm.metrics,
     )
+    renku_apps = (
+        RenkuAppBP(
+            name="renku_apps",
+            url_prefix=url_prefix,
+            apps_repo=dm.apps_repo,
+            authenticator=dm.authenticator,
+        )
+        if dm.config.apps.enabled and dm.apps_repo is not None
+        else None
+    )
     builds = (
         BuildsBP(
             name="builds",
@@ -192,7 +203,9 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         connected_services_repo=dm.connected_services_repo,
         oauth_client_factory=dm.oauth_http_client_factory,
         authenticator=dm.authenticator,
-        nb_config=dm.config.nb_config,
+        internal_authenticator=dm.internal_authenticator,
+        internal_token_mint=dm.internal_token_mint,
+        internal_scope_verifier=dm.internal_scope_verifier,
     )
     repositories = RepositoriesBP(
         name="repositories",
@@ -217,16 +230,24 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         oauth_client_factory=dm.oauth_http_client_factory,
         project_repo=dm.project_repo,
         project_session_secret_repo=dm.project_session_secret_repo,
+        project_storage_repo=dm.project_storage_repo,
         rp_repo=dm.rp_repo,
         session_repo=dm.session_repo,
-        storage_repo=dm.storage_repo,
         user_repo=dm.kc_user_repo,
+        git_repositories_repo=dm.git_repositories_repo,
+        builds_config=dm.config.builds,
+        internal_token_mint=dm.internal_token_mint,
+        resource_usage_service=dm.resource_usage_service,
+        resource_requests_repo=dm.resource_requests_repo,
+        authz=dm.authz,
+        ssh_proxy_config=dm.config.ssh_proxy_config,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",
         url_prefix=url_prefix,
         platform_repo=dm.platform_repo,
         authenticator=dm.authenticator,
+        authz=dm.authz,
     )
     platform_redirects = PlatformUrlRedirectBP(
         name="platform_redirects",
@@ -259,6 +280,17 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         data_connector_secret_repo=dm.data_connector_secret_repo,
         authenticator=dm.authenticator,
         metrics=dm.metrics,
+        zenodo_client=dm.zenodo_client,
+        envidat_client=dm.envidat_client,
+        scicat_client=dm.scicat_client,
+        connected_services_repo=dm.connected_services_repo,
+        job_client=dm.job_client,
+        secret_client=dm.secret_client,
+        data_source_repo=dm.data_source_repo,
+        dc_storage_class=dm.config.nb_config.cloud_storage.storage_class,
+        secrets_storage_service_url=dm.config.nb_config.user_secrets.secrets_storage_service_url,
+        k8s_client=dm.k8s_client,
+        deposit_config=dm.config.deposit_config,
     )
     notifications = NotificationsBP(
         name="notifications",
@@ -280,18 +312,47 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         rr_repo=dm.resource_requests_repo,
         rr_svc=dm.resource_usage_service,
         authenticator=dm.authenticator,
+        rp_repo=dm.rp_repo,
+    )
+    persisted_logs = (
+        PersistedLogsBP(
+            name="persisted_logs",
+            url_prefix=url_prefix,
+            session_logs_repo=dm.session_logs_repo,
+            build_logs_repo=dm.build_logs_repo,
+            authenticator=dm.authenticator,
+            session_maker=dm.config.db.async_session_maker,
+        )
+        if dm.config.persisted_logs.enabled
+        else None
+    )
+    internal_authentication = InternalAuthenticationBP(
+        name="internal_authentication",
+        url_prefix=url_prefix,
+        internal_authenticator=dm.internal_authenticator,
+        internal_token_mint=dm.internal_token_mint,
+        internal_scope_verifier=dm.internal_scope_verifier,
+    )
+    project_storage = ProjectStorageBP(
+        name="project_storage",
+        url_prefix=url_prefix,
+        project_storage_k8s=dm.project_storage_k8s,
+        project_storage_repo=dm.project_storage_repo,
+        authenticator=dm.authenticator,
     )
     app.blueprint(
         [
             resource_pools.blueprint(),
             classes.blueprint(),
+            resource_flavors.blueprint(),
             quota.blueprint(),
             resource_pools_users.blueprint(),
+            resource_pools_members.blueprint(),
             users.blueprint(),
             user_secrets.blueprint(),
+            ssh_keys.blueprint(),
             user_resource_pools.blueprint(),
             clusters.blueprint(),
-            storage.blueprint(),
             storage_schema.blueprint(),
             user_preferences.blueprint(),
             misc.blueprint(),
@@ -311,15 +372,16 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             notifications.blueprint(),
             capacity_reservation.blueprint(),
             resource_usage.blueprint(),
+            internal_authentication.blueprint(),
+            project_storage.blueprint(),
         ]
     )
     if builds is not None:
         app.blueprint(builds.blueprint())
-
-    # We need to patch sanic_ext as since version 24.12 they only send a string representation of errors
-    import sanic_ext.extras.validation.setup
-
-    sanic_ext.extras.validation.setup.validate_body = _patched_validate_body
+    if persisted_logs is not None:
+        app.blueprint(persisted_logs.blueprint())
+    if renku_apps is not None:
+        app.blueprint(renku_apps.blueprint())
 
     app.error_handler = CustomErrorHandler(apispec)
     app.config.OAS = False

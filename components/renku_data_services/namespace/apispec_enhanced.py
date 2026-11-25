@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import field_validator
+from pydantic import ConfigDict, field_validator
 
 from renku_data_services.namespace.apispec import GroupsGetParametersQuery as _GroupsGetParametersQuery
 from renku_data_services.namespace.apispec import NamespacesGetParametersQuery as _NamespacesGetParametersQuery
@@ -11,10 +11,7 @@ from renku_data_services.namespace.apispec import NamespacesGetParametersQuery a
 class NamespacesGetParametersQuery(_NamespacesGetParametersQuery):
     """The query parameters for listing namespaces."""
 
-    class Config(_NamespacesGetParametersQuery.Config):
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid") | _NamespacesGetParametersQuery.model_config
 
     @field_validator("kinds", mode="before")
     @classmethod
@@ -27,7 +24,4 @@ class NamespacesGetParametersQuery(_NamespacesGetParametersQuery):
 class GroupsGetParametersQuery(_GroupsGetParametersQuery):
     """The query parameters for listing groups."""
 
-    class Config(_GroupsGetParametersQuery.Config):
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid") | _GroupsGetParametersQuery.model_config

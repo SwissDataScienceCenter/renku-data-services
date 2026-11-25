@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import UTC, datetime
 from typing import cast
 
 import httpx
 from box import Box
 from kr8s import NotFoundError, ServerError
-from kr8s.asyncio.objects import Pod, Secret, StatefulSet
+from kr8s.asyncio.objects import PersistentVolumeClaim, Pod, Secret, StatefulSet
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
@@ -24,13 +25,29 @@ from renku_data_services.k8s.models import (
     K8sObject,
     K8sObjectFilter,
     K8sObjectMeta,
+    K8sPatch,
     K8sPatches,
+    K8sPersistentVolumeClaim,
     K8sSecret,
 )
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
+from renku_data_services.notebooks.models import SessionType
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
+
+logger = logging.getLogger(__name__)
+
+
+def _current_job_pod(pods: list[K8sObject]) -> K8sObject | None:
+    """Return the newest pod that is not terminal, or the newest pod when all pods are terminal."""
+    if not pods:
+        return None
+    by_age = sorted(pods, key=lambda p: str(p.manifest.get("metadata", {}).get("creationTimestamp", "")), reverse=True)
+    for pod in by_age:
+        if pod.manifest.get("status", {}).get("phase") not in ("Succeeded", "Failed"):
+            return pod
+    return by_age[0]
 
 
 class NotebookK8sClient(SecretClient):
@@ -182,19 +199,44 @@ class NotebookK8sClient(SecretClient):
 
         return await self.__client.cluster_by_id(cluster_id)
 
-    async def list_sessions(self, safe_username: str) -> list[AmaltheaSessionV1Alpha1]:
+    async def list_sessions(
+        self, safe_username: str, session_type: SessionType | None
+    ) -> list[AmaltheaSessionV1Alpha1]:
         """Get a list of sessions that belong to a user."""
+        session_filter = {self.__username_label: safe_username}
+        # NOTE: "interactive" sessions may exist without the "renku.io/session-type" label.
+        match session_type:
+            case SessionType.interactive | None:
+                pass
+            case _:
+                session_filter.update({"renku.io/session-type": session_type.value})
         sessions = [
             self.__session_type.model_validate(s.manifest)
             async for s in self.__client.list(
                 K8sObjectFilter(
                     gvk=self.__session_gvk,
                     user_id=safe_username,
-                    label_selector={self.__username_label: safe_username},
+                    label_selector=session_filter,
                 )
             )
         ]
-        return sorted(sessions, key=lambda sess: sess.metadata.name)
+        # NOTE: because "interactive" sessions may exist without the "renku.io/session-type" label,
+        # we need to filter results in this case.
+        if session_type == SessionType.interactive:
+            sessions = list(
+                filter(
+                    lambda s: s.metadata.labels.get("renku.io/session-type", SessionType.interactive.value).lower()
+                    == SessionType.interactive.value.lower(),
+                    sessions,
+                )
+            )
+        return sorted(
+            sessions,
+            key=lambda sess: (
+                sess.launcher_id,
+                -(sess.metadata.creationTimestamp or datetime.min.replace(tzinfo=UTC)).timestamp(),
+            ),
+        )
 
     async def get_session(self, name: str, safe_username: str) -> AmaltheaSessionV1Alpha1 | None:
         """Get a specific session, None is returned if the session does not exist."""
@@ -308,6 +350,30 @@ class NotebookK8sClient(SecretClient):
         await self.patch_statefulset_tokens(session_name, renku_tokens, safe_username)
         await self.patch_image_pull_secret(session_name, gitlab_token, safe_username)
 
+    async def _get_pod_for_session(self, session: AmaltheaSessionV1Alpha1) -> Pod | None:
+        """Get the pod associated to the given session."""
+        sess_mode = SessionType.from_amalthea(session.spec.sessionType)
+        pod_name = f"{session.metadata.name}-0"
+        pod_gvk = GVK.from_kr8s_object(Pod)
+        pod: K8sObject | None = None
+        if sess_mode == SessionType.non_interactive:
+            job_name = session.metadata.name
+            job_pods = [
+                j
+                async for j in self.__client.list(
+                    K8sObjectFilter(gvk=pod_gvk, label_selector={"batch.kubernetes.io/job-name": job_name})
+                )
+            ]
+            pod = _current_job_pod(job_pods)
+        else:
+            pod_name = f"{session.metadata.name}-0"
+            pod = await self._get(pod_name, pod_gvk, None)
+
+        if pod is None:
+            return None
+        cluster = await self.__client.cluster_by_id(pod.cluster)
+        return Pod(resource=pod.to_api_object(cluster.api), namespace=pod.namespace, api=cluster.api)
+
     async def get_session_logs(
         self, session_name: str, safe_username: str, max_log_lines: int | None = None
     ) -> dict[str, str]:
@@ -319,16 +385,13 @@ class NotebookK8sClient(SecretClient):
             raise errors.MissingResourceError(
                 message=f"Cannot find session {session_name} for user {safe_username} to retrieve logs."
             )
-        pod_name = f"{session_name}-0"
-        result = await self._get(pod_name, GVK.from_kr8s_object(Pod), None)
+        pod = await self._get_pod_for_session(session)
 
         logs: dict[str, str] = {}
-        if result is None:
+        if pod is None:
             return logs
 
-        cluster = await self.__client.cluster_by_id(result.cluster)
-
-        pod = Pod(resource=result.to_api_object(cluster.api), namespace=result.namespace, api=cluster.api)
+        pod_name = pod.name
 
         containers = [container.name for container in pod.spec.containers + pod.spec.get("initContainers", [])]
         for container in containers:
@@ -424,3 +487,32 @@ class NotebookK8sClient(SecretClient):
             logger.debug(f"Patching secret {secret.namespace}/{secret.name}")
             result = await self.patch_secret(secret, secret.to_patch())
         return result
+
+    async def get_persistent_volume_claim(self, name: str) -> K8sPersistentVolumeClaim | None:
+        """Get a persistent volume claim by name."""
+
+        obj = await self._get(name, GVK.from_kr8s_object(PersistentVolumeClaim), None)
+        if not obj:
+            return None
+
+        cluster = await self.__client.cluster_by_id(obj.cluster)
+        return K8sPersistentVolumeClaim(
+            name=obj.name, namespace=cluster.namespace, cluster=obj.cluster, manifest=obj.manifest
+        )
+
+    async def delete_persistent_volume(self, name: str) -> None:
+        """Delete a persistent volume."""
+
+        obj = await self.get_persistent_volume_claim(name)
+        if obj:
+            await self.__client.delete(obj)
+
+    async def create_persistent_volume(self, pvc: K8sPersistentVolumeClaim) -> None:
+        """Create a persistent volume for the given project storage."""
+
+        await self.__client.create(pvc, True)
+
+    async def patch_persistent_volume(self, pvc: K8sObjectMeta, patch: K8sPatch) -> None:
+        """Create a persistent volume for the given project storage."""
+
+        await self.__client.patch(pvc, patch)

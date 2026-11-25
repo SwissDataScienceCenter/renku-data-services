@@ -10,10 +10,11 @@ from urllib.parse import urlunparse
 
 from kubernetes.utils import parse_duration, parse_quantity
 from kubernetes.utils.duration import format_duration
-from pydantic import BaseModel, Field, field_serializer, field_validator, model_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_serializer
 from pydantic.types import HashableItemType
 from ulid import ULID
 
+from renku_data_services.app_config.config import SshProxyConfig
 from renku_data_services.base_models.core import RESET, ResetType
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
@@ -41,6 +42,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     RemoteSecretRef,
     RequiredDuringSchedulingIgnoredDuringExecution,
     RequiredDuringSchedulingIgnoredDuringExecutionItem,
+    SessionType,
     Size,
     State,
     Status,
@@ -66,6 +68,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
 from renku_data_services.notebooks.cr_amalthea_session import (
     PreferredDuringSchedulingIgnoredDuringExecutionItem2 as PreferredPodAntiAffinityItem,
 )
+from renku_data_services.notebooks.cr_amalthea_session import ReadinessProbe2 as ReadinessProbe
 from renku_data_services.notebooks.cr_amalthea_session import Requests6 as _Requests
 from renku_data_services.notebooks.cr_amalthea_session import Requests7 as RequestsStr
 from renku_data_services.notebooks.cr_amalthea_session import (
@@ -80,16 +83,15 @@ from renku_data_services.notebooks.cr_amalthea_session import Size1 as SizeStr
 from renku_data_services.notebooks.cr_amalthea_session import Spec as _ASSpec
 from renku_data_services.notebooks.cr_amalthea_session import Type as AuthenticationType
 from renku_data_services.notebooks.cr_amalthea_session import Type1 as CodeRepositoryType
+from renku_data_services.notebooks.cr_amalthea_session import Type3 as Type
 from renku_data_services.notebooks.cr_base import BaseCRD
+from renku_data_services.session.models import FrontendVariant
 
 
 class Metadata(BaseModel):
     """Basic k8s metadata spec."""
 
-    class Config:
-        """Do not exclude unknown properties."""
-
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
     name: str
     namespace: str | None = None
@@ -235,6 +237,7 @@ class AmaltheaSessionSpec(_ASSpec):
     session: Session
     culling: Culling | None = None
     ingress: Ingress | None = None
+    sessionType: SessionType = Field(default=SessionType.Interactive)
 
 
 class AmaltheaSessionV1Alpha1(_ASModel):
@@ -284,7 +287,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             )
         return int(self.metadata.annotations["renku.io/resource_class_id"])
 
-    def as_apispec(self) -> apispec.SessionResponse:
+    def as_apispec(self, ssh_config: SshProxyConfig) -> apispec.SessionResponse:
         """Convert the manifest into a form ready to be serialized and sent in a HTTP response."""
         if self.status is None:
             raise errors.ProgrammingError(
@@ -303,7 +306,11 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             )
 
         url = self.base_url()
-        if url is None:
+        if url is None and ssh_config.enabled and self.likely_ssh():
+            url = f"ssh://{self.metadata.name}@{ssh_config.hostname}"
+            if ssh_config.port != 22:
+                url += f":{ssh_config.port}"
+        elif url is None:
             url = "None"
 
         ready_containers = 0
@@ -328,6 +335,8 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             state = apispec.State1.running
         elif self.status.state == State.NotReady and self.metadata.deletionTimestamp is not None:
             state = apispec.State1.stopping
+        elif self.status.state == State.Succeeded:
+            state = apispec.State1.succeeded
         else:
             state = apispec.State1.starting
 
@@ -339,6 +348,26 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             ) if hibernated_since and max_hibernated:
                 will_delete_at = hibernated_since + max_hibernated
 
+        session_type_str = self.metadata.labels.get("renku.io/session-type")
+        match SessionType.from_str_or_none(session_type_str):
+            case SessionType.NonInteractive:
+                session_type = apispec.SessionType.non_interactive
+            case _:
+                session_type = apispec.SessionType.interactive
+
+        submission_id = self.metadata.annotations.get("renku.io/submission_id")
+
+        command_args = (list(self.spec.session.command) if self.spec.session.command else []) + (
+            list(self.spec.session.args) if self.spec.session.args else []
+        )
+        if (
+            session_type == apispec.SessionType.non_interactive
+            and len(command_args) > 0
+            and command_args[0] == "/cnb/lifecycle/launcher"
+        ):
+            command_args = list(self.spec.session.args) if self.spec.session.args else []
+
+        frontend_variant = self.metadata.labels.get("renku.io/frontend-variant")
         return apispec.SessionResponse(
             image=self.spec.session.image,
             name=self.metadata.name,
@@ -350,6 +379,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 else None,
             ),
             started=self.metadata.creationTimestamp,
+            job_completed_at=self.status.idleSince if session_type == apispec.SessionType.non_interactive else None,
             lastInteraction=self.spec.culling.lastInteraction if self.spec.culling else None,
             status=apispec.SessionStatus(
                 state=state,
@@ -360,13 +390,21 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 message=self.status.error,
             ),
             url=url,
+            external_url=self.external_url(),
             project_id=str(self.project_id),
             launcher_id=str(self.launcher_id),
             resource_class_id=self.resource_class_id(),
+            session_type=session_type,
+            submission_id=submission_id,
+            command_args=command_args,
+            frontend_variant=frontend_variant,
         )
 
     def base_url(self) -> str | None:
         """Get the URL of the session, excluding the default URL from the session launcher."""
+        if self.likely_ssh():
+            return None
+
         if self.status.url and len(self.status.url) > 0:
             return self.status.url
         if self.spec.ingress is None:
@@ -381,6 +419,54 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         query = None
         fragment = None
         url = str(urlunparse((scheme, host, path, params, query, fragment)))
+        return url
+
+    def _frontend_variant(self) -> FrontendVariant | None:
+        """Returns the frontend variant from the label of the session, None means the label is missing.
+
+        Not all sessions have the frontend variant label, if the label is missing we cannot tell what
+        is the frontend variant - in this case we return None.
+        If we cannot validate the frontend variant we return also None.
+        """
+        variant = self.metadata.labels.get("renku.io/frontend-variant")
+        if variant is None:
+            return None
+        try:
+            return FrontendVariant(variant)
+        except ValueError:
+            return None
+
+    def likely_ssh(self) -> bool:
+        """In the current setup we cannot be 100% certain the session is using SSH.
+
+        This is our best guess.
+        """
+        return (
+            self._frontend_variant() == FrontendVariant.ssh
+            and self.spec.sessionType == SessionType.Interactive
+            and self.spec.ingress is None
+            and self.spec.authentication is None
+        )
+
+    def external_url(self) -> str | None:
+        """Get the URL of the session for external access.
+
+        This is usually the stable session url as used in the UI.
+        The main use-case for this is to let third parties know where to redirect users
+        to access a session.
+        """
+        if self.spec.ingress is None:
+            return None
+
+        scheme = self.spec.ingress.scheme()
+        host = self.spec.ingress.host
+        params = None
+        query = None
+        fragment = None
+        path = f"/s/{self.metadata.name}?projectId={self.project_id}"
+
+        url = str(urlunparse((scheme, host, path, params, query, fragment)))
+
         return url
 
 
@@ -405,6 +491,7 @@ class AmaltheaSessionV1Alpha1MetadataPatch(BaseCRD):
     """Patch for the metadata of an amalthea session."""
 
     annotations: dict[str, str | ResetType] | ResetType | None = None
+    labels: dict[str, str | ResetType] | ResetType | None = None
 
 
 class NodeAffinityPatch(BaseCRD):
@@ -453,6 +540,19 @@ class CullingPatch(CullingDurationParsingMixin):
     lastInteraction: datetime | ResetType | None = None
 
 
+class TemplateMetadataPatch(BaseCRD):
+    """Patch for the session template metadata."""
+
+    annotations: dict[str, str | ResetType] | ResetType | None = None
+    labels: dict[str, str | ResetType] | ResetType | None = None
+
+
+class TemplatePatch(BaseCRD):
+    """Patch for the session template."""
+
+    metadata: TemplateMetadataPatch | ResetType | None = None
+
+
 class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     """Patch for the spec of an amalthea session."""
 
@@ -467,6 +567,9 @@ class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     session: AmaltheaSessionV1Alpha1SpecSessionPatch | None = None
     culling: CullingPatch | ResetType | None = None
     service_account_name: str | ResetType | None = None
+    template: TemplatePatch | ResetType | None = None
+    ingress: Ingress | ResetType | None = None
+    authentication: Authentication | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):

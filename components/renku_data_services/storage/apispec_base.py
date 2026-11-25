@@ -1,16 +1,16 @@
 """Base models for API specifications."""
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from ulid import ULID
 
 
 class BaseAPISpec(BaseModel):
     """Base API specification."""
 
-    class Config:
-        """Enables orm mode for pydantic."""
-
-        from_attributes = True
+    model_config = ConfigDict(
+        # Enables orm mode for pydantic."""
+        from_attributes=True,
+    )
 
     @field_validator("storage_id", mode="before", check_fields=False)
     @classmethod

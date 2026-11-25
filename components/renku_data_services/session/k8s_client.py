@@ -1,16 +1,19 @@
 """An abstraction over the kr8s kubernetes client and the k8s-watcher."""
 
 from collections.abc import AsyncIterable
+from logging import getLogger
 from typing import TYPE_CHECKING
 
 import httpx
+from box import Box
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod
 
 from renku_data_services import errors
 from renku_data_services.errors.errors import CannotStartBuildError
+from renku_data_services.k8s.clients import K8sSecretClient
 from renku_data_services.k8s.constants import ClusterId
-from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta, K8sSecret
 from renku_data_services.notebooks.api.classes.k8s_client import DEFAULT_K8S_CLUSTER
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 from renku_data_services.session import crs, models
@@ -19,10 +22,12 @@ from renku_data_services.session.constants import (
     DUMMY_TASK_RUN_USER_ID,
     TASK_RUN_GVK,
 )
-from renku_data_services.session.crs import BuildRun, TaskRun
+from renku_data_services.session.crs import BuildRun, Condition, TaskRun
 
 if TYPE_CHECKING:
     from renku_data_services.k8s.clients import K8sClusterClientsPool
+
+logger = getLogger(__name__)
 
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
@@ -63,6 +68,7 @@ class ShipwrightClient:
         namespace: str,
     ) -> None:
         self.client = client
+        self.secret_client = K8sSecretClient(client)
         self.namespace = namespace
 
     @staticmethod
@@ -77,7 +83,7 @@ class ShipwrightClient:
             yield BuildRun.model_validate(build.manifest.to_dict())
         return
 
-    async def get_build_run(self, name: str, user_id: str) -> BuildRun | None:
+    async def get_build_run(self, name: str) -> BuildRun | None:
         """Get a Shipwright BuildRun."""
         result = await self.client.get(
             K8sObjectMeta(
@@ -85,7 +91,6 @@ class ShipwrightClient:
                 namespace=self.namespace,
                 cluster=self.cluster_id(),
                 gvk=BUILD_RUN_GVK,
-                user_id=user_id,
             )
         )
         if result is None:
@@ -105,13 +110,14 @@ class ShipwrightClient:
                 gvk=BUILD_RUN_GVK,
                 user_id=user_id,
             ).with_manifest(manifest=manifest.model_dump(exclude_none=True, mode="json")),
-            refresh=False,
+            refresh=True,
         )
         build_resource = await retry_with_exponential_backoff_async(lambda x: x is None)(self.get_build_run)(
-            build_run_name, user_id
+            build_run_name
         )
         if build_resource is None:
             raise CannotStartBuildError(message=f"Cannot create the image build {build_run_name}")
+
         return build_resource
 
     async def delete_build_run(self, name: str, user_id: str) -> None:
@@ -166,6 +172,26 @@ class ShipwrightClient:
         if params.labels:
             metadata.labels = params.labels
 
+        secret: K8sSecret | None = None
+        if params.authentication_secret is not None:
+            manifest = {
+                "metadata": {
+                    "name": metadata.name,
+                    "labels": metadata.labels,
+                    "annotations": {"build.shipwright.io/referenced.secret": "true"},
+                },
+                "stringData": params.authentication_secret.to_string_data(),
+            }
+            secret = await self.secret_client.create_secret(
+                K8sSecret(
+                    name=metadata.name,
+                    namespace=self.namespace,
+                    cluster=self.cluster_id(),
+                    manifest=Box(manifest),
+                    user_id=user_id,
+                )
+            )
+
         retention: crs.Retention | None = None
         if params.retention_after_failed or params.retention_after_succeeded:
             retention_after_failed = (
@@ -179,23 +205,34 @@ class ShipwrightClient:
                 ttlAfterSucceeded=f"{retention_after_succeeded}s" if retention_after_succeeded else None,
             )
 
+        param_values = [
+            crs.ParamValue(name="frontend", value=params.frontend),
+            crs.ParamValue(name="run-image", value=params.run_image),
+            crs.ParamValue(name="builder-image", value=params.builder_image),
+            crs.ParamValue(name="insecure-registries", value=params.insecure_registries),
+        ]
+        # NOTE: Only pass "ai-agents" when set: Shipwright rejects BuildRuns with params their BuildStrategy lacks
+        if params.ai_agents:
+            param_values.append(crs.ParamValue(name="ai-agents", value=" ".join(params.ai_agents)))
+
         build_run = BuildRun(
             metadata=metadata,
             spec=crs.BuildRunSpec(
                 build=crs.Build(
                     spec=crs.BuildSpec(
                         source=crs.GitSource(
-                            git=crs.Git(url=params.git_repository, revision=params.git_repository_revision),
+                            git=crs.Git(
+                                url=params.git_repository,
+                                revision=params.git_repository_revision,
+                                cloneSecret=secret.name if secret is not None else None,
+                            ),
                             contextDir=params.context_dir,
                         ),
                         strategy=crs.Strategy(kind="BuildStrategy", name=params.build_strategy_name),
-                        paramValues=[
-                            crs.ParamValue(name="frontend", value=params.frontend),
-                            crs.ParamValue(name="run-image", value=params.run_image),
-                            crs.ParamValue(name="builder-image", value=params.builder_image),
-                        ],
+                        paramValues=param_values,
                         output=crs.BuildOutput(
                             image=params.output_image,
+                            insecure=params.build_insecure_output_enabled,
                             pushSecret=params.push_secret_name,
                         ),
                         timeout=f"{params.build_timeout.total_seconds()}s" if params.build_timeout else None,
@@ -204,24 +241,40 @@ class ShipwrightClient:
                     )
                 ),
                 retention=retention,
+                serviceAccount=".generate",
             ),
         )
-        await self.create_build_run(build_run, user_id)
 
-    async def update_image_build_status(self, buildrun_name: str, user_id: str) -> models.ShipwrightBuildStatusUpdate:
+        created = await self.create_build_run(build_run, user_id)
+
+        if secret is not None:
+            owner_reference = dict(
+                apiVersion=created.apiVersion,
+                kind=created.kind,
+                name=created.metadata.name,
+                uid=created.metadata.uid,
+                controller=True,
+            )
+            patch = [{"op": "replace", "path": "/metadata/ownerReferences", "value": [owner_reference]}]
+            await self.secret_client.patch_secret(secret, patch)
+
+    async def update_image_build_status(
+        self, buildrun_name: str
+    ) -> tuple[models.ShipwrightBuildStatusUpdate, str | None]:
         """Update the status of a build by pulling the corresponding BuildRun from Shipwright."""
-        k8s_build = await self.get_build_run(name=buildrun_name, user_id=user_id)
+        k8s_build = await self.get_build_run(name=buildrun_name)
 
         if k8s_build is None:
+            logger.warning(f"Buildrun {buildrun_name} considered failed because we cannot find it in the cluster.")
             return models.ShipwrightBuildStatusUpdate(
                 update=models.ShipwrightBuildStatusUpdateContent(status=models.BuildStatus.failed)
-            )
+            ), None
 
         k8s_build_status = k8s_build.status
         completion_time = k8s_build_status.completionTime if k8s_build_status else None
 
         if k8s_build_status is None or completion_time is None:
-            return models.ShipwrightBuildStatusUpdate(update=None)
+            return models.ShipwrightBuildStatusUpdate(update=None), k8s_build.frontend_variant
 
         conditions = k8s_build_status.conditions
         # NOTE: You can get a condition like this in some cases during autoscaling or for other reasons
@@ -244,50 +297,52 @@ class ShipwrightClient:
         # So I needed something to keep mypy happy. The real name of the field is "type"
         condition = next(filter(lambda c: c.type == "Succeeded", conditions or []), None)
 
-        if condition is not None and condition.status not in ["True", "False"]:
-            # The buildrun is still running or pending
-            return models.ShipwrightBuildStatusUpdate(update=None)
+        match condition:
+            case Condition(reason="Succeeded", status="True"):
+                buildSpec = k8s_build_status.buildSpec
+                output = buildSpec.output if buildSpec else None
+                result_image = output.image if output else "unknown"
 
-        buildSpec = k8s_build_status.buildSpec
-        output = buildSpec.output if buildSpec else None
-        result_image = output.image if output else "unknown"
+                source = buildSpec.source if buildSpec else None
+                git_obj = source.git if source else None
+                result_repository_url = git_obj.url if git_obj else "unknown"
 
-        source = buildSpec.source if buildSpec else None
-        git_obj = source.git if source else None
-        result_repository_url = git_obj.url if git_obj else "unknown"
-
-        source_2 = k8s_build_status.source
-        git_obj_2 = source_2.git if source_2 else None
-        result_repository_git_commit_sha = git_obj_2.commitSha if git_obj_2 else None
-        result_repository_git_commit_sha = result_repository_git_commit_sha or "unknown"
-
-        if condition is not None and condition.reason == "Succeeded" and condition.status == "True":
-            return models.ShipwrightBuildStatusUpdate(
-                update=models.ShipwrightBuildStatusUpdateContent(
-                    status=models.BuildStatus.succeeded,
-                    completed_at=completion_time,
-                    result=models.BuildResult(
+                source_2 = k8s_build_status.source
+                git_obj_2 = source_2.git if source_2 else None
+                result_repository_git_commit_sha = git_obj_2.commitSha if git_obj_2 else None
+                result_repository_git_commit_sha = result_repository_git_commit_sha or "unknown"
+                return models.ShipwrightBuildStatusUpdate(
+                    update=models.ShipwrightBuildStatusUpdateContent(
+                        status=models.BuildStatus.succeeded,
                         completed_at=completion_time,
-                        image=result_image,
-                        repository_url=result_repository_url,
-                        repository_git_commit_sha=result_repository_git_commit_sha,
-                    ),
+                        result=models.BuildResult(
+                            completed_at=completion_time,
+                            image=result_image,
+                            repository_url=result_repository_url,
+                            repository_git_commit_sha=result_repository_git_commit_sha,
+                        ),
+                    )
+                ), k8s_build.frontend_variant
+            case Condition(status="False", type="Succeeded"):
+                logger.info(f"Buildrun {buildrun_name} failed with condition {condition}")
+                return models.ShipwrightBuildStatusUpdate(
+                    update=models.ShipwrightBuildStatusUpdateContent(
+                        status=models.BuildStatus.failed,
+                        completed_at=completion_time,
+                        error_reason=condition.reason if condition is not None else None,
+                    )
+                ), k8s_build.frontend_variant
+            case None:
+                logger.warning(
+                    f"Buildrun {buildrun_name} is missing Succeeded condition, considered to be in progress."
                 )
-            )
-        else:
-            return models.ShipwrightBuildStatusUpdate(
-                update=models.ShipwrightBuildStatusUpdateContent(
-                    status=models.BuildStatus.failed,
-                    completed_at=completion_time,
-                    error_reason=condition.reason if condition is not None else None,
-                )
-            )
+                return models.ShipwrightBuildStatusUpdate(update=None), k8s_build.frontend_variant
+            case _:
+                return models.ShipwrightBuildStatusUpdate(update=None), k8s_build.frontend_variant
 
-    async def get_image_build_logs(
-        self, buildrun_name: str, user_id: str, max_log_lines: int | None = None
-    ) -> dict[str, str]:
+    async def get_image_build_logs(self, buildrun_name: str, max_log_lines: int | None = None) -> dict[str, str]:
         """Get the logs from a Shipwright BuildRun."""
-        buildrun = await self.get_build_run(name=buildrun_name, user_id=user_id)
+        buildrun = await self.get_build_run(name=buildrun_name)
         if not buildrun:
             raise errors.MissingResourceError(message=f"Cannot find buildrun {buildrun_name} to retrieve logs.")
         status = buildrun.status

@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Any, NamedTuple
 
 from pydantic import BaseModel, Field
+from ulid import ULID
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import errors
@@ -276,6 +277,18 @@ class UserInfo(UnsavedUserInfo):
         )
         return self_as_unsaved != current_user_info
 
+    def redact_email(self) -> UserInfo:
+        """Removes the email and sets it to None (if it is set)."""
+        if not self.email:
+            return self
+        return UserInfo(
+            id=self.id,
+            first_name=self.first_name,
+            last_name=self.last_name,
+            namespace=self.namespace,
+            email=None,
+        )
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UserPatch:
@@ -326,3 +339,22 @@ class UserPreferences(BaseModel):
     user_id: str = Field(min_length=3)
     pinned_projects: PinnedProjects
     show_project_migration_banner: bool = True
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedSSHKey:
+    """A new SSH public key to store for a user."""
+
+    public_key: str
+    key_type: str
+    fingerprint: str
+    name: str | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SSHKey(UnsavedSSHKey):
+    """An SSH public key registered by a user."""
+
+    id: ULID
+    user_id: str
+    created_at: datetime

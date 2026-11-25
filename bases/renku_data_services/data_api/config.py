@@ -5,14 +5,25 @@ from dataclasses import dataclass
 from typing import Self
 
 from renku_data_services import errors
-from renku_data_services.app_config.config import KeycloakConfig, PosthogConfig, SentryConfig, TrustedProxiesConfig
+from renku_data_services.app_config.config import (
+    InternalAuthenticationConfig,
+    KeycloakConfig,
+    PosthogConfig,
+    SentryConfig,
+    SshProxyConfig,
+    TrustedProxiesConfig,
+)
 from renku_data_services.app_config.logging import Config as LoggingConfig
 from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.data_connectors.config import DepositConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.persisted_logs.config import PersistedLogsConfig
+from renku_data_services.renku_apps.config import AppsConfig
 from renku_data_services.secrets.config import PublicSecretsConfig
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.solr.solr_client import SolrClientConfig
+from renku_data_services.storage.config import ProjectStorageConfig
 from renku_data_services.users.config import UserPreferencesConfig
 
 
@@ -26,6 +37,7 @@ class Config:
     k8s_config_root: str
     db: DBConfig
     builds: BuildsConfig
+    apps: AppsConfig
     nb_config: NotebooksConfig
     secrets: PublicSecretsConfig
     sentry: SentryConfig
@@ -35,10 +47,15 @@ class Config:
     trusted_proxies: TrustedProxiesConfig
     keycloak: KeycloakConfig | None
     user_preferences: UserPreferencesConfig
+    internal_authn_config: InternalAuthenticationConfig
     gitlab_url: str | None
     log_cfg: LoggingConfig
     version: str
     alertmanager_webhook_role: str
+    deposit_config: DepositConfig
+    persisted_logs: PersistedLogsConfig
+    project_storage_config: ProjectStorageConfig
+    ssh_proxy_config: SshProxyConfig
 
     @classmethod
     def from_env(cls, db: DBConfig | None = None) -> Self:
@@ -48,6 +65,8 @@ class Config:
         dummy_stores = os.environ.get("DUMMY_STORES", "false").lower() == "true"
         if db is None:
             db = DBConfig.from_env()
+
+        authz_config = AuthzConfig.from_env()
 
         if dummy_stores:
             keycloak = None
@@ -61,24 +80,34 @@ class Config:
             else:
                 gitlab_url = None
 
+        nb_config = NotebooksConfig.from_env(db, authz_config, enable_internal_gitlab=enable_internal_gitlab)
+
+        k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
+
         return cls(
             enable_internal_gitlab=enable_internal_gitlab,
             version=os.environ.get("VERSION", "0.0.1"),
             dummy_stores=dummy_stores,
-            k8s_namespace=os.environ.get("K8S_NAMESPACE", "default"),
+            k8s_namespace=k8s_namespace,
             k8s_config_root=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
             db=db,
             builds=BuildsConfig.from_env(),
-            nb_config=NotebooksConfig.from_env(db, enable_internal_gitlab=enable_internal_gitlab),
+            apps=AppsConfig.from_env(),
+            nb_config=nb_config,
             secrets=PublicSecretsConfig.from_env(),
             sentry=SentryConfig.from_env(),
             posthog=PosthogConfig.from_env(),
-            authz_config=AuthzConfig.from_env(),
+            authz_config=authz_config,
             solr=SolrClientConfig.from_env(),
             trusted_proxies=TrustedProxiesConfig.from_env(),
             keycloak=keycloak,
             user_preferences=UserPreferencesConfig.from_env(),
+            internal_authn_config=InternalAuthenticationConfig.from_env(),
             gitlab_url=gitlab_url,
             log_cfg=LoggingConfig.from_env(),
             alertmanager_webhook_role=os.environ.get("ALERTMANAGER_WEBHOOK_ROLE", "alertmanager-webhook"),
+            deposit_config=DepositConfig.from_env(nb_config.sessions.renku_url),
+            persisted_logs=PersistedLogsConfig.from_env(namespace=k8s_namespace),
+            project_storage_config=ProjectStorageConfig.from_env(),
+            ssh_proxy_config=SshProxyConfig.from_env(),
         )

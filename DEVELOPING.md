@@ -164,10 +164,10 @@ metadata for it in the `components/renku_data_services/migrations/env.py` file.
 
 **To create a new migration:**
 
-`DUMMY_STORES=true poetry run alembic -c components/renku_data_services/migrations/alembic.ini --name common revision -m "<message>" --autogenerate --version-path components/renku_data_services/migrations/versions`
+`DUMMY_STORES=true poetry run alembic --name common revision -m "<message>" --autogenerate`
 
 You can specify a different version path if you wish to, just make sure it is listed in `alembic.ini` under
 `version_locations`.
 
 **To run all migrations:**
-`DUMMY_STORES=true poetry run alembic -c components/renku_data_services/migrations/alembic.ini --name=common upgrade heads`
+`DUMMY_STORES=true poetry run alembic --name=common upgrade heads`
