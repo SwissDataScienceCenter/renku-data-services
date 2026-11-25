@@ -27,6 +27,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope
 from renku_data_services.base_models import RESET
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import ResetType, ResourceType, Slug
 from renku_data_services.connected_services.models import ConnectionStatus
 from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2ConnectionORM
@@ -52,6 +53,7 @@ from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.storage import orm as storage_schemas
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
 
@@ -2500,3 +2502,50 @@ class StorageQuotaRepository:
         await session.delete(sq_orm)
         await session.flush()
         return None
+
+    async def get_storage_quota_resources(
+        self, session: AsyncSession, user: base_models.APIUser, storage_quota_id: ULID
+    ) -> models.StorageQuotaResources:
+        """Get a report of consumed resources of a storage quota from the database."""
+        sq_orm = await self._get_storage_quota_or_none_orm(
+            session=session, user=user, storage_quota_id=storage_quota_id
+        )
+        if sq_orm is None:
+            raise errors.MissingResourceError(
+                message=f"Storage quota with ID '{str(storage_quota_id)}' does not exist "
+                "or you do not have access to it."
+            )
+
+        stmt = (
+            select(storage_schemas.ProjectStorageV2ORM)
+            .where(storage_schemas.ProjectStorageV2ORM.storage_quota_id == storage_quota_id)
+            .order_by(storage_schemas.ProjectStorageV2ORM.id.asc())
+        )
+        stream = await session.stream_scalars(stmt)
+
+        allocated_size = ByteSize(0)
+        requested_size = ByteSize(0)
+        async for storage_orm in stream:
+            if (
+                storage_orm.k8s_pvc_name
+                and storage_orm.actual_size is not None
+                and storage_orm.actual_size > storage_orm.requested_size
+            ):
+                allocated_size += storage_orm.actual_size
+            elif storage_orm.k8s_pvc_name:
+                allocated_size += storage_orm.requested_size
+            else:
+                requested_size += storage_orm.requested_size
+
+        free_size: ByteSize
+        if allocated_size + requested_size >= sq_orm.total_size:
+            free_size = ByteSize(0)
+        else:
+            free_size = sq_orm.total_size - allocated_size - requested_size
+
+        return models.StorageQuotaResources(
+            id=storage_quota_id,
+            allocated_size_bytes=allocated_size,
+            requested_size_bytes=requested_size,
+            free_size_bytes=free_size,
+        )

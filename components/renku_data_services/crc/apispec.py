@@ -973,6 +973,22 @@ class StorageQuotaPatch(BaseAPISpec):
     )
 
 
+class StorageQuotaResources(BaseAPISpec):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+    )
+    allocated_size: int = Field(..., description="Free size in GB", ge=0)
+    requested_size: int = Field(..., description="Free size in GB", ge=0)
+    free_size: int = Field(..., description="Free size in GB", ge=0)
+
+
 class RemoteConfigurationFirecrest(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
