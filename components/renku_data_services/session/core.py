@@ -73,6 +73,11 @@ def validate_unsaved_build_parameters(
         environment.builder_variant, environment.frontend_variant
     )
 
+    if environment.ai_agents is None or len(environment.ai_agents) == 0:
+        ai_agents = None
+    else:
+        ai_agents = sorted({agent.value for agent in environment.ai_agents})
+
     return models.UnsavedBuildParameters(
         repository=environment.repository,
         platforms=platforms,
@@ -80,6 +85,7 @@ def validate_unsaved_build_parameters(
         frontend_variant=frontend_variant,
         repository_revision=environment.repository_revision if environment.repository_revision else None,
         context_dir=environment.context_dir if environment.context_dir else None,
+        ai_agents=ai_agents,
         job_command=cmd_args.command,
         job_args=cmd_args.args,
     )
@@ -115,6 +121,13 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
     else:
         builder_variant, frontend_variant = environment.builder_variant, environment.frontend_variant
 
+    ai_agents: list[str] | ResetType | None = None
+    if environment.ai_agents is None or len(environment.ai_agents) == 0:
+        if "ai_agents" in environment.model_fields_set:
+            ai_agents = RESET
+    else:
+        ai_agents = sorted({agent.value for agent in environment.ai_agents})
+
     return models.BuildParametersPatch(
         repository=environment.repository,
         platforms=platforms,
@@ -122,6 +135,7 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
         frontend_variant=frontend_variant,
         repository_revision=environment.repository_revision,
         context_dir=environment.context_dir,
+        ai_agents=ai_agents,
     )
 
 
@@ -388,6 +402,19 @@ def validate_build_patch(patch: apispec.BuildPatch) -> models.BuildPatch:
     """Validate the update to a session launcher."""
     status = models.BuildStatus(patch.status.value) if patch.status else None
     return models.BuildPatch(status=status)
+
+
+def validate_session_launcher_secrets_patch(
+    patches: apispec.SessionLauncherSecretPatchList,
+) -> list[models.SessionLauncherSecretPatch]:
+    """Validate the update to the secret slots of a session launcher."""
+    return [
+        models.SessionLauncherSecretPatch(
+            secret_slot_id=ULID.from_str(patch.secret_slot_id),
+            policy=models.SessionLauncherSecretPolicyName(patch.policy),
+        )
+        for patch in patches.root
+    ]
 
 
 def __validate_build_parameters_platforms(platforms: list[apispec.BuildPlatform] | None) -> list[models.Platform]:

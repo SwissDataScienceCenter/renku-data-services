@@ -32,6 +32,7 @@ from renku_data_services.connected_services.models import ConnectionStatus
 from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2ConnectionORM
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
+from renku_data_services.crc.constants import PREEMPTIBLE_PRIORITY_VALUE, SESSION_PRIORITY_VALUE
 from renku_data_services.crc.core import (
     calculate_usage_hours,
     validate_resource_class_update,
@@ -124,6 +125,76 @@ def _only_admins(
     return decorated_function
 
 
+async def _get_flavor_orm(session: AsyncSession, flavor_id: ULID) -> schemas.ResourceFlavorORM:
+    """Load a resource flavor or raise if it does not exist."""
+    flavor = await session.scalar(select(schemas.ResourceFlavorORM).where(schemas.ResourceFlavorORM.id == flavor_id))
+    if flavor is None:
+        raise errors.MissingResourceError(message=f"Resource flavor with id {flavor_id} does not exist.")
+    return flavor
+
+
+async def _get_linked_classes(session: AsyncSession, flavor_id: ULID) -> list[schemas.ResourceClassORM]:
+    """Load every resource class linked to a resource flavor."""
+    res = await session.scalars(
+        select(schemas.ResourceClassORM)
+        .where(schemas.ResourceClassORM.resource_flavor_id == flavor_id)
+        .order_by(schemas.ResourceClassORM.id)
+    )
+    return list(res)
+
+
+async def _attach_flavors(session: AsyncSession, classes: Sequence[schemas.ResourceClassORM]) -> None:
+    """Link every class that carries a flavor id to its flavor."""
+    for cls in classes:
+        if cls.resource_flavor_id is None:
+            continue
+        _link_flavor(cls, await _get_flavor_orm(session, cls.resource_flavor_id))
+
+
+def _link_flavor(cls: schemas.ResourceClassORM, flavor: schemas.ResourceFlavorORM) -> None:
+    """Link a resource class to a flavor, which then supplies all of its resource values."""
+    cls.resource_flavor = flavor
+    cls.cpu = None
+    cls.memory = None
+    cls.max_storage = None
+    cls.default_storage = None
+    cls.gpu = None
+
+
+def _snapshot_flavor(cls: schemas.ResourceClassORM, flavor: schemas.ResourceFlavorORM) -> None:
+    """Copy a flavor's resource values onto a resource class that is unlinked from it."""
+    cls.cpu = flavor.cpu
+    cls.memory = flavor.memory
+    cls.max_storage = flavor.max_storage
+    cls.default_storage = flavor.default_storage
+    cls.gpu = flavor.gpu
+
+
+async def _reject_classes_over_quota(
+    session: AsyncSession, quotas_repo: QuotaRepository, flavor: schemas.ResourceFlavorORM
+) -> None:
+    """Refuse a flavor change that makes a linked resource class larger than the quota of its pool."""
+    quotas: dict[tuple[str, ClusterId], models.Quota | None] = {}
+    blockers: list[str] = []
+    for cls in await _get_linked_classes(session, flavor.id):
+        pool = cls.resource_pool
+        if pool is None or pool.quota is None:
+            continue
+        key = (pool.quota, pool.get_cluster_id())
+        if key not in quotas:
+            quotas[key] = await quotas_repo.get_quota(key[0], key[1])
+        quota = quotas[key]
+        if quota is not None and not quota.is_resource_class_compatible(cls.dump()):
+            blockers.append(f"{cls.name} (in {pool.name})")
+    if blockers:
+        raise errors.ConflictError(
+            message=(
+                f"The resource flavor {flavor.name} cannot be changed because the new values are larger than the "
+                f"quota of the resource pools of these resource classes: {', '.join(blockers)}."
+            )
+        )
+
+
 class ResourcePoolQueryRepository:
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
@@ -140,6 +211,14 @@ class ResourcePoolQueryRepository:
         self.authz = authz
         self.resource_usage_service = resource_usage_service
         self.resource_requests_repo = resource_requests_repo
+
+    async def get_quota_ids(self) -> list[tuple[str, ClusterId]]:
+        """Get the quota and cluster of every resource pool that has a quota."""
+        async with self.session_maker() as session:
+            res = await session.scalars(
+                select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.quota.is_not(None))
+            )
+            return [(rp.quota, rp.get_cluster_id()) for rp in res if rp.quota]
 
     async def get_resource_pools(
         self, api_user: base_models.APIUser, id: int | None = None, name: Optional[str] = None
@@ -508,6 +587,7 @@ class ResourcePoolRepository(_Base):
         resource_pool = schemas.ResourcePoolORM.from_unsaved_model(
             new_resource_pool=new_resource_pool, quota=quota, cluster=cluster
         )
+        await _attach_flavors(session, resource_pool.classes)
         if resource_pool.default:
             stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
             res = await session.execute(stmt)
@@ -520,6 +600,8 @@ class ResourcePoolRepository(_Base):
         session.add(resource_pool)
         await session.flush()
         await session.refresh(resource_pool)
+        if quota and any(rc.preemptible for rc in new_resource_pool.classes):
+            await self.quotas_repo.ensure_preemptible_priority_class(quota.id, cluster_id)
         result = resource_pool.dump(quota=quota)
         return result
 
@@ -550,6 +632,16 @@ class ResourcePoolRepository(_Base):
             resource_class = schemas.ResourceClassORM.from_unsaved_model(
                 new_resource_class=new_resource_class, resource_pool_id=resource_pool_id
             )
+            await _attach_flavors(session, [resource_class])
+            shape = resource_class.shape
+            new_resource_class = replace(
+                new_resource_class,
+                cpu=shape.cpu,
+                memory=shape.memory,
+                max_storage=shape.max_storage,
+                default_storage=shape.default_storage,
+                gpu=shape.gpu,
+            )
 
             if resource_pool_id is not None:
                 stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
@@ -569,6 +661,12 @@ class ResourcePoolRepository(_Base):
                     raise errors.ValidationError(
                         message="The resource class {resource_class} is not compatible with the quota {quota}."
                     )
+                if new_resource_class.preemptible:
+                    if not rp.quota:
+                        raise errors.ValidationError(
+                            message="A resource pool without a quota cannot have preemptible resource classes."
+                        )
+                    await self.quotas_repo.ensure_preemptible_priority_class(rp.quota, rp.get_cluster_id())
 
             session.add(resource_class)
             await session.flush()
@@ -714,6 +812,15 @@ class ResourcePoolRepository(_Base):
                 rp.remote_json = remote_json
 
             await gather(*new_classes_coroutines)
+
+            preemptible_class_ids = {rc.id for rc in rp.classes if rc.preemptible}
+            for rc in update.classes or []:
+                if rc.preemptible is True:
+                    preemptible_class_ids.add(rc.id)
+                elif rc.preemptible is False:
+                    preemptible_class_ids.discard(rc.id)
+            if rp.quota and preemptible_class_ids:
+                await self.quotas_repo.ensure_preemptible_priority_class(rp.quota, cluster_id)
 
             # Clear stale class remote_json when the pool is not FirecREST
             if effective_pool_kind != models.RemoteConfigurationKind.firecrest:
@@ -867,6 +974,32 @@ class ResourcePoolRepository(_Base):
 
             validate_resource_class_update(existing=cls.dump(), update=update)
 
+            new_flavor_id = update.resource_flavor_id
+            linked_after = cls.resource_flavor_id if new_flavor_id is None else new_flavor_id
+            explicit_shape = [
+                name
+                for name in ("cpu", "memory", "max_storage", "default_storage", "gpu")
+                if getattr(update, name) is not None
+            ]
+            if isinstance(linked_after, ULID) and explicit_shape:
+                raise errors.ValidationError(
+                    message=(
+                        f"The fields {', '.join(explicit_shape)} cannot be set on a resource class that is linked to "
+                        'a resource flavor. Change the flavor, or send "resource_flavor_id": "" in a PATCH to unlink '
+                        "the class."
+                    )
+                )
+
+            if new_flavor_id is RESET:
+                if cls.resource_flavor_id is not None:
+                    _snapshot_flavor(cls, await _get_flavor_orm(session, cls.resource_flavor_id))
+                cls.resource_flavor_id = None
+                cls.resource_flavor = None
+            elif new_flavor_id is not None:
+                flavor = await _get_flavor_orm(session, new_flavor_id)
+                cls.resource_flavor_id = new_flavor_id
+                _link_flavor(cls, flavor)
+
             # NOTE: updating the 'default' field is not supported, so it is skipped below
             if update.name is not None:
                 cls.name = update.name
@@ -882,6 +1015,8 @@ class ResourcePoolRepository(_Base):
                 cls.default_storage = update.default_storage
             if update.quota_enforced is not None:
                 cls.quota_enforced = update.quota_enforced
+            if update.preemptible is not None:
+                cls.preemptible = update.preemptible
             if pool_kind is None or pool_kind != models.RemoteConfigurationKind.firecrest:
                 cls.remote_json = None
             if update.remote is not None:
@@ -943,6 +1078,14 @@ class ResourcePoolRepository(_Base):
             if quota and not quota.is_resource_class_compatible(cls_model):
                 raise errors.ValidationError(
                     message=f"The resource class {cls_model} is not compatible with the quota {quota}"
+                )
+            if cls_model.preemptible:
+                if not cls_model.quota:
+                    raise errors.ValidationError(
+                        message="A resource pool without a quota cannot have preemptible resource classes."
+                    )
+                await self.quotas_repo.ensure_preemptible_priority_class(
+                    cls_model.quota, cls.resource_pool.get_cluster_id()
                 )
 
             return cls_model
@@ -1882,6 +2025,121 @@ class ClusterRepository:
 
 
 @dataclass
+class ResourceFlavorRepository:
+    """Repository for resource flavors."""
+
+    session_maker: Callable[..., AsyncSession]
+    quotas_repo: QuotaRepository
+
+    async def get_flavors(self, name: str | None = None) -> list[models.ResourceFlavor]:
+        """Get all resource flavors from the database."""
+        async with self.session_maker() as session:
+            stmt = select(schemas.ResourceFlavorORM).order_by(schemas.ResourceFlavorORM.name)
+            if name is not None:
+                stmt = stmt.where(schemas.ResourceFlavorORM.name == name)
+            res = await session.scalars(stmt)
+            return [flavor.dump() for flavor in res]
+
+    async def get_flavor(self, flavor_id: ULID) -> models.ResourceFlavor:
+        """Get a specific resource flavor from the database."""
+        async with self.session_maker() as session:
+            flavor = await _get_flavor_orm(session, flavor_id)
+            return flavor.dump()
+
+    async def get_flavor_resource_classes(self, flavor_id: ULID) -> list[models.LinkedResourceClass]:
+        """Get every resource class linked to a resource flavor, with the pool it belongs to."""
+        async with self.session_maker() as session:
+            await _get_flavor_orm(session, flavor_id)
+            return [
+                models.LinkedResourceClass(
+                    id=cls.id,
+                    name=cls.name,
+                    resource_pool_id=cls.resource_pool_id,
+                    resource_pool_name=cls.resource_pool.name if cls.resource_pool is not None else None,
+                )
+                for cls in await _get_linked_classes(session, flavor_id)
+            ]
+
+    @_only_admins
+    async def insert_flavor(
+        self, api_user: base_models.APIUser, new_flavor: models.UnsavedResourceFlavor
+    ) -> models.ResourceFlavor:
+        """Insert a new resource flavor in the database."""
+        async with self.session_maker() as session, session.begin():
+            existing = await session.scalar(
+                select(schemas.ResourceFlavorORM).where(schemas.ResourceFlavorORM.name == new_flavor.name)
+            )
+            if existing is not None:
+                raise errors.ConflictError(
+                    message=f"A resource flavor with the name {new_flavor.name} already exists.", quiet=True
+                )
+            flavor = schemas.ResourceFlavorORM.from_unsaved_model(new_flavor)
+            session.add(flavor)
+            await session.flush()
+            await session.refresh(flavor)
+            return flavor.dump()
+
+    @_only_admins
+    async def update_flavor(
+        self, api_user: base_models.APIUser, flavor_id: ULID, update: models.ResourceFlavorPatch
+    ) -> models.ResourceFlavor:
+        """Update a resource flavor in the database."""
+        async with self.session_maker() as session, session.begin():
+            flavor = await _get_flavor_orm(session, flavor_id)
+            if update.name is not None and update.name != flavor.name:
+                existing = await session.scalar(
+                    select(schemas.ResourceFlavorORM).where(schemas.ResourceFlavorORM.name == update.name)
+                )
+                if existing is not None:
+                    raise errors.ConflictError(
+                        message=f"A resource flavor with the name {update.name} already exists.", quiet=True
+                    )
+                flavor.name = update.name
+            if update.cpu is not None:
+                flavor.cpu = update.cpu
+            if update.memory is not None:
+                flavor.memory = update.memory
+            if update.max_storage is not None:
+                flavor.max_storage = update.max_storage
+            if update.default_storage is not None:
+                flavor.default_storage = update.default_storage
+            if update.gpu is not None:
+                flavor.gpu = update.gpu
+            if update.description is RESET:
+                flavor.description = None
+            elif isinstance(update.description, str):
+                flavor.description = update.description
+            if flavor.default_storage > flavor.max_storage:
+                raise errors.ValidationError(
+                    message="The default storage cannot be larger than the max allowable storage."
+                )
+            if any(value is not None for value in (update.cpu, update.memory, update.gpu)):
+                await _reject_classes_over_quota(session, self.quotas_repo, flavor)
+            await session.flush()
+            await session.refresh(flavor)
+            return flavor.dump()
+
+    @_only_admins
+    async def delete_flavor(self, api_user: base_models.APIUser, flavor_id: ULID) -> None:
+        """Delete a resource flavor, unless a resource class is still linked to it."""
+        async with self.session_maker() as session, session.begin():
+            flavor = await session.scalar(
+                select(schemas.ResourceFlavorORM).where(schemas.ResourceFlavorORM.id == flavor_id)
+            )
+            if flavor is None:
+                return
+            names = [cls.name for cls in await _get_linked_classes(session, flavor_id)]
+            if names:
+                raise errors.ConflictError(
+                    message=(
+                        f"The resource flavor {flavor.name} cannot be deleted because it is still linked to the "
+                        f"resource classes: {', '.join(names)}."
+                    )
+                )
+            await session.delete(flavor)
+
+
+@dataclass
 class QuotaRepository:
     """Adapter for CRUD operations on resource quotas and priority classes in k8s."""
 
@@ -1910,31 +2168,67 @@ class QuotaRepository:
             id=new_quota.id if isinstance(new_quota, models.Quota) else str(uuid4()),
         )
         labels = {self._label_name: self._label_value}
-
-        # Check if we have a priority class with the given name, if not, create one it.
-        pc = await self.pc_client.read_priority_class(K8sPriorityClass.meta(quota.id, cluster_id))
-        if pc is None:
-            await self.pc_client.create_priority_class(
-                K8sPriorityClass.new(
-                    name=quota.id,
-                    cluster=cluster_id,
-                    global_default=False,
-                    value=100,
-                    preemption_policy="Never",
-                    description="Renku resource quota priority class",
-                    labels=labels,
-                ),
-            )
-
+        await self._ensure_priority_class(self._quota_priority_class(quota.id, cluster_id))
         res = await self.rq_client.create_resource_quota(quota.to_patch(labels), cluster_id)
         return models.Quota.from_k8s_resource_quota(res)
 
     async def delete_quota(self, name: str, cluster_id: ClusterId) -> None:
-        """Delete a resource quota and priority class."""
-        await self.pc_client.delete_priority_class(
-            meta=K8sPriorityClass.meta(name, cluster_id), propagation_policy=DeletePropagationPolicy.foreground
-        )
+        """Delete a resource quota and its priority classes."""
+        for pc_name in [name, models.preemptible_priority_class_name(name)]:
+            await self.pc_client.delete_priority_class(
+                meta=K8sPriorityClass.meta(pc_name, cluster_id), propagation_policy=DeletePropagationPolicy.foreground
+            )
         await self.rq_client.delete_resource_quota(name=name, cluster_id=cluster_id)
+
+    async def migrate_quota(self, quota_id: str, cluster_id: ClusterId) -> None:
+        """Bring the priority class and scope of an existing quota up to date."""
+        await self._ensure_priority_class(self._quota_priority_class(quota_id, cluster_id))
+        res_quota = await self.rq_client.read_resource_quota(name=quota_id, cluster_id=cluster_id)
+        scope_selector = models.quota_scope_selector(quota_id)
+        if res_quota.manifest.to_dict().get("spec", {}).get("scopeSelector") != scope_selector:
+            await self.rq_client.patch_resource_quota(quota_id, {"spec": {"scopeSelector": scope_selector}}, cluster_id)
+
+    def priority_class_name(self, resource_class: models.ResourceClass) -> str | None:
+        """Return the priority class for a session or a job in the resource class."""
+        if not resource_class.quota:
+            return None
+        if resource_class.preemptible:
+            return models.preemptible_priority_class_name(resource_class.quota)
+        return resource_class.quota
+
+    async def ensure_preemptible_priority_class(self, quota_id: str, cluster_id: ClusterId) -> None:
+        """Create the preemptible priority class of a quota if it is missing."""
+        await self._ensure_priority_class(
+            K8sPriorityClass.new(
+                name=models.preemptible_priority_class_name(quota_id),
+                cluster=cluster_id,
+                global_default=False,
+                value=PREEMPTIBLE_PRIORITY_VALUE,
+                preemption_policy="Never",
+                description="Renku resource quota priority class for preemptible resource classes",
+                labels={self._label_name: self._label_value},
+            )
+        )
+
+    def _quota_priority_class(self, quota_id: str, cluster_id: ClusterId) -> K8sPriorityClass:
+        return K8sPriorityClass.new(
+            name=quota_id,
+            cluster=cluster_id,
+            global_default=False,
+            value=SESSION_PRIORITY_VALUE,
+            preemption_policy="PreemptLowerPriority",
+            description="Renku resource quota priority class",
+            labels={self._label_name: self._label_value},
+        )
+
+    async def _ensure_priority_class(self, desired: K8sPriorityClass) -> None:
+        meta = K8sPriorityClass.meta(desired.name, desired.cluster)
+        current = await self.pc_client.read_priority_class(meta)
+        if current is None:
+            await self.pc_client.create_priority_class(desired)
+        elif current.manifest.get("preemptionPolicy") != desired.manifest.preemptionPolicy:
+            await self.pc_client.delete_priority_class(meta=meta, propagation_policy=DeletePropagationPolicy.foreground)
+            await self.pc_client.create_priority_class(desired)
 
     async def update_quota(self, quota: models.Quota, cluster_id: ClusterId) -> models.Quota:
         """Update a specific resource quota."""

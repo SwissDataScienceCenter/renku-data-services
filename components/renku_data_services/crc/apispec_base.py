@@ -39,6 +39,14 @@ class BaseAPISpec(BaseModel):
         """Custom serializer that can handle ULIDs for id."""
         return str(v)
 
+    @field_validator("resource_flavor_id", mode="before", check_fields=False)
+    @classmethod
+    def serialize_resource_flavor_id(cls, resource_flavor_id: str | ULID | None) -> str | None:
+        """Custom serializer that can handle ULIDs."""
+        if resource_flavor_id is None:
+            return None
+        return str(resource_flavor_id)
+
     @field_validator("project_id", mode="before", check_fields=False)
     @classmethod
     def serialize_project_id(cls, project_id: str | ULID) -> str:

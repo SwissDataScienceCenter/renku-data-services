@@ -33,7 +33,13 @@ from renku_data_services.connected_services.db import ConnectedServicesRepositor
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory, OAuthHttpClientFactory
 from renku_data_services.crc import models as crc_models
 from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
-from renku_data_services.crc.db import ClusterRepository, MemberRepository, QuotaRepository, ResourcePoolRepository
+from renku_data_services.crc.db import (
+    ClusterRepository,
+    MemberRepository,
+    QuotaRepository,
+    ResourceFlavorRepository,
+    ResourcePoolRepository,
+)
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -89,7 +95,7 @@ from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
-from renku_data_services.users.db import UserPreferencesRepository
+from renku_data_services.users.db import SSHKeyRepository, UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
@@ -148,6 +154,7 @@ class DependencyManager:
     authz: Authz
     member_repo: MemberRepository
     rp_repo: ResourcePoolRepository
+    resource_flavor_repo: ResourceFlavorRepository
     project_repo: ProjectRepository
     project_migration_repo: ProjectMigrationRepository
     group_repo: GroupRepository
@@ -158,6 +165,7 @@ class DependencyManager:
     apps_k8s_client: RenkuAppsK8sClient | None
     apps_repo: RenkuAppsRepository | None
     user_preferences_repo: UserPreferencesRepository
+    ssh_key_repo: SSHKeyRepository
     kc_user_repo: KcUserRepo
     low_level_user_secrets_repo: LowLevelUserSecretsRepo
     user_secrets_repo: UserSecretsRepo
@@ -387,6 +395,9 @@ class DependencyManager:
             resource_requests_repo=resource_requests_repo,
             member_repo=member_repo,
         )
+        resource_flavor_repo = ResourceFlavorRepository(
+            session_maker=config.db.async_session_maker, quotas_repo=quota_repo
+        )
         project_storage_k8s = ProjectStorageK8s(config.nb_config.k8s_v2_client)
         project_storage_repo = ProjectStorageRepository(
             session_maker=config.db.async_session_maker,
@@ -403,7 +414,12 @@ class DependencyManager:
             internal_gitlab_url=config.gitlab_url,
             enable_internal_gitlab=config.enable_internal_gitlab,
         )
-
+        project_session_secret_repo = ProjectSessionSecretRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            user_repo=kc_user_repo,
+            secret_service_public_key=config.secrets.public_key,
+        )
         session_repo = SessionRepository(
             session_maker=config.db.async_session_maker,
             project_authz=authz,
@@ -422,16 +438,11 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
             authz=authz,
         )
-        project_session_secret_repo = ProjectSessionSecretRepository(
-            session_maker=config.db.async_session_maker,
-            authz=authz,
-            user_repo=kc_user_repo,
-            secret_service_public_key=config.secrets.public_key,
-        )
         user_preferences_repo = UserPreferencesRepository(
             session_maker=config.db.async_session_maker,
             user_preferences_config=config.user_preferences,
         )
+        ssh_key_repo = SSHKeyRepository(session_maker=config.db.async_session_maker)
         low_level_user_secrets_repo = LowLevelUserSecretsRepo(
             session_maker=config.db.async_session_maker,
         )
@@ -533,6 +544,7 @@ class DependencyManager:
             kc_api=kc_api,
             member_repo=member_repo,
             rp_repo=rp_repo,
+            resource_flavor_repo=resource_flavor_repo,
             reprovisioning_repo=reprovisioning_repo,
             search_updates_repo=search_updates_repo,
             search_reprovisioning=search_reprovisioning,
@@ -545,6 +557,7 @@ class DependencyManager:
             apps_k8s_client=apps_k8s_client,
             apps_repo=apps_repo,
             user_preferences_repo=user_preferences_repo,
+            ssh_key_repo=ssh_key_repo,
             kc_user_repo=kc_user_repo,
             user_secrets_repo=user_secrets_repo,
             connected_services_repo=connected_services_repo,

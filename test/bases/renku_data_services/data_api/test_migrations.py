@@ -943,3 +943,57 @@ async def test_migration_cd424c01676e_resource_pool_authz(
         and row.relationship.subject.object.object_id in seeded["prohibited_user_ids"]
     ]
     assert len(prohibited) == seeded["no_default_access_count"]
+
+
+@pytest.mark.asyncio
+async def test_migration_to_20076b29e3b8(app_manager_instance: DependencyManager, admin_user: UserInfo) -> None:
+    """A linked class stores no values, and a downgrade copies the values of its flavor back onto it."""
+    run_migrations_for_app("common", "20076b29e3b8")
+    flavor_id = str(ULID())
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        pool_id = (
+            await session.execute(
+                sa.text(
+                    'INSERT INTO resource_pools.resource_pools(name, "default", public) '
+                    "VALUES ('pool', FALSE, TRUE) RETURNING id"
+                )
+            )
+        ).scalar_one()
+        await session.execute(
+            sa.text(
+                "INSERT INTO resource_pools.resource_flavors(id, name, cpu, memory, max_storage, default_storage, gpu) "
+                "VALUES (:id, 'standard', 1.5, 2, 20, 1, 0)"
+            ),
+            {"id": flavor_id},
+        )
+        await session.execute(
+            sa.text(
+                'INSERT INTO resource_pools.resource_classes(name, "default", resource_pool_id, resource_flavor_id) '
+                "VALUES ('linked', FALSE, :pool_id, :flavor_id)"
+            ),
+            {"pool_id": pool_id, "flavor_id": flavor_id},
+        )
+        for values, flavor in [("1, 2, 20, 1, 0", flavor_id), ("NULL, NULL, NULL, NULL, NULL", None)]:
+            with pytest.raises(IntegrityError):
+                async with session.begin_nested():
+                    await session.execute(
+                        sa.text(
+                            "INSERT INTO resource_pools.resource_classes(name, cpu, memory, max_storage, "
+                            'default_storage, gpu, "default", resource_pool_id, resource_flavor_id) '
+                            f"VALUES ('invalid', {values}, FALSE, :pool_id, :flavor_id)"
+                        ),
+                        {"pool_id": pool_id, "flavor_id": flavor},
+                    )
+
+    downgrade_migrations_for_app("common", "181e715f787b")
+
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        row = (
+            await session.execute(
+                sa.text(
+                    "SELECT cpu, memory, max_storage, default_storage, gpu FROM resource_pools.resource_classes "
+                    "WHERE name = 'linked'"
+                )
+            )
+        ).one()
+    assert row._tuple() == (1.5, 2, 20, 1, 0)

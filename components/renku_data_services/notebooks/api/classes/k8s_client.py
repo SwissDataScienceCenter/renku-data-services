@@ -39,6 +39,17 @@ from renku_data_services.notebooks.util.retries import retry_with_exponential_ba
 logger = logging.getLogger(__name__)
 
 
+def _current_job_pod(pods: list[K8sObject]) -> K8sObject | None:
+    """Return the newest pod that is not terminal, or the newest pod when all pods are terminal."""
+    if not pods:
+        return None
+    by_age = sorted(pods, key=lambda p: str(p.manifest.get("metadata", {}).get("creationTimestamp", "")), reverse=True)
+    for pod in by_age:
+        if pod.manifest.get("status", {}).get("phase") not in ("Succeeded", "Failed"):
+            return pod
+    return by_age[0]
+
+
 class NotebookK8sClient(SecretClient):
     """A K8s Client for Notebooks."""
 
@@ -347,11 +358,13 @@ class NotebookK8sClient(SecretClient):
         pod: K8sObject | None = None
         if sess_mode == SessionType.non_interactive:
             job_name = session.metadata.name
-            async for j in self.__client.list(
-                K8sObjectFilter(gvk=pod_gvk, label_selector={"batch.kubernetes.io/job-name": job_name})
-            ):
-                pod = j
-                break
+            job_pods = [
+                j
+                async for j in self.__client.list(
+                    K8sObjectFilter(gvk=pod_gvk, label_selector={"batch.kubernetes.io/job-name": job_name})
+                )
+            ]
+            pod = _current_job_pod(job_pods)
         else:
             pod_name = f"{session.metadata.name}-0"
             pod = await self._get(pod_name, pod_gvk, None)

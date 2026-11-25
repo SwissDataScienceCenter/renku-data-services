@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Self
 
 from ulid import ULID
 
@@ -64,6 +64,61 @@ class BuilderVariant(StrEnum):
     r = "r"
 
 
+class SafeStrEnum(StrEnum):
+    """Enum with safe parsing of arbitrary strings."""
+
+    @classmethod
+    def safe_parse(
+        cls,
+        value: str,
+        default: Self | None = None,
+    ) -> Self | None:
+        """Return the enum value or the default if invalid."""
+        try:
+            return cls(value)
+        except ValueError:
+            return default
+
+
+class SessionLauncherRepositoryPolicyName(SafeStrEnum):
+    """The access mode of a resource within a session launcher.
+
+    Changing these values also requires updating the check constraint in the SessionLauncherRepositoryORM table.
+    """
+
+    excluded = "excluded"
+    read_only = "read_only"
+    read_write = "read_write"
+
+    @property
+    def requires_write_access(self) -> bool:
+        """Policy requires write access."""
+        return self is SessionLauncherRepositoryPolicyName.read_write
+
+
+class SessionLauncherDataConnectorPolicyName(SafeStrEnum):
+    """The access mode of a data connector within a session launcher.
+
+    Changing these values also requires updating the check constraint in the SessionLauncherDataConnectorORM table.
+    """
+
+    excluded = "excluded"
+    read_only = "read_only"
+    read_write = "read_write"
+
+    @property
+    def requires_write_access(self) -> bool:
+        """Policy requires write access."""
+        return self is SessionLauncherDataConnectorPolicyName.read_write
+
+
+class SessionLauncherSecretPolicyName(SafeStrEnum):
+    """The access mode of a resource within a session launcher."""
+
+    excluded = "excluded"
+    included = "included"
+
+
 class FrontendVariant(StrEnum):
     """The environment frontend choice."""
 
@@ -73,15 +128,18 @@ class FrontendVariant(StrEnum):
     rstudio = "rstudio"
     infer = "infer"
     none = "none"
+    ssh = "ssh"
 
 
 VALID_BUILDER_FRONTEND_COMBINATIONS: typing.Final[set[tuple[BuilderVariant, FrontendVariant]]] = {
     (BuilderVariant.r, FrontendVariant.rstudio),
+    (BuilderVariant.r, FrontendVariant.ssh),
     (BuilderVariant.r, FrontendVariant.none),
     (BuilderVariant.python, FrontendVariant.vscodium),
     (BuilderVariant.python, FrontendVariant.jupyterlab),
     (BuilderVariant.python, FrontendVariant.ttyd),
     (BuilderVariant.python, FrontendVariant.infer),
+    (BuilderVariant.python, FrontendVariant.ssh),
     (BuilderVariant.python, FrontendVariant.none),
 }
 
@@ -96,6 +154,7 @@ class UnsavedBuildParameters:
     frontend_variant: str
     repository_revision: str | None = None
     context_dir: str | None = None
+    ai_agents: list[str] | None = None
     job_command: list[str] | None = None
     job_args: list[str] | None = None
 
@@ -170,6 +229,7 @@ class BuildParametersPatch:
     frontend_variant: str | None = None
     repository_revision: str | None = None
     context_dir: str | None = None
+    ai_agents: list[str] | ResetType | None = None
 
 
 @dataclass(eq=True, kw_only=True)
@@ -278,6 +338,7 @@ class SessionLauncher(UnsavedSessionLauncher):
     creation_date: datetime
     created_by: Member
     environment: Environment
+    is_restricted: bool | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -380,6 +441,7 @@ class ShipwrightBuildRunParams:
     labels: dict[str, str] | None = None
     annotations: dict[str, str] | None = None
     frontend: str = FrontendVariant.vscodium.value
+    ai_agents: list[str] | None = None
     builder_image: str | None = None
     git_repository_revision: str | None = None
     context_dir: str | None = None
@@ -406,6 +468,7 @@ class ShipwrightBuildRunParams:
             labels=self.labels,
             annotations=self.annotations,
             frontend=self.frontend,
+            ai_agents=self.ai_agents,
             builder_image=overrides.builder_image or self.builder_image,
             git_repository_revision=self.git_repository_revision,
             context_dir=self.context_dir,
@@ -432,6 +495,66 @@ class ShipwrightBuildStatusUpdate:
     """The update about a build.
 
     None represents "no update"."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class SessionLauncherRepositoryPolicy:
+    """Model to represent a session launcher repository policy."""
+
+    policy: SessionLauncherRepositoryPolicyName | None
+    writable_references: list[str] | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherRepository(SessionLauncherRepositoryPolicy):
+    """Model to represent a repository and its access policies for a launcher."""
+
+    launcher_id: ULID
+    repository_id: int
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherDataConnectorPolicy:
+    """The access policy on a given data connector."""
+
+    policy: SessionLauncherDataConnectorPolicyName | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherDataConnector(SessionLauncherDataConnectorPolicy):
+    """Model to represent a data connector and its access policies for a launcher."""
+
+    launcher_id: ULID
+    data_connector_link_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherDataConnectorPatch(SessionLauncherDataConnectorPolicy):
+    """Model to patch a data connector and its access policies for a launcher."""
+
+    data_connector_link_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherSecretPolicy:
+    """Model to represent the visibility of a secret."""
+
+    policy: SessionLauncherSecretPolicyName | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherSecret(SessionLauncherSecretPolicy):
+    """Model to represent the visibility of a project secret in a launcher."""
+
+    launcher_id: ULID
+    secret_slot_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherSecretPatch(SessionLauncherSecretPolicy):
+    """Model to represent the visibility of a project secret in a launcher."""
+
+    secret_slot_id: ULID
 
 
 BUILD_ENVIRONMENT_CONFIGS: Final[dict[str, UnsavedEnvironment]] = {
@@ -489,6 +612,19 @@ BUILD_ENVIRONMENT_CONFIGS: Final[dict[str, UnsavedEnvironment]] = {
     ),
     FrontendVariant.infer.value: UnsavedEnvironment(
         name="inferred-frontend",
+        default_url="/",
+        port=BUILD_PORT,
+        container_image="image:unknown-at-the-moment",
+        working_directory=BUILD_WORKING_DIRECTORY,
+        mount_directory=BUILD_MOUNT_DIRECTORY,
+        uid=BUILD_UID,
+        gid=BUILD_GID,
+        environment_kind=EnvironmentKind.CUSTOM,
+        environment_image_source=EnvironmentImageSource.build,
+        strip_path_prefix=False,
+    ),
+    FrontendVariant.ssh.value: UnsavedEnvironment(
+        name="no-implicit-frontend",
         default_url="/",
         port=BUILD_PORT,
         container_image="image:unknown-at-the-moment",

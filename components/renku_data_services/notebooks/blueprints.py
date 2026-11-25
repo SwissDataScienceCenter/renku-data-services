@@ -8,6 +8,7 @@ from sanic_ext import validate
 
 from renku_data_services import base_models
 from renku_data_services.app_config import logging
+from renku_data_services.app_config.config import SshProxyConfig
 from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.auth import authenticate, authenticate_2
@@ -73,6 +74,7 @@ class NotebooksNewBP(CustomBlueprint):
     resource_usage_service: ResourceUsageService
     resource_requests_repo: ResourceRequestsRepo
     authz: Authz
+    ssh_proxy_config: SshProxyConfig
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -110,9 +112,10 @@ class NotebooksNewBP(CustomBlueprint):
                 internal_token_mint=self.internal_token_mint,
                 resource_usage_service=self.resource_usage_service,
                 authz=self.authz,
+                ssh_proxy_config=self.ssh_proxy_config,
             )
             status = 201 if created else 200
-            return json(session.as_apispec().model_dump(exclude_none=True, mode="json"), status)
+            return json(session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"), status)
 
         return "/sessions", ["POST"], _handler
 
@@ -134,7 +137,7 @@ class NotebooksNewBP(CustomBlueprint):
             sessions = await self.nb_config.k8s_v2_client.list_sessions(user.id, session_mode)
             output: list[dict] = []
             for session in sessions:
-                output.append(session.as_apispec().model_dump(exclude_none=True, mode="json"))
+                output.append(session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"))
             return json(output)
 
         return "/sessions", ["GET"], _handler
@@ -149,7 +152,7 @@ class NotebooksNewBP(CustomBlueprint):
                 raise errors.MissingResourceError(
                     message=f"The session with ID {session_id} does not exist.", quiet=True
                 )
-            return json(session.as_apispec().model_dump(exclude_none=True, mode="json"))
+            return json(session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"))
 
         return "/sessions/<session_id>", ["GET"], _handler
 
@@ -198,8 +201,9 @@ class NotebooksNewBP(CustomBlueprint):
                 resource_requests_repo=self.resource_requests_repo,
                 project_storage_repo=self.project_storage_repo,
                 authz=self.authz,
+                ssh_proxy_config=self.ssh_proxy_config,
             )
-            return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
+            return json(new_session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"))
 
         return "/sessions/<session_id>", ["PATCH"], _handler
 

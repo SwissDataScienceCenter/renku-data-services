@@ -61,6 +61,7 @@
   dict({
     'description': 'A session launcher.',
     'disk_storage': 42,
+    'is_restricted': False,
     'launcher_type': 'interactive',
     'name': 'Launcher',
     'resource_class_id': 1,
@@ -69,6 +70,10 @@
 # name: test_project_copy_creates_new_build_and_environment_instances.1
   dict({
     'build_parameters': dict({
+      'ai_agents': list([
+        'claude',
+        'pi',
+      ]),
       'builder_variant': 'python',
       'frontend_variant': 'vscodium',
       'platforms': list([
@@ -93,6 +98,10 @@
 # ---
 # name: test_project_copy_creates_new_build_and_environment_instances.2
   dict({
+    'ai_agents': list([
+      'claude',
+      'pi',
+    ]),
     'builder_variant': 'python',
     'frontend_variant': 'vscodium',
     'platforms': list([

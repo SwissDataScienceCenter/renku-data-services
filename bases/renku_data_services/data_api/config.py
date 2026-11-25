@@ -10,6 +10,7 @@ from renku_data_services.app_config.config import (
     KeycloakConfig,
     PosthogConfig,
     SentryConfig,
+    SshProxyConfig,
     TrustedProxiesConfig,
 )
 from renku_data_services.app_config.logging import Config as LoggingConfig
@@ -54,6 +55,7 @@ class Config:
     deposit_config: DepositConfig
     persisted_logs: PersistedLogsConfig
     project_storage_config: ProjectStorageConfig
+    ssh_proxy_config: SshProxyConfig
 
     @classmethod
     def from_env(cls, db: DBConfig | None = None) -> Self:
@@ -107,4 +109,5 @@ class Config:
             deposit_config=DepositConfig.from_env(nb_config.sessions.renku_url),
             persisted_logs=PersistedLogsConfig.from_env(namespace=k8s_namespace),
             project_storage_config=ProjectStorageConfig.from_env(),
+            ssh_proxy_config=SshProxyConfig.from_env(),
         )
