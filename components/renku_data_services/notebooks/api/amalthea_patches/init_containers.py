@@ -218,6 +218,8 @@ def user_secrets_extras(
     secrets_mount_directory: str,
     k8s_secret_name: str,
     session_secrets: list[SessionSecret],
+    uid: int = 1000,
+    gid: int = 1000,
 ) -> SessionExtraResources | None:
     """The session extras which decrypts user secrets to be mounted in the session."""
     if not session_secrets or user.is_anonymous:
@@ -261,8 +263,8 @@ def user_secrets_extras(
             ],
             securityContext={
                 "allowPrivilegeEscalation": False,
-                "runAsGroup": 1000,
-                "runAsUser": 1000,
+                "runAsGroup": gid,
+                "runAsUser": uid,
                 "runAsNonRoot": True,
                 "capabilities": {"drop": ["ALL"]},
             },

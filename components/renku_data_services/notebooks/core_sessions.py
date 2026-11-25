@@ -908,6 +908,8 @@ async def start_session(
             secrets_mount_directory=secrets_mount_directory.as_posix(),
             k8s_secret_name=f"{server_name}-secrets",
             session_secrets=session_secrets,
+            uid=environment.uid,
+            gid=environment.gid,
         )
     )
 
@@ -1254,6 +1256,8 @@ async def patch_session(
             secrets_mount_directory=secrets_mount_directory.as_posix(),
             k8s_secret_name=f"{server_name}-secrets",
             session_secrets=session_secrets,
+            uid=environment.uid,
+            gid=environment.gid,
         )
     )
 
