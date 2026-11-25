@@ -34,7 +34,7 @@ async def test_post_project_storage(
 
     payload = {"project_id": project_id, "storage_quota_id": sq_id, "requested_size": 16, "mount_path": "store"}
 
-    _, res = await sanic_client.post("/api/data/project_storage_v2", headers=admin_headers, json=payload)
+    _, res = await sanic_client.post("/api/data/storages", headers=admin_headers, json=payload)
 
     assert res.status_code == 201, res.text
     # TODO

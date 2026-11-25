@@ -38,7 +38,7 @@ from renku_data_services.search.blueprints import SearchBP
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
-from renku_data_services.storage.blueprints import ProjectStorageBP, ProjectStorageV2BP, StorageSchemaBP
+from renku_data_services.storage.blueprints import ProjectStorageV2BP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, SSHKeysBP, UserPreferencesBP, UserSecretsBP
 
 
@@ -335,13 +335,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         internal_token_mint=dm.internal_token_mint,
         internal_scope_verifier=dm.internal_scope_verifier,
     )
-    project_storage = ProjectStorageBP(
-        name="project_storage",
-        url_prefix=url_prefix,
-        project_storage_k8s=dm.project_storage_k8s,
-        project_storage_repo=dm.project_storage_repo,
-        authenticator=dm.authenticator,
-    )
     storage_flavors = StorageFlavorsBP(
         name="storage_flavors",
         url_prefix=url_prefix,
@@ -396,7 +389,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             capacity_reservation.blueprint(),
             resource_usage.blueprint(),
             internal_authentication.blueprint(),
-            project_storage.blueprint(),
             storage_flavors.blueprint(),
             storage_quotas.blueprint(),
             project_storages_v2.blueprint(),
