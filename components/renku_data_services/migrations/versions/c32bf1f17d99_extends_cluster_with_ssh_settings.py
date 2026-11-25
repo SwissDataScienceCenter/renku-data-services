@@ -1,7 +1,7 @@
 """extends cluster with ssh settings
 
 Revision ID: c32bf1f17d99
-Revises: e4265957153e
+Revises: 9969d6945381
 Create Date: 2026-11-20 15:31:56.399124
 
 """
@@ -13,7 +13,7 @@ from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.
 revision = "c32bf1f17d99"
-down_revision = "e4265957153e"
+down_revision = "9969d6945381"
 branch_labels = None
 depends_on = None
 
