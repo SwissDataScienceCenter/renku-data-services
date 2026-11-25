@@ -25,9 +25,9 @@ from renku_data_services.data_connectors.db import (
 )
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
-from renku_data_services.notebooks.constants import SSH_PROXY_ROLE
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
+from renku_data_services.notebooks.constants import SSH_PROXY_ROLE
 from renku_data_services.notebooks.core_sessions import (
     patch_session,
     refresh_session_deadline,
@@ -191,9 +191,7 @@ class NotebooksNewBP(CustomBlueprint):
                     or body.lastInteraction != apispec.CurrentTime.now
                 ):
                     raise errors.ForbiddenError(message="The ssh-proxy role may only refresh the session deadline.")
-                new_session = await refresh_session_deadline(
-                    nb_config=self.nb_config, session_id=session_id, user=user
-                )
+                new_session = await refresh_session_deadline(nb_config=self.nb_config, session_id=session_id, user=user)
                 return json(new_session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"))
             new_session = await patch_session(
                 request=request,

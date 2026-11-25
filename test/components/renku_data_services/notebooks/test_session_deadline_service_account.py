@@ -101,7 +101,9 @@ class FakeK8sV2Client:
         return SimpleNamespace(id="default", namespace="default")
 
 
-def make_client(session: AmaltheaSessionV1Alpha1 | None) -> tuple[SanicReusableASGITestClient, NotebooksNewBP, FakeK8sV2Client]:
+def make_client(
+    session: AmaltheaSessionV1Alpha1 | None,
+) -> tuple[SanicReusableASGITestClient, NotebooksNewBP, FakeK8sV2Client]:
     k8s = FakeK8sV2Client(session)
     mocks = {
         field.name: AsyncMock()

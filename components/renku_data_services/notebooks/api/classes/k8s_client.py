@@ -284,7 +284,9 @@ class NotebookK8sClient(SecretClient):
 
         return self.__session_type.model_validate(session.manifest)
 
-    async def patch_session(self, session_name: str, safe_username: str | None, patch: K8sPatches) -> AmaltheaSessionV1Alpha1:
+    async def patch_session(
+        self, session_name: str, safe_username: str | None, patch: K8sPatches
+    ) -> AmaltheaSessionV1Alpha1:
         """Patch a session."""
         session = await self._get(session_name, self.__session_gvk, safe_username)
         if session is None:
