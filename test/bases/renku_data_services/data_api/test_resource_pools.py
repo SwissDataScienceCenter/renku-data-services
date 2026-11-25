@@ -18,16 +18,6 @@ from test.components.renku_data_services.resource_usage.helper import FakeMeteri
 from test.utils import KindCluster
 
 
-@pytest.fixture
-def fake_metering(app_manager_instance: DependencyManager, monkeypatch: pytest.MonkeyPatch) -> FakeMetering:
-    """Replace the metering service (OpenMeter) with an in-memory fake."""
-    metering = FakeMetering()
-    for service in (app_manager_instance.resource_usage_service, app_manager_instance.rp_repo.resource_usage_service):
-        assert service is not None
-        monkeypatch.setattr(service, "_metering_client", metering)
-    return metering
-
-
 async def _create_oauth_provider_and_pool(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
