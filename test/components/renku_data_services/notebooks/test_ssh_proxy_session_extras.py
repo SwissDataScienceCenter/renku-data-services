@@ -3,7 +3,6 @@
 from pathlib import PurePosixPath
 
 import pytest
-from renku_data_services.crc.models import ClusterSettings
 from ulid import ULID
 
 from renku_data_services.app_config.config import SshProxyConfig
