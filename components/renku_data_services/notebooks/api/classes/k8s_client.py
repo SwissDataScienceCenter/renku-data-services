@@ -238,7 +238,7 @@ class NotebookK8sClient(SecretClient):
             ),
         )
 
-    async def get_session(self, name: str, safe_username: str) -> AmaltheaSessionV1Alpha1 | None:
+    async def get_session(self, name: str, safe_username: str | None) -> AmaltheaSessionV1Alpha1 | None:
         """Get a specific session, None is returned if the session does not exist."""
         session = await self._get(name, self.__session_gvk, safe_username)
 
@@ -284,7 +284,7 @@ class NotebookK8sClient(SecretClient):
 
         return self.__session_type.model_validate(session.manifest)
 
-    async def patch_session(self, session_name: str, safe_username: str, patch: K8sPatches) -> AmaltheaSessionV1Alpha1:
+    async def patch_session(self, session_name: str, safe_username: str | None, patch: K8sPatches) -> AmaltheaSessionV1Alpha1:
         """Patch a session."""
         session = await self._get(session_name, self.__session_gvk, safe_username)
         if session is None:

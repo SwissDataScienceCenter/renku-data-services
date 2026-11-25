@@ -25,6 +25,7 @@ from renku_data_services.data_connectors.db import (
 )
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
+from renku_data_services.notebooks.constants import SSH_PROXY_ROLE
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.core_sessions import (
@@ -147,8 +148,9 @@ class NotebooksNewBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
-            session = await self.nb_config.k8s_v2_client.get_session(session_id, user.id)
-            if session is None:
+            as_proxy = SSH_PROXY_ROLE in user.roles
+            session = await self.nb_config.k8s_v2_client.get_session(session_id, None if as_proxy else user.id)
+            if session is None or (as_proxy and not session.likely_ssh()):
                 raise errors.MissingResourceError(
                     message=f"The session with ID {session_id} does not exist.", quiet=True
                 )
