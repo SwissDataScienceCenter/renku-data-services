@@ -259,6 +259,13 @@ def user_secrets_extras(
                     readOnly=False,
                 ),
             ],
+            securityContext={
+                "allowPrivilegeEscalation": False,
+                "runAsGroup": 1000,
+                "runAsUser": 1000,
+                "runAsNonRoot": True,
+                "capabilities": {"drop": ["ALL"]},
+            },
             resources={
                 "requests": {
                     "cpu": "50m",
