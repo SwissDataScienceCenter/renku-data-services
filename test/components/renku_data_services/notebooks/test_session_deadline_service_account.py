@@ -3,6 +3,7 @@
 import dataclasses
 import json
 import uuid
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -169,3 +170,64 @@ async def test_get_without_role_keeps_the_owner_filter(ssh_session):
         _, owner = await c.get(SESSION_URL, headers=user_headers())
     assert other.status_code == 404
     assert owner.status_code == 200
+
+
+async def test_patch_role_now_writes_only_last_interaction(ssh_session):
+    client, _, k8s = make_client(ssh_session)
+    async with client as c:
+        _, response = await c.patch(SESSION_URL, headers=role_headers(), json={"lastInteraction": "now"})
+
+    assert response.status_code == 200
+    assert len(k8s.patches) == 1
+    safe_username, patch = k8s.patches[0]
+    assert safe_username is None
+    assert set(patch) == {"spec"}
+    assert set(patch["spec"]) == {"culling"}
+    assert set(patch["spec"]["culling"]) == {"lastInteraction"}
+    written = datetime.fromisoformat(patch["spec"]["culling"]["lastInteraction"].replace("Z", "+00:00"))
+    assert abs((datetime.now(UTC) - written).total_seconds()) < 60
+
+
+async def test_patch_role_hibernate_is_403_and_writes_nothing(ssh_session):
+    client, _, k8s = make_client(ssh_session)
+    async with client as c:
+        _, response = await c.patch(SESSION_URL, headers=role_headers(), json={"state": "hibernated"})
+    assert response.status_code == 403
+    assert k8s.patches == []
+
+
+async def test_patch_role_explicit_timestamp_is_403(ssh_session):
+    """Backdating lastInteraction would hibernate the session, so only "now" is allowed."""
+    client, _, k8s = make_client(ssh_session)
+    async with client as c:
+        _, response = await c.patch(
+            SESSION_URL, headers=role_headers(), json={"lastInteraction": "2020-01-01T00:00:00Z"}
+        )
+    assert response.status_code == 403
+    assert k8s.patches == []
+
+
+async def test_patch_role_extra_field_is_403(ssh_session):
+    client, _, k8s = make_client(ssh_session)
+    async with client as c:
+        _, response = await c.patch(
+            SESSION_URL, headers=role_headers(), json={"lastInteraction": "now", "resource_class_id": 3}
+        )
+    assert response.status_code == 403
+    assert k8s.patches == []
+
+
+async def test_patch_role_non_ssh_session_is_404():
+    client, _, k8s = make_client(make_session(frontend_variant=FrontendVariant.vscodium))
+    async with client as c:
+        _, response = await c.patch(SESSION_URL, headers=role_headers(), json={"lastInteraction": "now"})
+    assert response.status_code == 404
+    assert k8s.patches == []
+
+
+async def test_patch_role_unknown_session_is_404():
+    client, _, k8s = make_client(None)
+    async with client as c:
+        _, response = await c.patch(MISSING_URL, headers=role_headers(), json={"lastInteraction": "now"})
+    assert response.status_code == 404
+    assert k8s.patches == []

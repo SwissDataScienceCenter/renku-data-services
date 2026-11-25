@@ -30,6 +30,7 @@ from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.core_sessions import (
     patch_session,
+    refresh_session_deadline,
     start_session,
     validate_session_post_request,
 )
@@ -181,6 +182,19 @@ class NotebooksNewBP(CustomBlueprint):
             session_id: str,
             body: apispec.SessionPatchRequest,
         ) -> HTTPResponse:
+            if SSH_PROXY_ROLE in user.roles:
+                # The role may only refresh the deadline, and only with "now": an explicit
+                # timestamp would let it backdate the session into hibernation. The exact-body
+                # comparison keeps any future SessionPatchRequest field fail-closed.
+                if (
+                    set(body.model_dump(exclude_none=True)) != {"lastInteraction"}
+                    or body.lastInteraction != apispec.CurrentTime.now
+                ):
+                    raise errors.ForbiddenError(message="The ssh-proxy role may only refresh the session deadline.")
+                new_session = await refresh_session_deadline(
+                    nb_config=self.nb_config, session_id=session_id, user=user
+                )
+                return json(new_session.as_apispec(self.ssh_proxy_config).model_dump(exclude_none=True, mode="json"))
             new_session = await patch_session(
                 request=request,
                 body=body,
