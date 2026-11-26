@@ -747,17 +747,26 @@ class StorageQuota(UnsavedStorageQuota):
 
     @property
     def storage_flavor_display_name(self) -> str:
-        """Display name of the used storage flavor."""
+        """Display name of the used storage flavor.
+
+        Note: this method allows converting `self` to an instance of apispec.StorageQuota.
+        """
         return self.storage_flavor.display_name
 
     @property
     def storage_flavor_min_size(self) -> int:
-        """Minimum size from the used storage flavor."""
+        """Minimum size from the used storage flavor.
+
+        Note: this method allows converting `self` to an instance of apispec.StorageQuota.
+        """
         return self.storage_flavor.min_size
 
     @property
     def storage_flavor_documentation(self) -> str | None:
-        """Minimum size from the used storage flavor."""
+        """Minimum size from the used storage flavor.
+
+        Note: this method allows converting `self` to an instance of apispec.StorageQuota.
+        """
         return self.storage_flavor.documentation
 
     @property

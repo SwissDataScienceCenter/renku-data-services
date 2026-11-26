@@ -390,7 +390,6 @@ class ResourcePoolORM(BaseORM):
             "cpu_limit_factor IS NULL OR cpu_limit_factor >= 1.0",
             name="chk_cpu_limit_factor_gte_1",
         ),
-        # TODO: storage_config constraint
     )
     name: Mapped[str] = mapped_column(String(40), index=True)
     quota: Mapped[str | None] = mapped_column(String(63), index=True, default=None)
@@ -500,9 +499,6 @@ class ResourcePoolORM(BaseORM):
             key=lambda c: (c.gpu, c.cpu, c.memory, c.max_storage, c.name, c.id),
         )
 
-        # storage_config = self._dump_storage_config()
-        # logger.info(f"[STORAGE] rp_id = {self.id}, config = {storage_config}")
-
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -531,19 +527,6 @@ class ResourcePoolORM(BaseORM):
         return models.RemoteConfigurationFirecrest.from_dict(
             {**self.remote_json, "provider_id": self.remote_provider_id}
         )
-
-    # def _dump_storage_config(self) -> models.ResourcePoolStorageConfig:
-    #     """Create a ResourcePoolStorageConfig model from the corresponding columns of the ORM object."""
-    #     if self.storage_class_id is None or self.storage_class is None or self.storage_config is None:
-    #         return models.ResourcePoolStorageConfigDisabled()
-    #     return models.ResourcePoolStorageConfigEnabled(
-    #         storage_class_name=self.storage_class_id,
-    #         storage_display_name=self.storage_class.display_name,
-    #         storage_min_size_bytes=self.storage_class.min_size,
-    #         storage_documentation=self.storage_class.documentation,
-    #         storage_total_size_bytes=self.storage_config.total_size,
-    #         storage_max_size_bytes=self.storage_config.max_size,
-    #     )
 
     def get_cluster_id(self) -> ClusterId:
         """Get the ID of the cluster the resource pool refers to."""
