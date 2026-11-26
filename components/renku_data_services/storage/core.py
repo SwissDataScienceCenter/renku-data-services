@@ -7,6 +7,7 @@ from pathlib import PurePosixPath
 from ulid import ULID
 
 from renku_data_services import errors
+from renku_data_services.base_models import RESET, ResetType
 from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.storage import apispec, models
 
@@ -64,4 +65,25 @@ def validate_project_storage_v2_patch(body: apispec.ProjectStoragePatch) -> mode
     return models.ProjectStorageV2Patch(
         requested_size_bytes=requested_size,
         mount_path=PurePosixPath(body.mount_path) if body.mount_path else None,
+    )
+
+
+def validate_project_storage_v2_admin_patch(
+    body: apispec.ProjectStorageAdminPatchV2,
+) -> models.ProjectStorageV2AdminPatch:
+    """Validate a patch of a project storage (unsafe, admin-only)."""
+    project_id = ULID.from_str(body.project_id) if body.project_id else None
+    storage_quota_id = ULID.from_str(body.storage_quota_id) if body.storage_quota_id else None
+    k8s_pvc_name: str | ResetType | None
+    match body.k8s_pvc_name:
+        case None:
+            k8s_pvc_name = None
+        case "":
+            k8s_pvc_name = RESET
+        case _:
+            k8s_pvc_name = body.k8s_pvc_name
+    return models.ProjectStorageV2AdminPatch(
+        project_id=project_id,
+        storage_quota_id=storage_quota_id,
+        k8s_pvc_name=k8s_pvc_name,
     )

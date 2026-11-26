@@ -8,6 +8,7 @@ from pathlib import PurePosixPath
 
 from ulid import ULID
 
+from renku_data_services.base_models import ResetType
 from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import (
     ProjectPath,
@@ -198,3 +199,12 @@ class ProjectStorageV2Patch:
 
     requested_size_bytes: ByteSize | None
     mount_path: PurePosixPath | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectStorageV2AdminPatch:
+    """Model for unsafe changes requested on a project storage."""
+
+    project_id: ULID | None
+    storage_quota_id: ULID | None
+    k8s_pvc_name: str | ResetType | None
