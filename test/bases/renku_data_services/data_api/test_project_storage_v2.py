@@ -12,7 +12,6 @@ async def test_post_project_storage(
     regular_user: UserInfo,
     create_project,
     create_resource_pool,
-    create_storage_flavor,
     create_storage_quota,
 ) -> None:
     project = await create_project(sanic_client, name="Test Project")
@@ -31,7 +30,7 @@ async def test_post_project_storage(
 
     payload = {"project_id": project_id, "storage_quota_id": sq_id, "requested_size": 16, "mount_path": "store"}
 
-    _, res = await sanic_client.post("/api/data/storages", headers=admin_headers, json=payload)
+    _, res = await sanic_client.post("/api/data/storages", headers=user_headers, json=payload)
 
     assert res.status_code == 201, res.text
     assert res.json is not None
@@ -46,6 +45,104 @@ async def test_post_project_storage(
     assert result.get("k8s_pvc_status") is None
     assert isinstance(result.get("creation_date"), str) and result.get("creation_date") != ""
     assert isinstance(result.get("updated_at"), str) and result.get("updated_at") != ""
+
+
+@pytest.mark.asyncio
+async def test_post_project_storage_unauthenticated(
+    sanic_client: SanicASGITestClient,
+    create_project,
+    create_resource_pool,
+    create_storage_quota,
+) -> None:
+    project = await create_project(sanic_client, name="Test Project")
+    project_id = project["id"]
+
+    rp = await create_resource_pool(admin=True, public=True)
+    rp_id = rp["id"]
+
+    sq = await create_storage_quota(resource_pool_id=rp_id)
+    sq_id = sq["id"]
+
+    payload = {"project_id": project_id, "storage_quota_id": sq_id, "requested_size": 16, "mount_path": "store"}
+
+    _, res = await sanic_client.post("/api/data/storages", json=payload)
+
+    assert res.status_code == 401, res.text
+
+
+@pytest.mark.asyncio
+async def test_post_project_storage_forbidden(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    regular_user: UserInfo,
+    create_project,
+    create_resource_pool,
+    create_storage_quota,
+) -> None:
+    project = await create_project(
+        sanic_client, name="Test Project", admin=True, members=[{"id": regular_user.id, "role": "editor"}]
+    )
+    project_id = project["id"]
+
+    rp = await create_resource_pool(admin=True, public=True)
+    rp_id = rp["id"]
+
+    sq = await create_storage_quota(resource_pool_id=rp_id)
+    sq_id = sq["id"]
+
+    payload = {"project_id": project_id, "storage_quota_id": sq_id, "requested_size": 16, "mount_path": "store"}
+
+    _, res = await sanic_client.post("/api/data/storages", headers=user_headers, json=payload)
+
+    assert res.status_code == 403, res.text
+
+
+# @pytest.mark.asyncio
+# async def test_post_storage_duplicate_fails(
+#     sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
+# ) -> None:
+#     project = await create_project(sanic_client, "Test Project")
+#     namespace = f"{project['namespace']}/{project['slug']}"
+
+#     project_id = project["id"]
+#     payload = {"project_ref": {"id": project_id}, "max_size": 10}
+#     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+#     assert response.status == 201
+
+#     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
+#     _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+#     assert response.status_code == 201, response.text
+
+#     _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+
+#     assert response.status_code == 422, response.text
+
+
+# @pytest.mark.asyncio
+# @pytest.mark.parametrize("size", [0, -1, -20])
+# async def test_post_storage_negative_size_fails(
+#     sanic_client: SanicASGITestClient,
+#     create_project,
+#     admin_headers: dict[str, str],
+#     user_headers: dict[str, str],
+#     size: int,
+# ) -> None:
+#     project = await create_project(sanic_client, "Test Project")
+#     namespace = f"{project['namespace']}/{project['slug']}"
+#     project_id = project["id"]
+
+#     payload = {"project_ref": {"id": project_id}, "max_size": 10}
+#     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
+#     assert response.status_code == 201, response.text
+
+#     payload = {"namespace": namespace, "size": -1, "mount_path": "/data"}
+#     _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+
+#     assert response.status_code == 422, response.text
+#     assert response.json is not None
+#     assert response.json.get("error") is not None
+#     error = response.json["error"]
+#     assert "size: Input should be greater than or equal to 1" in error.get("message")
 
 
 @pytest.mark.asyncio

@@ -888,7 +888,7 @@ def create_project_storage(
             )
             sq = await create_storage_quota(resource_pool_id=rp["id"])
             payload["storage_quota_id"] = sq["id"]
-        _, res = await sanic_client.post("/api/data/storages", headers=admin_headers, json=payload)
+        _, res = await sanic_client.post("/api/data/storages", headers=user_headers, json=payload)
         assert res.status_code == 201, res.text
         return res.json
 
