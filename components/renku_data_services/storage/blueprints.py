@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from sanic import Request, empty
 from sanic.response import HTTPResponse, JSONResponse
@@ -27,6 +28,9 @@ from renku_data_services.storage.core import (
 )
 from renku_data_services.storage.db import ProjectStorageV2Repository
 from renku_data_services.storage.rclone import RCloneValidator
+
+if TYPE_CHECKING:
+    from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 
 
 @dataclass(kw_only=True)
@@ -96,6 +100,7 @@ class StorageSchemaBP(CustomBlueprint):
 class ProjectStorageV2BP(CustomBlueprint):
     """Handlers for project storages v2."""
 
+    k8s_client: NotebookK8sClient
     project_storage_v2_repo: ProjectStorageV2Repository
     authenticator: base_models.Authenticator
     session_maker: Callable[..., AsyncSession]
@@ -176,7 +181,7 @@ class ProjectStorageV2BP(CustomBlueprint):
         ) -> HTTPResponse:
             async with self.session_maker() as session, session.begin():
                 await self.project_storage_v2_repo.delete_project_storage(
-                    session=session, user=user, storage_id=storage_id
+                    k8s_client=self.k8s_client, session=session, user=user, storage_id=storage_id
                 )
             return HTTPResponse(status=204)
 
