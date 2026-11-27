@@ -97,25 +97,37 @@ async def test_post_project_storage_forbidden(
     assert res.status_code == 403, res.text
 
 
-# @pytest.mark.asyncio
-# async def test_post_storage_duplicate_fails(
-#     sanic_client: SanicASGITestClient, create_project, user_headers: dict[str, str], admin_headers: dict[str, str]
-# ) -> None:
-#     project = await create_project(sanic_client, "Test Project")
-#     namespace = f"{project['namespace']}/{project['slug']}"
+@pytest.mark.asyncio
+async def test_post_project_storage_no_duplicates(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    regular_user: UserInfo,
+    create_project,
+    create_resource_pool,
+    create_storage_quota,
+) -> None:
+    project = await create_project(sanic_client, name="Test Project")
+    project_id = project["id"]
 
-#     project_id = project["id"]
-#     payload = {"project_ref": {"id": project_id}, "max_size": 10}
-#     _, response = await sanic_client.post("/api/data/storage/allow", headers=admin_headers, json=payload)
-#     assert response.status == 201
+    rp = await create_resource_pool(admin=True, public=False)
+    rp_id = rp["id"]
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp_id}/members",
+        headers=admin_headers,
+        json=[{"member_type": "user", "id": regular_user.id, "role": "viewer"}],
+    )
 
-#     payload = {"namespace": namespace, "size": 10, "mount_path": "/data"}
-#     _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
-#     assert response.status_code == 201, response.text
+    sq = await create_storage_quota(resource_pool_id=rp_id)
+    sq_id = sq["id"]
 
-#     _, response = await sanic_client.post("/api/data/storage", headers=user_headers, json=payload)
+    payload = {"project_id": project_id, "storage_quota_id": sq_id, "requested_size": 16, "mount_path": "store"}
+    _, res = await sanic_client.post("/api/data/storages", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
 
-#     assert response.status_code == 422, response.text
+    _, res = await sanic_client.post("/api/data/storages", headers=user_headers, json=payload)
+
+    assert res.status_code == 422, res.text
 
 
 # @pytest.mark.asyncio
