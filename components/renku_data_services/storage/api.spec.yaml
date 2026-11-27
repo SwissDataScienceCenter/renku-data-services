@@ -203,6 +203,8 @@ components:
       format: int64
       minimum: 0
       exclusiveMinimum: true
+      # Max value for a size in GiBi we can store in postgres
+      maximum: 8589934591
       description: Maximum size in GB
     RCloneConfig:
       type: object
