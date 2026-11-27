@@ -14,7 +14,12 @@ from sanic import Request
 from ulid import ULID
 
 from renku_data_services.app_config.config import InternalAuthenticationConfig
-from renku_data_services.base_models.core import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
+from renku_data_services.base_models.core import (
+    AnonymousAPIUser,
+    APIUser,
+    AuthenticatedAPIUserWithInternalToken,
+    Authenticator,
+)
 from renku_data_services.errors import errors
 
 if TYPE_CHECKING:
@@ -67,7 +72,9 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
             if str(token_type).lower() != "bearer":
                 raise errors.UnauthorizedError() from None
 
-            return AuthenticatedAPIUser(
+            scope = str(parsed.get("scope", ""))
+
+            return AuthenticatedAPIUserWithInternalToken(
                 is_admin=False,
                 id=id,
                 access_token=token,
@@ -77,6 +84,7 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
                 email=email,
                 access_token_expires_at=datetime.fromtimestamp(exp) if exp is not None else None,
                 roles=[],
+                internal_token_scope=scope,
             )
 
         # Try to get an anonymous user ID from headers

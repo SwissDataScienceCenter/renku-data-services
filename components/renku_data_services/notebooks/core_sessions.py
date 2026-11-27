@@ -386,7 +386,7 @@ async def patch_data_sources(
         except Exception as err:
             logger.warning(f"Error decoding 'configData' for data connector {str(dc_id)}, skipping! {err}")
             continue
-        internal_token_scope = f"session:{server_name}"
+        internal_token_scope = f"session:{server_name} api:integrations:tokens"
         new_config_data = await data_source_repo.handle_patching_configuration(
             request=request,
             user=user,
@@ -840,7 +840,7 @@ def get_remote_secret(
     remote_provider = next(filter(lambda p: p.id == remote_provider_id, git_providers), None)
     if not remote_provider:
         return None
-    internal_token_scope = f"session:{server_name}"
+    internal_token_scope = f"session:{server_name} api:integrations:tokens"
     internal_access_token = internal_token_mint.create_access_token(user=user, scope=internal_token_scope)
     internal_refresh_token = internal_token_mint.create_refresh_token(user=user, scope=internal_token_scope)
     secret_data = {

@@ -284,7 +284,7 @@ class DataSourceRepository:
         dcs: dict[str, RCloneStorage] = {}
         dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
         user_secret_key: str | None = None
-        internal_token_scope = f"{resource_type}:{base_name}"
+        internal_token_scope = f"{resource_type}:{base_name} api:integrations:tokens"
         async for dc in data_connectors_stream:
             configuration = await self.handle_configuration(
                 request=request,

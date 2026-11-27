@@ -67,6 +67,13 @@ class AuthenticatedAPIUser(APIUser):
 
 
 @dataclass(kw_only=True, frozen=True)
+class AuthenticatedAPIUserWithInternalToken(AuthenticatedAPIUser):
+    """The model for an authenticated user with an internal token."""
+
+    internal_token_scope: str
+
+
+@dataclass(kw_only=True, frozen=True)
 class AnonymousAPIUser(APIUser):
     """The model for an anonymous user of the API."""
 

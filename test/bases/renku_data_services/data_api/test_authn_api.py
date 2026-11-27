@@ -31,7 +31,9 @@ async def test_post_internal_token_valid_refresh_token(
         first_name=regular_user.first_name,
         last_name=regular_user.last_name,
     )
-    request_refresh_token = app_manager_instance.internal_token_mint.create_refresh_token(user=user, scope="test_scope")
+    request_refresh_token = app_manager_instance.internal_token_mint.create_refresh_token(
+        user=user, scope="test_scope session:valid"
+    )
     assert request_refresh_token != ""
 
     payload = {
@@ -61,7 +63,7 @@ async def test_post_internal_token_valid_refresh_token(
     assert result["refresh_token"] != ""
     assert isinstance(result.get("refresh_expires_in"), int)
     assert result["refresh_expires_in"] == 3600  # 3600 seconds = 1 hour
-    assert result.get("scope") == "test_scope"
+    assert result.get("scope") == "test_scope session:valid"
 
     # Check that the new access token is accepted by the internal authenticator
     new_access_token = result["access_token"]
