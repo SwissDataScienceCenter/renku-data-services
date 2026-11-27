@@ -241,4 +241,5 @@ class NotebooksConfig:
             session_storage_class=self.sessions.storage.pvs_storage_class,
             service_account_name=self.local_cluster_session_service_account,
             session_ingress_use_default_cluster_tls_cert=self.sessions.ingress.use_default_cluster_tls_cert,
+            session_http_proxy=self.sessions.http_proxy,
         )

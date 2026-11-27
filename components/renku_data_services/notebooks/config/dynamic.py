@@ -13,6 +13,7 @@ import yaml
 from kubernetes import client
 from kubernetes.client import ApiClient, V1Affinity, V1Toleration
 
+from renku_data_services.crc.models import SessionHTTPProxy
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.crs import Affinity, Toleration
 
@@ -381,33 +382,24 @@ class _SessionSshConfig:
         return output
 
 
-@dataclass(frozen=True)
-class _SessionProxyConfig:
-    """Outgoing HTTP proxy for sessions, passed to amalthea which adds it to every container of the session pod."""
-
-    http_proxy: str
-    https_proxy: str
-    no_proxy: str = ""
-
-    @classmethod
-    def from_env(cls) -> Self | None:
-        """Read the proxy configuration, returns None when no proxy is configured."""
-        http_proxy = os.environ.get("NB_SESSIONS__PROXY__HTTP_PROXY", "").strip()
-        https_proxy = os.environ.get("NB_SESSIONS__PROXY__HTTPS_PROXY", "").strip() or http_proxy
-        no_proxy = os.environ.get("NB_SESSIONS__PROXY__NO_PROXY", "").strip()
-        if not http_proxy:
-            if https_proxy or no_proxy:
-                raise errors.ConfigurationError(
-                    message="NB_SESSIONS__PROXY__HTTPS_PROXY or NB_SESSIONS__PROXY__NO_PROXY is set "
-                    "but NB_SESSIONS__PROXY__HTTP_PROXY is empty."
-                )
-            return None
-        for name, value in [("HTTP_PROXY", http_proxy), ("HTTPS_PROXY", https_proxy)]:
-            if not value.startswith(("http://", "https://")):
-                raise errors.ConfigurationError(
-                    message=f"NB_SESSIONS__PROXY__{name} must start with http:// or https://, got {value!r}."
-                )
-        return cls(http_proxy=http_proxy, https_proxy=https_proxy, no_proxy=no_proxy)
+def _session_http_proxy_from_env() -> SessionHTTPProxy | None:
+    """Read the outgoing HTTP proxy for sessions on the local cluster, returns None when no proxy is configured."""
+    http_proxy = os.environ.get("NB_SESSIONS__PROXY__HTTP_PROXY", "").strip()
+    https_proxy = os.environ.get("NB_SESSIONS__PROXY__HTTPS_PROXY", "").strip() or http_proxy
+    no_proxy = os.environ.get("NB_SESSIONS__PROXY__NO_PROXY", "").strip()
+    if not http_proxy:
+        if https_proxy or no_proxy:
+            raise errors.ConfigurationError(
+                message="NB_SESSIONS__PROXY__HTTPS_PROXY or NB_SESSIONS__PROXY__NO_PROXY is set "
+                "but NB_SESSIONS__PROXY__HTTP_PROXY is empty."
+            )
+        return None
+    for name, value in [("HTTP_PROXY", http_proxy), ("HTTPS_PROXY", https_proxy)]:
+        if not value.startswith(("http://", "https://")):
+            raise errors.ConfigurationError(
+                message=f"NB_SESSIONS__PROXY__{name} must start with http:// or https://, got {value!r}."
+            )
+    return SessionHTTPProxy(http_proxy=http_proxy, https_proxy=https_proxy, no_proxy=no_proxy)
 
 
 def _get_renku_url_fallback(ingress_config: _SessionIngress) -> str:
@@ -435,7 +427,7 @@ class _SessionConfig:
     node_selector: dict[str, str] = field(default_factory=dict)
     affinity: dict[str, Any] = field(default_factory=dict)
     tolerations: list[dict[str, str]] = field(default_factory=list)
-    proxy: _SessionProxyConfig | None = None
+    http_proxy: SessionHTTPProxy | None = None
     init_containers: list[str] = field(
         default_factory=lambda: [
             "init-certificates",
@@ -467,7 +459,7 @@ class _SessionConfig:
             affinity=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__AFFINITY", "{}"))),
             tolerations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__TOLERATIONS", "[]"))),
             renku_url=os.environ.get("RENKU_URL") or _get_renku_url_fallback(ingress),
-            proxy=_SessionProxyConfig.from_env(),
+            http_proxy=_session_http_proxy_from_env(),
         )
 
     @classmethod

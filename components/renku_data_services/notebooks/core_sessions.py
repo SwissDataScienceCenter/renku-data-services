@@ -1164,12 +1164,7 @@ async def start_session(
     )
 
     # Cluster settings (ingress, storage class, etc)
-    cluster_settings: ClusterSettings
-    try:
-        cluster_settings = await cluster_repo.select(cluster.id)
-    except errors.MissingResourceError:
-        # Fallback to global, main cluster parameters
-        cluster_settings = nb_config.local_cluster_settings()
+    cluster_settings = await _get_cluster_settings(nb_config, cluster_repo, cluster)
 
     ingress_config = SessionIngress(server_name=server_name, cluster_settings=cluster_settings)
 
@@ -1345,7 +1340,7 @@ async def start_session(
             extraVolumes=session_extras.volumes,
             culling=get_culling(user, resource_pool, nb_config, session_type),
             authentication=authentication,
-            proxy=_get_session_proxy(nb_config),
+            proxy=_get_session_proxy(cluster_settings),
             dataSources=session_extras.data_sources,
             tolerations=tolerations_from_resource_class(resource_class, nb_config.sessions.tolerations_model),
             affinity=node_affinity_from_resource_class(resource_class, nb_config.sessions.affinity_model),
@@ -1415,6 +1410,7 @@ async def patch_session(
     project_storage_repo: ProjectStorageRepository,
     authz: Authz,
     ssh_proxy_config: SshProxyConfig,
+    cluster_repo: ClusterRepository,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -1657,7 +1653,8 @@ async def patch_session(
             )
 
     # Construct session patch
-    patch.spec.proxy = _get_session_proxy(nb_config) or RESET
+    cluster_settings = await _get_cluster_settings(nb_config, cluster_repo, cluster)
+    patch.spec.proxy = _get_session_proxy(cluster_settings) or RESET
     patch.spec.extraContainers = _make_patch_spec_list(
         existing=session.spec.extraContainers or [], updated=session_extras.containers
     )
@@ -1686,12 +1683,23 @@ async def patch_session(
     return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch_serialized)
 
 
-def _get_session_proxy(nb_config: NotebooksConfig) -> Proxy | None:
-    """Return the outgoing HTTP proxy for sessions, if one is configured.
+async def _get_cluster_settings(
+    nb_config: NotebooksConfig, cluster_repo: ClusterRepository, cluster: ClusterConnection
+) -> ClusterSettings:
+    """Return the settings of the cluster, falling back to the local cluster settings."""
+    try:
+        return await cluster_repo.select(cluster.id)
+    except errors.MissingResourceError:
+        # Fallback to global, main cluster parameters
+        return nb_config.local_cluster_settings()
+
+
+def _get_session_proxy(cluster_settings: ClusterSettings) -> Proxy | None:
+    """Return the outgoing HTTP proxy for sessions on the cluster, if one is configured.
 
     All fields are always set so that a merge patch overwrites every value from a previous configuration.
     """
-    proxy_config = nb_config.sessions.proxy
+    proxy_config = cluster_settings.session_http_proxy
     if proxy_config is None:
         return None
     return Proxy(
