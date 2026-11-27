@@ -1418,6 +1418,18 @@ components:
         - target_port
         - username
         - public_host_key
+    SshSettingsPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        target_host:
+          type: string
+        target_port:
+          type: integer
+        username:
+          type: string
+        public_host_key:
+          type: string
     ClusterPatch:
       type: object
       additionalProperties: false
@@ -1448,6 +1460,8 @@ components:
           $ref: "#/components/schemas/K8sResourceNamePatch"
         session_ingress_use_default_cluster_tls_cert:
           type: boolean
+        ssh_settings:
+          $ref: "#/components/schemas/SshSettingsPatch"
     ClusterWithId:
       type: object
       additionalProperties: false
@@ -1480,6 +1494,8 @@ components:
           type: boolean
         ssh_public_key:
           type: string
+        ssh_settings:
+          $ref: "#/components/schemas/SshSettings"
       required:
         [
           "name",

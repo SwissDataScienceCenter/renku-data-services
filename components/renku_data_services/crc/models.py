@@ -361,6 +361,16 @@ class SessionProtocol(StrEnum):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class SshSettingsPatch:
+    """Model for patching ssh settings of a cluster."""
+
+    target_host: str | None
+    target_port: int | None
+    username: str | None
+    public_host_key: str | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class ClusterPatch:
     """K8s Cluster settings patch."""
 
@@ -376,6 +386,7 @@ class ClusterPatch:
     session_storage_class: str | None
     service_account_name: str | None
     session_ingress_use_default_cluster_tls_cert: bool | None = False
+    ssh_settings: SshSettingsPatch | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -406,6 +417,15 @@ class SshSettings:
             public_host_key=public_host_key,
             public_host_key_fingerprint=fp,
             public_auth_key_fingerprint=public_auth_key_fingerprint,
+        )
+
+    def to_settings_patch(self) -> SshSettingsPatch:
+        """Convert it into a patch instance."""
+        return SshSettingsPatch(
+            target_host=self.target_host,
+            target_port=self.target_port,
+            username=self.username,
+            public_host_key=self.public_host_key,
         )
 
 
@@ -452,6 +472,7 @@ class ClusterSettings:
             session_storage_class=self.session_storage_class,
             service_account_name=self.service_account_name,
             session_ingress_use_default_cluster_tls_cert=self.session_ingress_use_default_cluster_tls_cert,
+            ssh_settings=self.ssh_settings.to_settings_patch() if self.ssh_settings else None,
         )
 
     def get_storage_class(self) -> str | None:

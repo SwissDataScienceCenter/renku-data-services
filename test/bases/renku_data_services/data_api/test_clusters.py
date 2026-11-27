@@ -4,6 +4,8 @@ from typing import Any
 import pytest
 from sanic_testing.testing import SanicASGITestClient
 
+from test.utils import KindCluster
+
 cluster_payload = {
     "config_name": "a-filename_with.0.9_AND_UPPER_CASE.yaml",
     "name": "test-cluster-post",
@@ -211,6 +213,45 @@ async def test_clusters_patch(
     await _clusters_request(
         sanic_client, "PATCH", admin_headers, expected_status_code, auth, cluster_id, payload, post_payload
     )
+
+
+async def test_clusters_ssh_settings_patch(
+    cluster: KindCluster,
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    base_url = "/api/data/clusters"
+
+    create_payload = {
+        **cluster_payload,
+        "ssh_settings": {
+            "target_host": "test.host",
+            "target_port": 22,
+            "username": "renku",
+            "public_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILzy0yXZOU6JGhnzLJ1uR6CkStN0i+CX34Dw85uLQ5N7",
+        },
+    }
+    patch_payload = {
+        "ssh_settings": {
+            "target_port": 28,
+        }
+    }
+
+    _, res = await sanic_client.post(base_url, headers=admin_headers, json=create_payload)
+    assert res.status_code == 201, res.text
+    cluster_id = res.json["id"]
+
+    check_payload = deepcopy(create_payload)
+    check_payload["id"] = cluster_id
+    check_payload["ssh_settings"]["target_port"] = 28
+
+    url = f"{base_url}/{cluster_id}"
+
+    _, res = await sanic_client.patch(url=url, headers=admin_headers, json=patch_payload)
+
+    assert res.status_code == 201, res.text
+    if res.is_success:
+        assert res.json == check_payload, f"\nRESULT: {res.json}\nEXPECT: {check_payload}\n"
 
 
 @pytest.mark.parametrize(

@@ -720,6 +720,14 @@ def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
         session_storage_class=patch.session_storage_class,
         service_account_name=patch.service_account_name,
         session_ingress_use_default_cluster_tls_cert=patch.session_ingress_use_default_cluster_tls_cert,
+        ssh_settings=models.SshSettingsPatch(
+            target_host=patch.ssh_settings.target_host,
+            target_port=patch.ssh_settings.target_port,
+            username=patch.ssh_settings.username,
+            public_host_key=patch.ssh_settings.public_host_key,
+        )
+        if patch.ssh_settings
+        else None,
     )
 
 

@@ -1892,7 +1892,7 @@ class ClusterRepository:
     async def select_all(self, cluster_id: ULID | None = None) -> AsyncGenerator[SavedClusterSettings, Any]:
         """Get cluster configurations from the database."""
         async with self.session_maker() as session:
-            query = select(ClusterORM)
+            query = select(ClusterORM).join(ClusterORM.ssh_settings)
             if cluster_id is not None:
                 query = query.where(ClusterORM.id == cluster_id)
 
@@ -1937,9 +1937,26 @@ class ClusterRepository:
         """Updates a cluster configuration."""
 
         async with self.session_maker() as session, session.begin():
-            saved_cluster = (await session.scalars(select(ClusterORM).where(ClusterORM.id == cluster_id))).one_or_none()
+            saved_cluster = (
+                await session.scalars(
+                    select(ClusterORM).join(ClusterORM.ssh_settings).where(ClusterORM.id == cluster_id)
+                )
+            ).one_or_none()
             if saved_cluster is None:
                 raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
+
+            if cluster.ssh_settings:
+                patch = cluster.ssh_settings
+                if saved_cluster.ssh_settings is None:
+                    raise errors.MissingResourceError(message=f"Cluster ssh settings id='{cluster_id}' does not exist.")
+                if patch.target_host:
+                    saved_cluster.ssh_settings.target_host = patch.target_host
+                if patch.target_port:
+                    saved_cluster.ssh_settings.target_port = patch.target_port
+                if patch.username:
+                    saved_cluster.ssh_settings.username = patch.username
+                if patch.public_host_key:
+                    saved_cluster.ssh_settings.public_host_key = patch.public_host_key
 
             _new_session_protocol = cluster.session_protocol or saved_cluster.session_protocol
             if isinstance(_new_session_protocol, SessionProtocol):
@@ -1986,6 +2003,8 @@ class ClusterRepository:
                         setattr(saved_cluster, key, None)
                     case "session_tls_secret_name", ResetType.Reset:
                         setattr(saved_cluster, key, None)
+                    case "ssh_settings", _:
+                        pass
                     case _, None:
                         # Do not modify a value which has not been set in the patch
                         pass

@@ -158,6 +158,7 @@
         kind
         redocly
         yq-go
+        k3d
         (writeShellScriptBin "poetry" ''
           unset PYTHONPATH PYTHONHOME
           ${poetry}/bin/poetry "$@"
