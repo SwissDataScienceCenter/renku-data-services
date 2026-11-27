@@ -92,7 +92,9 @@ async def test_get_repository_with_provider(app_manager_instance: DependencyMana
 
     url = "https://github.com/SwissDataScienceCenter/renku"
     result = await repo.get_repository(url, user, None)
-    assert result.provider == ProviderData(id=provider.id, name=provider.display_name, url=provider.url)
+    assert result.provider == ProviderData(
+        id=provider.id, name=provider.display_name, url=provider.url, kind=ProviderKind.github
+    )
     assert result.connection is None
     assert result.error is None
     assert isinstance(result.metadata, Metadata)
