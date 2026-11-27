@@ -84,6 +84,25 @@ async def test_clusters_post(
     assert res.status_code == expected_status_code, res.text
 
 
+@pytest.mark.asyncio
+async def test_clusters_post_https_default_cluster_tls_cert(
+    sanic_client: SanicASGITestClient, admin_headers: dict[str, str]
+) -> None:
+    payload = {
+        **cluster_payload,
+        "name": "test-cluster-default-tls",
+        "session_protocol": "https",
+        "session_ingress_use_default_cluster_tls_cert": True,
+    }
+    payload.pop("session_tls_secret_name")
+
+    _, res = await sanic_client.post("/api/data/clusters/", headers=admin_headers, json=payload)
+
+    assert res.status_code == 201, res.text
+    assert res.json["session_ingress_use_default_cluster_tls_cert"] is True
+    assert res.json.get("session_tls_secret_name") is None
+
+
 @pytest.mark.parametrize(
     "expected_status_code,auth,cluster_id",
     [

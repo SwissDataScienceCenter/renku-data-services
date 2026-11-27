@@ -679,6 +679,7 @@ def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:
         session_tls_secret_name=body.session_tls_secret_name,
         session_storage_class=body.session_storage_class,
         service_account_name=body.service_account_name,
+        session_ingress_use_default_cluster_tls_cert=body.session_ingress_use_default_cluster_tls_cert,
     )
 
 

@@ -7,6 +7,7 @@ from hypothesis import strategies as st
 from renku_data_services.base_models import RESET
 from renku_data_services.crc import apispec, models
 from renku_data_services.crc.core import (
+    validate_cluster,
     validate_resource_class,
     validate_resource_class_patch_or_put,
     validate_resource_class_update,
@@ -517,3 +518,22 @@ def test_resource_class_models_have_no_kind_field():
     assert not hasattr(unsaved, "kind"), "UnsavedResourceClass should not have a kind field"
     assert not hasattr(patch, "kind"), "ResourceClassPatch should not have a kind field"
     assert not hasattr(patch_with_id, "kind"), "ResourceClassPatchWithId should not have a kind field"
+
+
+@pytest.mark.parametrize("use_default_cluster_tls_cert", [True, False])
+def test_validate_cluster_keeps_default_cluster_tls_cert(use_default_cluster_tls_cert: bool) -> None:
+    body = apispec.Cluster(
+        name="cluster",
+        config_name="cluster.yaml",
+        session_protocol=apispec.Protocol.https,
+        session_host="renku.example.ch",
+        session_port=443,
+        session_path="/sessions",
+        session_ingress_annotations={},
+        session_tls_secret_name=None if use_default_cluster_tls_cert else "tls-secret",
+        session_ingress_use_default_cluster_tls_cert=use_default_cluster_tls_cert,
+    )
+
+    cluster = validate_cluster(body)
+
+    assert cluster.session_ingress_use_default_cluster_tls_cert is use_default_cluster_tls_cert
