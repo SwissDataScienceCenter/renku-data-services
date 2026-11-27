@@ -195,6 +195,47 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - project_storage
+  /storages/{storage_id}/admin:
+    parameters:
+      - in: path
+        name: storage_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    patch:
+      summary: Update a project storage with an unsafe operation
+      description: |
+        Admin only.
+
+        This endpoint allows admin to perform unsafe operations on project storages:
+        - Update `project_id`, i.e. move the storage to another project
+        - Update `storage_quota_id`, i.e. move the storage to another quota
+        - Update `k8s_pvc_name`, i.e. link the storage to an existing PVC
+      parameters:
+        - $ref: "#/components/parameters/If-Match"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectStorageAdminPatchV2"
+      responses:
+        "200":
+          description: The updated project storage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStorage"
+        "404":
+          description: The project storage does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - project_storage
 
 components:
   schemas:
@@ -422,6 +463,16 @@ components:
         requested_size:
           $ref: "#/components/schemas/MaxStorageSize"
         mount_path:
+          type: string
+    ProjectStorageAdminPatchV2:
+      type: object
+      additionalProperties: false
+      properties:
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        storage_quota_id:
+          $ref: "#/components/schemas/Ulid"
+        k8s_pvc_name:
           type: string
     ProjectStoragesGetQuery:
       description: Query parameters for filtering project storages

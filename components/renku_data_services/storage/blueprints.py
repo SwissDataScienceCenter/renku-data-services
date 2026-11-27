@@ -13,6 +13,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import (
     authenticate,
+    only_admins,
     only_authenticated,
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -23,6 +24,7 @@ from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClie
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage import apispec
 from renku_data_services.storage.core import (
+    validate_project_storage_v2_admin_patch,
     validate_project_storage_v2_patch,
     validate_unsaved_project_storage_v2,
 )
@@ -188,3 +190,31 @@ class ProjectStorageV2BP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/storages/<storage_id:ulid>", ["DELETE"], _delete
+
+    def admin_patch(self) -> BlueprintFactoryResponse:
+        """Update a project storage with an unsafe operation."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @if_match_required
+        @validate(json=apispec.ProjectStorageAdminPatchV2)
+        async def _admin_patch(
+            _: Request,
+            user: base_models.APIUser,
+            storage_id: ULID,
+            body: apispec.ProjectStorageAdminPatchV2,
+            etag: str,
+        ) -> HTTPResponse:
+            patch = validate_project_storage_v2_admin_patch(body=body)
+            async with self.session_maker() as session, session.begin():
+                storage = await self.project_storage_v2_repo.update_project_storage(
+                    k8s_client=self.k8s_client,
+                    session=session,
+                    user=user,
+                    storage_id=storage_id,
+                    patch=patch,
+                    etag=etag,
+                )
+            return validated_json(apispec.ProjectStorage, storage)
+
+        return "/storages/<storage_id:ulid>/admin", ["PATCH"], _admin_patch
