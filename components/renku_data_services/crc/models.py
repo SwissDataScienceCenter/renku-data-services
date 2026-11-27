@@ -378,6 +378,18 @@ class ClusterPatch:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class SessionHTTPProxy:
+    """Outgoing HTTP proxy for the sessions of a cluster.
+
+    Amalthea adds it as HTTP_PROXY, HTTPS_PROXY and NO_PROXY to every container of the session pod.
+    """
+
+    http_proxy: str
+    https_proxy: str
+    no_proxy: str = ""
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class ClusterSettings:
     """K8s Cluster settings."""
 
@@ -393,6 +405,8 @@ class ClusterSettings:
     session_storage_class: str | None
     service_account_name: str | None = None
     session_ingress_use_default_cluster_tls_cert: bool = False
+    session_http_proxy: SessionHTTPProxy | None = None
+    """Outgoing HTTP proxy for sessions. Only set for the local cluster for now, it is not saved in the database."""
 
     def to_cluster_patch(self) -> ClusterPatch:
         """Convert to ClusterPatch."""

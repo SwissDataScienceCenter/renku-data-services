@@ -3458,6 +3458,26 @@ class Location(Enum):
     remote = "remote"
 
 
+class Proxy(BaseCRD):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    httpProxy: str = Field(
+        ...,
+        description="The proxy URL used for http:// requests, e.g. http://proxy.example.com:3128.",
+        pattern="^https?://",
+    )
+    httpsProxy: Optional[str] = Field(
+        default=None,
+        description="The proxy URL used for https:// requests. Defaults to httpProxy when empty.",
+        pattern="^https?://",
+    )
+    noProxy: Optional[str] = Field(
+        default=None,
+        description="Comma separated list of hosts, domain suffixes and IP addresses that bypass the proxy.",
+    )
+
+
 class ReconcileStrategy(Enum):
     never = "never"
     always = "always"
@@ -3836,6 +3856,10 @@ class Spec(BaseCRD):
     priorityClassName: Optional[str] = Field(
         default=None,
         description="The name of the priority class assigned to the session Pod.",
+    )
+    proxy: Optional[Proxy] = Field(
+        default=None,
+        description="Outgoing HTTP proxy for the session. When set, HTTP_PROXY, HTTPS_PROXY and NO_PROXY\n(in upper and lower case) are added to every container and init container of the session pod,\nincluding the extra containers and init containers from this spec. A container that already\ndefines one of these variables keeps its own value for that variable.",
     )
     reconcileStrategy: ReconcileStrategy = Field(
         default="always",

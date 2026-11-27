@@ -38,6 +38,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     PodAntiAffinity,
     Preference,
     PreferredDuringSchedulingIgnoredDuringExecutionItem,
+    Proxy,
     ReconcileStrategy,
     RemoteSecretRef,
     RequiredDuringSchedulingIgnoredDuringExecution,
@@ -570,6 +571,7 @@ class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     template: TemplatePatch | ResetType | None = None
     ingress: Ingress | ResetType | None = None
     authentication: Authentication | ResetType | None = None
+    proxy: Proxy | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):
