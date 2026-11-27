@@ -1078,8 +1078,9 @@ async def start_session(
         resource_class = resource_pool.get_resource_class(resource_class_id)
         if not resource_class or not resource_class.id:
             raise errors.MissingResourceError(message=f"The resource class with ID {resource_class_id} does not exist.")
-    await nb_config.crc_validator.validate_class_storage(user, resource_class.id, launch_request.disk_storage)
-    disk_storage = launch_request.disk_storage or resource_class.default_storage
+    # Determine disk storage: the disk storage can be overwritten at the user's request
+    disk_storage = launch_request.disk_storage or launcher.disk_storage or resource_class.default_storage
+    await nb_config.crc_validator.validate_class_storage(user, resource_class.id, disk_storage)
 
     # NOTE: Refuse to start if the user is over quota and the resource class enforces it
     if user.id and resource_pool.id and resource_class.quota_enforced:
