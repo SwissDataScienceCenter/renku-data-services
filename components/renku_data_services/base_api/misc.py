@@ -20,6 +20,7 @@ class MiscBP(CustomBlueprint):
 
     apispec: dict[str, Any]
     version: str
+    apispec_v1: dict[str, Any] | None = None
 
     def get_apispec(self) -> BlueprintFactoryResponse:
         """Servers the OpenAPI specification."""
@@ -28,6 +29,14 @@ class MiscBP(CustomBlueprint):
             return json(self.apispec)
 
         return "/spec.json", ["GET"], _get_apispec
+
+    def get_apispec_v1(self) -> BlueprintFactoryResponse:
+        """Serves the v1 OpenAPI specification."""
+
+        async def _get_apispec_v1(_: Request) -> JSONResponse:
+            return json(self.apispec_v1 or {})
+
+        return "/v1/spec.json", ["GET"], _get_apispec_v1
 
     def get_error(self) -> BlueprintFactoryResponse:
         """Returns a sample error response."""

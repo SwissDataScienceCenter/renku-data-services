@@ -4,7 +4,7 @@ info:
   description: |
     Service that allows creating, updating, deleting, and managing Renku native projects.
     All errors have the same format as the schema called ErrorResponse.
-  version: v1
+  version: latest
 servers:
   - url: /api/data
 paths:
@@ -420,7 +420,7 @@ paths:
             $ref: "#/components/schemas/Ulid"
         - in: path
           name: member_id
-          description: This is user's KeyCloak ID
+          description: This is user's Keycloak ID
           required: true
           schema:
             $ref: "#/components/schemas/UserId"
@@ -748,7 +748,7 @@ components:
           $ref: "#/components/schemas/ProjectDocumentation"
         template_id:
           description:
-            template_id is set when copying a project from a template project and it cannot be modified.
+            template_id is set when copying a project from a template project, and it cannot be modified.
             This field can be either null or an empty string; a null value won't change it while an empty
             string value will delete it, meaning that the project is unlinked from its template
           type: string

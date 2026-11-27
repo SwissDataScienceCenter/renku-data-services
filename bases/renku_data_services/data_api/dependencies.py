@@ -6,7 +6,7 @@ import functools
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from yaml import safe_load
 
@@ -17,6 +17,7 @@ import renku_data_services.crc
 import renku_data_services.data_connectors
 import renku_data_services.notifications
 import renku_data_services.platform
+import renku_data_services.project.v1
 import renku_data_services.renku_apps
 import renku_data_services.repositories
 import renku_data_services.search
@@ -203,6 +204,7 @@ class DependencyManager:
     project_storage_repo: ProjectStorageRepository
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
+    spec_v1: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
     default_resource_pool_file: str | None = None
     default_resource_pool: crc_models.UnsavedResourcePool = default_resource_pool
@@ -249,10 +251,24 @@ class DependencyManager:
 
                 api_specs.append(yaml_content)
 
-        return merge_api_specs(*api_specs)
+        merged_spec = merge_api_specs(*api_specs)
+        # NOTE: The merged spec is for the `latest` version. Other versions (`v1`, `v2`, ...) have their own spec files
+        merged_spec["info"]["version"] = "latest"
+        return merged_spec
+
+    @staticmethod
+    @functools.cache
+    def load_apispec_v1() -> dict[str, Any]:
+        """Load v1 apispec with caching."""
+        # TODO: Change this to load all v1 spec files from all blueprints
+        # TODO: Make this more general to load all versions of the API spec files
+        spec_file = Path(renku_data_services.project.v1.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file) as f:
+            return cast(dict[str, Any], safe_load(f))
 
     def __post_init__(self) -> None:
         self.spec = self.load_apispec()
+        self.spec_v1 = self.load_apispec_v1()
 
     @classmethod
     def from_env(cls) -> DependencyManager:
