@@ -1,7 +1,3 @@
-ARG RCLONE_IMAGE_REPOSITORY="ghcr.io/swissdatasciencecenter/rclone"
-ARG RCLONE_IMAGE_TAG="sha-308067c"
-FROM ${RCLONE_IMAGE_REPOSITORY}:${RCLONE_IMAGE_TAG} AS rclone
-
 FROM python:3.13-bookworm AS builder
 ARG DEV_BUILD=false
 ARG USER_UID=1000
@@ -9,7 +5,6 @@ ARG USER_GID=$USER_UID
 
 RUN groupadd --gid $USER_GID renku && \
     DEBIAN_FRONTEND=noninteractive adduser --gid $USER_GID --uid $USER_UID renku
-COPY --from=rclone --chown=root:root --chmod=755 /rclone /usr/bin/rclone
 USER $USER_UID:$USER_GID
 WORKDIR /app
 RUN python3 -m pip install --user pipx && \
@@ -45,7 +40,6 @@ ENV PROMETHEUS_MULTIPROC_DIR=/prometheus
 RUN mkdir -p /prometheus \
     && chown $USER_UID:0 /prometheus \
     && chmod 770 /prometheus
-COPY --from=builder /usr/bin/rclone /usr/bin
 USER $USER_UID:$USER_GID
 WORKDIR /app
 COPY --from=builder /app/env ./env
