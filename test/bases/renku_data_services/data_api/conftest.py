@@ -861,6 +861,40 @@ def create_storage_quota(
     return create_storage_quota_helper
 
 
+@pytest.fixture
+def create_project_storage(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    user_headers: dict[str, str],
+    regular_user: UserInfo,
+    create_resource_pool,
+    create_storage_quota,
+    create_project,
+):
+    """Fixture for creating a new project storage."""
+
+    async def create_project_storage_helper(**kwargs: dict[str, Any]) -> dict[str, Any]:
+        payload = {"requested_size": 16, "mount_path": "store"}
+        payload.update(kwargs.copy())
+        if payload.get("project_id") is None:
+            project = await create_project(sanic_client, name="Test Project")
+            payload["project_id"] = project["id"]
+        if payload.get("storage_quota_id") is None:
+            rp = await create_resource_pool(admin=True, public=False)
+            _, res = await sanic_client.post(
+                f"/api/data/resource_pools/{rp['id']}/members",
+                headers=admin_headers,
+                json=[{"member_type": "user", "id": regular_user.id, "role": "viewer"}],
+            )
+            sq = await create_storage_quota(resource_pool_id=rp["id"])
+            payload["storage_quota_id"] = sq["id"]
+        _, res = await sanic_client.post("/api/data/storages", headers=user_headers, json=payload)
+        assert res.status_code == 201, res.text
+        return res.json
+
+    return create_project_storage_helper
+
+
 @pytest_asyncio.fixture
 async def create_resource_pool(cluster, sanic_client, user_headers, admin_headers, valid_resource_pool_payload):
     async def create_resource_pool_helper(admin: bool = False, **payload) -> dict[str, Any]:
