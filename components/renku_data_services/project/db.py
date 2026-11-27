@@ -374,9 +374,13 @@ class ProjectRepository:
                 await self.apps_cleanup.delete_apps_for_project(project_id=project_id)
             project.visibility = visibility_orm
         if patch.repositories is not None:
-            project.repositories = [
-                schemas.ProjectRepositoryORM(url=r, project_id=project.id, project=project) for r in patch.repositories
-            ]
+            existing_by_url = {repo.url: repo for repo in project.repositories}
+            requested_urls = set(patch.repositories)
+            # Remove repositories no longer listed in patch.
+            project.repositories = [repo for repo in project.repositories if repo.url in requested_urls]
+            # Add new repositories.
+            existing_urls = set(existing_by_url)
+            project.repositories.extend(schemas.ProjectRepositoryORM(url=url) for url in requested_urls - existing_urls)
             # Trigger update for ``updated_at`` column
             await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
         if patch.description is not None:
