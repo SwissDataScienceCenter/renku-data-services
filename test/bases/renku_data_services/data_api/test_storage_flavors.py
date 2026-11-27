@@ -2,6 +2,7 @@ import pytest
 from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
+from renku_data_services.base_models.bytesize import MAX_GIBI_VALUE_INT64
 from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
@@ -28,6 +29,38 @@ async def test_post_storage_flavor(sanic_client: SanicASGITestClient, admin_head
     assert result.get("documentation") == "User docs."
     assert isinstance(result.get("creation_date"), str) and result.get("creation_date") != ""
     assert isinstance(result.get("updated_at"), str) and result.get("updated_at") != ""
+
+
+@pytest.mark.asyncio
+async def test_post_storage_flavor_min_size_overflow(
+    sanic_client: SanicASGITestClient, admin_headers: dict[str, str]
+) -> None:
+    payload = {
+        "k8s_storage_class_name": "some-storage-class",
+        "display_name": "A storage flavor",
+        "min_size": MAX_GIBI_VALUE_INT64,
+        "admin_documentation": "Admin docs.",
+        "documentation": "User docs.",
+    }
+
+    _, res = await sanic_client.post("/api/data/storage_flavors", headers=admin_headers, json=payload)
+
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    result = res.json
+    assert result.get("min_size") == MAX_GIBI_VALUE_INT64
+
+    payload = {
+        "k8s_storage_class_name": "some-storage-class",
+        "display_name": "A storage flavor",
+        "min_size": MAX_GIBI_VALUE_INT64 + 1,
+        "admin_documentation": "Admin docs.",
+        "documentation": "User docs.",
+    }
+
+    _, res = await sanic_client.post("/api/data/storage_flavors", headers=admin_headers, json=payload)
+
+    assert res.status_code == 422, res.text
 
 
 @pytest.mark.asyncio
