@@ -20,6 +20,7 @@ from renku_data_services.crc.blueprints import (
     ResourcePoolsBP,
     ResourcePoolUsersBP,
     StorageFlavorsBP,
+    StorageQuotasBP,
     UserResourcePoolsBP,
 )
 from renku_data_services.data_api.dependencies import DependencyManager
@@ -348,6 +349,13 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         session_maker=dm.config.db.async_session_maker,
     )
+    storage_quotas = StorageQuotasBP(
+        name="storage_quotas",
+        url_prefix=url_prefix,
+        storage_quota_repo=dm.storage_quota_repo,
+        authenticator=dm.authenticator,
+        session_maker=dm.config.db.async_session_maker,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -383,6 +391,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             internal_authentication.blueprint(),
             project_storage.blueprint(),
             storage_flavors.blueprint(),
+            storage_quotas.blueprint(),
         ]
     )
     if builds is not None:
