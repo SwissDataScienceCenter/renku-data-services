@@ -29,7 +29,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.connected_services import orm as cs_schemas
 from renku_data_services.crc import models
-from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
+from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol, SshSettings
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.resource_usage.model import Credit
@@ -280,6 +280,51 @@ class ResourceClassORM(BaseORM):
         )
 
 
+class ClusterSshSettingsORM(BaseORM):
+    """SSH proxy settings for a remote cluster."""
+
+    __tablename__ = "cluster_ssh_settings"
+
+    id: Mapped[ULID] = mapped_column(ForeignKey("clusters.id", ondelete="CASCADE"), primary_key=True, init=False)
+    target_host: Mapped[str] = mapped_column(String())
+    """The target host to direct the ssh proxy to."""
+
+    target_port: Mapped[int] = mapped_column(Integer)
+
+    public_host_key: Mapped[str] = mapped_column(String())
+    """The public part of the host key the remote target uses to identify itself."""
+
+    public_host_key_fingerprint: Mapped[str] = mapped_column(String(), index=True, unique=True)
+
+    username: Mapped[str] = mapped_column(String())
+
+    public_auth_key_fingerprint: Mapped[str] = mapped_column(String(), index=True, unique=True)
+    """The public part of the key used to authenticate to the remote proxy."""
+
+    def dump(self) -> SshSettings:
+        """Dumps the orm data into a model class."""
+        return SshSettings(
+            target_host=self.target_host,
+            target_port=self.target_port,
+            username=self.username,
+            public_host_key=self.public_host_key,
+            public_host_key_fingerprint=self.public_host_key_fingerprint,
+            public_auth_key_fingerprint=self.public_auth_key_fingerprint,
+        )
+
+    @classmethod
+    def load(cls, m: models.SshSettings) -> ClusterSshSettingsORM:
+        """Loads the model data into the ORM class."""
+        return ClusterSshSettingsORM(
+            target_host=m.target_host,
+            target_port=m.target_port,
+            username=m.username,
+            public_host_key=m.public_host_key,
+            public_host_key_fingerprint=m.public_host_key_fingerprint,
+            public_auth_key_fingerprint=m.public_auth_key_fingerprint,
+        )
+
+
 class ClusterORM(BaseORM):
     """Cluster definition."""
 
@@ -311,6 +356,9 @@ class ClusterORM(BaseORM):
     session_ingress_use_default_cluster_tls_cert: Mapped[bool] = mapped_column(
         default=False, server_default=expression.false()
     )
+    ssh_settings: Mapped[ClusterSshSettingsORM | None] = relationship(
+        lazy="joined", cascade="all, delete-orphan", passive_deletes=True, default=None
+    )
 
     def dump(self) -> SavedClusterSettings:
         """Create a cluster model from the ORM object."""
@@ -328,6 +376,7 @@ class ClusterORM(BaseORM):
             service_account_name=self.service_account_name,
             id=ClusterId(self.id),
             session_ingress_use_default_cluster_tls_cert=self.session_ingress_use_default_cluster_tls_cert,
+            ssh_settings=self.ssh_settings.dump() if self.ssh_settings else None,
         )
 
     @classmethod
@@ -352,6 +401,7 @@ class ClusterORM(BaseORM):
             session_tls_secret_name=cluster.session_tls_secret_name,
             session_storage_class=cluster.session_storage_class,
             session_ingress_use_default_cluster_tls_cert=cluster.session_ingress_use_default_cluster_tls_cert,
+            ssh_settings=ClusterSshSettingsORM.load(cluster.ssh_settings) if cluster.ssh_settings else None,
         )
 
 

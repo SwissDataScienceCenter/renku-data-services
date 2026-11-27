@@ -679,6 +679,15 @@ def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:
         session_tls_secret_name=body.session_tls_secret_name,
         session_storage_class=body.session_storage_class,
         service_account_name=body.service_account_name,
+        ssh_settings=models.SshSettings.create(
+            target_host=body.ssh_settings.target_host,
+            target_port=body.ssh_settings.target_port,
+            username=body.ssh_settings.username,
+            public_host_key=body.ssh_settings.public_host_key,
+            public_auth_key_fingerprint="",
+        )
+        if body.ssh_settings
+        else None,
     )
 
 
@@ -711,6 +720,14 @@ def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
         session_storage_class=patch.session_storage_class,
         service_account_name=patch.service_account_name,
         session_ingress_use_default_cluster_tls_cert=patch.session_ingress_use_default_cluster_tls_cert,
+        ssh_settings=models.SshSettingsPatch(
+            target_host=patch.ssh_settings.target_host,
+            target_port=patch.ssh_settings.target_port,
+            username=patch.ssh_settings.username,
+            public_host_key=patch.ssh_settings.public_host_key,
+        )
+        if patch.ssh_settings
+        else None,
     )
 
 

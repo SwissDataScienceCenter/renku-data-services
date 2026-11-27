@@ -33,7 +33,7 @@ class TestSshProxySessionExtras:
             session_host_key_secret_name="host-secret",
             proxy_auth_key_secret_name="auth-secret",
         )
-        extras = ssh_proxy_session_extras(ssh, PurePosixPath("/workspace"))
+        extras = ssh_proxy_session_extras(ssh, PurePosixPath("/workspace"), None)
 
         assert [v.name for v in extras.volumes] == ["ssh-session-host-key", "ssh-proxy-session-auth-key"]
         host_volume, auth_volume = extras.volumes
@@ -62,7 +62,7 @@ class TestSshProxySessionExtras:
             proxy_auth_key_secret_name=None,
         )
         with pytest.raises(ProgrammingError):
-            ssh_proxy_session_extras(ssh_config, PurePosixPath("/workspace"))
+            ssh_proxy_session_extras(ssh_config, PurePosixPath("/workspace"), None)
 
     def test_no_mounts_when_disabled(self) -> None:
         """Nothing is mounted when the chart has not provided secret names."""
@@ -73,7 +73,7 @@ class TestSshProxySessionExtras:
             session_host_key_secret_name="host-secret",
             proxy_auth_key_secret_name="auth-secret",
         )
-        extras = ssh_proxy_session_extras(ssh_config, PurePosixPath("/workspace"))
+        extras = ssh_proxy_session_extras(ssh_config, PurePosixPath("/workspace"), None)
         assert extras.volumes == []
         assert extras.volume_mounts == []
 

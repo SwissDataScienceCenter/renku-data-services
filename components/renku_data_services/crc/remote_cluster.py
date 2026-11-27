@@ -1,0 +1,174 @@
+"""Setting up remote clusters."""
+
+from typing import Final
+
+from box import Box
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
+
+from renku_data_services.app_config import logging
+from renku_data_services.base_models import APIUser
+from renku_data_services.crc import models
+from renku_data_services.crc.db import ClusterRepository
+from renku_data_services.errors import errors
+from renku_data_services.k8s.clients import K8sClusterClientsPool
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
+from renku_data_services.k8s.models import K8sSecret
+from renku_data_services.users.core import fingerprint_ssh_public_key
+
+logger = logging.getLogger(__file__)
+
+auth_key_secret_name: Final[str] = "renku-ssh-identities"
+
+
+class RemoteClusterSetup:
+    """Registers remote clusters and prepares what is needed to connect to them, such as SSH keys."""
+
+    def __init__(self, repo: ClusterRepository, k8s_client: K8sClusterClientsPool) -> None:
+        self.__repo = repo
+        self.__k8s_client = k8s_client
+
+    async def setup_remote_cluster(
+        self, user: APIUser, model: models.ClusterSettings
+    ) -> tuple[models.ClusterSettings, models.SshKeyPair | None]:
+        """Store a new remote cluster and enable SSH access if it has SSH settings.
+
+        Returns the saved cluster and the generated SSH keypair, or
+        None when SSH is not configured.
+        """
+
+        logger.debug(f"Setting up remote cluster from settings: {model}")
+        if model.ssh_settings is None:
+            remote_cluster = await self.__repo.insert(user, model)
+            return (remote_cluster, None)
+
+        kpair = generate_ssh_keypair("main-renku")
+        pfp = fingerprint_ssh_public_key(kpair.public_part)
+        if pfp is None:
+            raise errors.ProgrammingError(message="Can't derive fingerprint from generated openssh key")
+
+        model = model.with_auth_key_fingerprint(pfp)
+        remote_cluster = await self.__repo.insert(user, model)
+        try:
+            await self.enable_ssh_remote_cluster(remote_cluster.id, kpair)
+        except Exception:
+            # Without the stored private key the cluster can't be used; remove it so the request can be retried
+            logger.error(f"Storing the ssh key for remote cluster {remote_cluster.id} failed, removing the cluster")
+            await self.__repo.delete(user, remote_cluster.id)
+            raise
+
+        return remote_cluster, kpair
+
+    async def delete_remote_cluster(self, user: APIUser, cluster_id: ClusterId) -> None:
+        """Delete a remote cluster and remove its ssh private key from the identities secret.
+
+        The key is removed before the cluster, so that if removing it
+        fails the cluster is still there and the request can be retried.
+        """
+        if not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        try:
+            cluster = await self.__repo.select(cluster_id)
+        except errors.MissingResourceError:
+            return
+
+        if cluster.ssh_settings is not None:
+            await self.__remove_auth_key(cluster_id)
+
+        await self.__repo.delete(user, cluster_id)
+
+    async def enable_ssh_remote_cluster(self, remote_cluster_id: ClusterId, kpair: models.SshKeyPair) -> None:
+        """Enable ssh for the remote cluster.
+
+        It generates a ssh keypair that will be used to connect to the
+        remote cluster's ssh service. The remote cluster needs to add the
+        public part to their authorized keys file.
+
+        The keypair is stored in the secret named by
+        `auth_key_secret_name` in the namespace of the
+        local (default) cluster. An existing secret is overwritten. The
+        generated keypair is returned so that the public part can be
+        handed to the remote cluster.
+        """
+        string_data = {
+            str(remote_cluster_id): kpair.private_part,
+        }
+        secret = await self.__identities_secret(string_data)
+
+        existing = await self.__k8s_client.get(secret)
+        if existing is None:
+            await self.__k8s_client.create(secret, refresh=False)
+        else:
+            # A merge patch on stringData replaces the keys in data
+            await self.__k8s_client.patch(secret, {"stringData": string_data})
+
+    async def __remove_auth_key(self, cluster_id: ClusterId) -> None:
+        """Remove the ssh private key of the given cluster from the identities secret."""
+        secret = await self.__identities_secret()
+        existing = await self.__k8s_client.get(secret)
+        if existing is None or str(cluster_id) not in existing.manifest.get("data", {}):
+            return
+        # A merge patch with a null value removes the key
+        await self.__k8s_client.patch(secret, {"data": {str(cluster_id): None}})
+
+    async def __identities_secret(self, string_data: dict[str, str] | None = None) -> K8sSecret:
+        """The secret in the local cluster holding one ssh private key per remote cluster id."""
+        cluster = await self.__k8s_client.cluster_by_id(DEFAULT_K8S_CLUSTER)
+        namespace = cluster.namespace
+        secret_name = auth_key_secret_name
+        return K8sSecret(
+            name=secret_name,
+            namespace=namespace,
+            cluster=cluster.id,
+            manifest=Box(
+                {
+                    "metadata": {"name": secret_name, "namespace": namespace},
+                    # Opaque: the ssh-auth type requires a single `ssh-privatekey` entry,
+                    # but this secret holds one private key per remote cluster id
+                    "type": "Opaque",
+                    "stringData": string_data or {},
+                }
+            ),
+        )
+
+
+def generate_ssh_keypair(comment: str | None = None) -> models.SshKeyPair:
+    """Return (private_key_openssh, public_key_openssh)."""
+    private_key = ed25519.Ed25519PrivateKey.generate()
+
+    private_openssh = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.OpenSSH,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+
+    public_openssh = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.OpenSSH,
+            format=serialization.PublicFormat.OpenSSH,
+        )
+        .decode()
+    )
+
+    if comment:
+        public_openssh = f"{public_openssh} {comment}"
+
+    return models.SshKeyPair(private_part=private_openssh, public_part=public_openssh)
+
+
+def public_key_from_private(private_openssh: str, password: bytes | None = None, comment: str | None = None) -> str:
+    """Derive the OpenSSH public key line from an OpenSSH private key."""
+    private_key = serialization.load_ssh_private_key(private_openssh.encode(), password=password)
+
+    public_openssh = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.OpenSSH,
+            format=serialization.PublicFormat.OpenSSH,
+        )
+        .decode()
+    )
+
+    return f"{public_openssh} {comment}" if comment else public_openssh

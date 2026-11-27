@@ -40,6 +40,7 @@ from renku_data_services.crc.db import (
     ResourceFlavorRepository,
     ResourcePoolRepository,
 )
+from renku_data_services.crc.remote_cluster import RemoteClusterSetup
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
@@ -91,6 +92,7 @@ from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsR
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
+from renku_data_services.ssh_proxy.core import SSHSessionAuthorize
 from renku_data_services.storage.db import ProjectStorageRepository
 from renku_data_services.storage.project_storage_k8s import ProjectStorageK8s
 from renku_data_services.storage.rclone import RCloneValidator
@@ -212,6 +214,7 @@ class TestDependencyManager(DependencyManager):
 
         job_client = DepositUploadJobClient(client)
         secret_client = K8sSecretClient(client)
+        remote_cluster_setup = RemoteClusterSetup(cluster_repo, client)
 
         shipwright_client = None
         gitrepositoriesrepository_class = GitRepositoriesRepository
@@ -332,6 +335,7 @@ class TestDependencyManager(DependencyManager):
             user_preferences_config=config.user_preferences,
         )
         ssh_key_repo = SSHKeyRepository(session_maker=config.db.async_session_maker)
+        ssh_authorize = SSHSessionAuthorize(ssh_key_repo, client, cluster_repo)
         low_level_user_secrets_repo = LowLevelUserSecretsRepo(
             session_maker=config.db.async_session_maker,
         )
@@ -459,6 +463,7 @@ class TestDependencyManager(DependencyManager):
             session_repo=session_repo,
             user_preferences_repo=user_preferences_repo,
             ssh_key_repo=ssh_key_repo,
+            ssh_authorize=ssh_authorize,
             kc_user_repo=kc_user_repo,
             user_secrets_repo=user_secrets_repo,
             connected_services_repo=connected_services_repo,
@@ -467,6 +472,7 @@ class TestDependencyManager(DependencyManager):
             data_connector_repo=data_connector_repo,
             data_connector_secret_repo=data_connector_secret_repo,
             cluster_repo=cluster_repo,
+            remote_cluster_setup=remote_cluster_setup,
             data_source_repo=data_source_repo,
             image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,
