@@ -14,7 +14,6 @@ from renku_data_services.resource_usage.model import (
     ResourceClassCost,
     ResourceUsageQuery,
 )
-from renku_data_services.resource_usage.orm import ResourcePoolLimits
 from test.components.renku_data_services.resource_usage.helper import assert_view_records, make_resources_request
 
 
@@ -68,22 +67,17 @@ async def test_resource_requests_limits(app_manager_instance: DependencyManager)
 
     (pool_id, _) = await create_resource_class(app_manager_instance)
 
-    limits = ResourcePoolLimits(pool_id, Credit.from_int(102), Credit.from_int(25))
-    await repo.set_resource_pool_limits(limits)
-    limits2 = await repo.find_resource_pool_limits(pool_id)
-    assert limits2 == limits
+    await repo.set_user_limits(pool_id, Credit.from_int(25))
+    user_limit = await repo.find_user_limits(pool_id)
+    assert user_limit is not None
+    assert user_limit == Credit.from_int(25)
 
-    limits = ResourcePoolLimits(pool_id, Credit.from_int(500), Credit.from_int(250))
-    await repo.set_resource_pool_limits(limits)
-    limits2 = await repo.find_resource_pool_limits(pool_id)
-    assert limits2 == limits
+    await repo.delete_user_limits(pool_id)
+    user_limit = await repo.find_user_limits(pool_id)
+    assert user_limit == Credit.unlimited()
 
-    await repo.delete_resource_pool_limits(pool_id)
-    limits3 = await repo.find_resource_pool_limits(pool_id)
-    assert limits3 == ResourcePoolLimits(pool_id, Credit.zero(), Credit.zero())
-
-    limits4 = await repo.find_resource_pool_limits(-1)
-    assert limits4 is None
+    user_limit = await repo.find_user_limits(-1)
+    assert user_limit is None
 
 
 @pytest.mark.asyncio
@@ -196,42 +190,6 @@ async def test_resource_request_query(app_manager_instance: DependencyManager) -
             },
         ],
     )
-
-
-@pytest.mark.asyncio
-async def test_resource_usage_current_week(app_manager_instance: DependencyManager) -> None:
-    run_migrations_for_app("common")
-    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
-    svc = app_manager_instance.resource_usage_service
-    (pool_id, class_id) = await create_resource_class(app_manager_instance)
-    await repo.set_resource_class_costs(ResourceClassCost(class_id, Credit.from_int(50)))
-    first_date = datetime(2026, 1, 21, 21, 55, 4, 0, tzinfo=UTC)
-    interval = timedelta(minutes=15)
-    await repo.insert_many(
-        [
-            make_resources_request(
-                date=first_date + i * interval,
-                interval=interval,
-                cpu_request=0.5,
-                memory_request="256Mi",
-                resource_class_id=class_id,
-                resource_pool_id=pool_id,
-            )
-            for i in range(0, 15)
-        ]
-    )
-    results = await svc.usage_of_running_week(pool_id, None, current_time=datetime(2026, 1, 23, 15, 20, 1, tzinfo=UTC))
-    assert results.runtime_hours == 3.75  # (15 * 15) / 60
-    assert results.cost == Credit.from_int(round(3.75 * 50))
-    assert results.entries == 2
-    assert results.first_capture == date(2026, 1, 21)
-    assert results.last_capture == date(2026, 1, 22)
-    assert not results.is_empty()
-
-    results = await svc.usage_of_running_week(pool_id, None, current_time=datetime(2025, 5, 25, 13, 34, 5, tzinfo=UTC))
-    assert results.is_empty()
-    assert results.entries == 0
-    assert results.cost == Credit.zero()
 
 
 @pytest.mark.asyncio
