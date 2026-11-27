@@ -39,6 +39,7 @@ from renku_data_services.crc.db import (
     QuotaRepository,
     ResourceFlavorRepository,
     ResourcePoolRepository,
+    StorageFlavorRepository,
 )
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
@@ -433,6 +434,7 @@ class TestDependencyManager(DependencyManager):
             )
             project_repo.apps_cleanup = apps_repo
             session_repo.apps_cleanup = apps_repo
+        storage_flavor_repo = StorageFlavorRepository()
         return cls(
             config=config,
             k8s_client=client,
@@ -493,6 +495,7 @@ class TestDependencyManager(DependencyManager):
             internal_scope_verifier=internal_scope_verifier,
             project_storage_k8s=project_storage_k8s,
             project_storage_repo=project_storage_repo,
+            storage_flavor_repo=storage_flavor_repo,
         )
 
     def __post_init__(self) -> None:

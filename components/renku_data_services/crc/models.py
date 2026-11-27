@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from math import ceil
 from typing import Any, Final, Optional, Protocol, Self
@@ -14,9 +15,11 @@ from ulid import ULID
 from renku_data_services import errors
 from renku_data_services.authz.models import MembershipChange
 from renku_data_services.base_models import ResetType
+from renku_data_services.base_models.bytesize import ByteSize
 from renku_data_services.base_models.core import ResourceType
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import K8sPatch, K8sResourceQuota
+from renku_data_services.utils.etag import compute_etag_from_timestamp
 
 
 class ResourcesProtocol(Protocol):
@@ -675,3 +678,46 @@ class ResourcePoolMemberIdentifier:
         if resource_type == ResourceType.project:
             return cls(member_id=str(resource_id), member_type=MemberType.PROJECT)
         return cls(member_id=str(resource_id), member_type=MemberType.USER)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedStorageFlavor:
+    """Unsaved storage flavor."""
+
+    k8s_storage_class_name: str
+    display_name: str
+    min_size_bytes: ByteSize
+    admin_documentation: str | None
+    documentation: str | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class StorageFlavor(UnsavedStorageFlavor):
+    """Storage flavor.
+
+    Storage flavors represent configurations for self-provisioned storage.
+    """
+
+    id: ULID
+    creation_date: datetime
+    updated_at: datetime
+
+    @property
+    def min_size(self) -> int:
+        """Minimum size (GiB)."""
+        return int(self.min_size_bytes.to_gibi())
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this storage class instance."""
+        return compute_etag_from_timestamp(self.updated_at)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class StorageFlavorPatch:
+    """Model for changes requested on a storage flavor."""
+
+    display_name: str | None
+    min_size_bytes: ByteSize | None
+    admin_documentation: str | None
+    documentation: str | None

@@ -3,6 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Final
+
+MAX_GIBI_VALUE_INT64: Final[int] = 8589934591
+"""The maximum value in GiBi which can be stored as a byte size as an int64 (bigint in PostgreSQL).
+
+See also: test/components/renku_data_services/base_models/test_bytesize.py
+"""
 
 
 @dataclass(frozen=True, order=True)
