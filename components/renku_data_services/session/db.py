@@ -529,6 +529,9 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
+        if isinstance(launcher.environment, models.UnsavedBuildParameters):
+            await self._validate_app_launcher_repository(user, launcher.launcher_type, launcher.environment.repository)
+
         start_build = False
 
         async with self.session_maker() as session, session.begin():
@@ -1394,6 +1397,8 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             visibility = result.metadata.visibility
 
         if visibility == RepositoryVisibility.private:
+            if launcher and launcher.launcher_type == models.LauncherType.app:
+                raise errors.ValidationError(message=constants.APP_PRIVATE_REPOSITORY_MESSAGE)
             if not self.builds_config.private_builds_enabled:
                 raise errors.CannotStartBuildError(message="Private repository builds are not enabled")
             if isinstance(result.metadata, Metadata) and not result.metadata.pull_permission:
@@ -1463,6 +1468,16 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         if launcher:
             authorized = await self.project_authz.has_permission(user, ResourceType.project, launcher.project_id, scope)
         return authorized
+
+    async def _validate_app_launcher_repository(
+        self, user: base_models.APIUser, launcher_type: models.LauncherType, repository: str
+    ) -> None:
+        """Raise if an app launcher would be built from a private code repository."""
+        if launcher_type != models.LauncherType.app:
+            return
+        result = await self.git_repositories_repo.get_repository(repository_url=repository, user=user, etag=None)
+        if isinstance(result.metadata, Metadata) and result.metadata.visibility == RepositoryVisibility.private:
+            raise errors.ValidationError(message=constants.APP_PRIVATE_REPOSITORY_MESSAGE)
 
     def __make_cmd_and_args(
         self, launcher_type: models.LauncherType, env: models.UnsavedBuildParameters

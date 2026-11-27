@@ -14,6 +14,9 @@ BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX: Final[str] = "harbor.dev.renku.ch/renku-build
 BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX: Final[str] = "harbor.dev.renku.ch/renku-builds-private/"
 """The default container image prefix for Renku private builds."""
 
+APP_PRIVATE_REPOSITORY_MESSAGE: Final[str] = "Apps can only be built from a public code repository."
+"""The error message when an app would use an image built from a private code repository."""
+
 BUILD_OUTPUT_IMAGE_NAME: Final[str] = "renku-build"
 """The container image name created from Renku builds."""
 
