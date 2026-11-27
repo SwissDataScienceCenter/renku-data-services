@@ -77,6 +77,7 @@ from renku_data_services.notebooks.crs import (
     Limits,
     LimitsStr,
     Metadata,
+    Proxy,
     ReadinessProbe,
     ReconcileStrategy,
     Requests,
@@ -1344,6 +1345,7 @@ async def start_session(
             extraVolumes=session_extras.volumes,
             culling=get_culling(user, resource_pool, nb_config, session_type),
             authentication=authentication,
+            proxy=_get_session_proxy(nb_config),
             dataSources=session_extras.data_sources,
             tolerations=tolerations_from_resource_class(resource_class, nb_config.sessions.tolerations_model),
             affinity=node_affinity_from_resource_class(resource_class, nb_config.sessions.affinity_model),
@@ -1655,6 +1657,7 @@ async def patch_session(
             )
 
     # Construct session patch
+    patch.spec.proxy = _get_session_proxy(nb_config) or RESET
     patch.spec.extraContainers = _make_patch_spec_list(
         existing=session.spec.extraContainers or [], updated=session_extras.containers
     )
@@ -1681,6 +1684,21 @@ async def patch_session(
         return session
 
     return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch_serialized)
+
+
+def _get_session_proxy(nb_config: NotebooksConfig) -> Proxy | None:
+    """Return the outgoing HTTP proxy for sessions, if one is configured.
+
+    All fields are always set so that a merge patch overwrites every value from a previous configuration.
+    """
+    proxy_config = nb_config.sessions.proxy
+    if proxy_config is None:
+        return None
+    return Proxy(
+        httpProxy=proxy_config.http_proxy,
+        httpsProxy=proxy_config.https_proxy,
+        noProxy=proxy_config.no_proxy,
+    )
 
 
 def _get_readiness_probe(session_type: SessionType, session_location: SessionLocation) -> ReadinessProbe:

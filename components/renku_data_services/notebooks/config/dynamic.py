@@ -381,6 +381,35 @@ class _SessionSshConfig:
         return output
 
 
+@dataclass(frozen=True)
+class _SessionProxyConfig:
+    """Outgoing HTTP proxy for sessions, passed to amalthea which adds it to every container of the session pod."""
+
+    http_proxy: str
+    https_proxy: str
+    no_proxy: str = ""
+
+    @classmethod
+    def from_env(cls) -> Self | None:
+        """Read the proxy configuration, returns None when no proxy is configured."""
+        http_proxy = os.environ.get("NB_SESSIONS__PROXY__HTTP_PROXY", "").strip()
+        https_proxy = os.environ.get("NB_SESSIONS__PROXY__HTTPS_PROXY", "").strip() or http_proxy
+        no_proxy = os.environ.get("NB_SESSIONS__PROXY__NO_PROXY", "").strip()
+        if not http_proxy:
+            if https_proxy or no_proxy:
+                raise errors.ConfigurationError(
+                    message="NB_SESSIONS__PROXY__HTTPS_PROXY or NB_SESSIONS__PROXY__NO_PROXY is set "
+                    "but NB_SESSIONS__PROXY__HTTP_PROXY is empty."
+                )
+            return None
+        for name, value in [("HTTP_PROXY", http_proxy), ("HTTPS_PROXY", https_proxy)]:
+            if not value.startswith(("http://", "https://")):
+                raise errors.ConfigurationError(
+                    message=f"NB_SESSIONS__PROXY__{name} must start with http:// or https://, got {value!r}."
+                )
+        return cls(http_proxy=http_proxy, https_proxy=https_proxy, no_proxy=no_proxy)
+
+
 def _get_renku_url_fallback(ingress_config: _SessionIngress) -> str:
     scheme = "https" if ingress_config.tls_secret or ingress_config.use_default_cluster_tls_cert else "http"
     return f"{scheme}::{ingress_config.host}"
@@ -406,6 +435,7 @@ class _SessionConfig:
     node_selector: dict[str, str] = field(default_factory=dict)
     affinity: dict[str, Any] = field(default_factory=dict)
     tolerations: list[dict[str, str]] = field(default_factory=list)
+    proxy: _SessionProxyConfig | None = None
     init_containers: list[str] = field(
         default_factory=lambda: [
             "init-certificates",
@@ -437,6 +467,7 @@ class _SessionConfig:
             affinity=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__AFFINITY", "{}"))),
             tolerations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__TOLERATIONS", "[]"))),
             renku_url=os.environ.get("RENKU_URL") or _get_renku_url_fallback(ingress),
+            proxy=_SessionProxyConfig.from_env(),
         )
 
     @classmethod
