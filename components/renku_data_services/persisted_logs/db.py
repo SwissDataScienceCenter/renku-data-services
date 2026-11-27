@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import delete, select
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession
 from ulid import ULID
@@ -179,7 +179,7 @@ class AmaltheaSessionPersistedLogsWriteRepository:
             schemas.AmaltheaSessionLogORM.timestamp < nano_ts
         )
         res = await session.execute(delete_logs_stmt)
-        deleted_logs_count = res.rowcount
+        deleted_logs_count = cast(CursorResult[Any], res).rowcount
 
         # Remove orphaned session runs
         stmt = (
@@ -369,7 +369,7 @@ class ImageBuildPersistedLogsWriteRepository:
         nano_ts = models.NanoTimestamp.from_datetime(before)
         delete_logs_stmt = delete(schemas.ImageBuildLogORM).where(schemas.ImageBuildLogORM.timestamp < nano_ts)
         res = await session.execute(delete_logs_stmt)
-        deleted_logs_count = res.rowcount
+        deleted_logs_count = cast(CursorResult[Any], res).rowcount
         return deleted_logs_count
 
     async def _insert_log_line(self, session: AsyncSession, log: models.UnsavedBuildLogLine) -> bool:

@@ -36,7 +36,7 @@ from test.utils import KindCluster
 
 
 @pytest_asyncio.fixture
-async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBConfig, None]:
+async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBConfig]:
     db_name = "R_" + str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
     host = os.getenv("DB_HOST", "127.0.0.1")
@@ -61,7 +61,7 @@ async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBCon
 @pytest_asyncio.fixture
 async def secrets_storage_app_manager(
     db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path, kubeconfig_path: Path
-) -> AsyncGenerator[SecretsDependencyManager, None]:
+) -> AsyncGenerator[SecretsDependencyManager]:
     encryption_key_path = tmp_path / "encryption-key"
     encryption_key_path.write_bytes(secrets.token_bytes(32))
 

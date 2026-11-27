@@ -12,7 +12,7 @@ from asyncio import gather
 from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Concatenate, Optional, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Any, Concatenate, Optional
 from uuid import uuid4
 
 from sqlalchemy import NullPool, delete, false, select, true
@@ -69,14 +69,11 @@ class _Base:
         self.authz: Authz = authz
 
 
-_ORM = TypeVar("_ORM", schemas.ResourcePoolORM, schemas.ResourceClassORM)
-
-
-async def _filter_by_authz(
+async def _filter_by_authz[ORM: (schemas.ResourcePoolORM, schemas.ResourceClassORM)](
     api_user: base_models.APIUser,
-    stmt: Select[tuple[_ORM]],
+    stmt: Select[ORM],
     authz: Authz | None,
-) -> Select[tuple[_ORM]]:
+) -> Select[ORM]:
     """Modifies a select query to list resource pools based on whether the user is logged in or not."""
     output = stmt
     if api_user.is_admin:
@@ -91,13 +88,9 @@ async def _filter_by_authz(
     return output
 
 
-_P = ParamSpec("_P")
-_T = TypeVar("_T")
-
-
-def _only_admins(
-    f: Callable[Concatenate[Any, _P], Coroutine[Any, Any, _T]],
-) -> Callable[Concatenate[Any, _P], Coroutine[Any, Any, _T]]:
+def _only_admins[**P, T](
+    f: Callable[Concatenate[Any, P], Coroutine[Any, Any, T]],
+) -> Callable[Concatenate[Any, P], Coroutine[Any, Any, T]]:
     """Decorator that errors out if the user is not an admin.
 
     It expects the APIUser model to be a named parameter in the decorated function or
@@ -105,7 +98,7 @@ def _only_admins(
     """
 
     @wraps(f)
-    async def decorated_function(self: Any, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+    async def decorated_function(self: Any, *args: P.args, **kwargs: P.kwargs) -> T:
         api_user = None
         if "api_user" in kwargs:
             api_user = kwargs["api_user"]
@@ -1392,7 +1385,7 @@ class MemberRepository(_Base):
         res = await session.execute(stmt)
         user = res.scalars().first()
         if user is None:
-            user = schemas.UserORM(keycloak_id=keycloak_id)
+            user = schemas.UserORM(keycloak_id=keycloak_id, resource_pools=[])
             session.add(user)
         stmt_rp = (
             select(schemas.ResourcePoolORM)
@@ -1523,7 +1516,9 @@ class MemberRepository(_Base):
             users_to_add_exist = res_usr.scalars().all()
             user_ids_to_add_exist = [i.keycloak_id for i in users_to_add_exist]
             users_to_add_missing = [
-                schemas.UserORM(keycloak_id=user_id) for user_id in user_ids if user_id not in user_ids_to_add_exist
+                schemas.UserORM(keycloak_id=user_id, resource_pools=[])
+                for user_id in user_ids
+                if user_id not in user_ids_to_add_exist
             ]
             if append:
                 rp_user_ids = {rp.id for rp in rp.users}
@@ -1824,7 +1819,7 @@ class MemberRepository(_Base):
             res = await session.execute(stmt)
             user: Optional[schemas.UserORM] = res.scalars().first()
             if not user:
-                user = schemas.UserORM(keycloak_id=keycloak_id)
+                user = schemas.UserORM(keycloak_id=keycloak_id, resource_pools=[])
                 session.add(user)
             allowed_updates = {"no_default_access"}
             if not set(kwargs.keys()).issubset(allowed_updates):

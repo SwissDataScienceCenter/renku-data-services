@@ -263,9 +263,7 @@ async def __collect_session_metrics(
             await metrics.session_job_terminated(
                 user=user, metadata={"session_id": new_obj.meta.name, "status": State.Succeeded.value.lower()}
             )
-        case State.Failed.value if (
-            previous_state != State.Failed.value and session_type == SessionType.non_interactive
-        ):
+        case State.Failed.value if previous_state != State.Failed.value and session_type == SessionType.non_interactive:
             # job may have failed, we need to check that the failure is from the job itself
             error_msg = new_obj.obj.raw.get("status", {}).get("error")
             # NOTE: we only get a text message as a way to match for job failures

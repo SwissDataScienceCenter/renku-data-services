@@ -10,6 +10,7 @@ from typing import Any
 
 from yaml import safe_load
 
+import renku_data_services.authn.api
 import renku_data_services.base_models as base_models
 import renku_data_services.capacity_reservation
 import renku_data_services.connected_services

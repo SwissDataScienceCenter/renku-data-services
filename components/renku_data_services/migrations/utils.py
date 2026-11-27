@@ -4,7 +4,7 @@ import asyncio
 import threading
 from asyncio.events import AbstractEventLoop
 from collections.abc import Coroutine, Sequence
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal
 
 from alembic import context
 from sqlalchemy import Connection, MetaData, NullPool, create_engine
@@ -25,6 +25,7 @@ def include_object(
         "index",
         "unique_constraint",
         "foreign_key_constraint",
+        "check_constraint",
     ],
     reflected: bool,
     compare_to: SchemaItem | None,
@@ -167,9 +168,6 @@ def run_migrations(metadata: Sequence[MetaData]) -> None:
         run_migrations_online(metadata, sync_sqlalchemy_url)
 
 
-_T = TypeVar("_T")
-
-
 def _run_event_loop(loop: asyncio.AbstractEventLoop) -> None:
     asyncio.set_event_loop(loop)
     loop.run_forever()
@@ -188,7 +186,7 @@ class UtilityEventLoop:
     _loop, _thread = _prepare_event_loop()
 
     @classmethod
-    def run(cls, coro: Coroutine[Any, Any, _T]) -> _T:
+    def run[T](cls, coro: Coroutine[Any, Any, T]) -> T:
         """Executes the specific coroutine in a separate thread with its own event loop.
 
         Note that this will block until the coroutine completes. Async/await should be used if you have the chance.

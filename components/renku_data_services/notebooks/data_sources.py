@@ -189,7 +189,7 @@ class DataSourceRepository:
             return None
         token_config = {
             "access_token": token_set.access_token,
-            "token_type": "Bearer",
+            "token_type": "Bearer",  # nosec B105
         }
         if provider_kind == ProviderKind.google:
             configuration["scope"] = configuration.get("scope") or "drive"
@@ -246,7 +246,7 @@ class DataSourceRepository:
             return None
         token_config = {
             "access_token": token_set.access_token,
-            "token_type": "Bearer",
+            "token_type": "Bearer",  # nosec B105
         }
         expires_in_td = self.internal_token_mint.long_refresh_token_expiration
         expires_in = int(expires_in_td.total_seconds())

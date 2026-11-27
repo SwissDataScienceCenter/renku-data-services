@@ -33,14 +33,14 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "sas_url": True,
             "tenant": True,
             "client_id": True,
-            "client_secret": True,
+            "client_secret": True,  # nosec B105
             # Path to a local file
             "client_certificate_path": False,
             # Related to above option
-            "client_certificate_password": False,
+            "client_certificate_password": False,  # nosec B105
             "client_send_certificate_chain": True,
             "username": True,
-            "password": True,
+            "password": True,  # nosec B105
             # Path to a local file
             "service_principal_file": False,
             "disable_instance_discovery": True,
@@ -99,10 +99,10 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
         allowed=True,
         options={
             "client_id": True,
-            "client_secret": True,
-            "token": True,
+            "client_secret": True,  # nosec B105
+            "token": True,  # nosec B105
             "auth_url": True,
-            "token_url": True,
+            "token_url": True,  # nosec B105
             "client_credentials": True,
             "scope": True,
             "root_folder_id": True,
@@ -157,10 +157,10 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
         allowed=True,
         options={
             "client_id": True,
-            "client_secret": True,
-            "token": True,
+            "client_secret": True,  # nosec B105
+            "token": True,  # nosec B105
             "auth_url": True,
-            "token_url": True,
+            "token_url": True,  # nosec B105
             "client_credentials": True,
             "chunk_size": True,
             "impersonate": True,
@@ -194,7 +194,7 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "host": True,
             "user": True,
             "port": True,
-            "pass": True,
+            "pass": True,  # nosec B105
             "tls": True,
             "explicit_tls": True,
             "concurrency": True,
@@ -210,7 +210,7 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "disable_tls13": True,
             "allow_insecure_tls_ciphers": True,
             "shut_timeout": True,
-            "ask_password": True,
+            "ask_password": True,  # nosec B105
             "socks_proxy": True,
             "http_proxy": True,
             "no_check_upload": True,
@@ -269,10 +269,10 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
         allowed=True,
         options={
             "client_id": True,
-            "client_secret": True,
-            "token": True,
+            "client_secret": True,  # nosec B105
+            "token": True,  # nosec B105
             "auth_url": True,
-            "token_url": True,
+            "token_url": True,  # nosec B105
             "client_credentials": True,
             "region": True,
             "upload_cutoff": True,
@@ -290,7 +290,7 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "hard_delete": True,
             "link_scope": True,
             "link_type": True,
-            "link_password": True,
+            "link_password": True,  # nosec B105
             "hash_type": True,
             "av_override": True,
             "delta": True,
@@ -316,13 +316,13 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
         allowed=True,
         options={
             "username": True,
-            "password": True,
-            "mailbox_password": True,
+            "password": True,  # nosec B105
+            "mailbox_password": True,  # nosec B105
             "2fa": True,
             "client_uid": True,
-            "client_access_token": True,
-            "client_refresh_token": True,
-            "client_salted_key_pass": True,
+            "client_access_token": True,  # nosec B105
+            "client_refresh_token": True,  # nosec B105
+            "client_salted_key_pass": True,  # nosec B105
             "encoding": True,
             "original_file_size": True,
             "app_version": True,
@@ -344,7 +344,7 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "provider": True,
             "env_auth": True,
             "access_key_id": True,
-            "secret_access_key": True,
+            "secret_access_key": True,  # nosec B105
             "region": True,
             "endpoint": True,
             "location_constraint": True,
@@ -367,7 +367,7 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "shared_credentials_file": False,
             # Related to above option
             "profile": False,
-            "session_token": True,
+            "session_token": True,  # nosec B105
             "upload_concurrency": True,
             "force_path_style": True,
             "v2_auth": True,
@@ -418,12 +418,12 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "host": True,
             "user": True,
             "port": True,
-            "pass": True,
+            "pass": True,  # nosec B105
             "key_pem": True,
             # Path to a local file
             "key_file": False,
             # Related to above option
-            "key_file_pass": False,
+            "key_file_pass": False,  # nosec B105
             "pubkey": True,
             # Path to a local file
             "pubkey_file": False,
@@ -432,7 +432,7 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "key_use_agent": True,
             "use_insecure_cipher": True,
             "disable_hashcheck": True,
-            "ask_password": True,
+            "ask_password": True,  # nosec B105
             "path_override": True,
             "set_modtime": True,
             "shell_type": True,
@@ -501,10 +501,10 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "url": True,
             "vendor": True,
             "user": True,
-            "pass": True,
-            "bearer_token": True,
+            "pass": True,  # nosec B105
+            "bearer_token": True,  # nosec B105
             # Arbitrary command to be executed
-            "bearer_token_command": False,
+            "bearer_token_command": False,  # nosec B105
             "encoding": True,
             "headers": True,
             "pacer_min_sleep": True,

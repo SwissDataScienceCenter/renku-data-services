@@ -6,7 +6,7 @@ import traceback
 from asyncio import CancelledError
 from collections.abc import Callable, Mapping, Set
 from sqlite3 import Error as SqliteError
-from typing import Any, Optional, Protocol, TypeVar, Union
+from typing import Any, Optional, Protocol, Union
 
 import httpx
 import jwt
@@ -53,11 +53,7 @@ class BaseErrorResponse(Protocol):
         ...
 
 
-BError = TypeVar("BError", bound=BaseError)
-BErrorResponse = TypeVar("BErrorResponse", bound=BaseErrorResponse)
-
-
-class ApiSpec(Protocol[BErrorResponse, BError]):
+class ApiSpec[BErrorResponse: BaseErrorResponse, BError: BaseError](Protocol):
     """Protocol for an apispec with error data."""
 
     ErrorResponse: BErrorResponse

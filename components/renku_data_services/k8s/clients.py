@@ -6,7 +6,6 @@ import contextlib
 import os
 from collections.abc import AsyncIterable, AsyncIterator, Callable
 from copy import deepcopy
-from typing import TypeVar
 
 import httpx
 import kr8s
@@ -238,6 +237,8 @@ class K8sClusterClient(K8sClient):
             )
 
             async for r in res:
+                # NOTE: async_get only yields dicts when raw=True
+                assert not isinstance(r, dict)
                 yield APIObjectInCluster(r, self.__cluster.id)
 
         except (kr8s.ServerError, kr8s.APITimeoutError, ValueError) as _e:
@@ -404,10 +405,7 @@ class K8sCachedClusterClient(K8sClusterClient):
             yield res
 
 
-T = TypeVar("T")
-
-
-async def empty_async_generator() -> AsyncIterator[T]:
+async def empty_async_generator[T]() -> AsyncIterator[T]:
     """A generic helper that yields nothing but satisfies type checkers."""
     a = False
     if a:

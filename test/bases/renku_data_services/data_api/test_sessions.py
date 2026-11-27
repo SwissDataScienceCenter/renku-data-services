@@ -267,7 +267,7 @@ async def test_launcher_restrictions_basic(
         else:
             assert not launcher_saved["is_restricted"]
 
-    _, res = await sanic_client.get(f"/api/data/projects/{project["id"]}/session_launchers", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/projects/{project['id']}/session_launchers", headers=user_headers)
     assert res.status_code == 200, res.text
     assert res.json is not None
     launchers = res.json
@@ -306,7 +306,7 @@ async def test_launcher_restrictions_readonly_data_connector(
         "policy": dc_EX,
     }
     _, res = await sanic_client.patch(
-        f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
+        f"/api/data/session_launchers/{launcher['id']}/data_connectors",
         headers=user_headers,
         json=[patch_dc_policy],
     )
@@ -316,7 +316,7 @@ async def test_launcher_restrictions_readonly_data_connector(
     assert dc_policy["policy"] == dc_EX
 
     # Launcher must be restricted if a data connector is excluded for launcher
-    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=user_headers)
     assert res.json is not None
     launcher_saved = res.json
     assert launcher_saved["is_restricted"]
@@ -324,7 +324,7 @@ async def test_launcher_restrictions_readonly_data_connector(
     # Excluded data connector connector can be made read-only for launcher
     patch_dc_policy["policy"] = dc_RO
     _, res = await sanic_client.patch(
-        f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
+        f"/api/data/session_launchers/{launcher['id']}/data_connectors",
         headers=user_headers,
         json=[patch_dc_policy],
     )
@@ -334,7 +334,7 @@ async def test_launcher_restrictions_readonly_data_connector(
     assert dc_policy["policy"] == dc_RO
 
     # Launcher is unrestricted if read-only data connector is made read-only for launcher
-    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=user_headers)
     assert res.json is not None
     launcher_saved = res.json
     assert not launcher_saved["is_restricted"]
@@ -342,7 +342,7 @@ async def test_launcher_restrictions_readonly_data_connector(
     # Read only data connector cannot be made rear write
     patch_dc_policy["policy"] = dc_RW
     _, res = await sanic_client.patch(
-        f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
+        f"/api/data/session_launchers/{launcher['id']}/data_connectors",
         headers=user_headers,
         json=[patch_dc_policy],
     )
@@ -350,7 +350,7 @@ async def test_launcher_restrictions_readonly_data_connector(
 
     # Data connector policy should be unchanged for launcher after failed attempt to escalate permissions.
     _, res = await sanic_client.get(
-        f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
+        f"/api/data/session_launchers/{launcher['id']}/data_connectors",
         headers=user_headers,
     )
     assert res.status_code == 200, res.text
@@ -360,7 +360,7 @@ async def test_launcher_restrictions_readonly_data_connector(
 
     # launcher is restricted when a read-only connector is made read-write and it was made read-only for launcher.
     _, res = await sanic_client.get(
-        f"/api/data/data_connectors/{data_connector_link["data_connector_id"]}",
+        f"/api/data/data_connectors/{data_connector_link['data_connector_id']}",
         headers=user_headers,
     )
     assert res.status_code == 200, res.text
@@ -369,32 +369,32 @@ async def test_launcher_restrictions_readonly_data_connector(
     patch_headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
     patch = {"storage": {"readonly": False}}
     _, res = await sanic_client.patch(
-        f"/api/data/data_connectors/{data_connector_link["data_connector_id"]}",
+        f"/api/data/data_connectors/{data_connector_link['data_connector_id']}",
         headers=patch_headers,
         json=patch,
     )
     assert res.status_code == 200, res.text
 
-    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=user_headers)
     assert res.json is not None
     launcher_saved = res.json
     assert launcher_saved["is_restricted"]
 
     # launcher restriction flag must be False when restricted data connector is deleted
     _, res = await sanic_client.delete(
-        f"/api/data/data_connectors/{data_connector_link["data_connector_id"]}",
+        f"/api/data/data_connectors/{data_connector_link['data_connector_id']}",
         headers=user_headers,
     )
     assert res.status_code == 204, res.text
 
-    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=user_headers)
     assert res.json is not None
     launcher_saved = res.json
     assert not launcher_saved["is_restricted"]
 
     # Data connector should not be listed after deletion
     _, res = await sanic_client.get(
-        f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
+        f"/api/data/session_launchers/{launcher['id']}/data_connectors",
         headers=user_headers,
     )
     assert res.status_code == 200, res.text
@@ -422,7 +422,7 @@ async def test_launcher_data_connector_post_unauthorized(
         "policy": SessionLauncherDataConnectorPolicyName.excluded,
     }
 
-    _, res = await sanic_client.patch(f"/api/data/session_launchers/{launcher["id"]}/data_connectors", json=payload)
+    _, res = await sanic_client.patch(f"/api/data/session_launchers/{launcher['id']}/data_connectors", json=payload)
     assert res.status_code == 401, res.text
 
 
@@ -446,7 +446,7 @@ async def test_launcher_secrets_post_unauthorized(
         "policy": sc_EX,
     }
 
-    _, res = await sanic_client.patch(f"/api/data/session_launchers/{launcher["id"]}/secrets", json=[payload])
+    _, res = await sanic_client.patch(f"/api/data/session_launchers/{launcher['id']}/secrets", json=[payload])
     assert res.status_code == 401, res.text
 
 
@@ -474,7 +474,7 @@ async def test_launcher_restrictions_delete_secrets(
     ]
 
     _, res = await sanic_client.patch(
-        f"/api/data/session_launchers/{launcher["id"]}/secrets",
+        f"/api/data/session_launchers/{launcher['id']}/secrets",
         headers=user_headers,
         json=patch_secret_slot_policies,
     )
@@ -483,22 +483,22 @@ async def test_launcher_restrictions_delete_secrets(
     secret_slot_policy = res.json[0]
     assert secret_slot_policy["policy"] == sc_EX
 
-    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=user_headers)
     assert res.json is not None
     launcher_saved = res.json
     assert launcher_saved["is_restricted"]
 
-    _, res = await sanic_client.delete(f"/api/data/session_secret_slots/{secret_slot["id"]}", headers=user_headers)
+    _, res = await sanic_client.delete(f"/api/data/session_secret_slots/{secret_slot['id']}", headers=user_headers)
     assert res.status_code == 204, res.text
 
-    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=user_headers)
     assert res.json is not None
     launcher_saved = res.json
     assert not launcher_saved["is_restricted"]
 
     # Secrets should not be listed after deletion
     _, res = await sanic_client.get(
-        f"/api/data/session_launchers/{launcher["id"]}/secrets",
+        f"/api/data/session_launchers/{launcher['id']}/secrets",
         headers=user_headers,
     )
     assert res.status_code == 200, res.text
@@ -545,7 +545,7 @@ async def test_launcher_restrictions_lower_data_connector_permissions(
         }
     ]
     _, res = await sanic_client.patch(
-        f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
+        f"/api/data/session_launchers/{launcher['id']}/data_connectors",
         headers=user_headers,
         json=patch_dc_policies,
     )
@@ -556,7 +556,7 @@ async def test_launcher_restrictions_lower_data_connector_permissions(
 
     # launcher policy is downgraded to read-only if data connector is made read-only
     _, res = await sanic_client.get(
-        f"/api/data/data_connectors/{data_connector_link["data_connector_id"]}",
+        f"/api/data/data_connectors/{data_connector_link['data_connector_id']}",
         headers=user_headers,
     )
     assert res.status_code == 200, res.text
@@ -565,14 +565,14 @@ async def test_launcher_restrictions_lower_data_connector_permissions(
     patch_headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
     patch = {"storage": {"readonly": True}}
     _, res = await sanic_client.patch(
-        f"/api/data/data_connectors/{data_connector_link["data_connector_id"]}",
+        f"/api/data/data_connectors/{data_connector_link['data_connector_id']}",
         headers=patch_headers,
         json=patch,
     )
     assert res.status_code == 200, res.text
 
     _, res = await sanic_client.get(
-        f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
+        f"/api/data/session_launchers/{launcher['id']}/data_connectors",
         headers=user_headers,
     )
     assert res.status_code == 200, res.text
@@ -581,7 +581,7 @@ async def test_launcher_restrictions_lower_data_connector_permissions(
     assert dc_policy["policy"] == dc_RO
 
     # Launcher should be unrestricted after downgrading the data connector permission
-    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=user_headers)
     assert res.json is not None
     launcher_saved = res.json
     assert not launcher_saved["is_restricted"]
@@ -630,14 +630,14 @@ async def test_launcher_restrictions_delete_data_connector(
         }
     ]
     _, res = await sanic_client.patch(
-        f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
+        f"/api/data/session_launchers/{launcher['id']}/data_connectors",
         headers=user_headers,
         json=patch_dc_policies,
     )
     assert res.status_code == 200, res.text
 
     # Check that the launcher is marked restricted if a RW data connector is made RO
-    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=user_headers)
     assert res.json is not None
     launcher_saved = res.json
     assert launcher_saved["is_restricted"]
@@ -646,18 +646,18 @@ async def test_launcher_restrictions_delete_data_connector(
     match delete_what:
         case "data_connector":
             _, res = await sanic_client.delete(
-                f"/api/data/data_connectors/{data_connector["id"]}", headers=user_headers
+                f"/api/data/data_connectors/{data_connector['id']}", headers=user_headers
             )
         case "link":
             _, res = await sanic_client.delete(
-                f"/api/data/data_connectors/{data_connector["id"]}/project_links/{link['id']}", headers=user_headers
+                f"/api/data/data_connectors/{data_connector['id']}/project_links/{link['id']}", headers=user_headers
             )
         case _:
             raise AssertionError()
     assert res.status_code == 204, res.text
 
     # Check that the launcher is unrestricted after deletion
-    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=user_headers)
     assert res.json is not None
     launcher_saved = res.json
     assert not launcher_saved["is_restricted"]
@@ -721,21 +721,21 @@ async def test_launcher_restrictions_private_data_connector(
 
     # regular user should see both data connectors
     _, res = await sanic_client.get(
-        f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=user_headers
+        f"/api/data/session_launchers/{launcher['id']}/data_connectors", headers=user_headers
     )
     assert res.json is not None
     assert len(res.json) == 2
 
     # viwer member should see one data connector
     _, res = await sanic_client.get(
-        f"/api/data/session_launchers/{launcher["id"]}/data_connectors", headers=member_1_headers
+        f"/api/data/session_launchers/{launcher['id']}/data_connectors", headers=member_1_headers
     )
     assert res.json is not None
     assert len(res.json) == 1
 
     # launcher should be unrestricted to both users
     for headers in [user_headers, member_1_headers]:
-        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=headers)
+        _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=headers)
         assert res.json is not None
         launcher_saved = res.json
         assert not launcher_saved["is_restricted"]
@@ -749,21 +749,21 @@ async def test_launcher_restrictions_private_data_connector(
         }
     ]
     _, res = await sanic_client.patch(
-        f"/api/data/session_launchers/{launcher["id"]}/data_connectors",
+        f"/api/data/session_launchers/{launcher['id']}/data_connectors",
         headers=user_headers,
         json=patch_dc_policies,
     )
     assert res.status_code == 200, res.text
 
     # Launcher should be restricted for user
-    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=user_headers)
     assert res.status_code == 200, res.text
     assert res.json is not None
     launcher_saved = res.json
     assert launcher_saved["is_restricted"]
 
     # Launcher should be unrestricted for member
-    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher["id"]}", headers=member_1_headers)
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher['id']}", headers=member_1_headers)
     assert res.status_code == 200, res.text
     assert res.json is not None
     launcher_saved = res.json

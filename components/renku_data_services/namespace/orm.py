@@ -176,12 +176,16 @@ class NamespaceORM(BaseORM):
     @classmethod
     def load_user(cls, ns: models.UserNamespace) -> Self:
         """Create an ORM object from the user namespace object."""
-        return cls(slug=ns.path.first.value, user_id=ns.underlying_resource_id)
+        namespace = cls(slug=ns.path.first.value, user_id=ns.underlying_resource_id)
+        namespace.old_namespaces = []
+        return namespace
 
     @classmethod
     def load_group(cls, ns: models.GroupNamespace) -> Self:
         """Create an ORM object from the group namespace object."""
-        return cls(slug=ns.path.first.value, group_id=ns.underlying_resource_id)
+        namespace = cls(slug=ns.path.first.value, group_id=ns.underlying_resource_id)
+        namespace.old_namespaces = []
+        return namespace
 
 
 class NamespaceOldORM(BaseORM):

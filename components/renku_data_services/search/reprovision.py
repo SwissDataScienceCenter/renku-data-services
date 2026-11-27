@@ -86,7 +86,7 @@ class SearchReprovision:
 
     async def _get_all_data_connectors(
         self, user: APIUser, per_page: int = 20
-    ) -> AsyncGenerator[DataConnector | GlobalDataConnector, None]:
+    ) -> AsyncGenerator[DataConnector | GlobalDataConnector]:
         """Get all data connectors, retrieving `per_page` each time."""
         preq = PaginationRequest(page=1, per_page=per_page)
         result: tuple[list[DataConnector | GlobalDataConnector], int] | None = None
@@ -181,7 +181,7 @@ class SearchReprovision:
 
     async def __update_entities(
         self,
-        iter: AsyncGenerator[Project | Group | UserInfo | DataConnector | GlobalDataConnector, None],
+        iter: AsyncGenerator[Project | Group | UserInfo | DataConnector | GlobalDataConnector],
         name: str,
         started: datetime,
         counter: int,

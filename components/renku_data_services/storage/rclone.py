@@ -157,9 +157,7 @@ class RCloneValidator:
         """Return Schema as dict."""
         return [provider.model_dump(exclude_none=True, by_alias=True) for provider in self.providers.values()]
 
-    def get_private_fields(
-        self, configuration: Union[RCloneConfig, dict[str, Any]]
-    ) -> Generator[RCloneOption, None, None]:
+    def get_private_fields(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> Generator[RCloneOption]:
         """Get private field descriptions for storage."""
         provider = self.get_provider(configuration)
         return provider.get_private_fields(configuration)
@@ -433,9 +431,7 @@ class RCloneProviderSchema(BaseModel):
                 configuration[passwd.name] = result.decode().strip()
         return configuration
 
-    def get_private_fields(
-        self, configuration: Union[RCloneConfig, dict[str, Any]]
-    ) -> Generator[RCloneOption, None, None]:
+    def get_private_fields(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> Generator[RCloneOption]:
         """Get private field descriptions for storage."""
         provider: str | None = configuration.get("provider")
 
@@ -574,7 +570,7 @@ class RCloneConfig(BaseModel, MutableMapping):
         del self.config[key]
         self.validator.validate(self.config, keep_sensitive=True)
 
-    def __iter__(self) -> Generator[str, None, None]:  # type: ignore[override]
+    def __iter__(self) -> Generator[str]:  # type: ignore[override]
         """Iterate method.
 
         Needed for pydantic to properly serialize the object.

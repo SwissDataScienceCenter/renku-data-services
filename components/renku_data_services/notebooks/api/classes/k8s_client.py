@@ -225,8 +225,10 @@ class NotebookK8sClient(SecretClient):
         if session_type == SessionType.interactive:
             sessions = list(
                 filter(
-                    lambda s: s.metadata.labels.get("renku.io/session-type", SessionType.interactive.value).lower()
-                    == SessionType.interactive.value.lower(),
+                    lambda s: (
+                        s.metadata.labels.get("renku.io/session-type", SessionType.interactive.value).lower()
+                        == SessionType.interactive.value.lower()
+                    ),
                     sessions,
                 )
             )

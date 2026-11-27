@@ -3,7 +3,7 @@
 from collections.abc import Callable, Coroutine, Sequence
 from functools import wraps
 from math import ceil
-from typing import Any, Concatenate, NamedTuple, ParamSpec, TypeVar, cast
+from typing import Any, Concatenate, NamedTuple, cast
 
 from sanic import Request, json
 from sanic.response import JSONResponse
@@ -55,19 +55,16 @@ class PaginationResponse(NamedTuple):
         }
 
 
-_P = ParamSpec("_P")
-
-
-def paginate(
-    f: Callable[Concatenate[Request, _P], Coroutine[Any, Any, tuple[Sequence[Any], int]]],
-) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, JSONResponse]]:
+def paginate[**P](
+    f: Callable[Concatenate[Request, P], Coroutine[Any, Any, tuple[Sequence[Any], int]]],
+) -> Callable[Concatenate[Request, P], Coroutine[Any, Any, JSONResponse]]:
     """Serializes the response to JSON and adds the required pagination headers to the response.
 
     The handler should return first the list of items and then the total count from the DB.
     """
 
     @wraps(f)
-    async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> JSONResponse:
+    async def decorated_function(request: Request, *args: P.args, **kwargs: P.kwargs) -> JSONResponse:
         default_page_number = 1
         default_number_of_elements_per_page = 20
         query_args: dict[str, str] = request.get_args() or {}
@@ -100,19 +97,16 @@ def paginate(
     return decorated_function
 
 
-_T = TypeVar("_T")
-
-
-async def paginate_queries(
-    req: PaginationRequest, session: AsyncSession, stmts: list[tuple[Select[tuple[_T]], int]]
-) -> list[_T]:
+async def paginate_queries[T](
+    req: PaginationRequest, session: AsyncSession, stmts: list[tuple[Select[T], int]]
+) -> list[T]:
     """Paginate several different queries as if they were part of a single table."""
     # NOTE: We ignore the possibility that a count for a statement is not accurate. I.e. the count
     # says that the statement should return 10 items but the statement truly returns 8 or vice-versa.
     # To fully account for edge cases of inaccuracry in the expected number of results
     # we would have to run every query passed in - even though the offset is so high that we would only need
     # to run 1 or 2 queries out of a large list.
-    output: list[_T] = []
+    output: list[T] = []
     max_offset = 0
     stmt_offset = 0
     offset_discount = 0

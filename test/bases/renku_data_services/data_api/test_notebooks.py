@@ -179,7 +179,7 @@ async def test_check_docker_image(sanic_client: SanicASGITestClient, user_header
 
 
 @pytest.fixture
-def notebooks_fixtures(cluster, amalthea_installation, amalthea_session_k8s_watcher) -> Generator[None, None]:
+def notebooks_fixtures(cluster, amalthea_installation, amalthea_session_k8s_watcher) -> Generator[None]:
     yield
 
 

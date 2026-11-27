@@ -88,7 +88,7 @@ class ServerOptions(BaseModel):
         return largest_list
 
 
-def _get_classname() -> Generator[str, None, None]:
+def _get_classname() -> Generator[str]:
     yield "small"
     yield "medium"
     yield "large"
